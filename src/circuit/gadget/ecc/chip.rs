@@ -14,7 +14,7 @@ mod add;
 // mod add_complete;
 mod double;
 // mod mul;
-// mod mul_fixed;
+mod mul_fixed;
 // mod mul_fixed_short;
 mod util;
 mod witness_point;
@@ -292,7 +292,17 @@ impl<C: CurveAffine> EccChip<C> {
 
         // TODO: Create complete point addition gate
 
-        // TODO: Create fixed-base full-width scalar mul gate
+        // Create fixed-base full-width scalar mul gate
+        {
+            let q_mul_fixed = meta.query_selector(q_mul_fixed, Rotation::cur());
+            let x_p = meta.query_advice(P.0, Rotation::cur());
+            let y_p = meta.query_advice(P.1, Rotation::cur());
+            let k = meta.query_advice(bits, Rotation::cur());
+            let u = meta.query_advice(extras[2], Rotation::cur());
+            let z = meta.query_fixed(fixed_z, Rotation::cur());
+
+            mul_fixed::create_gate(meta, lagrange_coeffs, q_mul_fixed, x_p, y_p, k, u, z);
+        }
 
         // TODO: Create fixed-base short signed scalar mul gate
 
@@ -595,7 +605,14 @@ impl<C: CurveAffine> EccInstructions<C> for EccChip<C> {
     ) -> Result<Self::Point, Error> {
         let config = self.config();
 
-        todo!()
+        let point = layouter.assign_region(
+            || format!("Multiply {:?}", base.fixed_point),
+            |mut region| {
+                mul_fixed::assign_region::<C>(scalar, base, 0, &mut region, config.clone())
+            },
+        )?;
+
+        Ok(point)
     }
 
     fn mul_fixed_short(
