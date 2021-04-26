@@ -18,7 +18,7 @@ mod double;
 // mod mul_fixed_short;
 mod util;
 mod witness_point;
-// mod witness_scalar_fixed;
+mod witness_scalar_fixed;
 // mod witness_scalar_fixed_short;
 
 /// A structure containing a cell and its assigned value.
@@ -257,7 +257,12 @@ impl<C: CurveAffine> EccChip<C> {
             witness_point::create_gate::<C>(meta, q_point, P.0, P.1);
         }
 
-        // TODO: Create witness scalar_fixed gate
+        // Create witness scalar_fixed gate
+        {
+            let q_scalar_fixed = meta.query_selector(q_scalar_fixed, Rotation::cur());
+            let k = meta.query_advice(bits, Rotation::cur());
+            witness_scalar_fixed::create_gate(meta, q_scalar_fixed, k);
+        }
 
         // TODO: Create witness scalar_fixed_short gate
 
@@ -272,7 +277,6 @@ impl<C: CurveAffine> EccChip<C> {
             double::create_gate(meta, q_double, x_a, y_a, x_p, y_p);
         }
 
-        // TODO: Create point addition gate
         // Create point addition gate
         {
             let q_add = meta.query_selector(q_add, Rotation::cur());
@@ -479,7 +483,20 @@ impl<C: CurveAffine> EccInstructions<C> for EccChip<C> {
     ) -> Result<Self::ScalarFixed, Error> {
         let config = self.config();
 
-        todo!()
+        let scalar = layouter.assign_region(
+            || "witness scalar for fixed-base mul",
+            |mut region| {
+                witness_scalar_fixed::assign_region(
+                    value,
+                    C::Scalar::NUM_BITS as usize,
+                    0,
+                    &mut region,
+                    config.clone(),
+                )
+            },
+        )?;
+
+        Ok(scalar)
     }
 
     fn witness_scalar_fixed_short(
