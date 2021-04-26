@@ -16,7 +16,7 @@ use halo2::{
 // mod mul;
 // mod mul_fixed;
 // mod mul_fixed_short;
-// mod util;
+mod util;
 // mod witness_point;
 // mod witness_scalar_fixed;
 // mod witness_scalar_fixed_short;
