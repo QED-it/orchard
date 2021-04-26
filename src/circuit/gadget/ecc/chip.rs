@@ -10,7 +10,7 @@ use halo2::{
     poly::Rotation,
 };
 
-// mod add;
+mod add;
 // mod add_complete;
 mod double;
 // mod mul;
@@ -273,6 +273,18 @@ impl<C: CurveAffine> EccChip<C> {
         }
 
         // TODO: Create point addition gate
+        // Create point addition gate
+        {
+            let q_add = meta.query_selector(q_add, Rotation::cur());
+            let x_p = meta.query_advice(P.0, Rotation::cur());
+            let y_p = meta.query_advice(P.1, Rotation::cur());
+            let x_q = meta.query_advice(extras[0], Rotation::cur());
+            let y_q = meta.query_advice(extras[1], Rotation::cur());
+            let x_a = meta.query_advice(extras[0], Rotation::next());
+            let y_a = meta.query_advice(extras[1], Rotation::next());
+
+            add::create_gate(meta, q_add, x_p, y_p, x_q, y_q, x_a, y_a);
+        }
 
         // TODO: Create complete point addition gate
 
@@ -528,7 +540,12 @@ impl<C: CurveAffine> EccInstructions<C> for EccChip<C> {
     ) -> Result<Self::Point, Error> {
         let config = self.config();
 
-        todo!()
+        let point = layouter.assign_region(
+            || "point addition",
+            |mut region| add::assign_region::<C>(a, b, 0, &mut region, config.clone()),
+        )?;
+
+        Ok(point)
     }
 
     fn add_complete(
