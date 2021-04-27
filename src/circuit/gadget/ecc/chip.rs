@@ -12,7 +12,7 @@ use halo2::{
 
 // mod add;
 // mod add_complete;
-// mod double;
+mod double;
 // mod mul;
 // mod mul_fixed;
 // mod mul_fixed_short;
@@ -261,7 +261,16 @@ impl<C: CurveAffine> EccChip<C> {
 
         // TODO: Create witness scalar_fixed_short gate
 
-        // TODO: Create point doubling gate
+        // Create point doubling gate
+        {
+            let q_double = meta.query_selector(q_double, Rotation::cur());
+            let x_a = meta.query_advice(extras[0], Rotation::cur());
+            let y_a = meta.query_advice(extras[1], Rotation::cur());
+            let x_p = meta.query_advice(P.0, Rotation::cur());
+            let y_p = meta.query_advice(P.1, Rotation::cur());
+
+            double::create_gate(meta, q_double, x_a, y_a, x_p, y_p);
+        }
 
         // TODO: Create point addition gate
 
