@@ -130,7 +130,18 @@ impl<C: CurveAffine> SinsemillaInstructions<C> for SinsemillaChip<C> {
         layouter: &mut impl Layouter<C::Base>,
         domain: &Self::HashDomains,
     ) -> Result<Self::Q, Error> {
-        todo!()
+        let q: C = domain.Q();
+        let q = q.coordinates().unwrap();
+        let config = self.config().clone();
+
+        layouter.assign_region(
+            || format!("{:?} Q", domain),
+            |mut region: Region<'_, C::Base>| {
+                let x = region.assign_advice(|| "x_q", config.x_a, 0, || Ok(*q.x()))?;
+                let x = CellValue::new(x, Some(*q.x()));
+                Ok((x, *q.y()))
+            },
+        )
     }
 
     fn witness_message(
@@ -138,7 +149,39 @@ impl<C: CurveAffine> SinsemillaInstructions<C> for SinsemillaChip<C> {
         layouter: &mut impl Layouter<C::Base>,
         message: Vec<bool>,
     ) -> Result<Self::Message, Error> {
-        todo!()
+        let config = self.config().clone();
+
+        // Message must be at most `kc` bits
+        let max_len = K * SinsemillaC;
+        assert!(message.len() <= max_len);
+
+        // Pad message to nearest multiple of `k`.
+        let pad_length = K - (message.len() % K);
+        let mut message = message;
+        message.extend_from_slice(&vec![false; pad_length]);
+
+        // Chunk message into `k`-bit words
+        let words: Vec<_> = message.chunks_exact(K).collect();
+
+        // Parse each chunk of boolean values (little-endian bit order) into a u64.
+        let words: Vec<u32> = words.iter().map(|word| lebs2ip_k(word)).collect();
+
+        layouter.assign_region(
+            || "message",
+            |mut region: Region<'_, C::Base>| {
+                let mut result = Vec::with_capacity(words.len());
+                for (idx, word) in words.iter().enumerate() {
+                    let cell = region.assign_advice(
+                        || format!("word {:?}", idx),
+                        config.bits,
+                        idx,
+                        || Ok(C::Base::from_u64(*word as u64)),
+                    )?;
+                    result.push(CellValue::new(cell, Some(*word)));
+                }
+                Ok(Message(result))
+            },
+        )
     }
 
     fn extract(point: &Self::Point) -> Self::X {
@@ -152,7 +195,156 @@ impl<C: CurveAffine> SinsemillaInstructions<C> for SinsemillaChip<C> {
         Q: &Self::Q,
         message: Self::Message,
     ) -> Result<Self::Point, Error> {
-        todo!()
+        let config = self.config().clone();
+
+        // Get (x_p, y_p) for each word. We precompute this here so that we can use `batch_normalize()`.
+        let generators_projective: Vec<_> = message
+            .0
+            .iter()
+            .map(|word| get_s_by_idx::<C>(word.value.unwrap()))
+            .collect();
+        let mut generators = vec![C::default(); generators_projective.len()];
+        C::Curve::batch_normalize(&generators_projective, &mut generators);
+        let generators: Vec<(C::Base, C::Base)> = generators
+            .iter()
+            .map(|gen| {
+                let point = gen.coordinates().unwrap();
+                (*point.x(), *point.y())
+            })
+            .collect();
+
+        // Initialize `(x_a, y_a)` to be `(x_q, y_q)`
+
+        layouter.assign_region(
+            || "Assign message",
+            |mut region| {
+                // Copy message into this region.
+                {
+                    for (idx, word) in message.0.iter().enumerate() {
+                        let word_copy = region.assign_advice(
+                            || format!("hash message word {:?}", idx),
+                            config.bits,
+                            idx,
+                            || {
+                                word.value
+                                    .map(|value| C::Base::from_u64(value.into()))
+                                    .ok_or(Error::SynthesisError)
+                            },
+                        )?;
+                        region.constrain_equal(&config.perm_bits, word.cell, word_copy)?;
+                    }
+                }
+
+                for row in 0..(message.0.len() - 1) {
+                    // Enable `Sinsemilla` selector
+                    config.q_sinsemilla.enable(&mut region, row)?;
+                }
+
+                // Copy the `x`-coordinate of our starting `Q` base.
+                let x_q_cell = region.assign_advice(
+                    || "x_q",
+                    config.x_a,
+                    0,
+                    || Q.0.value.ok_or(Error::SynthesisError),
+                )?;
+                region.constrain_equal(&config.perm_sum, Q.0.cell, x_q_cell)?;
+
+                // Initialize `x_a`, `y_a` as `x_q`, `y_q`.
+                let mut x_a = Q.0.value;
+                let mut x_a_cell = Q.0.cell;
+                let mut y_a = Some(Q.1);
+
+                for (row, _) in message.0.iter().enumerate() {
+                    let gen = generators[row];
+                    let x_p = gen.0;
+                    let y_p = gen.1;
+
+                    // Assign `x_p`
+                    region.assign_advice(|| "x_p", config.x_p, row, || Ok(x_p))?;
+
+                    // Compute and assign `lambda1, lambda2`
+                    let lambda1 = x_a
+                        .zip(y_a)
+                        .map(|(x_a, y_a)| (y_a - y_p) * (x_a - x_p).invert().unwrap());
+                    let x_r = lambda1
+                        .zip(x_a)
+                        .map(|(lambda1, x_a)| lambda1 * lambda1 - x_a - x_p);
+                    let lambda2 =
+                        x_a.zip(y_a)
+                            .zip(x_r)
+                            .zip(lambda1)
+                            .map(|(((x_a, y_a), x_r), lambda1)| {
+                                C::Base::from_u64(2) * y_a * (x_a - x_r).invert().unwrap() - lambda1
+                            });
+                    region.assign_advice(
+                        || "lambda1",
+                        config.lambda.0,
+                        row,
+                        || lambda1.ok_or(Error::SynthesisError),
+                    )?;
+                    region.assign_advice(
+                        || "lambda2",
+                        config.lambda.1,
+                        row,
+                        || lambda2.ok_or(Error::SynthesisError),
+                    )?;
+
+                    // Compute and assign `x_a` for the next row
+                    let x_a_new = lambda2
+                        .zip(x_a)
+                        .zip(x_r)
+                        .map(|((lambda2, x_a), x_r)| lambda2 * lambda2 - x_a - x_r);
+                    y_a =
+                        lambda2.zip(x_a).zip(x_a_new).zip(y_a).map(
+                            |(((lambda2, x_a), x_a_new), y_a)| lambda2 * (x_a - x_a_new) - y_a,
+                        );
+
+                    x_a_cell = region.assign_advice(
+                        || "x_a",
+                        config.x_a,
+                        row + 1,
+                        || x_a_new.ok_or(Error::SynthesisError),
+                    )?;
+
+                    x_a = x_a_new;
+                }
+
+                // Assign the final `y_a`
+                let y_a_cell = region.assign_advice(
+                    || "y_a",
+                    config.bits,
+                    message.0.len(),
+                    || y_a.ok_or(Error::SynthesisError),
+                )?;
+
+                #[cfg(test)]
+                if let Some((x_a, y_a)) = x_a.zip(y_a) {
+                    let computed_point: C = C::from_xy(x_a, y_a).unwrap();
+                    let expected_point: C = {
+                        let Q = C::from_xy(Q.0.value.unwrap(), Q.1).unwrap();
+                        let message: Vec<u32> =
+                            message.0.iter().map(|word| word.value.unwrap()).collect();
+
+                        use crate::primitives::sinsemilla::S_PERSONALIZATION;
+                        use pasta_curves::arithmetic::CurveExt;
+
+                        let hasher_S = C::CurveExt::hash_to_curve(S_PERSONALIZATION);
+                        let S = |chunk: u32| -> C { hasher_S(&chunk.to_le_bytes()).to_affine() };
+
+                        message
+                            .iter()
+                            .fold(C::CurveExt::from(Q), |acc, &chunk| (acc + S(chunk)) + acc)
+                            .to_affine()
+                    };
+                    assert_eq!(computed_point, expected_point);
+                }
+
+                let y_a = CellValue::new(y_a_cell, y_a);
+                let x_a = CellValue::new(x_a_cell, x_a);
+
+                Ok(EccPoint { x: x_a, y: y_a })
+            },
+        )
     }
 }
 
