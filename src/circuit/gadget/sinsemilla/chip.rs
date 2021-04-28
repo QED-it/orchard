@@ -18,8 +18,8 @@ use halo2::{
     plonk::{Advice, Column, ConstraintSystem, Error, Fixed, Permutation, Selector},
 };
 
-// mod generator_table;
-// use generator_table::{get_s_by_idx, GeneratorTableChip, GeneratorTableConfig};
+mod generator_table;
+use generator_table::{get_s_by_idx, GeneratorTableChip, GeneratorTableConfig};
 
 /// A message to be hashed.
 #[derive(Clone, Debug)]
@@ -33,6 +33,7 @@ pub struct SinsemillaConfig {
     x_a: Column<Advice>,
     x_p: Column<Advice>,
     lambda: (Column<Advice>, Column<Advice>),
+    generator_table: GeneratorTableConfig,
     ecc_config: EccConfig,
 }
 
@@ -63,9 +64,20 @@ impl<C: CurveAffine> SinsemillaChip<C> {
         Self { config, loaded }
     }
 
-    // TODO: configure()
+    pub fn load(
+        config: SinsemillaConfig,
+        layouter: &mut impl Layouter<C::Base>,
+    ) -> Result<<Self as Chip<C::Base>>::Loaded, Error> {
+        // Load the lookup table.
+        let generator_table_chip =
+            GeneratorTableChip::<C>::construct(config.generator_table.clone());
+        generator_table_chip.load(layouter)?;
 
-    // TODO: load()
+        // Load the ECC fixed configuration
+        Ok(EccChip::<C>::load())
+    }
+
+    // TODO: configure()
 }
 
 // Impl SinsemillaInstructions for SinsemillaChip
