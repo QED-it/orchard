@@ -172,3 +172,128 @@ impl<C: CurveAffine, SinsemillaChip: Clone + SinsemillaInstructions<C>>
         p.map(|p| p.extract_p())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use halo2::{
+        arithmetic::{CurveAffine, FieldExt},
+        circuit::{layouter::SingleChipLayouter, Layouter},
+        dev::MockProver,
+        pasta::pallas,
+        plonk::{Assignment, Circuit, ConstraintSystem, Error},
+    };
+
+    use super::{
+        CommitDomain, HashDomain, SinsemillaChip, SinsemillaCommitDomains, SinsemillaConfig,
+        SinsemillaHashDomains,
+    };
+    use crate::circuit::gadget::ecc::{chip::EccChip, ScalarFixed};
+
+    struct MyCircuit<C: CurveAffine> {
+        _marker: std::marker::PhantomData<C>,
+    }
+
+    impl<C: CurveAffine> Circuit<C::Base> for MyCircuit<C> {
+        type Config = (SinsemillaConfig, SinsemillaConfig);
+
+        #[allow(non_snake_case)]
+        fn configure(meta: &mut ConstraintSystem<C::Base>) -> Self::Config {
+            let bits = meta.advice_column();
+            let P = (meta.advice_column(), meta.advice_column());
+            let lambda = (meta.advice_column(), meta.advice_column());
+            let extras = [
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+            ];
+
+            let ecc_config = EccChip::<C>::configure(meta, bits, P, lambda, extras);
+
+            // Fixed columns for the Sinsemilla generator lookup table
+            let lookup = (
+                meta.fixed_column(),
+                meta.fixed_column(),
+                meta.fixed_column(),
+            );
+
+            let config1 = SinsemillaChip::<C>::configure(
+                meta,
+                bits,
+                P.0,
+                P.1,
+                lambda,
+                lookup,
+                ecc_config.clone(),
+            );
+            let config2 = SinsemillaChip::<C>::configure(
+                meta,
+                extras[0],
+                extras[1],
+                extras[2],
+                (extras[3], extras[4]),
+                lookup,
+                ecc_config,
+            );
+            (config1, config2)
+        }
+
+        fn synthesize(
+            &self,
+            cs: &mut impl Assignment<C::Base>,
+            config: Self::Config,
+        ) -> Result<(), Error> {
+            let mut layouter = SingleChipLayouter::new(cs)?;
+
+            let loaded1 = SinsemillaChip::<C>::load(config.0.clone(), &mut layouter)?;
+            let chip1 = SinsemillaChip::<C>::construct(config.0, loaded1);
+
+            let merkle_crh = HashDomain::new(
+                chip1.clone(),
+                layouter.namespace(|| "merkle_crh"),
+                &SinsemillaHashDomains::MerkleCrh,
+            )?;
+            merkle_crh.hash_to_point(
+                layouter.namespace(|| "hash_to_point"),
+                vec![
+                    true, true, false, true, true, false, false, false, true, true, false, false,
+                ],
+            )?;
+
+            let loaded2 = SinsemillaChip::<C>::load(config.1.clone(), &mut layouter)?;
+            let chip2 = SinsemillaChip::<C>::construct(config.1, loaded2);
+
+            let commit_ivk = CommitDomain::new(
+                chip2.clone(),
+                layouter.namespace(|| "commit_ivk"),
+                &SinsemillaCommitDomains::CommitIvk,
+            )?;
+            let r = ScalarFixed::<C, SinsemillaChip<C>>::new(
+                chip2.clone(),
+                layouter.namespace(|| "r"),
+                Some(C::Scalar::rand()),
+            )?;
+            commit_ivk.commit(
+                layouter.namespace(|| "commit"),
+                vec![
+                    true, true, false, false, true, false, true, true, false, true, false, true,
+                    true, false,
+                ],
+                r,
+            )?;
+
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn sinsemilla_gadget() {
+        let k = 11;
+        let circuit = MyCircuit::<pallas::Affine> {
+            _marker: std::marker::PhantomData,
+        };
+        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        assert_eq!(prover.verify(), Ok(()))
+    }
+}
