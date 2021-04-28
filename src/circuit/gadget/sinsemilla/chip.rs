@@ -29,10 +29,13 @@ pub struct Message(Vec<CellValue<u32>>);
 #[derive(Clone, Debug)]
 #[allow(non_snake_case)]
 pub struct SinsemillaConfig {
+    q_sinsemilla: Selector,
     bits: Column<Advice>,
     x_a: Column<Advice>,
     x_p: Column<Advice>,
     lambda: (Column<Advice>, Column<Advice>),
+    perm_bits: Permutation,
+    perm_sum: Permutation,
     generator_table: GeneratorTableConfig,
     ecc_config: EccConfig,
 }
@@ -77,7 +80,39 @@ impl<C: CurveAffine> SinsemillaChip<C> {
         Ok(EccChip::<C>::load())
     }
 
-    // TODO: configure()
+    #[allow(clippy::too_many_arguments)]
+    pub fn configure(
+        meta: &mut ConstraintSystem<C::Base>,
+        bits: Column<Advice>,
+        x_a: Column<Advice>,
+        x_p: Column<Advice>,
+        lambda: (Column<Advice>, Column<Advice>),
+        lookup: (Column<Fixed>, Column<Fixed>, Column<Fixed>),
+        ecc_config: EccConfig,
+    ) -> <Self as Chip<C::Base>>::Config {
+        // Sinsemilla selector
+        let q_sinsemilla = meta.selector();
+
+        // Set up permutations
+        let perm_bits = Permutation::new(meta, &[bits.into()]);
+        let perm_sum = Permutation::new(meta, &[x_a.into(), x_p.into()]);
+
+        // Generator table config
+        let generator_table =
+            GeneratorTableChip::<C>::configure(meta, q_sinsemilla, lookup, bits, x_a, x_p, lambda);
+
+        SinsemillaConfig {
+            q_sinsemilla,
+            bits,
+            x_a,
+            x_p,
+            lambda,
+            perm_bits,
+            perm_sum,
+            generator_table,
+            ecc_config,
+        }
+    }
 }
 
 // Impl SinsemillaInstructions for SinsemillaChip
