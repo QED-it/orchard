@@ -3,10 +3,10 @@ use crate::circuit::gadget::ecc::{self, EccInstructions};
 use halo2::{arithmetic::CurveAffine, circuit::Layouter, plonk::Error};
 use std::fmt;
 
-// pub mod chip;
-// pub use chip::{
-//     Message, SinsemillaChip, SinsemillaCommitDomains, SinsemillaConfigEnum, SinsemillaHashDomains,
-// };
+pub mod chip;
+pub use chip::{
+    Message, SinsemillaChip, SinsemillaCommitDomains, SinsemillaConfig, SinsemillaHashDomains,
+};
 
 /// The set of circuit instructions required to use the [`Sinsemilla`](https://zcash.github.io/halo2/design/gadgets/sinsemilla.html) gadget.
 pub trait SinsemillaInstructions<C: CurveAffine>: EccInstructions<C> {

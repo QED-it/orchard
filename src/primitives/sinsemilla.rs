@@ -12,7 +12,7 @@ use self::addition::IncompletePoint;
 mod constants;
 pub use constants::*;
 
-fn lebs2ip_k(bits: &[bool]) -> u32 {
+pub fn lebs2ip_k(bits: &[bool]) -> u32 {
     assert!(bits.len() == K);
     bits.iter()
         .enumerate()
