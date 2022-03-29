@@ -16,9 +16,9 @@ jobs:
       - checkout
       - run:
           name: "cargo test"
-            command: |
-              cargo version;
-              cargo test;
+          command: |
+            cargo version;
+            cargo test;
           
 
 # Invoke jobs via workflows
