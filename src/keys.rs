@@ -1050,6 +1050,7 @@ mod tests {
         value::NoteValue,
         Note,
     };
+    use crate::note::NoteType;
 
     #[test]
     fn spend_validating_key_from_bytes() {
@@ -1136,6 +1137,7 @@ mod tests {
             let note = Note::from_parts(
                 addr,
                 NoteValue::from_raw(tv.note_v),
+                NoteType::native(),
                 rho,
                 RandomSeed::from_bytes(tv.note_rseed, &rho).unwrap(),
             );
