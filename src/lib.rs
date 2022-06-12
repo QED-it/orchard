@@ -16,6 +16,8 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
+extern crate pasta_curves;
+
 mod action;
 mod address;
 pub mod builder;
