@@ -1116,7 +1116,6 @@ mod tests {
 
     #[test]
     fn test_vectors() {
-        let mut i = 0;
         for tv in crate::test_vectors::keys::test_vectors() {
             let sk = SpendingKey::from_bytes(tv.sk).unwrap();
 
