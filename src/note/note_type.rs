@@ -34,7 +34,7 @@ impl NoteType {
     ///
     /// [notetypes]: https://zips.z.cash/protocol/nu5.pdf#notetypes
     #[allow(non_snake_case)]
-    pub(super) fn derive(ak: &SpendValidatingKey, assetDesc: &[u8; 64]) -> Self {
+    pub fn derive(ak: &SpendValidatingKey, assetDesc: &[u8; 64]) -> Self {
         let mut s = vec![];
 
         s.extend(ak.to_bytes());
