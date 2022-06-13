@@ -206,7 +206,8 @@ impl SpendValidatingKey {
 /// An issuer authorizing key, used to create issuer authorization signatures.
 /// This type enforces that the corresponding public point (ik^ℙ) has ỹ = 0.
 ///
-/// $\mathsf{ask}$ as defined in [Zcash Protocol Spec § 4.2.3: Orchard Key Components][orchardkeycomponents].
+/// $\mathsf{isk}$ as defined in
+/// [Zcash Protocol Spec § 4.2.3: Orchard Key Components][orchardkeycomponents].
 ///
 /// [orchardkeycomponents]: https://zips.z.cash/protocol/nu5.pdf#orchardkeycomponents
 #[derive(Clone, Debug)]
@@ -248,7 +249,7 @@ impl From<&SpendingKey> for IssuerAuthorizingKey {
 /// Note that this is $\mathsf{ik}^\mathbb{P}$, which by construction is equivalent to
 /// $\mathsf{ik}$ but stored here as a RedPallas verification key.
 ///
-/// [orchardkeycomponents]: TBD ZIP LINK
+/// [orchardkeycomponents]: https://zips.z.cash/protocol/nu5.pdf#orchardkeycomponents
 #[derive(Debug, Clone, PartialOrd, Ord)]
 pub struct IssuerValidatingKey(redpallas::VerificationKey<SpendAuth>);
 // Discuss <SpendAuth>
