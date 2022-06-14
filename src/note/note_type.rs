@@ -71,7 +71,7 @@ pub mod testing {
         ) -> NoteType {
             let bytes64 = [bytes32a, bytes32b].concat();
             let isk = IssuerAuthorizingKey::from(&sk);
-            NoteType::derive(&IssuerValidatingKey::from(&isk), &bytes64.try_into().unwrap())
+            NoteType::derive(&IssuerValidatingKey::from(&isk), bytes64)
         }
     }
 }
