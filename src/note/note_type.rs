@@ -4,7 +4,7 @@ use pasta_curves::pallas;
 use subtle::CtOption;
 
 use crate::constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_V_BYTES};
-use crate::keys::{IssuerValidatingKey};
+use crate::keys::IssuerValidatingKey;
 
 /// Note type identifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
