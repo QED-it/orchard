@@ -18,7 +18,7 @@ use zcash_note_encryption::EphemeralKeyBytes;
 
 use crate::{
     address::Address,
-    primitives::redpallas::{self, SpendAuth},
+    primitives::redpallas::{self, SpendAuth, VerificationKey},
     spec::{
         commit_ivk, diversify_hash, extract_p, ka_orchard, prf_nf, to_base, to_scalar,
         NonIdentityPallasPoint, NonZeroPallasBase, NonZeroPallasScalar, PrfExpand,
@@ -188,17 +188,7 @@ impl SpendValidatingKey {
     pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
         <[u8; 32]>::try_from(bytes)
             .ok()
-            .and_then(|b| {
-                // Structural validity checks for ak_P:
-                // - The point must not be the identity
-                //   (which for Pallas is canonically encoded as all-zeroes).
-                // - The sign of the y-coordinate must be positive.
-                if b != [0; 32] && b[31] & 0x80 == 0 {
-                    <redpallas::VerificationKey<SpendAuth>>::try_from(b).ok()
-                } else {
-                    None
-                }
-            })
+            .and_then(|b|check_structural_validity(&b))
             .map(SpendValidatingKey)
     }
 }
@@ -276,18 +266,21 @@ impl IssuerValidatingKey {
     pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
         <[u8; 32]>::try_from(bytes)
             .ok()
-            .and_then(|b| {
-                // Structural validity checks for ik_P:
-                // - The point must not be the identity
-                //   (which for Pallas is canonically encoded as all-zeroes).
-                // - The sign of the y-coordinate must be positive.
-                if b != [0; 32] && b[31] & 0x80 == 0 {
-                    <redpallas::VerificationKey<SpendAuth>>::try_from(b).ok()
-                } else {
-                    None
-                }
-            })
+            .and_then(|b|check_structural_validity(&b))
             .map(IssuerValidatingKey)
+    }
+}
+
+/// A function to check structural validity of the validating keys for authorizing transfers and
+/// issuing assets
+/// Structural validity checks for ik_P:
+///  - The point must not be the identity (which for Pallas is canonically encoded as all-zeroes).
+///  - The sign of the y-coordinate must be positive.
+fn check_structural_validity(verification_key_bytes: &[u8; 32]) -> Option<VerificationKey<SpendAuth>> {
+    if *verification_key_bytes != [0; 32] && verification_key_bytes[31] & 0x80 == 0 {
+        <redpallas::VerificationKey<SpendAuth>>::try_from(*verification_key_bytes).ok()
+    } else {
+        None
     }
 }
 
