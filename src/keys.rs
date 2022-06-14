@@ -214,16 +214,9 @@ impl SpendValidatingKey {
 pub struct IssuerAuthorizingKey(redpallas::SigningKey<SpendAuth>);
 
 impl IssuerAuthorizingKey {
-    /// Derives ask from sk. Internal use only, does not enforce all constraints.
+    /// Derives isk from sk. Internal use only, does not enforce all constraints.
     fn derive_inner(sk: &SpendingKey) -> pallas::Scalar {
         to_scalar(PrfExpand::ZsaIsk.expand(&sk.0))
-    }
-
-    /// Randomizes this spend authorizing key with the given `randomizer`.
-    /// TODO: not sure we need a randomizer (remove?)
-    /// The resulting key can be used to actually sign a spend.
-    pub fn randomize(&self, randomizer: &pallas::Scalar) -> redpallas::SigningKey<SpendAuth> {
-        self.0.randomize(randomizer)
     }
 }
 
@@ -232,7 +225,6 @@ impl From<&SpendingKey> for IssuerAuthorizingKey {
         let isk = Self::derive_inner(sk);
         // IssuerSigningKey cannot be constructed such that this assertion would fail.
         assert!(!bool::from(isk.is_zero()));
-        // TODO: Add TryFrom<S::Scalar> for IssuerAuthorizingKey.
         let ret = IssuerAuthorizingKey(isk.to_repr().try_into().unwrap());
         // If the last bit of repr_P(ik) is 1, negate isk.
         if (<[u8; 32]>::from(IssuerValidatingKey::from(&ret).0)[31] >> 7) == 1 {
@@ -252,7 +244,6 @@ impl From<&SpendingKey> for IssuerAuthorizingKey {
 /// [orchardkeycomponents]: https://zips.z.cash/protocol/nu5.pdf#orchardkeycomponents
 #[derive(Debug, Clone, PartialOrd, Ord)]
 pub struct IssuerValidatingKey(redpallas::VerificationKey<SpendAuth>);
-// Discuss <SpendAuth>
 impl From<&IssuerAuthorizingKey> for IssuerValidatingKey {
     fn from(isk: &IssuerAuthorizingKey) -> Self {
         IssuerValidatingKey((&isk.0).into())
@@ -274,13 +265,8 @@ impl PartialEq for IssuerValidatingKey {
 impl Eq for IssuerValidatingKey {}
 
 impl IssuerValidatingKey {
-    /// Randomizes this spend validating key with the given `randomizer`.
-    pub fn randomize(&self, randomizer: &pallas::Scalar) -> redpallas::VerificationKey<SpendAuth> {
-        self.0.randomize(randomizer)
-    }
-
     /// Converts this spend validating key to its serialized form,
-    /// I2LEOSP_256(ak).
+    /// I2LEOSP_256(ik).
     pub(crate) fn to_bytes(&self) -> [u8; 32] {
         // This is correct because the wrapped point must have ỹ = 0, and
         // so the point repr is the same as I2LEOSP of its x-coordinate.
