@@ -188,7 +188,7 @@ impl SpendValidatingKey {
     pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
         <[u8; 32]>::try_from(bytes)
             .ok()
-            .and_then(|b|check_structural_validity(&b))
+            .and_then(check_structural_validity)
             .map(SpendValidatingKey)
     }
 }
@@ -266,7 +266,7 @@ impl IssuerValidatingKey {
     pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
         <[u8; 32]>::try_from(bytes)
             .ok()
-            .and_then(|b|check_structural_validity(&b))
+            .and_then(check_structural_validity)
             .map(IssuerValidatingKey)
     }
 }
@@ -276,9 +276,11 @@ impl IssuerValidatingKey {
 /// Structural validity checks for ik_P:
 ///  - The point must not be the identity (which for Pallas is canonically encoded as all-zeroes).
 ///  - The sign of the y-coordinate must be positive.
-fn check_structural_validity(verification_key_bytes: &[u8; 32]) -> Option<VerificationKey<SpendAuth>> {
-    if *verification_key_bytes != [0; 32] && verification_key_bytes[31] & 0x80 == 0 {
-        <redpallas::VerificationKey<SpendAuth>>::try_from(*verification_key_bytes).ok()
+fn check_structural_validity(
+    verification_key_bytes: [u8; 32],
+) -> Option<VerificationKey<SpendAuth>> {
+    if verification_key_bytes != [0; 32] && verification_key_bytes[31] & 0x80 == 0 {
+        <redpallas::VerificationKey<SpendAuth>>::try_from(verification_key_bytes).ok()
     } else {
         None
     }
