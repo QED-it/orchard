@@ -74,13 +74,18 @@ pub mod testing {
     prop_compose! {
         /// Generate a uniformly distributed note type
         pub fn arb_note_type()(
+            is_native in prop::bool::ANY,
             sk in arb_spending_key(),
             bytes32a in prop::array::uniform32(prop::num::u8::ANY),
             bytes32b in prop::array::uniform32(prop::num::u8::ANY),
         ) -> NoteType {
-            let bytes64 = [bytes32a, bytes32b].concat();
-            let isk = IssuerAuthorizingKey::from(&sk);
-            NoteType::derive(&IssuerValidatingKey::from(&isk), bytes64)
+            if is_native {
+                NoteType::native()
+            } else {
+                let bytes64 = [bytes32a, bytes32b].concat();
+                let isk = IssuerAuthorizingKey::from(&sk);
+                NoteType::derive(&IssuerValidatingKey::from(&isk), bytes64)
+            }
         }
     }
 }
