@@ -1,8 +1,7 @@
 //! In-band secret distribution for Orchard bundles.
 
-use core::fmt;
-
 use blake2b_simd::{Hash, Params};
+use core::fmt;
 use group::ff::PrimeField;
 use zcash_note_encryption::{
     BatchDomain, Domain, EphemeralKeyBytes, NotePlaintextBytes, OutPlaintextBytes,
@@ -394,7 +393,7 @@ mod tests {
         try_compact_note_decryption, try_note_decryption, try_output_recovery_with_ovk, Domain,
         EphemeralKeyBytes,
     };
-    use super::{prf_ock_orchard, CompactAction, OrchardDomain, OrchardNoteEncryption};
+
     use crate::note::NoteType;
     use crate::{
         action::Action,
@@ -411,10 +410,8 @@ mod tests {
         Address, Note,
     };
 
-    use super::{
-        get_note_version, orchard_parse_note_plaintext_without_memo, prf_ock_orchard,
-        CompactAction, OrchardDomain, OrchardNoteEncryption,
-    };
+    use super::{get_note_version, orchard_parse_note_plaintext_without_memo};
+    use super::{prf_ock_orchard, CompactAction, OrchardDomain, OrchardNoteEncryption};
 
     proptest! {
     #[test]
