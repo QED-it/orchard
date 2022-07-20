@@ -8,9 +8,9 @@ use crate::keys::IssuerValidatingKey;
 
 /// Note type identifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct NoteType(pallas::Point);
+pub struct NoteType(pub(crate) pallas::Point);
 
-pub const MAX_ASSET_DESCRIPTION_SIZE: usize = 512;
+const MAX_ASSET_DESCRIPTION_SIZE: usize = 512;
 
 // the hasher used to derive the assetID
 #[allow(non_snake_case)]
@@ -66,10 +66,11 @@ impl NoteType {
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
-    use super::NoteType;
     use proptest::prelude::*;
 
     use crate::keys::{testing::arb_spending_key, IssuerAuthorizingKey, IssuerValidatingKey};
+
+    use super::NoteType;
 
     prop_compose! {
         /// Generate a uniformly distributed note type

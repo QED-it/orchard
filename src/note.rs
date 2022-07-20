@@ -189,7 +189,7 @@ impl Note {
         self.value
     }
 
-    /// Returns the note type of this note.
+    /// Returns the note type
     pub fn note_type(&self) -> NoteType {
         self.note_type
     }
