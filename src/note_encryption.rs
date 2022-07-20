@@ -361,7 +361,9 @@ mod tests {
 
     #[test]
     fn test_vectors() {
-        let test_vectors = crate::test_vectors::note_encryption::test_vectors();
+        let test_vectors1 = crate::test_vectors::note_encryption::test_vectors();
+        let test_vectors2 = crate::test_vectors::note_encryption2::test_vectors();
+        let test_vectors = test_vectors1.iter().chain(test_vectors2.iter());
 
         for tv in test_vectors {
             //
