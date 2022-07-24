@@ -257,7 +257,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 meta,
                 advices[..5].try_into().unwrap(),
                 advices[6],
-                lagrange_coeffs[0],
                 lookup,
                 range_check,
             );
@@ -275,7 +274,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 meta,
                 advices[5..].try_into().unwrap(),
                 advices[7],
-                lagrange_coeffs[1],
                 lookup,
                 range_check,
             );
