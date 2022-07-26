@@ -1098,7 +1098,7 @@ mod tests {
             let test_case_bytes = include_bytes!("circuit_proof_test_case.bin");
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
-        assert_eq!(proof.0.len(), 4992);
+        assert_eq!(proof.0.len(), 5024);
 
         assert!(proof.verify(&vk, &[instance]).is_ok());
     }
