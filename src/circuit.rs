@@ -3,6 +3,21 @@
 use core::fmt;
 
 use group::{Curve, GroupEncoding};
+use halo2_gadgets::{
+    ecc::{
+        chip::{EccChip, EccConfig},
+        FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarFixedShort, ScalarVar,
+    },
+    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
+    sinsemilla::{
+        chip::{SinsemillaChip, SinsemillaConfig},
+        merkle::{
+            chip::{MerkleChip, MerkleConfig},
+            MerklePath,
+        },
+    },
+    utilities::lookup_range_check::LookupRangeCheckConfig,
+};
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
     plonk::{
@@ -16,14 +31,7 @@ use memuse::DynamicUsage;
 use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
 use rand::RngCore;
 
-use self::{
-    commit_ivk::{CommitIvkChip, CommitIvkConfig},
-    gadget::{
-        add_chip::{AddChip, AddConfig},
-        assign_free_advice,
-    },
-    note_commit::{NoteCommitChip, NoteCommitConfig},
-};
+use crate::circuit::gadget::mux_chip::{MuxChip, MuxConfig};
 use crate::{
     constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
@@ -42,20 +50,14 @@ use crate::{
     tree::{Anchor, MerkleHashOrchard},
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
 };
-use halo2_gadgets::{
-    ecc::{
-        chip::{EccChip, EccConfig},
-        FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarFixedShort, ScalarVar,
+
+use self::{
+    commit_ivk::{CommitIvkChip, CommitIvkConfig},
+    gadget::{
+        add_chip::{AddChip, AddConfig},
+        assign_free_advice,
     },
-    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
-    sinsemilla::{
-        chip::{SinsemillaChip, SinsemillaConfig},
-        merkle::{
-            chip::{MerkleChip, MerkleConfig},
-            MerklePath,
-        },
-    },
-    utilities::lookup_range_check::LookupRangeCheckConfig,
+    note_commit::{NoteCommitChip, NoteCommitConfig},
 };
 
 mod commit_ivk;
@@ -94,6 +96,7 @@ pub struct Config {
     commit_ivk_config: CommitIvkConfig,
     old_note_commit_config: NoteCommitConfig,
     new_note_commit_config: NoteCommitConfig,
+    mux_config: MuxConfig,
 }
 
 /// The Orchard Action circuit.
@@ -185,6 +188,9 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 ],
             )
         });
+
+        // Multiplexer.
+        let mux_config = MuxChip::configure(meta, advices[0], advices[1], advices[2], advices[3]);
 
         // Addition of two field elements.
         let add_config = AddChip::configure(meta, advices[7], advices[8], advices[6]);
@@ -312,6 +318,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             commit_ivk_config,
             old_note_commit_config,
             new_note_commit_config,
+            mux_config,
         }
     }
 
@@ -899,7 +906,6 @@ mod tests {
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, RngCore};
 
-    use super::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K};
     use crate::note::NoteType;
     use crate::{
         keys::SpendValidatingKey,
@@ -907,6 +913,8 @@ mod tests {
         tree::MerklePath,
         value::{ValueCommitTrapdoor, ValueCommitment},
     };
+
+    use super::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K};
 
     fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None);
@@ -991,8 +999,8 @@ mod tests {
                     K as usize,
                     &circuits[0],
                 );
-            assert_eq!(usize::from(circuit_cost.proof_size(1)), 4992);
-            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7264);
+            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5024);
+            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7296);
             usize::from(circuit_cost.proof_size(instances.len()))
         };
 
@@ -1100,7 +1108,7 @@ mod tests {
             let test_case_bytes = include_bytes!("circuit_proof_test_case.bin");
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
-        assert_eq!(proof.0.len(), 4992);
+        assert_eq!(proof.0.len(), 5024);
 
         assert!(proof.verify(&vk, &[instance]).is_ok());
     }
