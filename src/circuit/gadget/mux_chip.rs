@@ -63,6 +63,8 @@ impl MuxChip {
             Constraints::with_selector(q_mux, Some(should_be_zero))
         });
 
+        // TODO: is enable equality or enable constant needed?
+
         MuxConfig {
             q_mux,
             switch,
@@ -78,6 +80,12 @@ impl MuxChip {
 }
 
 pub trait MuxInstructions<C: CurveAffine> {
+    fn witness_switch(
+        &self,
+        layouter: impl Layouter<C::Base>,
+        value: Value<bool>,
+    ) -> Result<AssignedCell<C::Base, C::Base>, plonk::Error>;
+
     fn mux(
         &self,
         layouter: impl Layouter<C::Base>,
@@ -93,9 +101,64 @@ pub trait MuxInstructions<C: CurveAffine> {
         left: &EccPoint,
         right: &EccPoint,
     ) -> Result<EccPoint, plonk::Error>;
+
+    /// If is_free_advice { advice = anything } else { advice = constant }
+    fn conditional_advice(
+        &self,
+        layouter: impl Layouter<C::Base>,
+        is_free_advice: &AssignedCell<C::Base, C::Base>,
+        advice: &AssignedCell<C::Base, C::Base>,
+        else_constant: &C::Base,
+    ) -> Result<(), plonk::Error>;
 }
 
 impl MuxInstructions<pallas::Affine> for MuxChip {
+    // TODO: this could return a wrapper type for usage safety.
+    // TODO: this could use constant-time Choice instead of bool.
+    fn witness_switch(
+        &self,
+        mut layouter: impl Layouter<pallas::Base>,
+        value: Value<bool>,
+    ) -> Result<AssignedCell<pallas::Base, pallas::Base>, plonk::Error> {
+        layouter.assign_region(
+            || "witness switch",
+            |mut region| {
+                // This is a boolean constraint implemented with the mux gate.
+                // Set left=switch, right=0, output=0, giving:
+                //     (1 - switch) * switch == 0
+
+                // Enable the multiplexer gate.
+                self.config.q_mux.enable(&mut region, 0)?;
+
+                let switch = region.assign_advice(
+                    || "load switch",
+                    self.config.switch,
+                    0,
+                    || value.map(|b| pallas::Base::from(b)),
+                )?;
+
+                // Copy the switch into the left input.
+                switch.copy_advice(|| "copy switch", &mut region, self.config.left, 0)?;
+
+                // Force the right input and the output to zero.
+                region.assign_advice_from_constant(
+                    || "null right",
+                    self.config.right,
+                    0,
+                    pallas::Base::zero(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "null output",
+                    self.config.out,
+                    0,
+                    pallas::Base::zero(),
+                )?;
+
+                Ok(switch)
+            },
+        )
+    }
+
     fn mux(
         &self,
         mut layouter: impl Layouter<pallas::Base>,
@@ -143,6 +206,48 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
         )?;
 
         Ok(EccPoint::from_coordinates_unchecked(x.into(), y.into()))
+    }
+
+    fn conditional_advice(
+        &self,
+        mut layouter: impl Layouter<pallas::Base>,
+        is_free_advice: &AssignedCell<pallas::Base, pallas::Base>,
+        advice: &AssignedCell<pallas::Base, pallas::Base>,
+        else_constant: &pallas::Base,
+    ) -> Result<(), plonk::Error> {
+        layouter.assign_region(
+            || "conditional advice",
+            |mut region| {
+                // Enable the multiplexer gate.
+                self.config.q_mux.enable(&mut region, 0)?;
+
+                // Copy the switch.
+                is_free_advice.copy_advice(|| "copy switch", &mut region, self.config.switch, 0)?;
+
+                // Copy the advice into the left input.
+                // When the switch is off, it must equal the constant output.
+                // When the switch is on, it is ignored so its value is freely chosen.
+                advice.copy_advice(|| "copy advice", &mut region, self.config.left, 0)?;
+
+                // The right witness just satisfies the gate when the switch is on.
+                region.assign_advice(
+                    || "witness right",
+                    self.config.right,
+                    0,
+                    || Value::known(*else_constant),
+                )?;
+
+                // Force a constant output.
+                region.assign_advice_from_constant(
+                    || "constant output",
+                    self.config.out,
+                    0,
+                    *else_constant,
+                )?;
+
+                Ok(())
+            },
+        )
     }
 }
 

@@ -31,7 +31,7 @@ use memuse::DynamicUsage;
 use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
 use rand::RngCore;
 
-use crate::circuit::gadget::mux_chip::{MuxChip, MuxConfig};
+use crate::circuit::gadget::mux_chip::{MuxChip, MuxConfig, MuxInstructions};
 use crate::note::NoteType;
 use crate::{
     constants::{
@@ -404,20 +404,41 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
             // TODO: move to self.
             let note_type_value = Value::known(NoteType::native());
-            let is_zsa_value = Value::known(pallas::Base::zero()); // TODO: bool type.
+            let is_zsa_value = note_type_value.map(|nt| !bool::from(nt.is_native()));
 
-            // Witness note_type.
+            // Witness boolean is_zsa.
+            let mux_chip = config.mux_chip();
+            let is_zsa =
+                mux_chip.witness_switch(layouter.namespace(|| "witness is_zsa"), is_zsa_value)?;
+
+            // Witness note_type as a point.
             let note_type = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "note_type"),
                 note_type_value.as_ref().map(|nt| nt.cv_base().to_affine()),
             )?;
 
-            // Witness is_zsa.
-            let is_zsa = assign_free_advice(
-                layouter.namespace(|| "witness is_zsa"),
-                config.advices[0],
-                is_zsa_value,
+            // The constant that represents the native note type.
+            let note_type_native = NoteType::native()
+                .cv_base()
+                .to_affine()
+                .coordinates()
+                .unwrap();
+
+            // If is_zsa=false, check that the note type is native.
+            // TODO: is this necessary?
+            // TODO: is it necessary to check the opposite case, with note_type!=native ?
+            mux_chip.conditional_advice(
+                layouter.namespace(|| "note_type consistency X"),
+                &is_zsa,
+                &note_type.inner().x(),
+                note_type_native.x(),
+            )?;
+            mux_chip.conditional_advice(
+                layouter.namespace(|| "note_type consistency Y"),
+                &is_zsa,
+                &note_type.inner().y(),
+                note_type_native.y(),
             )?;
 
             (
