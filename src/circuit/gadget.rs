@@ -33,6 +33,10 @@ impl super::Config {
         add_chip::AddChip::construct(self.add_config.clone())
     }
 
+    pub(super) fn mux_chip(&self) -> mux_chip::MuxChip {
+        mux_chip::MuxChip::construct(self.mux_config.clone())
+    }
+
     pub(super) fn commit_ivk_chip(&self) -> CommitIvkChip {
         CommitIvkChip::construct(self.commit_ivk_config.clone())
     }

@@ -32,6 +32,7 @@ use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
 use rand::RngCore;
 
 use crate::circuit::gadget::mux_chip::{MuxChip, MuxConfig};
+use crate::note::NoteType;
 use crate::{
     constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
@@ -296,13 +297,21 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
         // Configuration to handle decomposition and canonicity checking
         // for NoteCommit_old.
-        let old_note_commit_config =
-            NoteCommitChip::configure(meta, advices, sinsemilla_config_1.clone());
+        let old_note_commit_config = NoteCommitChip::configure(
+            meta,
+            advices,
+            sinsemilla_config_1.clone(),
+            mux_config.clone(),
+        );
 
         // Configuration to handle decomposition and canonicity checking
         // for NoteCommit_new.
-        let new_note_commit_config =
-            NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone());
+        let new_note_commit_config = NoteCommitChip::configure(
+            meta,
+            advices,
+            sinsemilla_config_2.clone(),
+            mux_config.clone(),
+        );
 
         Config {
             primary,
@@ -335,7 +344,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         let ecc_chip = config.ecc_chip();
 
         // Witness private inputs that are used across multiple checks.
-        let (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new) = {
+        let (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, note_type, is_zsa) = {
             // Witness psi_old
             let psi_old = assign_free_advice(
                 layouter.namespace(|| "witness psi_old"),
@@ -393,7 +402,27 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 self.v_new,
             )?;
 
-            (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new)
+            // TODO: move to self.
+            let note_type_value = Value::known(NoteType::native());
+            let is_zsa_value = Value::known(pallas::Base::zero()); // TODO: bool type.
+
+            // Witness note_type.
+            let note_type = NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "note_type"),
+                note_type_value.as_ref().map(|nt| nt.cv_base().to_affine()),
+            )?;
+
+            // Witness is_zsa.
+            let is_zsa = assign_free_advice(
+                layouter.namespace(|| "witness is_zsa"),
+                config.advices[0],
+                is_zsa_value,
+            )?;
+
+            (
+                psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, note_type, is_zsa,
+            )
         };
 
         // Merkle path validity check (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
@@ -570,9 +599,11 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 config.sinsemilla_chip_1(),
                 config.ecc_chip(),
                 config.note_commit_chip_old(),
+                config.mux_chip(),
                 g_d_old.inner(),
                 pk_d_old.inner(),
                 v_old.clone(),
+                is_zsa.clone(),
                 rho_old,
                 psi_old,
                 rcm_old,
@@ -628,9 +659,11 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 config.sinsemilla_chip_2(),
                 config.ecc_chip(),
                 config.note_commit_chip_new(),
+                config.mux_chip(),
                 g_d_new.inner(),
                 pk_d_new.inner(),
                 v_new.clone(),
+                is_zsa.clone(),
                 rho_new,
                 psi_new,
                 rcm_new,

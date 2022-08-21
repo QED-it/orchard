@@ -1,3 +1,4 @@
+use halo2_gadgets::ecc::chip::EccPoint;
 use halo2_proofs::circuit::Value;
 use halo2_proofs::{
     circuit::{AssignedCell, Chip, Layouter},
@@ -84,6 +85,14 @@ pub trait MuxInstructions<C: CurveAffine> {
         left: &AssignedCell<C::Base, C::Base>,
         right: &AssignedCell<C::Base, C::Base>,
     ) -> Result<AssignedCell<C::Base, C::Base>, plonk::Error>;
+
+    fn mux_point(
+        &self,
+        layouter: impl Layouter<pallas::Base>,
+        switch: &AssignedCell<pallas::Base, pallas::Base>,
+        left: &EccPoint,
+        right: &EccPoint,
+    ) -> Result<EccPoint, plonk::Error>;
 }
 
 impl MuxInstructions<pallas::Affine> for MuxChip {
@@ -111,6 +120,29 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
                 region.assign_advice(|| "out", self.config.out, 0, || out_val)
             },
         )
+    }
+
+    fn mux_point(
+        &self,
+        mut layouter: impl Layouter<pallas::Base>,
+        switch: &AssignedCell<pallas::Base, pallas::Base>,
+        left: &EccPoint,
+        right: &EccPoint,
+    ) -> Result<EccPoint, plonk::Error> {
+        let x = self.mux(
+            layouter.namespace(|| "mux x"),
+            switch,
+            &left.x(),
+            &right.x(),
+        )?;
+        let y = self.mux(
+            layouter.namespace(|| "mux y"),
+            switch,
+            &left.y(),
+            &right.y(),
+        )?;
+
+        Ok(EccPoint::from_coordinates_unchecked(x.into(), y.into()))
     }
 }
 

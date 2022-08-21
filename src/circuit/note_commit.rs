@@ -24,6 +24,7 @@ use halo2_gadgets::{
         bool_check, lookup_range_check::LookupRangeCheckConfig, FieldValue, RangeConstrained,
     },
 };
+use crate::circuit::gadget::mux_chip::{MuxConfig, MuxInstructions};
 
 type NoteCommitPiece = MessagePiece<
     pallas::Affine,
@@ -1426,6 +1427,7 @@ pub struct NoteCommitConfig {
     advices: [Column<Advice>; 10],
     sinsemilla_config:
         SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+    mux_config: MuxConfig,
 }
 
 #[derive(Clone, Debug)]
@@ -1444,6 +1446,7 @@ impl NoteCommitChip {
             OrchardCommitDomains,
             OrchardFixedBases,
         >,
+        mux_config: MuxConfig,
     ) -> NoteCommitConfig {
         // Useful constants
         let two = pallas::Base::from(2);
@@ -1552,6 +1555,7 @@ impl NoteCommitChip {
             y_canon,
             advices,
             sinsemilla_config,
+            mux_config,
         }
     }
 
@@ -1564,6 +1568,7 @@ pub(in crate::circuit) mod gadgets {
     use halo2_proofs::circuit::{Chip, Value};
 
     use super::*;
+    use crate::circuit::gadget::mux_chip::MuxChip;
 
     #[allow(clippy::many_single_char_names)]
     #[allow(clippy::type_complexity)]
@@ -1573,9 +1578,11 @@ pub(in crate::circuit) mod gadgets {
         chip: SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
         ecc_chip: EccChip<OrchardFixedBases>,
         note_commit_chip: NoteCommitChip,
+        mux_chip: MuxChip,
         g_d: &NonIdentityEccPoint,
         pk_d: &NonIdentityEccPoint,
         value: AssignedCell<NoteValue, pallas::Base>,
+        is_zsa: AssignedCell<pallas::Base, pallas::Base>,
         rho: AssignedCell<pallas::Base, pallas::Base>,
         psi: AssignedCell<pallas::Base, pallas::Base>,
         rcm: ScalarFixed<pallas::Affine, EccChip<OrchardFixedBases>>,
@@ -1666,12 +1673,26 @@ pub(in crate::circuit) mod gadgets {
                     h.clone(),
                 ],
             );
-            let domain = CommitDomain::new(chip, ecc_chip, &OrchardCommitDomains::NoteCommit);
-            domain.commit(
+            let domain = CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteCommit);
+            let (cm_native, zs) = domain.commit(
                 layouter.namespace(|| "Process NoteCommit inputs"),
                 message,
                 rcm,
-            )?
+            )?;
+
+            // TODO: use ZSA hash.
+            let cm_zsa = cm_native.clone();
+
+            let cm = mux_chip.mux_point(
+                layouter.namespace(|| "mux cm"),
+                &is_zsa,
+                cm_native.inner(),
+                cm_zsa.inner(),
+            )?;
+            let cm = Point::from_inner(ecc_chip.clone(), cm);
+
+            // TODO: deal with zs too.
+            (cm, zs)
         };
 
         // `CommitDomain::commit` returns the running sum for each `MessagePiece`. Grab
@@ -2049,6 +2070,7 @@ mod tests {
     };
 
     use rand::{rngs::OsRng, RngCore};
+    use crate::circuit::gadget::mux_chip::MuxChip;
 
     #[test]
     fn note_commit() {
@@ -2122,8 +2144,9 @@ mod tests {
                     lookup,
                     range_check,
                 );
+                let mux_config = MuxChip::configure(meta, advices[0], advices[1], advices[2], advices[3]);
                 let note_commit_config =
-                    NoteCommitChip::configure(meta, advices, sinsemilla_config);
+                    NoteCommitChip::configure(meta, advices, sinsemilla_config, mux_config);
 
                 let ecc_config = EccChip::<OrchardFixedBases>::configure(
                     meta,
@@ -2158,6 +2181,8 @@ mod tests {
 
                 // Construct a NoteCommit chip
                 let note_commit_chip = NoteCommitChip::construct(note_commit_config.clone());
+
+                let mux_chip = MuxChip::construct(note_commit_config.mux_config);
 
                 // Witness g_d
                 let g_d = {
@@ -2209,6 +2234,14 @@ mod tests {
                     )?
                 };
 
+                // Witness is_zsa.
+                let is_zsa_value = Value::known(pallas::Base::zero());
+                let is_zsa = assign_free_advice(
+                    layouter.namespace(|| "witness is_zsa"),
+                    note_commit_config.advices[0],
+                    is_zsa_value,
+                )?;
+
                 // Witness rho
                 let rho = assign_free_advice(
                     layouter.namespace(|| "witness rho"),
@@ -2235,9 +2268,11 @@ mod tests {
                     sinsemilla_chip,
                     ecc_chip.clone(),
                     note_commit_chip,
+                    mux_chip,
                     g_d.inner(),
                     pk_d.inner(),
                     value_var,
+                    is_zsa,
                     rho,
                     psi,
                     rcm_gadget,
