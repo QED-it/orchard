@@ -1673,25 +1673,32 @@ pub(in crate::circuit) mod gadgets {
                     h.clone(),
                 ],
             );
+
             let domain = CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteCommit);
-            let (cm_native, zs) = domain.commit(
-                layouter.namespace(|| "Process NoteCommit inputs"),
+
+            let (hash_native, zs) = domain.hash(
+                layouter.namespace(|| "NoteCommit hash"),
                 message,
-                rcm,
             )?;
 
             // TODO: use ZSA hash.
-            let cm_zsa = cm_native.clone();
+            let hash_zsa = hash_native.clone();
 
-            let cm = mux_chip.mux_point(
-                layouter.namespace(|| "mux cm"),
+            let hash = mux_chip.mux_point(
+                layouter.namespace(|| "mux hash"),
                 &is_zsa,
-                cm_native.inner(),
-                cm_zsa.inner(),
+                &(hash_native.inner().clone().into()),
+                &(hash_zsa.inner().clone().into()),
             )?;
-            let cm = Point::from_inner(ecc_chip.clone(), cm);
+            let hash = Point::from_inner(ecc_chip.clone(), hash);
 
-            // TODO: deal with zs too.
+            let cm = domain.blind(
+                layouter.namespace(|| "NoteCommit blind"),
+                hash,
+                rcm,
+            )?;
+
+            // TODO: handle zs in the zsa case.
             (cm, zs)
         };
 
