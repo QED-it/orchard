@@ -1,10 +1,11 @@
 //! Sinsemilla generators
-use super::{OrchardFixedBases, OrchardFixedBasesFull};
-use crate::spec::i2lebsp;
-use halo2_gadgets::sinsemilla::{CommitDomains, HashDomains};
-
 use group::ff::PrimeField;
+use halo2_gadgets::sinsemilla::{CommitDomains, HashDomains};
 use pasta_curves::{arithmetic::CurveAffine, pallas};
+
+use crate::spec::i2lebsp;
+
+use super::{OrchardFixedBases, OrchardFixedBasesFull};
 
 /// Number of bits of each message piece in $\mathsf{SinsemillaHashToPoint}$
 pub const K: usize = 10;
@@ -34,6 +35,18 @@ pub const Q_NOTE_COMMITMENT_M_GENERATOR: ([u8; 32], [u8; 32]) = (
     [
         99, 172, 73, 115, 90, 10, 39, 135, 158, 94, 219, 129, 136, 18, 34, 136, 44, 201, 244, 110,
         217, 194, 190, 78, 131, 112, 198, 138, 147, 88, 160, 50,
+    ],
+);
+
+/// Generator used in SinsemillaHashToPoint for ZSA note commitment
+pub const Q_NOTE_ZSA_COMMITMENT_M_GENERATOR: ([u8; 32], [u8; 32]) = (
+    [
+        207, 235, 191, 45, 66, 225, 8, 126, 199, 188, 39, 26, 115, 106, 18, 2, 191, 173, 75, 9, 65,
+        225, 175, 193, 224, 202, 228, 177, 3, 75, 228, 1,
+    ],
+    [
+        220, 251, 80, 86, 182, 182, 99, 67, 254, 97, 241, 22, 79, 111, 161, 176, 79, 97, 208, 98,
+        116, 57, 110, 196, 25, 73, 239, 31, 196, 97, 19, 30,
     ],
 );
 
@@ -78,6 +91,7 @@ pub(crate) fn i2lebsp_k(int: usize) -> [bool; K] {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OrchardHashDomains {
     NoteCommit,
+    NoteCommitZSA,
     CommitIvk,
     MerkleCrh,
 }
@@ -96,6 +110,11 @@ impl HashDomains<pallas::Affine> for OrchardHashDomains {
                 pallas::Base::from_repr(Q_NOTE_COMMITMENT_M_GENERATOR.1).unwrap(),
             )
             .unwrap(),
+            OrchardHashDomains::NoteCommitZSA => pallas::Affine::from_xy(
+                pallas::Base::from_repr(Q_NOTE_ZSA_COMMITMENT_M_GENERATOR.0).unwrap(),
+                pallas::Base::from_repr(Q_NOTE_ZSA_COMMITMENT_M_GENERATOR.1).unwrap(),
+            )
+            .unwrap(),
             OrchardHashDomains::MerkleCrh => pallas::Affine::from_xy(
                 pallas::Base::from_repr(Q_MERKLE_CRH.0).unwrap(),
                 pallas::Base::from_repr(Q_MERKLE_CRH.1).unwrap(),
@@ -108,13 +127,15 @@ impl HashDomains<pallas::Affine> for OrchardHashDomains {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OrchardCommitDomains {
     NoteCommit,
+    NoteCommitZSA,
     CommitIvk,
 }
 
 impl CommitDomains<pallas::Affine, OrchardFixedBases, OrchardHashDomains> for OrchardCommitDomains {
     fn r(&self) -> OrchardFixedBasesFull {
         match self {
-            Self::NoteCommit => OrchardFixedBasesFull::NoteCommitR,
+            // Native and ZSA notes share the same blinding domain.
+            Self::NoteCommit | Self::NoteCommitZSA => OrchardFixedBasesFull::NoteCommitR,
             Self::CommitIvk => OrchardFixedBasesFull::CommitIvkR,
         }
     }
@@ -122,6 +143,7 @@ impl CommitDomains<pallas::Affine, OrchardFixedBases, OrchardHashDomains> for Or
     fn hash_domain(&self) -> OrchardHashDomains {
         match self {
             Self::NoteCommit => OrchardHashDomains::NoteCommit,
+            Self::NoteCommitZSA => OrchardHashDomains::NoteCommitZSA,
             Self::CommitIvk => OrchardHashDomains::CommitIvk,
         }
     }
@@ -129,16 +151,21 @@ impl CommitDomains<pallas::Affine, OrchardFixedBases, OrchardHashDomains> for Or
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::constants::{
-        fixed_bases::{COMMIT_IVK_PERSONALIZATION, NOTE_COMMITMENT_PERSONALIZATION},
-        sinsemilla::MERKLE_CRH_PERSONALIZATION,
-    };
     use group::{ff::PrimeField, Curve};
     use halo2_gadgets::sinsemilla::primitives::{CommitDomain, HashDomain};
     use halo2_proofs::arithmetic::CurveAffine;
     use halo2_proofs::pasta::pallas;
     use rand::{self, rngs::OsRng, Rng};
+
+    use crate::constants::{
+        fixed_bases::{
+            COMMIT_IVK_PERSONALIZATION, NOTE_COMMITMENT_PERSONALIZATION,
+            NOTE_ZSA_COMMITMENT_PERSONALIZATION,
+        },
+        sinsemilla::MERKLE_CRH_PERSONALIZATION,
+    };
+
+    use super::*;
 
     #[test]
     // Nodes in the Merkle tree are Pallas base field elements.
@@ -189,6 +216,22 @@ mod tests {
         assert_eq!(
             *coords.y(),
             pallas::Base::from_repr(Q_NOTE_COMMITMENT_M_GENERATOR.1).unwrap()
+        );
+    }
+
+    #[test]
+    fn q_note_commitment_zsa_m() {
+        let domain = CommitDomain::new(NOTE_ZSA_COMMITMENT_PERSONALIZATION);
+        let point = domain.Q();
+        let coords = point.to_affine().coordinates().unwrap();
+
+        assert_eq!(
+            *coords.x(),
+            pallas::Base::from_repr(Q_NOTE_ZSA_COMMITMENT_M_GENERATOR.0).unwrap()
+        );
+        assert_eq!(
+            *coords.y(),
+            pallas::Base::from_repr(Q_NOTE_ZSA_COMMITMENT_M_GENERATOR.1).unwrap()
         );
     }
 

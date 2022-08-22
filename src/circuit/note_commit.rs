@@ -1674,15 +1674,22 @@ pub(in crate::circuit) mod gadgets {
                 ],
             );
 
-            let domain = CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteCommit);
+            // TODO: use ZSA note_type.
+            let message_zsa = message.clone();
+
+            let domain = CommitDomain::new(chip.clone(), ecc_chip.clone(), &OrchardCommitDomains::NoteCommit);
 
             let (hash_native, zs) = domain.hash(
-                layouter.namespace(|| "NoteCommit hash"),
+                layouter.namespace(|| "NoteCommit native hash"),
                 message,
             )?;
 
-            // TODO: use ZSA hash.
-            let hash_zsa = hash_native.clone();
+            let domain_zsa = CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteCommitZSA);
+
+            let (hash_zsa, _zs_zsa) = domain_zsa.hash(
+                layouter.namespace(|| "NoteCommit ZSA hash"),
+                message_zsa,
+            )?;
 
             let hash = mux_chip.mux_point(
                 layouter.namespace(|| "mux hash"),
