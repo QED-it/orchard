@@ -1583,6 +1583,7 @@ pub(in crate::circuit) mod gadgets {
         pk_d: &NonIdentityEccPoint,
         value: AssignedCell<NoteValue, pallas::Base>,
         is_zsa: AssignedCell<pallas::Base, pallas::Base>,
+        note_type: &NonIdentityEccPoint,
         rho: AssignedCell<pallas::Base, pallas::Base>,
         psi: AssignedCell<pallas::Base, pallas::Base>,
         rcm: ScalarFixed<pallas::Affine, EccChip<OrchardFixedBases>>,
@@ -2085,6 +2086,7 @@ mod tests {
 
     use rand::{rngs::OsRng, RngCore};
     use crate::circuit::gadget::mux_chip::MuxChip;
+    use crate::note::NoteType;
 
     #[test]
     fn note_commit() {
@@ -2277,6 +2279,13 @@ mod tests {
                     Value::known(rcm),
                 )?;
 
+                // Witness note_type as a point.
+                let note_type = NonIdentityPoint::new(
+                    ecc_chip.clone(),
+                    layouter.namespace(|| "note_type"),
+                    Value::known(NoteType::native().cv_base().to_affine()),
+                )?;
+
                 let cm = gadgets::note_commit(
                     layouter.namespace(|| "Hash NoteCommit pieces"),
                     sinsemilla_chip,
@@ -2287,6 +2296,7 @@ mod tests {
                     pk_d.inner(),
                     value_var,
                     is_zsa,
+                    note_type.inner(),
                     rho,
                     psi,
                     rcm_gadget,
