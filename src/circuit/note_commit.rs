@@ -1,16 +1,5 @@
 use core::iter;
 
-use halo2_proofs::{
-    circuit::{AssignedCell, Layouter, Value},
-    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
-    poly::Rotation,
-};
-use pasta_curves::{arithmetic::FieldExt, pallas};
-
-use crate::{
-    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P},
-    value::NoteValue,
-};
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, NonIdentityEccPoint},
@@ -24,7 +13,18 @@ use halo2_gadgets::{
         bool_check, lookup_range_check::LookupRangeCheckConfig, FieldValue, RangeConstrained,
     },
 };
+use halo2_proofs::{
+    circuit::{AssignedCell, Layouter, Value},
+    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
+    poly::Rotation,
+};
+use pasta_curves::{arithmetic::FieldExt, pallas};
+
 use crate::circuit::gadget::mux_chip::{MuxConfig, MuxInstructions};
+use crate::{
+    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P},
+    value::NoteValue,
+};
 
 type NoteCommitPiece = MessagePiece<
     pallas::Affine,
@@ -640,12 +640,13 @@ impl DecomposeH {
         chip: SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
         layouter: &mut impl Layouter<pallas::Base>,
         psi: &AssignedCell<pallas::Base, pallas::Base>,
-        // TODO: note_type_or_zeros: &NonIdentityEccPoint,
+        h_2_value: Value<&pallas::Base>,
     ) -> Result<
         (
             NoteCommitPiece,
             RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
             RangeConstrained<pallas::Base, Value<pallas::Base>>,
+            RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         ),
         Error,
     > {
@@ -660,26 +661,21 @@ impl DecomposeH {
         // h_1 will be boolean-constrained in the gate.
         let h_1 = RangeConstrained::bitrange_of(psi.value(), 254..255);
 
-        let h_2 = RangeConstrained::bitrange_of(Value::known(&pallas::Base::zero()), 0..4);
-        // TODO: or note_type
-        /*let h_2 = RangeConstrained::witness_short(
+        // Constrain h_2 to be 4 bits.
+        let h_2 = RangeConstrained::witness_short(
             lookup_config,
             layouter.namespace(|| "h_2"),
-            note_type.x().value(),
+            h_2_value,
             0..4,
-        )?;*/
+        )?;
 
         let h = MessagePiece::from_subpieces(
             chip,
             layouter.namespace(|| "h"),
-            [
-                h_0.value(),
-                h_1,
-                h_2,
-            ],
+            [h_0.value(), h_1, h_2.value()],
         )?;
 
-        Ok((h, h_0, h_1)) // TODO: return h_2
+        Ok((h, h_0, h_1, h_2))
     }
 
     fn assign(
@@ -688,7 +684,7 @@ impl DecomposeH {
         h: NoteCommitPiece,
         h_0: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         h_1: RangeConstrained<pallas::Base, Value<pallas::Base>>,
-        // TODO: h_2 cell
+        h_2: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
     ) -> Result<AssignedCell<pallas::Base, pallas::Base>, Error> {
         layouter.assign_region(
             || "NoteCommit MessagePiece h",
@@ -703,6 +699,8 @@ impl DecomposeH {
                 let h_1 = region.assign_advice(|| "h_1", self.col_r, 0, || *h_1.inner())?;
 
                 // TODO: copy_advice h_2
+                //h_2.inner()
+                //    .copy_advice(|| "h_2", &mut region, self.col ?, 0 ?)?;
 
                 Ok(h_1)
             },
@@ -749,11 +747,7 @@ impl DecomposeJ {
 
         let j_2 = RangeConstrained::bitrange_of(Value::known(&pallas::Base::zero()), 0..8);
 
-        let j = MessagePiece::from_subpieces(
-            chip,
-            layouter.namespace(|| "j"),
-            [j_0, j_1, j_2],
-        )?;
+        let j = MessagePiece::from_subpieces(chip, layouter.namespace(|| "j"), [j_0, j_1, j_2])?;
 
         Ok((j, j_0, j_1))
     }
@@ -1673,10 +1667,12 @@ impl NoteCommitChip {
 }
 
 pub(in crate::circuit) mod gadgets {
+    use group::ff::Field;
     use halo2_proofs::circuit::{Chip, Value};
 
-    use super::*;
     use crate::circuit::gadget::mux_chip::MuxChip;
+
+    use super::*;
 
     #[allow(clippy::many_single_char_names)]
     #[allow(clippy::type_complexity)]
@@ -1740,11 +1736,32 @@ pub(in crate::circuit) mod gadgets {
 
         // h = h_0 || h_1 || h_2
         //   = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
-        // TODO: witness h_2 = 4 zeros OR (bits 0..=3 of x(note_type)).
-        let (h, h_0, h_1) =
-            DecomposeH::decompose(&lookup_config, chip.clone(), &mut layouter, &psi)?;
-        // TODO: check conditional_advice(…, is_zsa, h_2, 0000)
-        let h_2 = b_3.clone();
+
+        // The value of h_2 is 4 zeros OR (bits 0..=3 of x(note_type)).
+        let h_2 = is_zsa
+            .value()
+            .zip(note_type.x().value())
+            .map(|(is_zsa, x)| {
+                if is_zsa.is_zero_vartime() {
+                    pallas::Base::zero()
+                } else {
+                    x.clone()
+                }
+            });
+        let (h, h_0, h_1, h_2) = DecomposeH::decompose(
+            &lookup_config,
+            chip.clone(),
+            &mut layouter,
+            &psi,
+            h_2.as_ref(),
+        )?;
+        // Enforce the choice of h_2.
+        mux_chip.conditional_advice(
+            layouter.namespace(|| "h_2 = 0 or start of note_type"),
+            &is_zsa,
+            &h_2.inner(),          // Four bits of ZSA note_type.
+            &pallas::Base::zero(), // Or zero for native notes.
+        )?;
 
         // i = bits 4..=253 of x(note_type)
         let i = MessagePiece::from_subpieces(
@@ -1822,19 +1839,20 @@ pub(in crate::circuit) mod gadgets {
                 ],
             );
 
-            let domain = CommitDomain::new(chip.clone(), ecc_chip.clone(), &OrchardCommitDomains::NoteCommit);
+            let domain = CommitDomain::new(
+                chip.clone(),
+                ecc_chip.clone(),
+                &OrchardCommitDomains::NoteCommit,
+            );
 
-            let (hash_native, zs) = domain.hash(
-                layouter.namespace(|| "NoteCommit native hash"),
-                message,
-            )?;
+            let (hash_native, zs) =
+                domain.hash(layouter.namespace(|| "NoteCommit native hash"), message)?;
 
-            let domain_zsa = CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteCommitZSA);
+            let domain_zsa =
+                CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteCommitZSA);
 
-            let (hash_zsa, _zs_zsa) = domain_zsa.hash(
-                layouter.namespace(|| "NoteCommit ZSA hash"),
-                message_zsa,
-            )?;
+            let (hash_zsa, _zs_zsa) =
+                domain_zsa.hash(layouter.namespace(|| "NoteCommit ZSA hash"), message_zsa)?;
 
             let hash = mux_chip.mux_point(
                 layouter.namespace(|| "mux hash"),
@@ -1844,11 +1862,7 @@ pub(in crate::circuit) mod gadgets {
             )?;
             let hash = Point::from_inner(ecc_chip.clone(), hash);
 
-            let cm = domain.blind(
-                layouter.namespace(|| "NoteCommit blind"),
-                hash,
-                rcm,
-            )?;
+            let cm = domain.blind(layouter.namespace(|| "NoteCommit blind"), hash, rcm)?;
 
             // TODO: handle zs in the zsa case.
             (cm, zs)
@@ -1911,7 +1925,9 @@ pub(in crate::circuit) mod gadgets {
             .g
             .assign(&mut layouter, g, g_0, g_1.clone(), z1_g.clone())?;
 
-        let h_1 = cfg.h.assign(&mut layouter, h, h_0.clone(), h_1)?;
+        let h_1 = cfg
+            .h
+            .assign(&mut layouter, h, h_0.clone(), h_1, h_2.clone())?;
 
         let j_0 = cfg.j.assign(&mut layouter, j, j_0, j_1)?;
 
@@ -2200,7 +2216,30 @@ pub(in crate::circuit) mod gadgets {
 mod tests {
     use core::iter;
 
-    use super::NoteCommitConfig;
+    use ff::{Field, PrimeField, PrimeFieldBits};
+    use group::Curve;
+    use halo2_gadgets::{
+        ecc::{
+            chip::{EccChip, EccConfig},
+            NonIdentityPoint, ScalarFixed,
+        },
+        sinsemilla::chip::SinsemillaChip,
+        sinsemilla::primitives::CommitDomain,
+        utilities::lookup_range_check::LookupRangeCheckConfig,
+    };
+    use halo2_proofs::{
+        circuit::{Layouter, SimpleFloorPlanner, Value},
+        dev::MockProver,
+        plonk::{Circuit, ConstraintSystem, Error},
+    };
+    use pasta_curves::{
+        arithmetic::{CurveAffine, FieldExt},
+        pallas,
+    };
+    use rand::{rngs::OsRng, RngCore};
+
+    use crate::circuit::gadget::mux_chip::MuxChip;
+    use crate::note::NoteType;
     use crate::{
         circuit::{
             gadget::assign_free_advice,
@@ -2212,31 +2251,8 @@ mod tests {
         },
         value::NoteValue,
     };
-    use halo2_gadgets::{
-        ecc::{
-            chip::{EccChip, EccConfig},
-            NonIdentityPoint, ScalarFixed,
-        },
-        sinsemilla::chip::SinsemillaChip,
-        sinsemilla::primitives::CommitDomain,
-        utilities::lookup_range_check::LookupRangeCheckConfig,
-    };
 
-    use ff::{Field, PrimeField, PrimeFieldBits};
-    use group::Curve;
-    use halo2_proofs::{
-        circuit::{Layouter, SimpleFloorPlanner, Value},
-        dev::MockProver,
-        plonk::{Circuit, ConstraintSystem, Error},
-    };
-    use pasta_curves::{
-        arithmetic::{CurveAffine, FieldExt},
-        pallas,
-    };
-
-    use rand::{rngs::OsRng, RngCore};
-    use crate::circuit::gadget::mux_chip::MuxChip;
-    use crate::note::NoteType;
+    use super::NoteCommitConfig;
 
     #[test]
     fn note_commit() {
@@ -2310,7 +2326,8 @@ mod tests {
                     lookup,
                     range_check,
                 );
-                let mux_config = MuxChip::configure(meta, advices[0], advices[1], advices[2], advices[3]);
+                let mux_config =
+                    MuxChip::configure(meta, advices[0], advices[1], advices[2], advices[3]);
                 let note_commit_config =
                     NoteCommitChip::configure(meta, advices, sinsemilla_config, mux_config);
 
