@@ -66,7 +66,8 @@ pub mod gadget;
 mod note_commit;
 
 /// Size of the Orchard circuit.
-const K: u32 = 11;
+const K: u32 = 12;
+// TODO: attempt to optimize back to K=11.
 
 // Absolute offsets for public inputs.
 const ANCHOR: usize = 0;
@@ -1055,8 +1056,8 @@ mod tests {
                     K as usize,
                     &circuits[0],
                 );
-            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5024);
-            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7296);
+            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5088);
+            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7360);
             usize::from(circuit_cost.proof_size(instances.len()))
         };
 
@@ -1153,7 +1154,7 @@ mod tests {
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
-                let file = std::fs::File::create("circuit_proof_test_case.bin")?;
+                let file = std::fs::File::create("src/circuit_proof_test_case.bin")?;
                 write_test_case(file, &instance, &proof)
             };
             create_proof().expect("should be able to write new proof");
@@ -1164,7 +1165,7 @@ mod tests {
             let test_case_bytes = include_bytes!("circuit_proof_test_case.bin");
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
-        assert_eq!(proof.0.len(), 5024);
+        assert_eq!(proof.0.len(), 5088);
 
         assert!(proof.verify(&vk, &[instance]).is_ok());
     }

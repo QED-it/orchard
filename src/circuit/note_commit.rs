@@ -577,11 +577,11 @@ impl DecomposeG {
 }
 
 /// h = h_0 || h_1 || h_2
-///   = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
+///   = (bits 249..=253 of psi) || (bit 254 of psi) || (4 bits of note_type or zeros)
 ///
-/// | A_6 | A_7 | A_8 | q_notecommit_h |
+/// | A_6 | A_7 | A_8 | A_9 | q_notecommit_h |
 /// ------------------------------------
-/// |  h  | h_0 | h_1 |       1        |
+/// |  h  | h_0 | h_1 | h_2 |       1        |
 ///
 /// https://p.z.cash/orchard-0.1:note-commit-decomposition-h?partial
 #[derive(Clone, Debug)]
@@ -590,6 +590,7 @@ struct DecomposeH {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
+    col_z: Column<Advice>,
 }
 
 impl DecomposeH {
@@ -598,7 +599,9 @@ impl DecomposeH {
         col_l: Column<Advice>,
         col_m: Column<Advice>,
         col_r: Column<Advice>,
+        col_z: Column<Advice>,
         two_pow_5: pallas::Base,
+        two_pow_6: pallas::Base,
     ) -> Self {
         let q_notecommit_h = meta.selector();
 
@@ -611,11 +614,11 @@ impl DecomposeH {
             let h_0 = meta.query_advice(col_m, Rotation::cur());
             // This gate constrains h_1 to be boolean.
             let h_1 = meta.query_advice(col_r, Rotation::cur());
+            // h_2 has been constrained to be 4 bits outside this gate.
+            let h_2 = meta.query_advice(col_z, Rotation::cur());
 
-            // TODO: h_2 4 bits
-
-            // h = h_0 + (2^5) h_1
-            let decomposition_check = h - (h_0 + h_1.clone() * two_pow_5);
+            // h = h_0 + (2^5) h_1 + (2^6) h_2
+            let decomposition_check = h - (h_0 + h_1.clone() * two_pow_5 + h_2 * two_pow_6);
 
             Constraints::with_selector(
                 q_notecommit_h,
@@ -631,6 +634,7 @@ impl DecomposeH {
             col_l,
             col_m,
             col_r,
+            col_z,
         }
     }
 
@@ -697,10 +701,8 @@ impl DecomposeH {
                 h_0.inner()
                     .copy_advice(|| "h_0", &mut region, self.col_m, 0)?;
                 let h_1 = region.assign_advice(|| "h_1", self.col_r, 0, || *h_1.inner())?;
-
-                // TODO: copy_advice h_2
-                //h_2.inner()
-                //    .copy_advice(|| "h_2", &mut region, self.col ?, 0 ?)?;
+                h_2.inner()
+                    .copy_advice(|| "h_2", &mut region, self.col_z, 0)?;
 
                 Ok(h_1)
             },
@@ -768,7 +770,6 @@ impl DecomposeJ {
                     .cell_value()
                     .copy_advice(|| "j", &mut region, self.d.col_l, 0)?;
 
-                // TODO: Why assign_advice and not copy_advice?
                 let j_0 = region.assign_advice(|| "j_0", self.d.col_m, 0, || *j_0.inner())?;
 
                 j_1.inner()
@@ -781,6 +782,7 @@ impl DecomposeJ {
                     pallas::Base::zero(),
                 )?;
 
+                // TODO: should this instead copy like z1_d in DecomposeD?
                 region.assign_advice_from_constant(
                     || "j_3 = 0",
                     self.d.col_r,
@@ -1576,7 +1578,7 @@ impl NoteCommitChip {
         let d = DecomposeD::configure(meta, col_l, col_m, col_r, two, two_pow_2, two_pow_10);
         let e = DecomposeE::configure(meta, col_l, col_m, col_r, two_pow_6);
         let g = DecomposeG::configure(meta, col_l, col_m, two, two_pow_10);
-        let h = DecomposeH::configure(meta, col_l, col_m, col_r, two_pow_5);
+        let h = DecomposeH::configure(meta, col_l, col_m, col_r, col_z, two_pow_5, two_pow_6);
         let j = DecomposeJ::configure(d.clone());
 
         let g_d = GdCanonicity::configure(
@@ -1762,6 +1764,7 @@ pub(in crate::circuit) mod gadgets {
             &h_2.inner(),          // Four bits of ZSA note_type.
             &pallas::Base::zero(), // Or zero for native notes.
         )?;
+        // TODO: move the block above into DecomposeH.
 
         // i = bits 4..=253 of x(note_type)
         let i = MessagePiece::from_subpieces(
@@ -1796,7 +1799,7 @@ pub(in crate::circuit) mod gadgets {
             &note_commit_chip.config.y_canon,
             layouter.namespace(|| "y(note_type) decomposition"),
             note_type.y(),
-            j_1,
+            j_1, // Similar to d_1.
         )?;
 
         // cm = NoteCommit^Orchard_rcm(g★_d || pk★_d || i2lebsp_{64}(v) || rho || psi)
@@ -1845,13 +1848,13 @@ pub(in crate::circuit) mod gadgets {
                 &OrchardCommitDomains::NoteCommit,
             );
 
-            let (hash_native, zs) =
+            let (hash_native, _zs) =
                 domain.hash(layouter.namespace(|| "NoteCommit native hash"), message)?;
 
             let domain_zsa =
                 CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteCommitZSA);
 
-            let (hash_zsa, _zs_zsa) =
+            let (hash_zsa, zs) =
                 domain_zsa.hash(layouter.namespace(|| "NoteCommit ZSA hash"), message_zsa)?;
 
             let hash = mux_chip.mux_point(
@@ -1864,7 +1867,6 @@ pub(in crate::circuit) mod gadgets {
 
             let cm = domain.blind(layouter.namespace(|| "NoteCommit blind"), hash, rcm)?;
 
-            // TODO: handle zs in the zsa case.
             (cm, zs)
         };
 
@@ -1877,6 +1879,7 @@ pub(in crate::circuit) mod gadgets {
         let z1_g = zs[6][1].clone();
         let g_2 = z1_g.clone();
         let z13_g = zs[6][13].clone();
+        let z13_i = zs[8][13].clone();
 
         // Witness and constrain the bounds we need to ensure canonicity.
         let (a_prime, z13_a_prime) = canon_bitshift_130(
@@ -1892,7 +1895,12 @@ pub(in crate::circuit) mod gadgets {
             c.inner().cell_value(),
         )?;
 
-        // TODO: x(note_type) canonicity, which has the same structure as pk_d above.
+        let (h2_i_prime, z14_h2_i_prime) = pkd_x_canonicity(
+            &lookup_config,
+            layouter.namespace(|| "x(note_type) canonicity"),
+            h_2.clone(), // Similar to b_3.
+            i.inner().cell_value(), // Similar to c.
+        )?;
 
         let (e1_f_prime, z14_e1_f_prime) = rho_canonicity(
             &lookup_config,
@@ -1945,7 +1953,19 @@ pub(in crate::circuit) mod gadgets {
             z14_b3_c_prime,
         )?;
 
-        // TODO: check note_type, similar to pk_d but with h_2, i, j_0. Missing h_2.
+        // Check note_type, using the same chip as pk_d.
+        /* TODO: fix and check.
+        cfg.pk_d.assign(
+            &mut layouter.namespace(|| "note_type"),
+            note_type,
+            h_2, // Similar to b_3.
+            i, // Similar to c.
+             j_0, // Similar to d_0.
+            h2_i_prime,
+            z13_i,
+            z14_h2_i_prime,
+        )?;
+        */
 
         cfg.value.assign(&mut layouter, value, d_2, z1_d, e_0)?;
 
