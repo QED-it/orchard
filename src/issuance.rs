@@ -4,7 +4,6 @@ use rand::{CryptoRng, RngCore};
 use std::collections::HashSet;
 use std::fmt;
 
-use crate::issuance::Error::{IssueActionPreviouslyFinalizedNoteType, IssueBundleInvalidSignature};
 use crate::keys::{IssuerAuthorizingKey, IssuerValidatingKey};
 use crate::note::note_type::MAX_ASSET_DESCRIPTION_SIZE;
 use crate::note::{NoteType, Nullifier};
@@ -303,7 +302,7 @@ pub fn verify_issue_bundle<'a>(
     previously_finalized: &'a mut HashSet<NoteType>, // The current note_type finalization set.
 ) -> Result<&'a mut HashSet<NoteType>, Error> {
     if let Err(e) = bundle.ik.verify(&sighash, &bundle.authorization.signature) {
-        return Err(IssueBundleInvalidSignature(e));
+        return Err(Error::IssueBundleInvalidSignature(e));
     };
 
     // Any IssueAction could have just one properly derived NoteType.
@@ -320,7 +319,7 @@ pub fn verify_issue_bundle<'a>(
 
             // Fail if the current note_type was previously finalized.
             if acc.contains(&note_type) {
-                return Err(IssueActionPreviouslyFinalizedNoteType(note_type));
+                return Err(Error::IssueActionPreviouslyFinalizedNoteType(note_type));
             }
 
             // Add to finalization set, if needed.
@@ -364,38 +363,60 @@ pub enum Error {
     IssueActionPreviouslyFinalizedNoteType(NoteType),
 }
 
-// impl std::error::Error for Error {}
-//
-// impl fmt::Display for Error {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Error::IssueActionAlreadyFinalized => {write!(f, "unable to add note to the IssueAction since it has already been finalized")}
-//             Error::IssueActionNotFound => {}
-//             Error::IssueActionIncorrectNoteType => {}
-//             Error::IssueBundleIkMismatchNoteType => {}
-//             Error::WrongAssetDescSize => {}
-//             IssueBundleInvalidSignature(_) => {}
-//             IssueActionPreviouslyFinalizedNoteType(_) => {}
-//         }
-//     }
-// }
+impl std::error::Error for Error {}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::IssueActionAlreadyFinalized => {
+                write!(
+                    f,
+                    "unable to add note to the IssueAction since it has already been finalized"
+                )
+            }
+            Error::IssueActionNotFound => {
+                write!(f, "the requested IssueAction not exists in the bundle.")
+            }
+            Error::IssueActionIncorrectNoteType => {
+                write!(f, "not all `NoteType`s are the same inside the action")
+            }
+            Error::IssueBundleIkMismatchNoteType => {
+                write!(
+                    f,
+                    "the provided `isk` and the driven `ik` does not match at least one note type"
+                )
+            }
+            Error::WrongAssetDescSize => {
+                write!(f, "`asset_desc` should be between 1 and 512 bytes")
+            }
+            Error::IssueBundleInvalidSignature(_) => {
+                write!(f, "invalid signature")
+            }
+            Error::IssueActionPreviouslyFinalizedNoteType(_) => {
+                write!(f, "the provided `NoteType` has been previously finalized")
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::IssueBundle;
     use crate::issuance::Error::{
-        IssueActionAlreadyFinalized, IssueActionNotFound, IssueActionPreviouslyFinalizedNoteType,
-        IssueBundleIkMismatchNoteType, WrongAssetDescSize,
+        IssueActionAlreadyFinalized, IssueActionIncorrectNoteType, IssueActionNotFound,
+        IssueActionPreviouslyFinalizedNoteType, IssueBundleIkMismatchNoteType, WrongAssetDescSize,
     };
-    use crate::issuance::{verify_issue_bundle, Error, Signed};
+    use crate::issuance::{verify_issue_bundle, Error, IssueAction, Signed};
     use crate::keys::{
         FullViewingKey, IssuerAuthorizingKey, IssuerValidatingKey, Scope, SpendingKey,
     };
-    use crate::note::NoteType;
+    use crate::note::{NoteType, Nullifier};
     use crate::value::NoteValue;
-    use crate::Address;
+    use crate::{Address, Note};
+    use nonempty::NonEmpty;
     use rand::rngs::OsRng;
     use rand::RngCore;
+    use std::borrow::{Borrow, BorrowMut};
     use std::collections::HashSet;
 
     fn setup_params() -> (
@@ -432,6 +453,19 @@ mod tests {
             bundle
                 .add_recipient(
                     String::from_utf8(vec![b'X'; 513]).unwrap(),
+                    recipient,
+                    NoteValue::unsplittable(),
+                    true,
+                    rng,
+                )
+                .unwrap_err(),
+            WrongAssetDescSize
+        );
+
+        assert_eq!(
+            bundle
+                .add_recipient(
+                    "".to_string(),
                     recipient,
                     NoteValue::unsplittable(),
                     true,
@@ -518,6 +552,11 @@ mod tests {
             bundle
                 .finalize_action(String::from_utf8(vec![b'X'; 513]).unwrap())
                 .unwrap_err(),
+            WrongAssetDescSize
+        );
+
+        assert_eq!(
+            bundle.finalize_action("".to_string()).unwrap_err(),
             WrongAssetDescSize
         );
 
@@ -611,6 +650,47 @@ mod tests {
             .expect_err("should not be able to sign");
 
         assert_eq!(err, IssueBundleIkMismatchNoteType);
+    }
+
+    #[test]
+    fn issue_bundle_incorrect_note_type_for_signature() {
+        let (mut rng, isk, ik, recipient, _) = setup_params();
+
+        let mut bundle = IssueBundle::new(ik);
+
+        // Add "normal" note
+        bundle
+            .add_recipient(
+                String::from("IssueBundle"),
+                recipient,
+                NoteValue::from_raw(5),
+                false,
+                rng,
+            )
+            .unwrap();
+
+        // Add "bad" note
+        let note = Note::new(
+            recipient,
+            NoteValue::from_raw(5),
+            NoteType::derive(bundle.ik(), "Poisoned pill"),
+            Nullifier::dummy(&mut rng),
+            &mut rng,
+        );
+        bundle
+            .actions
+            .first_mut()
+            .unwrap()
+            .notes
+            .borrow_mut()
+            .push(note);
+
+        let err = bundle
+            .prepare([0; 32])
+            .sign(rng, &isk)
+            .expect_err("should not be able to sign");
+
+        assert_eq!(err, IssueActionIncorrectNoteType);
     }
 
     #[test]
@@ -732,5 +812,134 @@ mod tests {
             verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
             Error::IssueBundleInvalidSignature(reddsa::Error::InvalidSignature)
         );
+    }
+
+    #[test]
+    fn issue_bundle_verify_fail_incorrect_asset_description() {
+        let (mut rng, isk, ik, recipient, sighash) = setup_params();
+
+        let mut bundle = IssueBundle::new(ik.clone());
+
+        bundle
+            .add_recipient(
+                String::from("Good description"),
+                recipient,
+                NoteValue::from_raw(5),
+                false,
+                rng,
+            )
+            .unwrap();
+
+        let mut signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
+
+        // Add "bad" note
+        let note = Note::new(
+            recipient,
+            NoteValue::from_raw(5),
+            NoteType::derive(signed.ik(), "Poisoned pill"),
+            Nullifier::dummy(&mut rng),
+            &mut rng,
+        );
+
+        signed
+            .actions
+            .first_mut()
+            .unwrap()
+            .notes
+            .borrow_mut()
+            .push(note);
+
+        let prev_finalized = &mut HashSet::new();
+        let err = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err();
+
+        assert_eq!(err, IssueActionIncorrectNoteType);
+    }
+
+    #[test]
+    fn issue_bundle_verify_fail_incorrect_ik() {
+        let asset_description = "asset";
+
+        let (mut rng, isk, ik, recipient, sighash) = setup_params();
+
+        let mut bundle = IssueBundle::new(ik.clone());
+
+        bundle
+            .add_recipient(
+                String::from(asset_description),
+                recipient,
+                NoteValue::from_raw(5),
+                false,
+                rng,
+            )
+            .unwrap();
+
+        let mut signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
+
+        let incorrect_sk = SpendingKey::random(&mut rng);
+        let incorrect_isk: IssuerAuthorizingKey = (&incorrect_sk).into();
+        let incorrect_ik: IssuerValidatingKey = (&incorrect_isk).into();
+
+        // Add "bad" note
+        let note = Note::new(
+            recipient,
+            NoteValue::from_raw(55),
+            NoteType::derive(&incorrect_ik, asset_description),
+            Nullifier::dummy(&mut rng),
+            &mut rng,
+        );
+
+        signed.actions.first_mut().unwrap().notes = NonEmpty::new(note);
+
+        let prev_finalized = &mut HashSet::new();
+        let err = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err();
+
+        assert_eq!(err, IssueBundleIkMismatchNoteType);
+    }
+
+    #[test]
+    fn issue_bundle_verify_fail_wrong_asset_descr_size() {
+        // we want to inject "bad" description for test purposes.
+        impl IssueAction {
+            pub fn modify_descr(&mut self, new_descr: String) {
+                self.asset_desc = new_descr;
+            }
+        }
+
+        let (rng, isk, ik, recipient, sighash) = setup_params();
+
+        let mut bundle = IssueBundle::new(ik.clone());
+
+        bundle
+            .add_recipient(
+                String::from("Good description"),
+                recipient,
+                NoteValue::from_raw(5),
+                false,
+                rng,
+            )
+            .unwrap();
+
+        let mut signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
+        let prev_finalized = &mut HashSet::new();
+
+        // 1. Try too long description
+        signed
+            .actions
+            .first_mut()
+            .unwrap()
+            .modify_descr(String::from_utf8(vec![b'X'; 513]).unwrap());
+        let finalized = verify_issue_bundle(&signed, sighash, prev_finalized);
+
+        assert_eq!(finalized.unwrap_err(), WrongAssetDescSize);
+
+        // 2. Try empty description
+        signed
+            .actions
+            .first_mut()
+            .unwrap()
+            .modify_descr("".to_string());
+        let finalized = verify_issue_bundle(&signed, sighash, prev_finalized);
+
+        assert_eq!(finalized.unwrap_err(), WrongAssetDescSize);
     }
 }
