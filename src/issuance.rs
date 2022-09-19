@@ -1030,7 +1030,7 @@ pub mod testing {
     /// Generate an issue action having issued values less than MAX_NOTE_VALUE / n_actions.
     pub fn arb_issue_action_n(n_actions: usize) -> impl Strategy<Value = IssueAction> {
         let value_gen = Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64));
-        value_gen.prop_flat_map(move |value| arb_issue_action(value))
+        value_gen.prop_flat_map(arb_issue_action)
     }
 
     prop_compose! {
