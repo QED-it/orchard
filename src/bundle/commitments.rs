@@ -1,8 +1,10 @@
 //! Utility functions for computing bundle commitments
 
+use bitvec::macros::internal::funty::Fundamental;
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::bundle::{Authorization, Authorized, Bundle};
+use crate::issuance::{IssueAuth, IssueBundle};
 
 const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
 const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActCHash";
@@ -89,4 +91,24 @@ pub(crate) fn hash_bundle_auth_data<V>(bundle: &Bundle<Authorized, V>) -> Blake2
 /// [zip244]: https://zips.z.cash/zip-0244
 pub fn hash_bundle_auth_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION).finalize()
+}
+
+/// Construct the commitment for the issue bundle
+/// TODO - investigate if we need different personalizations
+pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>) -> Blake2bHash {
+    let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
+
+    for action in bundle.actions().iter() {
+        for note in action.notes().iter() {
+            h.update(&note.recipient().to_raw_address_bytes());
+            h.update(&note.value().to_bytes());
+            h.update(&note.note_type().to_bytes());
+            h.update(&note.rho().to_bytes());
+            h.update(note.rseed().as_bytes());
+        }
+        h.update(action.asset_desc().as_bytes());
+        h.update(&[action.is_finalized().as_u8()]);
+    }
+    h.update(&bundle.ik().to_bytes());
+    h.finalize()
 }

@@ -1,9 +1,11 @@
 //! Structs related to issuance bundles and the associated logic.
+use blake2b_simd::Hash as Blake2bHash;
 use nonempty::NonEmpty;
 use rand::{CryptoRng, RngCore};
 use std::collections::HashSet;
 use std::fmt;
 
+use crate::bundle::commitments::hash_issue_bundle_txid_data;
 use crate::keys::{IssuerAuthorizingKey, IssuerValidatingKey};
 use crate::note::note_type::MAX_ASSET_DESCRIPTION_SIZE;
 use crate::note::{NoteType, Nullifier};
@@ -149,6 +151,12 @@ impl<T: IssueAuth> IssueBundle<T> {
             .find(|a| NoteType::derive(&self.ik, &a.asset_desc).eq(&note_type));
         action
     }
+
+    /// Computes a commitment to the effects of this bundle, suitable for inclusion within
+    /// a transaction ID.
+    pub fn commitment(&self) -> IssueBundleCommitment {
+        IssueBundleCommitment(hash_issue_bundle_txid_data(self))
+    }
 }
 
 impl IssueBundle<Unauthorized> {
@@ -278,6 +286,13 @@ impl IssueBundle<Prepared> {
         })
     }
 }
+
+/// A commitment to a bundle of actions.
+///
+/// This commitment is non-malleable, in the sense that a bundle's commitment will only
+/// change if the effects of the bundle are altered.
+#[derive(Debug)]
+pub struct IssueBundleCommitment(pub Blake2bHash);
 
 fn is_asset_desc_valid(asset_desc: &str) -> bool {
     !asset_desc.is_empty() && asset_desc.bytes().len() <= MAX_ASSET_DESCRIPTION_SIZE
@@ -416,7 +431,7 @@ mod tests {
     use nonempty::NonEmpty;
     use rand::rngs::OsRng;
     use rand::RngCore;
-    use std::borrow::{Borrow, BorrowMut};
+    use std::borrow::BorrowMut;
     use std::collections::HashSet;
 
     fn setup_params() -> (
@@ -815,10 +830,38 @@ mod tests {
     }
 
     #[test]
+    fn issue_bundle_verify_fail_wrong_sighash() {
+        let (rng, isk, ik, recipient, random_sighash) = setup_params();
+        let mut bundle = IssueBundle::new(ik);
+
+        bundle
+            .add_recipient(
+                String::from("Good description"),
+                recipient,
+                NoteValue::from_raw(5),
+                false,
+                rng,
+            )
+            .unwrap();
+
+        let sighash: [u8; 32] = <[u8; 32]>::try_from(bundle.commitment().0.as_bytes()).unwrap();
+        let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
+        let prev_finalized = &mut HashSet::new();
+
+        // 2. Try empty description
+        let finalized = verify_issue_bundle(&signed, random_sighash, prev_finalized);
+
+        assert_eq!(
+            finalized.unwrap_err(),
+            Error::IssueBundleInvalidSignature(reddsa::Error::InvalidSignature)
+        );
+    }
+
+    #[test]
     fn issue_bundle_verify_fail_incorrect_asset_description() {
         let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
-        let mut bundle = IssueBundle::new(ik.clone());
+        let mut bundle = IssueBundle::new(ik);
 
         bundle
             .add_recipient(
@@ -861,7 +904,7 @@ mod tests {
 
         let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
-        let mut bundle = IssueBundle::new(ik.clone());
+        let mut bundle = IssueBundle::new(ik);
 
         bundle
             .add_recipient(
@@ -907,7 +950,7 @@ mod tests {
 
         let (rng, isk, ik, recipient, sighash) = setup_params();
 
-        let mut bundle = IssueBundle::new(ik.clone());
+        let mut bundle = IssueBundle::new(ik);
 
         bundle
             .add_recipient(
@@ -941,5 +984,109 @@ mod tests {
         let finalized = verify_issue_bundle(&signed, sighash, prev_finalized);
 
         assert_eq!(finalized.unwrap_err(), WrongAssetDescSize);
+    }
+}
+
+/// Generators for property testing.
+#[cfg(any(test, feature = "test-dependencies"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
+pub mod testing {
+    use crate::issuance::{IssueAction, IssueBundle, Prepared, Signed, Unauthorized};
+    use crate::keys::{IssuerAuthorizingKey, IssuerValidatingKey, SpendingKey};
+    use crate::note::testing::arb_zsa_note;
+    use crate::value::testing::arb_note_value_bounded;
+    use crate::value::{NoteValue, MAX_NOTE_VALUE};
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use proptest::prop_compose;
+    use proptest::string::string_regex;
+    use rand::{rngs::StdRng, SeedableRng};
+
+    prop_compose! {
+        /// Generate a uniformly distributed RedDSA issuer authorizing key.
+        pub fn arb_issuer_authorizing_key()(rng_seed in prop::array::uniform32(prop::num::u8::ANY)) -> IssuerAuthorizingKey {
+            let mut rng = StdRng::from_seed(rng_seed);
+            IssuerAuthorizingKey::from(&SpendingKey::random(&mut rng))
+        }
+    }
+
+    prop_compose! {
+        /// Generate a uniformly distributed RedDSA issuer validating key.
+        pub fn arb_issuer_validating_key()(isk in arb_issuer_authorizing_key()) -> IssuerValidatingKey {
+            IssuerValidatingKey::from(&isk)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an issue action given note value
+        pub fn arb_issue_action(value: NoteValue)(
+            note in arb_zsa_note(value),
+            asset_descr in string_regex(".{1,512}").unwrap()
+        ) -> IssueAction {
+            IssueAction::new(asset_descr, &note)
+        }
+    }
+
+    /// Generate an issue action having issued values less than MAX_NOTE_VALUE / n_actions.
+    pub fn arb_issue_action_n(n_actions: usize) -> impl Strategy<Value = IssueAction> {
+        let value_gen = Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64));
+        value_gen.prop_flat_map(move |value| arb_issue_action(value))
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary issue bundle with fake authorization data. This bundle does not
+        /// necessarily respect consensus rules; for that use
+        /// TODO [`crate::builder::testing::arb_issue_bundle`]
+        pub fn arb_unathorized_issue_bundle(n_actions: usize)
+        (
+            actions in vec(arb_issue_action_n(n_actions), n_actions),
+            ik in arb_issuer_validating_key()
+        ) -> IssueBundle<Unauthorized> {
+            IssueBundle {
+                ik,
+                actions,
+                authorization: Unauthorized
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary issue bundle with fake authorization data. This bundle does not
+        /// necessarily respect consensus rules; for that use
+        /// TODO [`crate::builder::testing::arb_issue_bundle`]
+        pub fn arb_prepared_issue_bundle(n_actions: usize)
+        (
+            actions in vec(arb_issue_action_n(n_actions), n_actions),
+            ik in arb_issuer_validating_key(),
+            fake_sighash in prop::array::uniform32(prop::num::u8::ANY)
+        ) -> IssueBundle<Prepared> {
+            IssueBundle {
+                ik,
+                actions,
+                authorization: Prepared { sighash: fake_sighash }
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary issue bundle with fake authorization data. This bundle does not
+        /// necessarily respect consensus rules; for that use
+        /// TODO [`crate::builder::testing::arb_issue_bundle`]
+        pub fn arb_signed_issue_bundle(n_actions: usize)
+        (
+            actions in vec(arb_issue_action_n(n_actions), n_actions),
+            ik in arb_issuer_validating_key(),
+            isk in arb_issuer_authorizing_key(),
+            rng_seed in prop::array::uniform32(prop::num::u8::ANY),
+            fake_sighash in prop::array::uniform32(prop::num::u8::ANY)
+        ) -> IssueBundle<Signed> {
+            let rng = StdRng::from_seed(rng_seed);
+
+            IssueBundle {
+                ik,
+                actions,
+                authorization: Prepared { sighash: fake_sighash },
+            }.sign(rng, &isk).unwrap()
+        }
     }
 }
