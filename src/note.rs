@@ -283,9 +283,9 @@ impl fmt::Debug for TransmittedNoteCiphertext {
 pub mod testing {
     use proptest::prelude::*;
 
-    use crate::value::testing::arb_note_value;
     use crate::note::note_type::testing::arb_note_type;
     use crate::note::note_type::testing::zsa_note_type;
+    use crate::value::testing::arb_note_value;
     use crate::{
         address::testing::arb_address, note::nullifier::testing::arb_nullifier, value::NoteValue,
     };

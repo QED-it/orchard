@@ -1003,8 +1003,11 @@ impl SharedSecret {
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
+    use super::{
+        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuerAuthorizingKey,
+        IssuerValidatingKey, SpendingKey,
+    };
     use proptest::prelude::*;
-    use super::{DiversifierIndex, DiversifierKey, EphemeralSecretKey, SpendingKey, IssuerAuthorizingKey, IssuerValidatingKey};
     use rand::{rngs::StdRng, SeedableRng};
 
     prop_compose! {
