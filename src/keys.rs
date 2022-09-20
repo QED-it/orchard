@@ -1004,8 +1004,8 @@ impl SharedSecret {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use proptest::prelude::*;
-
-    use super::{DiversifierIndex, DiversifierKey, EphemeralSecretKey, SpendingKey};
+    use super::{DiversifierIndex, DiversifierKey, EphemeralSecretKey, SpendingKey, IssuerAuthorizingKey, IssuerValidatingKey};
+    use rand::{rngs::StdRng, SeedableRng};
 
     prop_compose! {
         /// Generate a uniformly distributed Orchard spending key.
@@ -1050,6 +1050,21 @@ pub mod testing {
             d_bytes in prop::array::uniform11(prop::num::u8::ANY)
         ) -> DiversifierIndex {
             DiversifierIndex::from(d_bytes)
+        }
+    }
+
+    prop_compose! {
+        /// Generate a uniformly distributed RedDSA issuer authorizing key.
+        pub fn arb_issuer_authorizing_key()(rng_seed in prop::array::uniform32(prop::num::u8::ANY)) -> IssuerAuthorizingKey {
+            let mut rng = StdRng::from_seed(rng_seed);
+            IssuerAuthorizingKey::from(&SpendingKey::random(&mut rng))
+        }
+    }
+
+    prop_compose! {
+        /// Generate a uniformly distributed RedDSA issuer validating key.
+        pub fn arb_issuer_validating_key()(isk in arb_issuer_authorizing_key()) -> IssuerValidatingKey {
+            IssuerValidatingKey::from(&isk)
         }
     }
 }

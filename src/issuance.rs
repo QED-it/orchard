@@ -5,7 +5,12 @@ use rand::{CryptoRng, RngCore};
 use std::collections::HashSet;
 use std::fmt;
 
-use crate::bundle::commitments::hash_issue_bundle_txid_data;
+use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
+use crate::issuance::Error::{
+    IssueActionAlreadyFinalized, IssueActionIncorrectNoteType, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedNoteType, IssueBundleIkMismatchNoteType,
+    IssueBundleInvalidSignature, WrongAssetDescSize,
+};
 use crate::keys::{IssuerAuthorizingKey, IssuerValidatingKey};
 use crate::note::note_type::MAX_ASSET_DESCRIPTION_SIZE;
 use crate::note::{NoteType, Nullifier};
@@ -89,12 +94,12 @@ impl IssueAction {
                 note.note_type()
                     .eq(&note_type)
                     .then(|| note_type)
-                    .ok_or(Error::IssueActionIncorrectNoteType)
+                    .ok_or(IssueActionIncorrectNoteType)
             }) {
             Ok(note_type) => note_type // check that the note_type was properly derived.
                 .eq(&NoteType::derive(ik, &self.asset_desc))
                 .then(|| note_type)
-                .ok_or(Error::IssueBundleIkMismatchNoteType),
+                .ok_or(IssueBundleIkMismatchNoteType),
             Err(e) => Err(e),
         }
     }
@@ -117,6 +122,13 @@ pub struct Prepared {
 #[derive(Debug)]
 pub struct Signed {
     signature: redpallas::Signature<SpendAuth>,
+}
+
+impl Signed {
+    /// Returns the signature for this authorization.
+    pub fn signature(&self) -> &redpallas::Signature<SpendAuth> {
+        &self.signature
+    }
 }
 
 impl IssueAuth for Unauthorized {}
@@ -185,7 +197,7 @@ impl IssueBundle<Unauthorized> {
         mut rng: impl RngCore,
     ) -> Result<NoteType, Error> {
         if !is_asset_desc_valid(&asset_desc) {
-            return Err(Error::WrongAssetDescSize);
+            return Err(WrongAssetDescSize);
         }
 
         let note_type = NoteType::derive(&self.ik, &asset_desc);
@@ -206,7 +218,7 @@ impl IssueBundle<Unauthorized> {
             // Append to an existing IssueAction.
             Some(action) => {
                 if action.finalize {
-                    return Err(Error::IssueActionAlreadyFinalized);
+                    return Err(IssueActionAlreadyFinalized);
                 };
                 action.notes.push(note);
                 finalize.then(|| action.finalize = true);
@@ -229,7 +241,7 @@ impl IssueBundle<Unauthorized> {
     /// Panics if `asset_desc` is empty or longer than 512 bytes.
     pub fn finalize_action(&mut self, asset_desc: String) -> Result<(), Error> {
         if !is_asset_desc_valid(&asset_desc) {
-            return Err(Error::WrongAssetDescSize);
+            return Err(WrongAssetDescSize);
         }
 
         match self
@@ -241,7 +253,7 @@ impl IssueBundle<Unauthorized> {
                 issue_action.finalize = true;
             }
             None => {
-                return Err(Error::IssueActionNotFound);
+                return Err(IssueActionNotFound);
             }
         }
 
@@ -294,6 +306,27 @@ impl IssueBundle<Prepared> {
 #[derive(Debug)]
 pub struct IssueBundleCommitment(pub Blake2bHash);
 
+impl From<IssueBundleCommitment> for [u8; 32] {
+    /// Serializes issue bundle commitment as byte array
+    fn from(commitment: IssueBundleCommitment) -> Self {
+        // The commitment uses BLAKE2b-256.
+        commitment.0.as_bytes().try_into().unwrap()
+    }
+}
+
+/// A commitment to the authorizing data within a bundle of actions.
+#[derive(Debug)]
+pub struct IssueBundleAuthorizingCommitment(pub Blake2bHash);
+
+impl IssueBundle<Signed> {
+    /// Computes a commitment to the authorizing data within for this bundle.
+    ///
+    /// This together with `IssueBundle::commitment` bind the entire bundle.
+    pub fn authorizing_commitment(&self) -> IssueBundleAuthorizingCommitment {
+        IssueBundleAuthorizingCommitment(hash_issue_bundle_auth_data(self))
+    }
+}
+
 fn is_asset_desc_valid(asset_desc: &str) -> bool {
     !asset_desc.is_empty() && asset_desc.bytes().len() <= MAX_ASSET_DESCRIPTION_SIZE
 }
@@ -317,7 +350,7 @@ pub fn verify_issue_bundle<'a>(
     previously_finalized: &'a mut HashSet<NoteType>, // The current note_type finalization set.
 ) -> Result<&'a mut HashSet<NoteType>, Error> {
     if let Err(e) = bundle.ik.verify(&sighash, &bundle.authorization.signature) {
-        return Err(Error::IssueBundleInvalidSignature(e));
+        return Err(IssueBundleInvalidSignature(e));
     };
 
     // Any IssueAction could have just one properly derived NoteType.
@@ -326,7 +359,7 @@ pub fn verify_issue_bundle<'a>(
         .iter()
         .try_fold(previously_finalized, |acc, action| {
             if !is_asset_desc_valid(action.asset_desc()) {
-                return Err(Error::WrongAssetDescSize);
+                return Err(WrongAssetDescSize);
             }
 
             // Fail if any note in the IssueAction has incorrect note type.
@@ -334,7 +367,7 @@ pub fn verify_issue_bundle<'a>(
 
             // Fail if the current note_type was previously finalized.
             if acc.contains(&note_type) {
-                return Err(Error::IssueActionPreviouslyFinalizedNoteType(note_type));
+                return Err(IssueActionPreviouslyFinalizedNoteType(note_type));
             }
 
             // Add to finalization set, if needed.
@@ -383,31 +416,31 @@ impl std::error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::IssueActionAlreadyFinalized => {
+            IssueActionAlreadyFinalized => {
                 write!(
                     f,
                     "unable to add note to the IssueAction since it has already been finalized"
                 )
             }
-            Error::IssueActionNotFound => {
+            IssueActionNotFound => {
                 write!(f, "the requested IssueAction not exists in the bundle.")
             }
-            Error::IssueActionIncorrectNoteType => {
+            IssueActionIncorrectNoteType => {
                 write!(f, "not all `NoteType`s are the same inside the action")
             }
-            Error::IssueBundleIkMismatchNoteType => {
+            IssueBundleIkMismatchNoteType => {
                 write!(
                     f,
                     "the provided `isk` and the driven `ik` does not match at least one note type"
                 )
             }
-            Error::WrongAssetDescSize => {
+            WrongAssetDescSize => {
                 write!(f, "`asset_desc` should be between 1 and 512 bytes")
             }
-            Error::IssueBundleInvalidSignature(_) => {
+            IssueBundleInvalidSignature(_) => {
                 write!(f, "invalid signature")
             }
-            Error::IssueActionPreviouslyFinalizedNoteType(_) => {
+            IssueActionPreviouslyFinalizedNoteType(_) => {
                 write!(f, "the provided `NoteType` has been previously finalized")
             }
         }
@@ -419,9 +452,10 @@ mod tests {
     use super::IssueBundle;
     use crate::issuance::Error::{
         IssueActionAlreadyFinalized, IssueActionIncorrectNoteType, IssueActionNotFound,
-        IssueActionPreviouslyFinalizedNoteType, IssueBundleIkMismatchNoteType, WrongAssetDescSize,
+        IssueActionPreviouslyFinalizedNoteType, IssueBundleIkMismatchNoteType,
+        IssueBundleInvalidSignature, WrongAssetDescSize,
     };
-    use crate::issuance::{verify_issue_bundle, Error, IssueAction, Signed};
+    use crate::issuance::{verify_issue_bundle, IssueAction, Signed};
     use crate::keys::{
         FullViewingKey, IssuerAuthorizingKey, IssuerValidatingKey, Scope, SpendingKey,
     };
@@ -431,6 +465,7 @@ mod tests {
     use nonempty::NonEmpty;
     use rand::rngs::OsRng;
     use rand::RngCore;
+    use reddsa::Error::InvalidSignature;
     use std::borrow::BorrowMut;
     use std::collections::HashSet;
 
@@ -825,7 +860,7 @@ mod tests {
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
-            Error::IssueBundleInvalidSignature(reddsa::Error::InvalidSignature)
+            IssueBundleInvalidSignature(InvalidSignature)
         );
     }
 
@@ -844,7 +879,7 @@ mod tests {
             )
             .unwrap();
 
-        let sighash: [u8; 32] = <[u8; 32]>::try_from(bundle.commitment().0.as_bytes()).unwrap();
+        let sighash: [u8; 32] = bundle.commitment().into();
         let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
         let prev_finalized = &mut HashSet::new();
 
@@ -853,7 +888,7 @@ mod tests {
 
         assert_eq!(
             finalized.unwrap_err(),
-            Error::IssueBundleInvalidSignature(reddsa::Error::InvalidSignature)
+            IssueBundleInvalidSignature(InvalidSignature)
         );
     }
 
@@ -992,10 +1027,8 @@ mod tests {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use crate::issuance::{IssueAction, IssueBundle, Prepared, Signed, Unauthorized};
-    use crate::keys::{IssuerAuthorizingKey, IssuerValidatingKey, SpendingKey};
     use crate::note::testing::arb_zsa_note;
-    use crate::value::testing::arb_note_value_bounded;
-    use crate::value::{NoteValue, MAX_NOTE_VALUE};
+    use crate::keys::testing::{arb_issuer_authorizing_key, arb_issuer_validating_key};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
@@ -1003,34 +1036,13 @@ pub mod testing {
     use rand::{rngs::StdRng, SeedableRng};
 
     prop_compose! {
-        /// Generate a uniformly distributed RedDSA issuer authorizing key.
-        pub fn arb_issuer_authorizing_key()(rng_seed in prop::array::uniform32(prop::num::u8::ANY)) -> IssuerAuthorizingKey {
-            let mut rng = StdRng::from_seed(rng_seed);
-            IssuerAuthorizingKey::from(&SpendingKey::random(&mut rng))
-        }
-    }
-
-    prop_compose! {
-        /// Generate a uniformly distributed RedDSA issuer validating key.
-        pub fn arb_issuer_validating_key()(isk in arb_issuer_authorizing_key()) -> IssuerValidatingKey {
-            IssuerValidatingKey::from(&isk)
-        }
-    }
-
-    prop_compose! {
         /// Generate an issue action given note value
-        pub fn arb_issue_action(value: NoteValue)(
-            note in arb_zsa_note(value),
+        pub fn arb_issue_action()(
+            note in arb_zsa_note(),
             asset_descr in string_regex(".{1,512}").unwrap()
         ) -> IssueAction {
             IssueAction::new(asset_descr, &note)
         }
-    }
-
-    /// Generate an issue action having issued values less than MAX_NOTE_VALUE / n_actions.
-    pub fn arb_issue_action_n(n_actions: usize) -> impl Strategy<Value = IssueAction> {
-        let value_gen = Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64));
-        value_gen.prop_flat_map(arb_issue_action)
     }
 
     prop_compose! {
@@ -1039,7 +1051,7 @@ pub mod testing {
         /// TODO [`crate::builder::testing::arb_issue_bundle`]
         pub fn arb_unathorized_issue_bundle(n_actions: usize)
         (
-            actions in vec(arb_issue_action_n(n_actions), n_actions),
+            actions in vec(arb_issue_action(), n_actions),
             ik in arb_issuer_validating_key()
         ) -> IssueBundle<Unauthorized> {
             IssueBundle {
@@ -1056,7 +1068,7 @@ pub mod testing {
         /// TODO [`crate::builder::testing::arb_issue_bundle`]
         pub fn arb_prepared_issue_bundle(n_actions: usize)
         (
-            actions in vec(arb_issue_action_n(n_actions), n_actions),
+            actions in vec(arb_issue_action(), n_actions),
             ik in arb_issuer_validating_key(),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY)
         ) -> IssueBundle<Prepared> {
@@ -1074,7 +1086,7 @@ pub mod testing {
         /// TODO [`crate::builder::testing::arb_issue_bundle`]
         pub fn arb_signed_issue_bundle(n_actions: usize)
         (
-            actions in vec(arb_issue_action_n(n_actions), n_actions),
+            actions in vec(arb_issue_action(), n_actions),
             ik in arb_issuer_validating_key(),
             isk in arb_issuer_authorizing_key(),
             rng_seed in prop::array::uniform32(prop::num::u8::ANY),

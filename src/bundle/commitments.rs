@@ -1,16 +1,17 @@
 //! Utility functions for computing bundle commitments
 
-use bitvec::macros::internal::funty::Fundamental;
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::bundle::{Authorization, Authorized, Bundle};
-use crate::issuance::{IssueAuth, IssueBundle};
+use crate::issuance::{IssueAuth, IssueBundle, Signed};
 
 const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
 const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActCHash";
 const ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActMHash";
 const ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActNHash";
 const ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrchaHash";
+const ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcZSAIssue";
+const ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION: &[u8; 16] = b"ZTxAuthZSAOrHash";
 
 fn hasher(personal: &[u8; 16]) -> State {
     Params::new().hash_length(32).personal(personal).to_state()
@@ -94,9 +95,8 @@ pub fn hash_bundle_auth_empty() -> Blake2bHash {
 }
 
 /// Construct the commitment for the issue bundle
-/// TODO - investigate if we need different personalizations
 pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>) -> Blake2bHash {
-    let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
+    let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION);
 
     for action in bundle.actions().iter() {
         for note in action.notes().iter() {
@@ -107,8 +107,16 @@ pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>)
             h.update(note.rseed().as_bytes());
         }
         h.update(action.asset_desc().as_bytes());
-        h.update(&[action.is_finalized().as_u8()]);
+        h.update(&[u8::from(action.is_finalized())]);
     }
     h.update(&bundle.ik().to_bytes());
+    h.finalize()
+}
+
+/// Construct the commitment to the authorizing data of an
+/// authorized issue bundle
+pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake2bHash {
+    let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION);
+    h.update(&<[u8; 64]>::from(bundle.authorization().signature()));
     h.finalize()
 }

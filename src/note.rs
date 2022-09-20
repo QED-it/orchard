@@ -283,6 +283,7 @@ impl fmt::Debug for TransmittedNoteCiphertext {
 pub mod testing {
     use proptest::prelude::*;
 
+    use crate::value::testing::arb_note_value;
     use crate::note::note_type::testing::arb_note_type;
     use crate::note::note_type::testing::zsa_note_type;
     use crate::{
@@ -318,8 +319,9 @@ pub mod testing {
 
     prop_compose! {
         /// Generate an arbitrary ZSA note
-        pub fn arb_zsa_note(value: NoteValue)(
+        pub fn arb_zsa_note()(
             recipient in arb_address(),
+            value in arb_note_value(),
             rho in arb_nullifier(),
             rseed in arb_rseed(),
             note_type in zsa_note_type(),
