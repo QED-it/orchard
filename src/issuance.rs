@@ -1048,7 +1048,7 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary issue bundle with fake authorization data. This bundle does not
         /// necessarily respect consensus rules; for that use
-        /// TODO [`crate::builder::testing::arb_issue_bundle`]
+        /// [`crate::builder::testing::arb_issue_bundle`]
         pub fn arb_unathorized_issue_bundle(n_actions: usize)
         (
             actions in vec(arb_issue_action(), n_actions),
@@ -1065,7 +1065,7 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary issue bundle with fake authorization data. This bundle does not
         /// necessarily respect consensus rules; for that use
-        /// TODO [`crate::builder::testing::arb_issue_bundle`]
+        /// [`crate::builder::testing::arb_issue_bundle`]
         pub fn arb_prepared_issue_bundle(n_actions: usize)
         (
             actions in vec(arb_issue_action(), n_actions),
@@ -1083,7 +1083,7 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary issue bundle with fake authorization data. This bundle does not
         /// necessarily respect consensus rules; for that use
-        /// TODO [`crate::builder::testing::arb_issue_bundle`]
+        /// [`crate::builder::testing::arb_issue_bundle`]
         pub fn arb_signed_issue_bundle(n_actions: usize)
         (
             actions in vec(arb_issue_action(), n_actions),
