@@ -1094,9 +1094,6 @@ impl NoteTypeCanonicity {
         h_2: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         i: NoteCommitPiece,
         j_0: AssignedCell<pallas::Base, pallas::Base>,
-        h2_i_prime: AssignedCell<pallas::Base, pallas::Base>,
-        z13_i: AssignedCell<pallas::Base, pallas::Base>,
-        z14_h2_i_prime: AssignedCell<pallas::Base, pallas::Base>,
     ) -> Result<(), Error> {
         layouter.assign_region(
             || "NoteCommit input note_type",
@@ -1112,10 +1109,6 @@ impl NoteTypeCanonicity {
                 i.inner()
                     .cell_value()
                     .copy_advice(|| "i", &mut region, self.col_r, 0)?;
-                h2_i_prime.copy_advice(|| "h2_i_prime", &mut region, self.col_r, 1)?;
-
-                z13_i.copy_advice(|| "z13_i", &mut region, self.col_z, 0)?;
-                z14_h2_i_prime.copy_advice(|| "z14_h2_i_prime", &mut region, self.col_z, 1)?;
 
                 self.q_notecommit_note_type.enable(&mut region, 0)
             },
@@ -1843,18 +1836,6 @@ pub(in crate::circuit) mod gadgets {
 
         // h = h_0 || h_1 || h_2
         //   = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
-
-        // The value of h_2 is 4 zeros OR (bits 0..=3 of x(note_type)).
-        let h_2 = is_zsa
-            .value()
-            .zip(note_type.x().value())
-            .map(|(is_zsa, x)| {
-                if is_zsa.is_zero_vartime() {
-                    pallas::Base::zero()
-                } else {
-                    x.clone()
-                }
-            });
         // Constrain h_2_zsa to be 4 bits.
         // TODO: Enforce h_2_zsa==h_2 for note_type recomposition.
         let h_2_zsa = RangeConstrained::witness_short(
@@ -1863,6 +1844,7 @@ pub(in crate::circuit) mod gadgets {
             note_type.x().value(),
             0..4,
         )?;
+        // The value of h_2 is 4 zeros OR (bits 0..=3 of x(note_type)).
         let h_2 = mux_chip.mux_const(
             layouter.namespace(|| "h_2 = 0 or start of note_type"),
             &is_zsa,
@@ -1872,13 +1854,6 @@ pub(in crate::circuit) mod gadgets {
         let h_2 = RangeConstrained::unsound_unchecked(h_2, h_2_zsa.num_bits());
         let (h, h_0, h_1) =
             DecomposeH::decompose(&lookup_config, chip.clone(), &mut layouter, &psi, &h_2)?;
-        // Enforce the choice of h_2.
-        mux_chip.conditional_advice(
-            layouter.namespace(|| "h_2 = 0 or start of note_type"),
-            &is_zsa,
-            &h_2.inner(),          // Four bits of ZSA note_type.
-            &pallas::Base::zero(), // Or zero for native notes.
-        )?;
         // TODO: move the block above into DecomposeH.
 
         // i = bits 4..=253 of x(note_type)
@@ -1994,7 +1969,6 @@ pub(in crate::circuit) mod gadgets {
         let z1_g = zs[6][1].clone();
         let g_2 = z1_g.clone();
         let z13_g = zs[6][13].clone();
-        let z13_i = zs[8][13].clone();
 
         // Witness and constrain the bounds we need to ensure canonicity.
         let (a_prime, z13_a_prime) = canon_bitshift_130(
@@ -2008,14 +1982,6 @@ pub(in crate::circuit) mod gadgets {
             layouter.namespace(|| "x(pk_d) canonicity"),
             b_3.clone(),
             c.inner().cell_value(),
-        )?;
-
-        // TODO: remove.
-        let (h2_i_prime, z14_h2_i_prime) = pkd_x_canonicity(
-            &lookup_config,
-            layouter.namespace(|| "x(note_type) canonicity"),
-            h_2.clone(),            // Similar to b_3.
-            i.inner().cell_value(), // Similar to c.
         )?;
 
         let (e1_f_prime, z14_e1_f_prime) = rho_canonicity(
@@ -2076,9 +2042,6 @@ pub(in crate::circuit) mod gadgets {
             h_2_zsa, // Similar to b_3.
             i,       // Similar to c.
             j_0,     // Similar to d_0.
-            h2_i_prime,
-            z13_i,
-            z14_h2_i_prime,
         )?;
 
         cfg.value.assign(&mut layouter, value, d_2, z1_d, e_0)?;
