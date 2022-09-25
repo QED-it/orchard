@@ -408,6 +408,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let is_zsa_value = note_type_value.map(|nt| !bool::from(nt.is_native()));
 
             // Witness boolean is_zsa.
+            // TODO: or use RangeConstrained::witness_short?
             let mux_chip = config.mux_chip();
             let is_zsa =
                 mux_chip.witness_switch(layouter.namespace(|| "witness is_zsa"), is_zsa_value)?;

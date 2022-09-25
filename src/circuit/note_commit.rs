@@ -1047,51 +1047,33 @@ impl NoteTypeCanonicity {
         col_r: Column<Advice>,
         col_z: Column<Advice>,
         two_pow_4: pallas::Base,
-        two_pow_140: Expression<pallas::Base>,
         two_pow_254: pallas::Base,
-        t_p: Expression<pallas::Base>,
     ) -> Self {
         let q_notecommit_note_type = meta.selector();
 
         meta.create_gate("NoteCommit input note_type", |meta| {
             let q_notecommit_pk_d = meta.query_selector(q_notecommit_note_type);
 
-            let pkd_x = meta.query_advice(col_l, Rotation::cur());
+            let note_type_x = meta.query_advice(col_l, Rotation::cur());
 
-            // `b_3` has been constrained to 4 bits outside this gate.
-            let b_3 = meta.query_advice(col_m, Rotation::cur());
-            // d_0 has been constrained to be boolean outside this gate.
-            let d_0 = meta.query_advice(col_m, Rotation::next());
+            // `h_2` has been constrained to 4 bits outside this gate.
+            let h_2 = meta.query_advice(col_m, Rotation::cur());
+            // j_0 has been constrained to be boolean outside this gate.
+            let j_0 = meta.query_advice(col_m, Rotation::next());
+            // `i` has been constrained to 250 bits by the Sinsemilla hash.
+            let i = meta.query_advice(col_r, Rotation::cur());
 
-            // `c` has been constrained to 250 bits by the Sinsemilla hash.
-            let c = meta.query_advice(col_r, Rotation::cur());
-            let b3_c_prime = meta.query_advice(col_r, Rotation::next());
-
-            let z13_c = meta.query_advice(col_z, Rotation::cur());
-            let z14_b3_c_prime = meta.query_advice(col_z, Rotation::next());
-
-            // x(pk_d) = b_3 + (2^4)c + (2^254)d_0
+            // x(note_type) = h_2 + (2^4)i + (2^254)j_0
             let decomposition_check = {
-                let sum = b_3.clone() + c.clone() * two_pow_4 + d_0.clone() * two_pow_254;
-                sum - pkd_x
+                let sum = h_2.clone() + i.clone() * two_pow_4 + j_0.clone() * two_pow_254;
+                sum - note_type_x
             };
 
-            // b3_c_prime = b_3 + (2^4)c + 2^140 - t_P
-            let b3_c_prime_check = b_3 + (c * two_pow_4) + two_pow_140 - t_p - b3_c_prime;
-
-            // The pkd_x_canonicity_checks are enforced if and only if `d_0` = 1.
-            // `x(pk_d)` = `b_3 (4 bits) || c (250 bits) || d_0 (1 bit)`
-            let canonicity_checks = iter::empty()
-                .chain(Some(("d_0 = 1 => z13_c", z13_c)))
-                .chain(Some(("d_0 = 1 => z14_b3_c_prime", z14_b3_c_prime)))
-                .map(move |(name, poly)| (name, d_0.clone() * poly));
-
+            // TODO: check that the canonicity check is indeed not necessary
+            // for note_type (e.g., for cv computation).
             Constraints::with_selector(
                 q_notecommit_pk_d,
-                iter::empty().chain(Some(("decomposition", decomposition_check))), /* TODO: check that this is indeed not necessary for note_type.
-                                                                                   .chain(Some(("b3_c_prime_check", b3_c_prime_check)))
-                                                                                   .chain(canonicity_checks),
-                                                                                   */
+                iter::empty().chain(Some(("decomposition", decomposition_check))),
             )
         });
 
@@ -1724,9 +1706,7 @@ impl NoteCommitChip {
             col_r,
             col_z,
             two_pow_4,
-            two_pow_140.clone(),
             two_pow_254,
-            t_p.clone(),
         );
 
         let value =
