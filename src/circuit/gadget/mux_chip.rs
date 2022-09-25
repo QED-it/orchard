@@ -79,6 +79,7 @@ impl MuxChip {
     }
 }
 
+// TODO: simplify or generalize this API.
 pub trait MuxInstructions<C: CurveAffine> {
     fn witness_switch(
         &self,
@@ -91,6 +92,14 @@ pub trait MuxInstructions<C: CurveAffine> {
         layouter: impl Layouter<C::Base>,
         switch: &AssignedCell<C::Base, C::Base>,
         left: &AssignedCell<C::Base, C::Base>,
+        right: &AssignedCell<C::Base, C::Base>,
+    ) -> Result<AssignedCell<C::Base, C::Base>, plonk::Error>;
+
+    fn mux_const(
+        &self,
+        layouter: impl Layouter<C::Base>,
+        switch: &AssignedCell<C::Base, C::Base>,
+        left: &C::Base,
         right: &AssignedCell<C::Base, C::Base>,
     ) -> Result<AssignedCell<C::Base, C::Base>, plonk::Error>;
 
@@ -134,7 +143,7 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
                     || "load switch",
                     self.config.switch,
                     0,
-                    || value.map(|b| pallas::Base::from(b)),
+                    || value.map(pallas::Base::from),
                 )?;
 
                 // Copy the switch into the left input.
@@ -179,6 +188,39 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
 
                 // Assign the output value into the multiplexer row.
                 let out_val = compute_mux(switch.value(), left.value(), right.value());
+
+                region.assign_advice(|| "out", self.config.out, 0, || out_val)
+            },
+        )
+    }
+
+    fn mux_const(
+        &self,
+        mut layouter: impl Layouter<pallas::Base>,
+        switch: &AssignedCell<pallas::Base, pallas::Base>,
+        left: &pallas::Base,
+        right: &AssignedCell<pallas::Base, pallas::Base>,
+    ) -> Result<AssignedCell<pallas::Base, pallas::Base>, plonk::Error> {
+        layouter.assign_region(
+            || "mux",
+            |mut region| {
+                // Enable the multiplexer gate.
+                self.config.q_mux.enable(&mut region, 0)?;
+
+                // Copy the inputs into the multiplexer row.
+                switch.copy_advice(|| "copy switch", &mut region, self.config.switch, 0)?;
+
+                region.assign_advice_from_constant(
+                    || "constant left",
+                    self.config.left,
+                    0,
+                    *left,
+                )?;
+
+                right.copy_advice(|| "copy right", &mut region, self.config.right, 0)?;
+
+                // Assign the output value into the multiplexer row.
+                let out_val = compute_mux(switch.value(), Value::known(left), right.value());
 
                 region.assign_advice(|| "out", self.config.out, 0, || out_val)
             },

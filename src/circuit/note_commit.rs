@@ -1,16 +1,5 @@
 use core::iter;
 
-use halo2_proofs::{
-    circuit::{AssignedCell, Layouter, Value},
-    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
-    poly::Rotation,
-};
-use pasta_curves::{arithmetic::FieldExt, pallas};
-
-use crate::{
-    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P},
-    value::NoteValue,
-};
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, NonIdentityEccPoint},
@@ -24,7 +13,18 @@ use halo2_gadgets::{
         bool_check, lookup_range_check::LookupRangeCheckConfig, FieldValue, RangeConstrained,
     },
 };
+use halo2_proofs::{
+    circuit::{AssignedCell, Layouter, Value},
+    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
+    poly::Rotation,
+};
+use pasta_curves::{arithmetic::FieldExt, pallas};
+
 use crate::circuit::gadget::mux_chip::{MuxConfig, MuxInstructions};
+use crate::{
+    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P},
+    value::NoteValue,
+};
 
 type NoteCommitPiece = MessagePiece<
     pallas::Affine,
@@ -577,11 +577,11 @@ impl DecomposeG {
 }
 
 /// h = h_0 || h_1 || h_2
-///   = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
+///   = (bits 249..=253 of psi) || (bit 254 of psi) || (4 bits of note_type or zeros)
 ///
-/// | A_6 | A_7 | A_8 | q_notecommit_h |
+/// | A_6 | A_7 | A_8 | A_9 | q_notecommit_h |
 /// ------------------------------------
-/// |  h  | h_0 | h_1 |       1        |
+/// |  h  | h_0 | h_1 | h_2 |       1        |
 ///
 /// https://p.z.cash/orchard-0.1:note-commit-decomposition-h?partial
 #[derive(Clone, Debug)]
@@ -590,6 +590,7 @@ struct DecomposeH {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
+    col_z: Column<Advice>,
 }
 
 impl DecomposeH {
@@ -598,7 +599,9 @@ impl DecomposeH {
         col_l: Column<Advice>,
         col_m: Column<Advice>,
         col_r: Column<Advice>,
+        col_z: Column<Advice>,
         two_pow_5: pallas::Base,
+        two_pow_6: pallas::Base,
     ) -> Self {
         let q_notecommit_h = meta.selector();
 
@@ -611,9 +614,11 @@ impl DecomposeH {
             let h_0 = meta.query_advice(col_m, Rotation::cur());
             // This gate constrains h_1 to be boolean.
             let h_1 = meta.query_advice(col_r, Rotation::cur());
+            // h_2 has been constrained to be 4 bits outside this gate.
+            let h_2 = meta.query_advice(col_z, Rotation::cur());
 
-            // h = h_0 + (2^5) h_1
-            let decomposition_check = h - (h_0 + h_1.clone() * two_pow_5);
+            // h = h_0 + (2^5) h_1 + (2^6) h_2
+            let decomposition_check = h - (h_0 + h_1.clone() * two_pow_5 + h_2 * two_pow_6);
 
             Constraints::with_selector(
                 q_notecommit_h,
@@ -629,6 +634,7 @@ impl DecomposeH {
             col_l,
             col_m,
             col_r,
+            col_z,
         }
     }
 
@@ -638,6 +644,7 @@ impl DecomposeH {
         chip: SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
         layouter: &mut impl Layouter<pallas::Base>,
         psi: &AssignedCell<pallas::Base, pallas::Base>,
+        h_2: &RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
     ) -> Result<
         (
             NoteCommitPiece,
@@ -657,14 +664,12 @@ impl DecomposeH {
         // h_1 will be boolean-constrained in the gate.
         let h_1 = RangeConstrained::bitrange_of(psi.value(), 254..255);
 
+        // h_2 must have been constrained to be 4 bits outside of this gate.
+
         let h = MessagePiece::from_subpieces(
             chip,
             layouter.namespace(|| "h"),
-            [
-                h_0.value(),
-                h_1,
-                RangeConstrained::bitrange_of(Value::known(&pallas::Base::zero()), 0..4),
-            ],
+            [h_0.value(), h_1, h_2.value()],
         )?;
 
         Ok((h, h_0, h_1))
@@ -676,6 +681,7 @@ impl DecomposeH {
         h: NoteCommitPiece,
         h_0: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         h_1: RangeConstrained<pallas::Base, Value<pallas::Base>>,
+        h_2: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
     ) -> Result<AssignedCell<pallas::Base, pallas::Base>, Error> {
         layouter.assign_region(
             || "NoteCommit MessagePiece h",
@@ -688,8 +694,96 @@ impl DecomposeH {
                 h_0.inner()
                     .copy_advice(|| "h_0", &mut region, self.col_m, 0)?;
                 let h_1 = region.assign_advice(|| "h_1", self.col_r, 0, || *h_1.inner())?;
+                h_2.inner()
+                    .copy_advice(|| "h_2", &mut region, self.col_z, 0)?;
 
                 Ok(h_1)
+            },
+        )
+    }
+}
+
+/// j = j_0 || j_1 || j_2 || j_3
+///   = (bit 254 of x(note_type)) || (ỹ bit of note_type) || (8 zeros) || (50 zeros)
+///
+/// | A_6 | A_7 | A_8 | q_notecommit_d |
+/// ------------------------------------
+/// |  j  | j_0 | j_1 |       1        |
+/// |     | j_2 | j_3 |       0        |
+///
+/// https://p.z.cash/orchard-0.1:note-commit-decomposition-d?partial
+#[derive(Clone, Debug)]
+struct DecomposeJ {
+    d: DecomposeD,
+}
+
+impl DecomposeJ {
+    fn configure(d: DecomposeD) -> Self {
+        // Reuse the gates of DecomposeD::configure
+        Self { d }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn decompose(
+        chip: SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+        layouter: &mut impl Layouter<pallas::Base>,
+        note_type: &NonIdentityEccPoint,
+    ) -> Result<
+        (
+            NoteCommitPiece,
+            RangeConstrained<pallas::Base, Value<pallas::Base>>,
+            RangeConstrained<pallas::Base, Value<pallas::Base>>,
+        ),
+        Error,
+    > {
+        // j_0, j_1 will be boolean-constrained in the gate.
+        let j_0 = RangeConstrained::bitrange_of(note_type.x().value(), 254..255);
+        let j_1 = RangeConstrained::bitrange_of(note_type.y().value(), 0..1);
+
+        let j_2 = RangeConstrained::bitrange_of(Value::known(&pallas::Base::zero()), 0..8);
+
+        let j = MessagePiece::from_subpieces(chip, layouter.namespace(|| "j"), [j_0, j_1, j_2])?;
+
+        Ok((j, j_0, j_1))
+    }
+
+    fn assign(
+        &self,
+        layouter: &mut impl Layouter<pallas::Base>,
+        j: NoteCommitPiece,
+        j_0: RangeConstrained<pallas::Base, Value<pallas::Base>>,
+        j_1: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
+    ) -> Result<AssignedCell<pallas::Base, pallas::Base>, Error> {
+        layouter.assign_region(
+            || "NoteCommit MessagePiece j",
+            |mut region| {
+                self.d.q_notecommit_d.enable(&mut region, 0)?;
+
+                j.inner()
+                    .cell_value()
+                    .copy_advice(|| "j", &mut region, self.d.col_l, 0)?;
+
+                let j_0 = region.assign_advice(|| "j_0", self.d.col_m, 0, || *j_0.inner())?;
+
+                j_1.inner()
+                    .copy_advice(|| "j_1", &mut region, self.d.col_r, 0)?;
+
+                region.assign_advice_from_constant(
+                    || "j_2 = 0",
+                    self.d.col_m,
+                    1,
+                    pallas::Base::zero(),
+                )?;
+
+                // TODO: should this instead copy like z1_d in DecomposeD?
+                region.assign_advice_from_constant(
+                    || "j_3 = 0",
+                    self.d.col_r,
+                    1,
+                    pallas::Base::zero(),
+                )?;
+
+                Ok(j_0)
             },
         )
     }
@@ -924,6 +1018,99 @@ impl PkdCanonicity {
                 z14_b3_c_prime.copy_advice(|| "z14_b3_c_prime", &mut region, self.col_z, 1)?;
 
                 self.q_notecommit_pk_d.enable(&mut region, 0)
+            },
+        )
+    }
+}
+
+/// |   A_6   | A_7 |    A_8     |      A_9       | q_notecommit_pk_d |
+/// -------------------------------------------------------------------
+/// | x(pk_d) | b_3 |    c       | z13_c          |         1         |
+/// |         | d_0 | b3_c_prime | z14_b3_c_prime |         0         |
+///
+/// https://p.z.cash/orchard-0.1:note-commit-canonicity-pk_d?partial
+#[derive(Clone, Debug)]
+struct NoteTypeCanonicity {
+    q_notecommit_note_type: Selector,
+    col_l: Column<Advice>,
+    col_m: Column<Advice>,
+    col_r: Column<Advice>,
+    col_z: Column<Advice>,
+}
+
+impl NoteTypeCanonicity {
+    #[allow(clippy::too_many_arguments)]
+    fn configure(
+        meta: &mut ConstraintSystem<pallas::Base>,
+        col_l: Column<Advice>,
+        col_m: Column<Advice>,
+        col_r: Column<Advice>,
+        col_z: Column<Advice>,
+        two_pow_4: pallas::Base,
+        two_pow_254: pallas::Base,
+    ) -> Self {
+        let q_notecommit_note_type = meta.selector();
+
+        meta.create_gate("NoteCommit input note_type", |meta| {
+            let q_notecommit_pk_d = meta.query_selector(q_notecommit_note_type);
+
+            let note_type_x = meta.query_advice(col_l, Rotation::cur());
+
+            // `h_2` has been constrained to 4 bits outside this gate.
+            let h_2 = meta.query_advice(col_m, Rotation::cur());
+            // j_0 has been constrained to be boolean outside this gate.
+            let j_0 = meta.query_advice(col_m, Rotation::next());
+            // `i` has been constrained to 250 bits by the Sinsemilla hash.
+            let i = meta.query_advice(col_r, Rotation::cur());
+
+            // x(note_type) = h_2 + (2^4)i + (2^254)j_0
+            let decomposition_check = {
+                let sum = h_2.clone() + i.clone() * two_pow_4 + j_0.clone() * two_pow_254;
+                sum - note_type_x
+            };
+
+            // TODO: check that the canonicity check is indeed not necessary
+            // for note_type (e.g., for cv computation).
+            Constraints::with_selector(
+                q_notecommit_pk_d,
+                iter::empty().chain(Some(("decomposition", decomposition_check))),
+            )
+        });
+
+        Self {
+            q_notecommit_note_type,
+            col_l,
+            col_m,
+            col_r,
+            col_z,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn assign(
+        &self,
+        layouter: &mut impl Layouter<pallas::Base>,
+        note_type: &NonIdentityEccPoint,
+        h_2: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
+        i: NoteCommitPiece,
+        j_0: AssignedCell<pallas::Base, pallas::Base>,
+    ) -> Result<(), Error> {
+        layouter.assign_region(
+            || "NoteCommit input note_type",
+            |mut region| {
+                note_type
+                    .x()
+                    .copy_advice(|| "note_type_x", &mut region, self.col_l, 0)?;
+
+                h_2.inner()
+                    .copy_advice(|| "h_2", &mut region, self.col_m, 0)?;
+                j_0.copy_advice(|| "j_0", &mut region, self.col_m, 1)?;
+
+                i.inner()
+                    .cell_value()
+                    .copy_advice(|| "i", &mut region, self.col_r, 0)?;
+
+                self.q_notecommit_note_type.enable(&mut region, 0)
             },
         )
     }
@@ -1418,8 +1605,10 @@ pub struct NoteCommitConfig {
     e: DecomposeE,
     g: DecomposeG,
     h: DecomposeH,
+    j: DecomposeJ,
     g_d: GdCanonicity,
     pk_d: PkdCanonicity,
+    note_type: NoteTypeCanonicity,
     value: ValueCanonicity,
     rho: RhoCanonicity,
     psi: PsiCanonicity,
@@ -1476,7 +1665,8 @@ impl NoteCommitChip {
         let d = DecomposeD::configure(meta, col_l, col_m, col_r, two, two_pow_2, two_pow_10);
         let e = DecomposeE::configure(meta, col_l, col_m, col_r, two_pow_6);
         let g = DecomposeG::configure(meta, col_l, col_m, two, two_pow_10);
-        let h = DecomposeH::configure(meta, col_l, col_m, col_r, two_pow_5);
+        let h = DecomposeH::configure(meta, col_l, col_m, col_r, col_z, two_pow_5, two_pow_6);
+        let j = DecomposeJ::configure(d.clone());
 
         let g_d = GdCanonicity::configure(
             meta,
@@ -1500,6 +1690,16 @@ impl NoteCommitChip {
             two_pow_140.clone(),
             two_pow_254,
             t_p.clone(),
+        );
+
+        let note_type = NoteTypeCanonicity::configure(
+            meta,
+            col_l,
+            col_m,
+            col_r,
+            col_z,
+            two_pow_4,
+            two_pow_254,
         );
 
         let value =
@@ -1547,8 +1747,10 @@ impl NoteCommitChip {
             e,
             g,
             h,
+            j,
             g_d,
             pk_d,
+            note_type,
             value,
             rho,
             psi,
@@ -1567,8 +1769,9 @@ impl NoteCommitChip {
 pub(in crate::circuit) mod gadgets {
     use halo2_proofs::circuit::{Chip, Value};
 
-    use super::*;
     use crate::circuit::gadget::mux_chip::MuxChip;
+
+    use super::*;
 
     #[allow(clippy::many_single_char_names)]
     #[allow(clippy::type_complexity)]
@@ -1632,8 +1835,36 @@ pub(in crate::circuit) mod gadgets {
 
         // h = h_0 || h_1 || h_2
         //   = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
+        // Constrain h_2_zsa to be 4 bits.
+        // TODO: Enforce h_2_zsa==h_2 for note_type recomposition.
+        let h_2_zsa = RangeConstrained::witness_short(
+            &lookup_config,
+            layouter.namespace(|| "h_2_zsa"),
+            note_type.x().value(),
+            0..4,
+        )?;
+        // The value of h_2 is 4 zeros OR (bits 0..=3 of x(note_type)).
+        let h_2 = mux_chip.mux_const(
+            layouter.namespace(|| "h_2 = 0 or start of note_type"),
+            &is_zsa,
+            &pallas::Base::zero(),
+            &h_2_zsa.inner(),
+        )?;
+        let h_2 = RangeConstrained::unsound_unchecked(h_2, h_2_zsa.num_bits());
         let (h, h_0, h_1) =
-            DecomposeH::decompose(&lookup_config, chip.clone(), &mut layouter, &psi)?;
+            DecomposeH::decompose(&lookup_config, chip.clone(), &mut layouter, &psi, &h_2)?;
+        // TODO: move the block above into DecomposeH.
+
+        // i = bits 4..=253 of x(note_type)
+        let i = MessagePiece::from_subpieces(
+            chip.clone(),
+            layouter.namespace(|| "i"),
+            [RangeConstrained::bitrange_of(note_type.x().value(), 4..254)],
+        )?;
+
+        // j = j_0 || j_1 || j_2
+        //   = (bit 254 of x(note_type)) || (ỹ bit of note_type) || 8 zeros
+        let (j, j_0, j_1) = DecomposeJ::decompose(chip.clone(), &mut layouter, note_type)?;
 
         // Check decomposition of `y(g_d)`.
         let b_2 = y_canonicity(
@@ -1650,6 +1881,14 @@ pub(in crate::circuit) mod gadgets {
             layouter.namespace(|| "y(pk_d) decomposition"),
             pk_d.y(),
             d_1,
+        )?;
+        // Check decomposition of `y(note_type)`.
+        let j_1 = y_canonicity(
+            &lookup_config,
+            &note_commit_chip.config.y_canon,
+            layouter.namespace(|| "y(note_type) decomposition"),
+            note_type.y(),
+            j_1, // Similar to d_1.
         )?;
 
         // cm = NoteCommit^Orchard_rcm(g★_d || pk★_d || i2lebsp_{64}(v) || rho || psi)
@@ -1675,22 +1914,37 @@ pub(in crate::circuit) mod gadgets {
                 ],
             );
 
-            // TODO: use ZSA note_type.
-            let message_zsa = message.clone();
+            let message_zsa = Message::from_pieces(
+                chip.clone(),
+                vec![
+                    a.clone(),
+                    b.clone(),
+                    c.clone(),
+                    d.clone(),
+                    e.clone(),
+                    f.clone(),
+                    g.clone(),
+                    h.clone(),
+                    // Compared to the native message, add i and j.
+                    i.clone(),
+                    j.clone(),
+                ],
+            );
 
-            let domain = CommitDomain::new(chip.clone(), ecc_chip.clone(), &OrchardCommitDomains::NoteCommit);
+            let domain = CommitDomain::new(
+                chip.clone(),
+                ecc_chip.clone(),
+                &OrchardCommitDomains::NoteCommit,
+            );
 
-            let (hash_native, zs) = domain.hash(
-                layouter.namespace(|| "NoteCommit native hash"),
-                message,
-            )?;
+            let (hash_native, _zs) =
+                domain.hash(layouter.namespace(|| "NoteCommit native hash"), message)?;
 
-            let domain_zsa = CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteCommitZSA);
+            let domain_zsa =
+                CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteCommitZSA);
 
-            let (hash_zsa, _zs_zsa) = domain_zsa.hash(
-                layouter.namespace(|| "NoteCommit ZSA hash"),
-                message_zsa,
-            )?;
+            let (hash_zsa, zs) =
+                domain_zsa.hash(layouter.namespace(|| "NoteCommit ZSA hash"), message_zsa)?;
 
             let hash = mux_chip.mux_point(
                 layouter.namespace(|| "mux hash"),
@@ -1700,13 +1954,8 @@ pub(in crate::circuit) mod gadgets {
             )?;
             let hash = Point::from_inner(ecc_chip.clone(), hash);
 
-            let cm = domain.blind(
-                layouter.namespace(|| "NoteCommit blind"),
-                hash,
-                rcm,
-            )?;
+            let cm = domain.blind(layouter.namespace(|| "NoteCommit blind"), hash, rcm)?;
 
-            // TODO: handle zs in the zsa case.
             (cm, zs)
         };
 
@@ -1765,7 +2014,11 @@ pub(in crate::circuit) mod gadgets {
             .g
             .assign(&mut layouter, g, g_0, g_1.clone(), z1_g.clone())?;
 
-        let h_1 = cfg.h.assign(&mut layouter, h, h_0.clone(), h_1)?;
+        let h_1 = cfg
+            .h
+            .assign(&mut layouter, h, h_0.clone(), h_1, h_2.clone())?;
+
+        let j_0 = cfg.j.assign(&mut layouter, j, j_0, j_1)?;
 
         cfg.g_d
             .assign(&mut layouter, g_d, a, b_0, b_1, a_prime, z13_a, z13_a_prime)?;
@@ -1779,6 +2032,15 @@ pub(in crate::circuit) mod gadgets {
             b3_c_prime,
             z13_c,
             z14_b3_c_prime,
+        )?;
+
+        // Check note_type, using the same chip as pk_d.
+        cfg.note_type.assign(
+            &mut layouter.namespace(|| "note_type"),
+            note_type,
+            h_2_zsa, // Similar to b_3.
+            i,       // Similar to c.
+            j_0,     // Similar to d_0.
         )?;
 
         cfg.value.assign(&mut layouter, value, d_2, z1_d, e_0)?;
@@ -2050,7 +2312,30 @@ pub(in crate::circuit) mod gadgets {
 mod tests {
     use core::iter;
 
-    use super::NoteCommitConfig;
+    use ff::{Field, PrimeField, PrimeFieldBits};
+    use group::Curve;
+    use halo2_gadgets::{
+        ecc::{
+            chip::{EccChip, EccConfig},
+            NonIdentityPoint, ScalarFixed,
+        },
+        sinsemilla::chip::SinsemillaChip,
+        sinsemilla::primitives::CommitDomain,
+        utilities::lookup_range_check::LookupRangeCheckConfig,
+    };
+    use halo2_proofs::{
+        circuit::{Layouter, SimpleFloorPlanner, Value},
+        dev::MockProver,
+        plonk::{Circuit, ConstraintSystem, Error},
+    };
+    use pasta_curves::{
+        arithmetic::{CurveAffine, FieldExt},
+        pallas,
+    };
+    use rand::{rngs::OsRng, RngCore};
+
+    use crate::circuit::gadget::mux_chip::MuxChip;
+    use crate::note::NoteType;
     use crate::{
         circuit::{
             gadget::assign_free_advice,
@@ -2062,31 +2347,8 @@ mod tests {
         },
         value::NoteValue,
     };
-    use halo2_gadgets::{
-        ecc::{
-            chip::{EccChip, EccConfig},
-            NonIdentityPoint, ScalarFixed,
-        },
-        sinsemilla::chip::SinsemillaChip,
-        sinsemilla::primitives::CommitDomain,
-        utilities::lookup_range_check::LookupRangeCheckConfig,
-    };
 
-    use ff::{Field, PrimeField, PrimeFieldBits};
-    use group::Curve;
-    use halo2_proofs::{
-        circuit::{Layouter, SimpleFloorPlanner, Value},
-        dev::MockProver,
-        plonk::{Circuit, ConstraintSystem, Error},
-    };
-    use pasta_curves::{
-        arithmetic::{CurveAffine, FieldExt},
-        pallas,
-    };
-
-    use rand::{rngs::OsRng, RngCore};
-    use crate::circuit::gadget::mux_chip::MuxChip;
-    use crate::note::NoteType;
+    use super::NoteCommitConfig;
 
     #[test]
     fn note_commit() {
@@ -2160,7 +2422,8 @@ mod tests {
                     lookup,
                     range_check,
                 );
-                let mux_config = MuxChip::configure(meta, advices[0], advices[1], advices[2], advices[3]);
+                let mux_config =
+                    MuxChip::configure(meta, advices[0], advices[1], advices[2], advices[3]);
                 let note_commit_config =
                     NoteCommitChip::configure(meta, advices, sinsemilla_config, mux_config);
 

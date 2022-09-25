@@ -66,7 +66,8 @@ pub mod gadget;
 mod note_commit;
 
 /// Size of the Orchard circuit.
-const K: u32 = 11;
+const K: u32 = 12;
+// TODO: attempt to optimize back to K=11.
 
 // Absolute offsets for public inputs.
 const ANCHOR: usize = 0;
@@ -407,6 +408,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let is_zsa_value = note_type_value.map(|nt| !bool::from(nt.is_native()));
 
             // Witness boolean is_zsa.
+            // TODO: or use RangeConstrained::witness_short?
             let mux_chip = config.mux_chip();
             let is_zsa =
                 mux_chip.witness_switch(layouter.namespace(|| "witness is_zsa"), is_zsa_value)?;
@@ -685,7 +687,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 g_d_new.inner(),
                 pk_d_new.inner(),
                 v_new.clone(),
-                is_zsa.clone(),
+                is_zsa,
                 note_type.inner(),
                 rho_new,
                 psi_new,
@@ -1055,8 +1057,8 @@ mod tests {
                     K as usize,
                     &circuits[0],
                 );
-            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5024);
-            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7296);
+            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5088);
+            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7360);
             usize::from(circuit_cost.proof_size(instances.len()))
         };
 
@@ -1100,8 +1102,8 @@ mod tests {
             w.write_all(&<[u8; 32]>::from(instance.rk.clone()))?;
             w.write_all(&instance.cmx.to_bytes())?;
             w.write_all(&[
-                if instance.enable_spend { 1 } else { 0 },
-                if instance.enable_output { 1 } else { 0 },
+                instance.enable_spend as u8,
+                instance.enable_output as u8,
             ])?;
 
             w.write_all(proof.as_ref())?;
@@ -1153,7 +1155,7 @@ mod tests {
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
-                let file = std::fs::File::create("circuit_proof_test_case.bin")?;
+                let file = std::fs::File::create("src/circuit_proof_test_case.bin")?;
                 write_test_case(file, &instance, &proof)
             };
             create_proof().expect("should be able to write new proof");
@@ -1164,7 +1166,7 @@ mod tests {
             let test_case_bytes = include_bytes!("circuit_proof_test_case.bin");
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
-        assert_eq!(proof.0.len(), 5024);
+        assert_eq!(proof.0.len(), 5088);
 
         assert!(proof.verify(&vk, &[instance]).is_ok());
     }
