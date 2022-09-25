@@ -83,7 +83,7 @@ impl super::Config {
 }
 
 /// An instruction set for adding two circuit words (field elements).
-pub(in crate::circuit) trait AddInstruction<F: FieldExt>: Chip<F> {
+pub(crate) trait AddInstruction<F: FieldExt>: Chip<F> {
     /// Constraints `a + b` and returns the sum.
     fn add(
         &self,

@@ -1,3 +1,4 @@
+use ff::Field;
 use halo2_gadgets::ecc::chip::EccPoint;
 use halo2_proofs::circuit::Value;
 use halo2_proofs::{
@@ -7,6 +8,8 @@ use halo2_proofs::{
 };
 use pasta_curves::arithmetic::CurveAffine;
 use pasta_curves::pallas;
+
+use crate::circuit::gadget::AddInstruction;
 
 #[derive(Clone, Debug)]
 pub(in crate::circuit) struct MuxConfig {
@@ -80,11 +83,19 @@ impl MuxChip {
 }
 
 // TODO: simplify or generalize this API.
-pub trait MuxInstructions<C: CurveAffine> {
+pub(crate) trait MuxInstructions<C: CurveAffine> {
+    /// Witness a boolean switch value.
     fn witness_switch(
         &self,
         layouter: impl Layouter<C::Base>,
         value: Value<bool>,
+    ) -> Result<AssignedCell<C::Base, C::Base>, plonk::Error>;
+
+    /// Witness a value != 0
+    fn witness_non_zero(
+        &self,
+        layouter: impl Layouter<C::Base>,
+        value: Value<C::Base>,
     ) -> Result<AssignedCell<C::Base, C::Base>, plonk::Error>;
 
     fn mux(
@@ -111,17 +122,29 @@ pub trait MuxInstructions<C: CurveAffine> {
         right: &EccPoint,
     ) -> Result<EccPoint, plonk::Error>;
 
-    /// If is_free_advice { advice = anything } else { advice = constant }
-    fn conditional_advice(
+    /// If is_any_value { advice = any value } else { advice = constant }
+    /// Note that "any value" might equal the constant anyway.
+    fn constant_or_any_value(
         &self,
         layouter: impl Layouter<C::Base>,
-        is_free_advice: &AssignedCell<C::Base, C::Base>,
+        is_any_value: &AssignedCell<C::Base, C::Base>,
         advice: &AssignedCell<C::Base, C::Base>,
-        else_constant: &C::Base,
+        constant: &C::Base,
+    ) -> Result<(), plonk::Error>;
+
+    /// If is_different { advice != constant } else { advice == constant }
+    fn constant_or_different(
+        &self,
+        layouter: impl Layouter<C::Base>,
+        add_chip: impl AddInstruction<C::Base>,
+        is_different: &AssignedCell<C::Base, C::Base>,
+        advice: &AssignedCell<C::Base, C::Base>,
+        constant: &C::Base,
     ) -> Result<(), plonk::Error>;
 }
 
 impl MuxInstructions<pallas::Affine> for MuxChip {
+    /// Witness a boolean switch value.
     // TODO: this could return a wrapper type for usage safety.
     // TODO: this could use constant-time Choice instead of bool.
     fn witness_switch(
@@ -164,6 +187,56 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
                 )?;
 
                 Ok(switch)
+            },
+        )
+    }
+
+    /// Witness a value != 0
+    fn witness_non_zero(
+        &self,
+        mut layouter: impl Layouter<pallas::Base>,
+        value: Value<pallas::Base>,
+    ) -> Result<AssignedCell<pallas::Base, pallas::Base>, plonk::Error> {
+        layouter.assign_region(
+            || "witness_non_zero",
+            |mut region| {
+                // This is a non-zero constraint implemented with the mux gate.
+                // Set switch=value, right=1/value, left=0, output=1, giving:
+                //     value * (1/value) == 1
+
+                // Enable the multiplexer gate.
+                self.config.q_mux.enable(&mut region, 0)?;
+
+                let cell =
+                    region.assign_advice(|| "witness value", self.config.switch, 0, || value)?;
+
+                region.assign_advice(
+                    || "witness 1/value",
+                    self.config.right,
+                    0,
+                    || {
+                        value.map(|v| {
+                            let inverse = v.invert().unwrap();
+                            inverse
+                        })
+                    },
+                )?;
+
+                // Set the "left" and "output" constants.
+                region.assign_advice_from_constant(
+                    || "left=0",
+                    self.config.left,
+                    0,
+                    pallas::Base::zero(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "output=1",
+                    self.config.out,
+                    0,
+                    pallas::Base::one(),
+                )?;
+
+                Ok(cell)
             },
         )
     }
@@ -250,21 +323,23 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
         Ok(EccPoint::from_coordinates_unchecked(x.into(), y.into()))
     }
 
-    fn conditional_advice(
+    /// If is_any_value { advice = any value } else { advice = constant }
+    /// Note that "any value" might equal the constant anyway.
+    fn constant_or_any_value(
         &self,
         mut layouter: impl Layouter<pallas::Base>,
-        is_free_advice: &AssignedCell<pallas::Base, pallas::Base>,
+        is_any_value: &AssignedCell<pallas::Base, pallas::Base>,
         advice: &AssignedCell<pallas::Base, pallas::Base>,
         else_constant: &pallas::Base,
     ) -> Result<(), plonk::Error> {
         layouter.assign_region(
-            || "conditional advice",
+            || "equal_or_anything",
             |mut region| {
                 // Enable the multiplexer gate.
                 self.config.q_mux.enable(&mut region, 0)?;
 
                 // Copy the switch.
-                is_free_advice.copy_advice(|| "copy switch", &mut region, self.config.switch, 0)?;
+                is_any_value.copy_advice(|| "copy switch", &mut region, self.config.switch, 0)?;
 
                 // Copy the advice into the left input.
                 // When the switch is off, it must equal the constant output.
@@ -290,6 +365,55 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
                 Ok(())
             },
         )
+    }
+
+    /// If is_different { advice != constant } else { advice == constant }
+    fn constant_or_different(
+        &self,
+        mut layouter: impl Layouter<pallas::Base>,
+        add_chip: impl AddInstruction<pallas::Base>,
+        is_different: &AssignedCell<pallas::Base, pallas::Base>,
+        advice: &AssignedCell<pallas::Base, pallas::Base>,
+        constant: &pallas::Base,
+    ) -> Result<(), plonk::Error> {
+        // Witness the difference between the advice and the constant.
+        let non_zero_value =
+            advice
+                .value()
+                .zip(is_different.value())
+                .map(|(value, is_different)| {
+                    let difference = constant - value;
+
+                    if difference.is_zero_vartime() {
+                        assert!(is_different.is_zero_vartime(), "expected equal values");
+                        // If the values are equal, use any non-zero value to be ignored.
+                        pallas::Base::one()
+                    } else {
+                        assert!(!is_different.is_zero_vartime(), "expected non-equal values");
+                        difference
+                    }
+                });
+        let non_zero =
+            self.witness_non_zero(layouter.namespace(|| "non-zero difference"), non_zero_value)?;
+
+        // Prepare a cell that is definitely different than the advice cell.
+        let different_than_advice =
+            add_chip.add(layouter.namespace(|| "different cell"), &advice, &non_zero)?;
+
+        // Prepare a cell whose value equals the given constant.
+        let advice_or_different = self.mux(
+            layouter.namespace(|| "advice or different"),
+            is_different,
+            &advice,                // switch == 0, constant == advice
+            &different_than_advice, // switch == 1, constant != advice
+        )?;
+
+        // Constrain the above cell to the given constant.
+        layouter.assign_region(
+            || "advice_or_different == constant",
+            |mut region| region.constrain_constant(advice_or_different.cell(), constant),
+        )?;
+        Ok(())
     }
 }
 

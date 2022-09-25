@@ -427,16 +427,20 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 .coordinates()
                 .unwrap();
 
-            // If is_zsa=false, check that the note type is native.
-            // TODO: is this necessary?
-            // TODO: is it necessary to check the opposite case, with note_type!=native ?
-            mux_chip.conditional_advice(
+            // If is_zsa=false, the note type is the native type (equal X coordinates).
+            // If is_zsa=true, the note type is different than the native type
+            //   (also not its negation, because of different X coordinates).
+            mux_chip.constant_or_different(
                 layouter.namespace(|| "note_type consistency X"),
+                config.add_chip(),
                 &is_zsa,
                 &note_type.inner().x(),
                 note_type_native.x(),
             )?;
-            mux_chip.conditional_advice(
+
+            // If is_zsa=false, the note type is the native type (equal Y coordinates).
+            // If is_zsa=true, there is nothing more to check about Y.
+            mux_chip.constant_or_any_value(
                 layouter.namespace(|| "note_type consistency Y"),
                 &is_zsa,
                 &note_type.inner().y(),
@@ -1102,10 +1106,7 @@ mod tests {
             w.write_all(&instance.nf_old.to_bytes())?;
             w.write_all(&<[u8; 32]>::from(instance.rk.clone()))?;
             w.write_all(&instance.cmx.to_bytes())?;
-            w.write_all(&[
-                instance.enable_spend as u8,
-                instance.enable_output as u8,
-            ])?;
+            w.write_all(&[instance.enable_spend as u8, instance.enable_output as u8])?;
 
             w.write_all(proof.as_ref())?;
             Ok(())
