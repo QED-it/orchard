@@ -904,7 +904,7 @@ mod tests {
             .unwrap()
             .create_proof(&pk, &mut rng)
             .unwrap()
-            .prepare(&mut rng, [0; 32])
+            .prepare(rng, [0; 32])
             .finalize()
             .unwrap();
         assert_eq!(bundle.value_balance(), &(-5000))
