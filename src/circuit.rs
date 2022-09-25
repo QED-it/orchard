@@ -687,7 +687,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 g_d_new.inner(),
                 pk_d_new.inner(),
                 v_new.clone(),
-                is_zsa.clone(),
+                is_zsa,
                 note_type.inner(),
                 rho_new,
                 psi_new,
@@ -1102,8 +1102,8 @@ mod tests {
             w.write_all(&<[u8; 32]>::from(instance.rk.clone()))?;
             w.write_all(&instance.cmx.to_bytes())?;
             w.write_all(&[
-                if instance.enable_spend { 1 } else { 0 },
-                if instance.enable_output { 1 } else { 0 },
+                instance.enable_spend as u8,
+                instance.enable_output as u8,
             ])?;
 
             w.write_all(proof.as_ref())?;

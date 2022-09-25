@@ -1767,7 +1767,6 @@ impl NoteCommitChip {
 }
 
 pub(in crate::circuit) mod gadgets {
-    use group::ff::Field;
     use halo2_proofs::circuit::{Chip, Value};
 
     use crate::circuit::gadget::mux_chip::MuxChip;

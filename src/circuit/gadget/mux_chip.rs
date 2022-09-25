@@ -143,7 +143,7 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
                     || "load switch",
                     self.config.switch,
                     0,
-                    || value.map(|b| pallas::Base::from(b)),
+                    || value.map(pallas::Base::from),
                 )?;
 
                 // Copy the switch into the left input.
