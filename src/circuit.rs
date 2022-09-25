@@ -123,6 +123,7 @@ pub struct Circuit {
     pub(crate) psi_new: Value<pallas::Base>,
     pub(crate) rcm_new: Value<NoteCommitTrapdoor>,
     pub(crate) rcv: Value<ValueCommitTrapdoor>,
+    pub(crate) note_type: Value<NoteType>,
 }
 
 impl plonk::Circuit<pallas::Base> for Circuit {
@@ -403,8 +404,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 self.v_new,
             )?;
 
-            // TODO: move to self.
-            let note_type_value = Value::known(NoteType::native());
+            let note_type_value = self.note_type;
             let is_zsa_value = note_type_value.map(|nt| !bool::from(nt.is_native()));
 
             // Witness boolean is_zsa.
@@ -1016,6 +1016,7 @@ mod tests {
                 psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
                 rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
                 rcv: Value::known(rcv),
+                note_type: Value::known(spent_note.note_type()),
             },
             Instance {
                 anchor,
@@ -1202,6 +1203,7 @@ mod tests {
             psi_new: Value::unknown(),
             rcm_new: Value::unknown(),
             rcv: Value::unknown(),
+            note_type: Value::unknown(),
         };
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)

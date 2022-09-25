@@ -247,6 +247,7 @@ impl ActionInfo {
                 psi_new: Value::known(note.rseed().psi(&note.rho())),
                 rcm_new: Value::known(note.rseed().rcm(&note.rho())),
                 rcv: Value::known(self.rcv),
+                note_type: Value::known(note_type),
             },
         )
     }
