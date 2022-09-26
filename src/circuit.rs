@@ -514,6 +514,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 layouter.namespace(|| "cv_net = ValueCommit^Orchard_rcv(v_net)"),
                 ecc_chip.clone(),
                 v_net,
+                note_type.clone(),
                 rcv,
             )?;
 

@@ -125,14 +125,19 @@ pub(in crate::circuit) fn value_commit_orchard<
     mut layouter: impl Layouter<pallas::Base>,
     ecc_chip: EccChip,
     v: ScalarFixedShort<pallas::Affine, EccChip>,
+    note_type: NonIdentityPoint<pallas::Affine, EccChip>,
     rcv: ScalarFixed<pallas::Affine, EccChip>,
 ) -> Result<Point<pallas::Affine, EccChip>, plonk::Error> {
+    let (commitment, _) = note_type.mul_short(layouter.namespace(|| "[v] NoteType"), v)?;
+
+    /* TODO: remove.
     // commitment = [v] ValueCommitV
     let (commitment, _) = {
         let value_commit_v = ValueCommitV;
         let value_commit_v = FixedPointShort::from_inner(ecc_chip.clone(), value_commit_v);
         value_commit_v.mul(layouter.namespace(|| "[v] ValueCommitV"), v)?
     };
+    */
 
     // blind = [rcv] ValueCommitR
     let (blind, _rcv) = {
@@ -207,3 +212,4 @@ pub(in crate::circuit) fn derive_nullifier<
 
 pub(in crate::circuit) use crate::circuit::commit_ivk::gadgets::commit_ivk;
 pub(in crate::circuit) use crate::circuit::note_commit::gadgets::note_commit;
+use halo2_gadgets::ecc::NonIdentityPoint;
