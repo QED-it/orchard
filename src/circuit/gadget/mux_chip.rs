@@ -141,6 +141,14 @@ pub(crate) trait MuxInstructions<C: CurveAffine> {
         advice: &AssignedCell<C::Base, C::Base>,
         constant: &C::Base,
     ) -> Result<(), plonk::Error>;
+
+    // TODO: remove if not used?
+    fn mul(
+        &self,
+        layouter: impl Layouter<C::Base>,
+        a: &AssignedCell<C::Base, C::Base>,
+        b: &AssignedCell<C::Base, C::Base>,
+    ) -> Result<AssignedCell<C::Base, C::Base>, plonk::Error>;
 }
 
 impl MuxInstructions<pallas::Affine> for MuxChip {
@@ -333,7 +341,7 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
         else_constant: &pallas::Base,
     ) -> Result<(), plonk::Error> {
         layouter.assign_region(
-            || "equal_or_anything",
+            || "equal_or_any_value",
             |mut region| {
                 // Enable the multiplexer gate.
                 self.config.q_mux.enable(&mut region, 0)?;
@@ -414,6 +422,48 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
             |mut region| region.constrain_constant(advice_or_different.cell(), constant),
         )?;
         Ok(())
+    }
+
+    fn mul(
+        &self,
+        mut layouter: impl Layouter<pallas::Base>,
+        a: &AssignedCell<pallas::Base, pallas::Base>,
+        b: &AssignedCell<pallas::Base, pallas::Base>,
+    ) -> Result<AssignedCell<pallas::Base, pallas::Base>, plonk::Error> {
+        layouter.assign_region(
+            || "mul",
+            |mut region| {
+                // This is a multiplication implemented with the mux gate.
+                // Set switch=a, right=b, output=product, left=0, giving:
+                //     a * b == product
+
+                // Enable the multiplexer gate.
+                self.config.q_mux.enable(&mut region, 0)?;
+
+                // Copy the inputs into the multiplexer row.
+                a.copy_advice(|| "copy a", &mut region, self.config.switch, 0)?;
+                b.copy_advice(|| "copy b", &mut region, self.config.right, 0)?;
+
+                let product_value = a.value().zip(b.value()).map(|(a, b)| a * b);
+
+                let product = region.assign_advice(
+                    || "witness product",
+                    self.config.out,
+                    0,
+                    || product_value,
+                )?;
+
+                // Set the "left" constant.
+                region.assign_advice_from_constant(
+                    || "left=0",
+                    self.config.left,
+                    0,
+                    pallas::Base::zero(),
+                )?;
+
+                Ok(product)
+            },
+        )
     }
 }
 
