@@ -112,7 +112,7 @@ impl RecipientInfo {
     /// Defined in [Zcash Protocol Spec § 4.8.3: Dummy Notes (Orchard)][orcharddummynotes].
     ///
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
-    fn dummy(rng: &mut impl RngCore) -> Self {
+    fn dummy(rng: &mut impl RngCore, note_type: NoteType) -> Self {
         let fvk: FullViewingKey = (&SpendingKey::random(rng)).into();
         let recipient = fvk.address_at(0u32, Scope::External);
 
@@ -120,7 +120,7 @@ impl RecipientInfo {
             ovk: None,
             recipient,
             value: NoteValue::zero(),
-            note_type: NoteType::native(),
+            note_type,
             memo: None,
         }
     }
@@ -147,15 +147,15 @@ impl ActionInfo {
     /// Split notes does not contribute to the value sum.
     fn value_sum(&self) -> ValueSum {
         // TODO: Aurel, uncomment when circuit for split flag is implemented.
-        // let spent_value = self
-        //     .spend
-        //     .split_flag
-        //     .then(|| self.spend.note.value())
-        //     .unwrap_or_else(NoteValue::zero);
-        //
-        // spent_value - self.output.value
+        let spent_value = self
+            .spend
+            .split_flag
+            .then(|| self.spend.note.value())
+            .unwrap_or_else(NoteValue::zero);
 
-        self.spend.note.value() - self.output.value
+        spent_value - self.output.value
+
+        // self.spend.note.value() - self.output.value
     }
 
     /// Builds the action.
@@ -374,7 +374,7 @@ impl Builder {
             spends.extend(iter::repeat_with(|| dummy_spend.clone()).take(num_actions - num_spends));
 
             recipients.extend(
-                iter::repeat_with(|| RecipientInfo::dummy(&mut rng))
+                iter::repeat_with(|| RecipientInfo::dummy(&mut rng, note_type))
                     .take(num_actions - num_recipients),
             );
 
@@ -397,14 +397,15 @@ impl Builder {
         let anchor = self.anchor;
 
         // Determine the value balance for this bundle, ensuring it is valid.
-        let value_balance = pre_actions
+        let native_value_balance = pre_actions
             .iter()
+            .filter(|a| a.output.note_type.is_native().into())
             .fold(Some(ValueSum::zero()), |acc, action| {
                 acc? + action.value_sum()
             })
             .ok_or(OverflowError)?;
 
-        let result_value_balance: V = i64::try_from(value_balance)
+        let result_value_balance: V = i64::try_from(native_value_balance)
             .map_err(Error::ValueSum)
             .and_then(|i| V::try_from(i).map_err(|_| Error::ValueSum(value::OverflowError)))?;
 
@@ -422,7 +423,7 @@ impl Builder {
         // Verify that bsk and bvk are consistent.
         let bvk = (actions.iter().map(|a| a.cv_net()).sum::<ValueCommitment>()
             - ValueCommitment::derive(
-                value_balance,
+                native_value_balance,
                 ValueCommitTrapdoor::zero(),
                 NoteType::native(),
             ))
