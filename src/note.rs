@@ -160,6 +160,7 @@ impl Note {
     /// Defined in [Zcash Protocol Spec § 4.8.3: Dummy Notes (Orchard)][orcharddummynotes].
     ///
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
+    /// TODO zsa: remove note_type
     pub(crate) fn dummy(
         rng: &mut impl RngCore,
         rho: Option<Nullifier>,
@@ -283,6 +284,8 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::note::note_type::testing::arb_note_type;
+    use crate::note::note_type::testing::zsa_note_type;
+    use crate::value::testing::arb_note_value;
     use crate::{
         address::testing::arb_address, note::nullifier::testing::arb_nullifier, value::NoteValue,
     };
@@ -303,6 +306,25 @@ pub mod testing {
             rho in arb_nullifier(),
             rseed in arb_rseed(),
             note_type in arb_note_type(),
+        ) -> Note {
+            Note {
+                recipient,
+                value,
+                note_type,
+                rho,
+                rseed,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary ZSA note
+        pub fn arb_zsa_note()(
+            recipient in arb_address(),
+            value in arb_note_value(),
+            rho in arb_nullifier(),
+            rseed in arb_rseed(),
+            note_type in zsa_note_type(),
         ) -> Note {
             Note {
                 recipient,
