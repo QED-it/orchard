@@ -6,11 +6,10 @@ use pasta_curves::pallas;
 use super::{commit_ivk::CommitIvkChip, note_commit::NoteCommitChip};
 use crate::constants::{
     NullifierK, OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
-    ValueCommitV,
 };
 use halo2_gadgets::{
     ecc::{
-        chip::EccChip, EccInstructions, FixedPoint, FixedPointBaseField, FixedPointShort, Point,
+        chip::EccChip, EccInstructions, FixedPoint, FixedPointBaseField, Point,
         ScalarFixed, ScalarFixedShort, X,
     },
     poseidon::{

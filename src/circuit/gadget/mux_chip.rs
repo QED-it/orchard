@@ -222,12 +222,7 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
                     || "witness 1/value",
                     self.config.right,
                     0,
-                    || {
-                        value.map(|v| {
-                            let inverse = v.invert().unwrap();
-                            inverse
-                        })
-                    },
+                    || value.map(|v| v.invert().unwrap()),
                 )?;
 
                 // Set the "left" and "output" constants.
@@ -406,13 +401,13 @@ impl MuxInstructions<pallas::Affine> for MuxChip {
 
         // Prepare a cell that is definitely different than the advice cell.
         let different_than_advice =
-            add_chip.add(layouter.namespace(|| "different cell"), &advice, &non_zero)?;
+            add_chip.add(layouter.namespace(|| "different cell"), advice, &non_zero)?;
 
         // Prepare a cell whose value equals the given constant.
         let advice_or_different = self.mux(
             layouter.namespace(|| "advice or different"),
             is_different,
-            &advice,                // switch == 0, constant == advice
+            advice,                 // switch == 0, constant == advice
             &different_than_advice, // switch == 1, constant != advice
         )?;
 

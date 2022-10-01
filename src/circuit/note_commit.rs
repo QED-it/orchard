@@ -1065,7 +1065,7 @@ impl NoteTypeCanonicity {
 
             // x(note_type) = h_2 + (2^4)i + (2^254)j_0
             let decomposition_check = {
-                let sum = h_2.clone() + i.clone() * two_pow_4 + j_0.clone() * two_pow_254;
+                let sum = h_2 + i * two_pow_4 + j_0 * two_pow_254;
                 sum - note_type_x
             };
 
@@ -1692,15 +1692,8 @@ impl NoteCommitChip {
             t_p.clone(),
         );
 
-        let note_type = NoteTypeCanonicity::configure(
-            meta,
-            col_l,
-            col_m,
-            col_r,
-            col_z,
-            two_pow_4,
-            two_pow_254,
-        );
+        let note_type =
+            NoteTypeCanonicity::configure(meta, col_l, col_m, col_r, col_z, two_pow_4, two_pow_254);
 
         let value =
             ValueCanonicity::configure(meta, col_l, col_m, col_r, col_z, two_pow_8, two_pow_58);
@@ -1848,7 +1841,7 @@ pub(in crate::circuit) mod gadgets {
             layouter.namespace(|| "h_2 = 0 or start of note_type"),
             &is_zsa,
             &pallas::Base::zero(),
-            &h_2_zsa.inner(),
+            h_2_zsa.inner(),
         )?;
         let h_2 = RangeConstrained::unsound_unchecked(h_2, h_2_zsa.num_bits());
         let (h, h_0, h_1) =
@@ -1952,7 +1945,7 @@ pub(in crate::circuit) mod gadgets {
                 &(hash_native.inner().clone().into()),
                 &(hash_zsa.inner().clone().into()),
             )?;
-            let hash = Point::from_inner(ecc_chip.clone(), hash);
+            let hash = Point::from_inner(ecc_chip, hash);
 
             let cm = domain.blind(layouter.namespace(|| "NoteCommit blind"), hash, rcm)?;
 
