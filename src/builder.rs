@@ -146,16 +146,13 @@ impl ActionInfo {
     /// Returns the value sum for this action.
     /// Split notes does not contribute to the value sum.
     fn value_sum(&self) -> ValueSum {
-        // TODO: Aurel, uncomment when circuit for split flag is implemented.
         let spent_value = self
             .spend
             .split_flag
-            .then(|| self.spend.note.value())
-            .unwrap_or_else(NoteValue::zero);
+            .then(NoteValue::zero)
+            .unwrap_or_else(|| self.spend.note.value());
 
         spent_value - self.output.value
-
-        // self.spend.note.value() - self.output.value
     }
 
     /// Builds the action.
@@ -397,15 +394,14 @@ impl Builder {
         let anchor = self.anchor;
 
         // Determine the value balance for this bundle, ensuring it is valid.
-        let native_value_balance = pre_actions
+        let value_balance = pre_actions
             .iter()
-            .filter(|a| a.output.note_type.is_native().into())
             .fold(Some(ValueSum::zero()), |acc, action| {
                 acc? + action.value_sum()
             })
             .ok_or(OverflowError)?;
 
-        let result_value_balance: V = i64::try_from(native_value_balance)
+        let result_value_balance: V = i64::try_from(value_balance)
             .map_err(Error::ValueSum)
             .and_then(|i| V::try_from(i).map_err(|_| Error::ValueSum(value::OverflowError)))?;
 
@@ -423,7 +419,7 @@ impl Builder {
         // Verify that bsk and bvk are consistent.
         let bvk = (actions.iter().map(|a| a.cv_net()).sum::<ValueCommitment>()
             - ValueCommitment::derive(
-                native_value_balance,
+                value_balance,
                 ValueCommitTrapdoor::zero(),
                 NoteType::native(),
             ))
