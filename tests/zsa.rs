@@ -3,6 +3,7 @@ mod builder;
 use crate::builder::{build_merkle_tree, verify_bundle};
 use incrementalmerkletree::bridgetree::BridgeTree;
 use incrementalmerkletree::{Hashable, Tree};
+use orchard::builder::{InProgress, Unproven};
 use orchard::bundle::Authorized;
 use orchard::issuance::{IssueBundle, Signed, Unauthorized};
 use orchard::keys::{IssuerAuthorizingKey, IssuerValidatingKey};
@@ -19,7 +20,6 @@ use orchard::{
 };
 use rand::rngs::OsRng;
 use zcash_note_encryption::try_note_decryption;
-use orchard::builder::{InProgress, Unproven};
 
 fn verify_issuing_bundle(bundle: &IssueBundle<Signed>) {
     let sighash: [u8; 32] = bundle.commitment().into();
@@ -695,5 +695,6 @@ fn e2e_2zsa_to_2zsa_with_different_types_wrong_denomination() {
         ),
         Ok(())
     );
-    let _result: Bundle<InProgress<Unproven, orchard::builder::Unauthorized>, i64> = builder.build(&mut rng).unwrap();
+    let _result: Bundle<InProgress<Unproven, orchard::builder::Unauthorized>, i64> =
+        builder.build(&mut rng).unwrap();
 }
