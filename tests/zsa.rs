@@ -1,11 +1,10 @@
 mod builder;
 
-use crate::builder::{build_merkle_tree, verify_bundle};
+use crate::builder::{build_merkle_path, verify_bundle};
 use incrementalmerkletree::bridgetree::BridgeTree;
 use incrementalmerkletree::{Hashable, Tree};
-use orchard::builder::{InProgress, Unproven};
 use orchard::bundle::Authorized;
-use orchard::issuance::{IssueBundle, Signed, Unauthorized};
+use orchard::issuance::{verify_issue_bundle, IssueBundle, Signed, Unauthorized};
 use orchard::keys::{IssuerAuthorizingKey, IssuerValidatingKey};
 use orchard::note::{ExtractedNoteCommitment, NoteType};
 use orchard::note_encryption::OrchardDomain;
@@ -19,17 +18,8 @@ use orchard::{
     Address, Anchor, Bundle, Note,
 };
 use rand::rngs::OsRng;
+use std::collections::HashSet;
 use zcash_note_encryption::try_note_decryption;
-
-fn verify_issuing_bundle(bundle: &IssueBundle<Signed>) {
-    let sighash: [u8; 32] = bundle.commitment().into();
-    assert_eq!(
-        bundle
-            .ik()
-            .verify(&sighash, bundle.authorization().signature()),
-        Ok(())
-    );
-}
 
 fn prepare_keys() -> (
     ProvingKey,
@@ -62,7 +52,7 @@ fn sign_issuing_bundle(
     proven.sign(&mut rng, &isk).unwrap()
 }
 
-fn sign_shielded_bundle(
+fn build_and_sign_issuing_bundle(
     builder: Builder,
     mut rng: OsRng,
     pk: ProvingKey,
@@ -76,7 +66,10 @@ fn sign_shielded_bundle(
         .unwrap()
 }
 
-pub fn build_merkle_tree_2_leaves(note1: &Note, note2: &Note) -> (MerklePath, MerklePath, Anchor) {
+pub fn build_merkle_path_with_two_leaves(
+    note1: &Note,
+    note2: &Note,
+) -> (MerklePath, MerklePath, Anchor) {
     let mut tree = BridgeTree::<MerkleHashOrchard, 32>::new(0);
 
     // Add first leaf
@@ -115,7 +108,7 @@ pub fn build_merkle_tree_2_leaves(note1: &Note, note2: &Note) -> (MerklePath, Me
 
 /// Issue single ZSA note and spend it
 #[test]
-fn e2e_1zsa_to_1zsa() {
+fn e2e_issue_one_zsa_note_to_one_zsa_note() {
     let mut rng = OsRng;
     let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
     let asset_descr = "zsa_asset";
@@ -137,14 +130,19 @@ fn e2e_1zsa_to_1zsa() {
     let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
 
     // Take first note from first action
-    let note = issuing_bundle.actions().first().unwrap().notes().first();
+    let note = issuing_bundle.get_all_notes()[0];
 
-    let (merkle_path, anchor) = build_merkle_tree(note);
+    assert!(verify_issue_bundle(
+        &issuing_bundle,
+        issuing_bundle.commitment().into(),
+        &mut HashSet::new(),
+    )
+    .is_ok());
 
-    verify_issuing_bundle(&issuing_bundle);
+    let (merkle_path, anchor) = build_merkle_path(note);
 
     // Create a shielded bundle spending the previous output
-    let shielded_bundle: Bundle<_, i64> = {
+    let shielded_bundle: Bndle<_, i64> = {
         let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
         // Add single ZSA spend
         assert_eq!(builder.add_spend(fvk, *note, merkle_path), Ok(()));
@@ -153,7 +151,7 @@ fn e2e_1zsa_to_1zsa() {
             builder.add_recipient(None, recipient, note.value(), note.note_type(), None),
             Ok(())
         );
-        sign_shielded_bundle(builder, rng, pk, sk)
+        build_and_sign_issuing_bundle(builder, rng, pk, sk)
     };
 
     // Verify the shielded bundle
@@ -162,7 +160,7 @@ fn e2e_1zsa_to_1zsa() {
 
 /// Issue single ZSA note and split it into 2 notes
 #[test]
-fn e2e_1zsa_to_2zsa() {
+fn e2e_issue_one_zsa_note_to_two_zsa_notes() {
     let mut rng = OsRng;
     let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
     let asset_descr = "zsa_asset";
@@ -184,11 +182,16 @@ fn e2e_1zsa_to_2zsa() {
     let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
 
     // Take first note from first action
-    let note = issuing_bundle.actions().first().unwrap().notes().first();
+    let note = issuing_bundle.get_all_notes()[0];
 
-    let (merkle_path, anchor) = build_merkle_tree(note);
+    assert!(verify_issue_bundle(
+        &issuing_bundle,
+        issuing_bundle.commitment().into(),
+        &mut HashSet::new(),
+    )
+    .is_ok());
 
-    verify_issuing_bundle(&issuing_bundle);
+    let (merkle_path, anchor) = build_merkle_path(note);
 
     // Create a shielded bundle spending the previous output
     let shielded_bundle: Bundle<_, i64> = {
@@ -216,7 +219,7 @@ fn e2e_1zsa_to_2zsa() {
             ),
             Ok(())
         );
-        sign_shielded_bundle(builder, rng, pk, sk)
+        build_and_sign_issuing_bundle(builder, rng, pk, sk)
     };
 
     // Verify the shielded bundle
@@ -225,7 +228,7 @@ fn e2e_1zsa_to_2zsa() {
 
 /// Issue 2 ZSA notes and join them into a single note
 #[test]
-fn e2e_2zsa_to_1zsa() {
+fn e2e_issue_two_zsa_notes_to_one_zsa_note() {
     let mut rng = OsRng;
     let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
     let asset_descr = "zsa_asset";
@@ -256,24 +259,17 @@ fn e2e_2zsa_to_1zsa() {
     let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
 
     // Take notes from first action
-    let note1 = issuing_bundle
-        .actions()
-        .first()
-        .unwrap()
-        .notes()
-        .get(0)
-        .unwrap();
-    let note2 = issuing_bundle
-        .actions()
-        .first()
-        .unwrap()
-        .notes()
-        .get(1)
-        .unwrap();
+    let note1 = issuing_bundle.get_all_notes()[0];
+    let note2 = issuing_bundle.get_all_notes()[1];
 
-    let (merkle_path1, merkle_path2, anchor) = build_merkle_tree_2_leaves(note1, note2);
+    assert!(verify_issue_bundle(
+        &issuing_bundle,
+        issuing_bundle.commitment().into(),
+        &mut HashSet::new(),
+    )
+    .is_ok());
 
-    verify_issuing_bundle(&issuing_bundle);
+    let (merkle_path1, merkle_path2, anchor) = build_merkle_path_with_two_leaves(note1, note2);
 
     // Create a shielded bundle spending the previous output
     let shielded_bundle: Bundle<_, i64> = {
@@ -292,7 +288,7 @@ fn e2e_2zsa_to_1zsa() {
             ),
             Ok(())
         );
-        sign_shielded_bundle(builder, rng, pk, sk)
+        build_and_sign_issuing_bundle(builder, rng, pk, sk)
     };
 
     // Verify the shielded bundle
@@ -301,7 +297,7 @@ fn e2e_2zsa_to_1zsa() {
 
 /// Issue 2 ZSA notes and send them as 2 notes with different denomination
 #[test]
-fn e2e_2zsa_to_2zsa() {
+fn e2e_issue_two_zsa_notes_to_two_zsa_notes() {
     let mut rng = OsRng;
     let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
     let asset_descr = "zsa_asset";
@@ -332,24 +328,17 @@ fn e2e_2zsa_to_2zsa() {
     let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
 
     // Take notes from first action
-    let note1 = issuing_bundle
-        .actions()
-        .first()
-        .unwrap()
-        .notes()
-        .get(0)
-        .unwrap();
-    let note2 = issuing_bundle
-        .actions()
-        .first()
-        .unwrap()
-        .notes()
-        .get(1)
-        .unwrap();
+    let note1 = issuing_bundle.get_all_notes()[0];
+    let note2 = issuing_bundle.get_all_notes()[1];
 
-    let (merkle_path1, merkle_path2, anchor) = build_merkle_tree_2_leaves(note1, note2);
+    assert!(verify_issue_bundle(
+        &issuing_bundle,
+        issuing_bundle.commitment().into(),
+        &mut HashSet::new(),
+    )
+    .is_ok());
 
-    verify_issuing_bundle(&issuing_bundle);
+    let (merkle_path1, merkle_path2, anchor) = build_merkle_path_with_two_leaves(note1, note2);
 
     // Create a shielded bundle spending the previous output
     let shielded_bundle: Bundle<_, i64> = {
@@ -378,7 +367,7 @@ fn e2e_2zsa_to_2zsa() {
             ),
             Ok(())
         );
-        sign_shielded_bundle(builder, rng, pk, sk)
+        build_and_sign_issuing_bundle(builder, rng, pk, sk)
     };
 
     // Verify the shielded bundle
@@ -387,7 +376,7 @@ fn e2e_2zsa_to_2zsa() {
 
 /// Issue single ZSA note and spend it, mixed with native notes (shielding)
 #[test]
-fn e2e_1zsa_to_1zsa_with_native_shielding() {
+fn e2e_issue_one_zsa_note_to_one_zsa_note_with_native_shielding() {
     let mut rng = OsRng;
     let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
     let asset_descr = "zsa_asset";
@@ -409,11 +398,16 @@ fn e2e_1zsa_to_1zsa_with_native_shielding() {
     let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
 
     // Take first note from first action
-    let note = issuing_bundle.actions().first().unwrap().notes().first();
+    let note = issuing_bundle.get_all_notes()[0];
 
-    let (merkle_path, anchor) = build_merkle_tree(note);
+    assert!(verify_issue_bundle(
+        &issuing_bundle,
+        issuing_bundle.commitment().into(),
+        &mut HashSet::new(),
+    )
+    .is_ok());
 
-    verify_issuing_bundle(&issuing_bundle);
+    let (merkle_path, anchor) = build_merkle_path(note);
 
     // Create a shielded bundle spending the previous output
     let shielded_bundle: Bundle<_, i64> = {
@@ -438,7 +432,7 @@ fn e2e_1zsa_to_1zsa_with_native_shielding() {
             Ok(())
         );
 
-        sign_shielded_bundle(builder, rng, pk, sk)
+        build_and_sign_issuing_bundle(builder, rng, pk, sk)
     };
 
     // Verify the shielded bundle
@@ -447,7 +441,7 @@ fn e2e_1zsa_to_1zsa_with_native_shielding() {
 
 /// Issue single ZSA note and spend it, mixed with native notes (shielded to shielded)
 #[test]
-fn e2e_1zsa_to_1zsa_with_native_shielded() {
+fn e2e_issue_one_zsa_note_to_one_zsa_note_with_native_shielded() {
     let mut rng = OsRng;
     let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
     let asset_descr = "zsa_asset";
@@ -501,11 +495,17 @@ fn e2e_1zsa_to_1zsa_with_native_shielded() {
     let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
 
     // Take first note from first action
-    let note = issuing_bundle.actions().first().unwrap().notes().first();
+    let note = issuing_bundle.get_all_notes()[0];
 
-    let (merkle_path, native_merkle_path, anchor) = build_merkle_tree_2_leaves(note, &native_note);
+    assert!(verify_issue_bundle(
+        &issuing_bundle,
+        issuing_bundle.commitment().into(),
+        &mut HashSet::new(),
+    )
+    .is_ok());
 
-    verify_issuing_bundle(&issuing_bundle);
+    let (merkle_path, native_merkle_path, anchor) =
+        build_merkle_path_with_two_leaves(note, &native_note);
 
     // Create a shielded bundle spending the previous output
     let shielded_bundle: Bundle<_, i64> = {
@@ -535,7 +535,7 @@ fn e2e_1zsa_to_1zsa_with_native_shielded() {
             Ok(())
         );
 
-        sign_shielded_bundle(builder, rng, pk, sk)
+        build_and_sign_issuing_bundle(builder, rng, pk, sk)
     };
 
     // Verify the shielded bundle
@@ -544,7 +544,7 @@ fn e2e_1zsa_to_1zsa_with_native_shielded() {
 
 /// Issue 2 ZSA notes of different asset types
 #[test]
-fn e2e_2zsa_to_2zsa_with_different_types() {
+fn e2e_issue_two_zsa_notes_to_two_zsa_notes_with_different_types() {
     let mut rng = OsRng;
     let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
     let asset_descr1 = "zsa_asset";
@@ -575,24 +575,17 @@ fn e2e_2zsa_to_2zsa_with_different_types() {
 
     let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
 
-    let note1 = issuing_bundle
-        .actions()
-        .get(0)
-        .unwrap()
-        .notes()
-        .get(0)
-        .unwrap();
-    let note2 = issuing_bundle
-        .actions()
-        .get(1)
-        .unwrap()
-        .notes()
-        .get(0)
-        .unwrap();
+    let note1 = issuing_bundle.get_all_notes()[0];
+    let note2 = issuing_bundle.get_all_notes()[1];
 
-    let (merkle_path1, merkle_path2, anchor) = build_merkle_tree_2_leaves(note1, note2);
+    assert!(verify_issue_bundle(
+        &issuing_bundle,
+        issuing_bundle.commitment().into(),
+        &mut HashSet::new(),
+    )
+    .is_ok());
 
-    verify_issuing_bundle(&issuing_bundle);
+    let (merkle_path1, merkle_path2, anchor) = build_merkle_path_with_two_leaves(note1, note2);
 
     // Create a shielded bundle spending the previous output
     let shielded_bundle: Bundle<_, i64> = {
@@ -609,7 +602,7 @@ fn e2e_2zsa_to_2zsa_with_different_types() {
             builder.add_recipient(None, recipient, note2.value(), note2.note_type(), None),
             Ok(())
         );
-        sign_shielded_bundle(builder, rng, pk, sk)
+        build_and_sign_issuing_bundle(builder, rng, pk, sk)
     };
 
     // Verify the shielded bundle
@@ -618,8 +611,7 @@ fn e2e_2zsa_to_2zsa_with_different_types() {
 
 /// Issue 2 ZSA notes of different asset types
 #[test]
-#[should_panic]
-fn e2e_2zsa_to_2zsa_with_different_types_wrong_denomination() {
+fn e2e_issue_two_zsa_notes_to_two_zsa_notes_with_different_types_wrong_denomination() {
     let mut rng = OsRng;
     let (_, _, _, fvk, recipient, isk, ik) = prepare_keys();
     let asset_descr1 = "zsa_asset";
@@ -650,24 +642,17 @@ fn e2e_2zsa_to_2zsa_with_different_types_wrong_denomination() {
 
     let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
 
-    let note1 = issuing_bundle
-        .actions()
-        .get(0)
-        .unwrap()
-        .notes()
-        .get(0)
-        .unwrap();
-    let note2 = issuing_bundle
-        .actions()
-        .get(1)
-        .unwrap()
-        .notes()
-        .get(0)
-        .unwrap();
+    let note1 = issuing_bundle.get_all_notes()[0];
+    let note2 = issuing_bundle.get_all_notes()[1];
 
-    let (merkle_path1, merkle_path2, anchor) = build_merkle_tree_2_leaves(note1, note2);
+    assert!(verify_issue_bundle(
+        &issuing_bundle,
+        issuing_bundle.commitment().into(),
+        &mut HashSet::new(),
+    )
+    .is_ok());
 
-    verify_issuing_bundle(&issuing_bundle);
+    let (merkle_path1, merkle_path2, anchor) = build_merkle_path_with_two_leaves(note1, note2);
 
     // Create a shielded bundle spending the previous output
     let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
@@ -695,6 +680,10 @@ fn e2e_2zsa_to_2zsa_with_different_types_wrong_denomination() {
         ),
         Ok(())
     );
-    let _result: Bundle<InProgress<Unproven, orchard::builder::Unauthorized>, i64> =
-        builder.build(&mut rng).unwrap();
+
+    let result = std::panic::catch_unwind(|| {
+        let _res: Result<Bundle<_, i64>, _> = builder.build(OsRng);
+    });
+
+    assert!(result.is_err());
 }

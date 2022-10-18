@@ -27,7 +27,7 @@ pub fn verify_bundle(bundle: &Bundle<Authorized, i64>, _vk: &VerifyingKey) {
     );
 }
 
-pub fn build_merkle_tree(note: &Note) -> (MerklePath, Anchor) {
+pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
     // Use the tree with a single leaf.
     let cmx: ExtractedNoteCommitment = note.commitment().into();
     let leaf = MerkleHashOrchard::from_cmx(&cmx);
@@ -92,7 +92,7 @@ fn bundle_chain() {
             })
             .unwrap();
 
-        let (merkle_path, anchor) = build_merkle_tree(&note);
+        let (merkle_path, anchor) = build_merkle_path(&note);
 
         let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
         assert_eq!(builder.add_spend(fvk, note, merkle_path), Ok(()));
