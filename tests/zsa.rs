@@ -142,7 +142,7 @@ fn e2e_issue_one_zsa_note_to_one_zsa_note() {
     let (merkle_path, anchor) = build_merkle_path(note);
 
     // Create a shielded bundle spending the previous output
-    let shielded_bundle: Bndle<_, i64> = {
+    let shielded_bundle: Bundle<_, i64> = {
         let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
         // Add single ZSA spend
         assert_eq!(builder.add_spend(fvk, *note, merkle_path), Ok(()));
