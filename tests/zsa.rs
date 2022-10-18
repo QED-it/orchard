@@ -156,6 +156,7 @@ fn e2e_issue_one_zsa_note_to_one_zsa_note() {
 
     // Verify the shielded bundle
     verify_bundle(&shielded_bundle, &vk);
+    assert_eq!(shielded_bundle.actions().len(), 2);
 }
 
 /// Issue single ZSA note and split it into 2 notes
@@ -224,6 +225,7 @@ fn e2e_issue_one_zsa_note_to_two_zsa_notes() {
 
     // Verify the shielded bundle
     verify_bundle(&shielded_bundle, &vk);
+    assert_eq!(shielded_bundle.actions().len(), 2);
 }
 
 /// Issue 2 ZSA notes and join them into a single note
@@ -293,6 +295,7 @@ fn e2e_issue_two_zsa_notes_to_one_zsa_note() {
 
     // Verify the shielded bundle
     verify_bundle(&shielded_bundle, &vk);
+    assert_eq!(shielded_bundle.actions().len(), 2);
 }
 
 /// Issue 2 ZSA notes and send them as 2 notes with different denomination
@@ -372,6 +375,7 @@ fn e2e_issue_two_zsa_notes_to_two_zsa_notes() {
 
     // Verify the shielded bundle
     verify_bundle(&shielded_bundle, &vk);
+    assert_eq!(shielded_bundle.actions().len(), 2);
 }
 
 /// Issue single ZSA note and spend it, mixed with native notes (shielding)
@@ -437,6 +441,7 @@ fn e2e_issue_one_zsa_note_to_one_zsa_note_with_native_shielding() {
 
     // Verify the shielded bundle
     verify_bundle(&shielded_bundle, &vk);
+    assert_eq!(shielded_bundle.actions().len(), 4);
 }
 
 /// Issue single ZSA note and spend it, mixed with native notes (shielded to shielded)
@@ -540,6 +545,7 @@ fn e2e_issue_one_zsa_note_to_one_zsa_note_with_native_shielded() {
 
     // Verify the shielded bundle
     verify_bundle(&shielded_bundle, &vk);
+    assert_eq!(shielded_bundle.actions().len(), 4);
 }
 
 /// Issue 2 ZSA notes of different asset types
@@ -607,6 +613,7 @@ fn e2e_issue_two_zsa_notes_to_two_zsa_notes_with_different_types() {
 
     // Verify the shielded bundle
     verify_bundle(&shielded_bundle, &vk);
+    assert_eq!(shielded_bundle.actions().len(), 4);
 }
 
 /// Issue 2 ZSA notes of different asset types
