@@ -1,6 +1,6 @@
 mod builder;
 
-use crate::builder::{build_merkle_path, verify_bundle};
+use crate::builder::verify_bundle;
 use incrementalmerkletree::bridgetree::BridgeTree;
 use incrementalmerkletree::{Hashable, Tree};
 use orchard::bundle::Authorized;
@@ -21,15 +21,36 @@ use rand::rngs::OsRng;
 use std::collections::HashSet;
 use zcash_note_encryption::try_note_decryption;
 
-fn prepare_keys() -> (
-    ProvingKey,
-    VerifyingKey,
-    SpendingKey,
-    FullViewingKey,
-    Address,
-    IssuerAuthorizingKey,
-    IssuerValidatingKey,
-) {
+#[derive(Debug)]
+struct Keychain {
+    pk: ProvingKey,
+    vk: VerifyingKey,
+    sk: SpendingKey,
+    fvk: FullViewingKey,
+    isk: IssuerAuthorizingKey,
+    ik: IssuerValidatingKey,
+    recipient: Address,
+}
+
+impl Keychain {
+    fn pk(&self) -> &ProvingKey {
+        &self.pk
+    }
+    fn sk(&self) -> &SpendingKey {
+        &self.sk
+    }
+    fn fvk(&self) -> &FullViewingKey {
+        &self.fvk
+    }
+    fn isk(&self) -> &IssuerAuthorizingKey {
+        &self.isk
+    }
+    fn ik(&self) -> &IssuerValidatingKey {
+        &self.ik
+    }
+}
+
+fn prepare_keys() -> Keychain {
     let pk = ProvingKey::build();
     let vk = VerifyingKey::build();
 
@@ -39,7 +60,15 @@ fn prepare_keys() -> (
 
     let isk = IssuerAuthorizingKey::from(&sk);
     let ik = IssuerValidatingKey::from(&isk);
-    (pk, vk, sk, fvk, recipient, isk, ik)
+    Keychain {
+        pk,
+        vk,
+        sk,
+        fvk,
+        isk,
+        ik,
+        recipient,
+    }
 }
 
 fn sign_issuing_bundle(
@@ -52,17 +81,17 @@ fn sign_issuing_bundle(
     proven.sign(&mut rng, &isk).unwrap()
 }
 
-fn build_and_sign_issuing_bundle(
+fn build_and_sign_bundle(
     builder: Builder,
     mut rng: OsRng,
-    pk: ProvingKey,
-    sk: SpendingKey,
+    pk: &ProvingKey,
+    sk: &SpendingKey,
 ) -> Bundle<Authorized, i64> {
     let unauthorized = builder.build(&mut rng).unwrap();
     let sighash = unauthorized.commitment().into();
-    let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
+    let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
     proven
-        .apply_signatures(&mut rng, sighash, &[SpendAuthorizingKey::from(&sk)])
+        .apply_signatures(&mut rng, sighash, &[SpendAuthorizingKey::from(sk)])
         .unwrap()
 }
 
@@ -106,143 +135,15 @@ pub fn build_merkle_path_with_two_leaves(
     (merkle_path1, merkle_path2, anchor)
 }
 
-/// Issue single ZSA note and spend it
-#[test]
-fn e2e_issue_one_zsa_note_to_one_zsa_note() {
+fn issue_zsa_notes(asset_descr: &str, keys: &Keychain) -> (Note, Note) {
     let mut rng = OsRng;
-    let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
-    let asset_descr = "zsa_asset";
-
     // Create a issuance bundle
-    let mut unauthorized = IssueBundle::new(ik);
+    let mut unauthorized = IssueBundle::new(keys.ik().clone());
 
-    // Add output ZSA note
     assert!(unauthorized
         .add_recipient(
             asset_descr.to_string(),
-            recipient,
-            NoteValue::from_raw(50),
-            false,
-            &mut rng,
-        )
-        .is_ok());
-
-    let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
-
-    // Take first note from first action
-    let note = issuing_bundle.get_all_notes()[0];
-
-    assert!(verify_issue_bundle(
-        &issuing_bundle,
-        issuing_bundle.commitment().into(),
-        &mut HashSet::new(),
-    )
-    .is_ok());
-
-    let (merkle_path, anchor) = build_merkle_path(note);
-
-    // Create a shielded bundle spending the previous output
-    let shielded_bundle: Bundle<_, i64> = {
-        let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
-        // Add single ZSA spend
-        assert_eq!(builder.add_spend(fvk, *note, merkle_path), Ok(()));
-        // and single ZSA output
-        assert_eq!(
-            builder.add_recipient(None, recipient, note.value(), note.note_type(), None),
-            Ok(())
-        );
-        build_and_sign_issuing_bundle(builder, rng, pk, sk)
-    };
-
-    // Verify the shielded bundle
-    verify_bundle(&shielded_bundle, &vk);
-    assert_eq!(shielded_bundle.actions().len(), 2);
-}
-
-/// Issue single ZSA note and split it into 2 notes
-#[test]
-fn e2e_issue_one_zsa_note_to_two_zsa_notes() {
-    let mut rng = OsRng;
-    let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
-    let asset_descr = "zsa_asset";
-
-    // Create a issuance bundle
-    let mut unauthorized = IssueBundle::new(ik);
-
-    // Add output ZSA note
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr.to_string(),
-            recipient,
-            NoteValue::from_raw(42),
-            false,
-            &mut rng,
-        )
-        .is_ok());
-
-    let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
-
-    // Take first note from first action
-    let note = issuing_bundle.get_all_notes()[0];
-
-    assert!(verify_issue_bundle(
-        &issuing_bundle,
-        issuing_bundle.commitment().into(),
-        &mut HashSet::new(),
-    )
-    .is_ok());
-
-    let (merkle_path, anchor) = build_merkle_path(note);
-
-    // Create a shielded bundle spending the previous output
-    let shielded_bundle: Bundle<_, i64> = {
-        let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
-        // Add single ZSA spend
-        assert_eq!(builder.add_spend(fvk, *note, merkle_path), Ok(()));
-        // and 2 ZSA outputs
-        assert_eq!(
-            builder.add_recipient(
-                None,
-                recipient,
-                NoteValue::from_raw(40),
-                note.note_type(),
-                None
-            ),
-            Ok(())
-        );
-        assert_eq!(
-            builder.add_recipient(
-                None,
-                recipient,
-                NoteValue::from_raw(2),
-                note.note_type(),
-                None
-            ),
-            Ok(())
-        );
-        build_and_sign_issuing_bundle(builder, rng, pk, sk)
-    };
-
-    // Verify the shielded bundle
-    verify_bundle(&shielded_bundle, &vk);
-    assert_eq!(shielded_bundle.actions().len(), 2);
-}
-
-/// Issue 2 ZSA notes and join them into a single note
-#[test]
-fn e2e_issue_two_zsa_notes_to_one_zsa_note() {
-    let mut rng = OsRng;
-    let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
-    let asset_descr = "zsa_asset";
-
-    // Create a issuance bundle
-    let mut unauthorized = IssueBundle::new(ik);
-
-    // Add 2 output ZSA notes
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr.to_string(),
-            recipient,
+            keys.recipient,
             NoteValue::from_raw(40),
             false,
             &mut rng,
@@ -251,18 +152,18 @@ fn e2e_issue_two_zsa_notes_to_one_zsa_note() {
     assert!(unauthorized
         .add_recipient(
             asset_descr.to_string(),
-            recipient,
+            keys.recipient,
             NoteValue::from_raw(2),
             false,
             &mut rng,
         )
         .is_ok());
 
-    let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
+    let issuing_bundle = sign_issuing_bundle(unauthorized, rng, keys.isk().clone());
 
     // Take notes from first action
-    let note1 = issuing_bundle.get_all_notes()[0];
-    let note2 = issuing_bundle.get_all_notes()[1];
+    let note1 = *issuing_bundle.get_all_notes()[0];
+    let note2 = *issuing_bundle.get_all_notes()[1];
 
     assert!(verify_issue_bundle(
         &issuing_bundle,
@@ -271,187 +172,11 @@ fn e2e_issue_two_zsa_notes_to_one_zsa_note() {
     )
     .is_ok());
 
-    let (merkle_path1, merkle_path2, anchor) = build_merkle_path_with_two_leaves(note1, note2);
-
-    // Create a shielded bundle spending the previous output
-    let shielded_bundle: Bundle<_, i64> = {
-        let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
-        // Add 2 ZSA spends
-        assert_eq!(builder.add_spend(fvk.clone(), *note1, merkle_path1), Ok(()));
-        assert_eq!(builder.add_spend(fvk, *note2, merkle_path2), Ok(()));
-        // and single ZSA output
-        assert_eq!(
-            builder.add_recipient(
-                None,
-                recipient,
-                NoteValue::from_raw(42),
-                note1.note_type(),
-                None
-            ),
-            Ok(())
-        );
-        build_and_sign_issuing_bundle(builder, rng, pk, sk)
-    };
-
-    // Verify the shielded bundle
-    verify_bundle(&shielded_bundle, &vk);
-    assert_eq!(shielded_bundle.actions().len(), 2);
+    (note1, note2)
 }
 
-/// Issue 2 ZSA notes and send them as 2 notes with different denomination
-#[test]
-fn e2e_issue_two_zsa_notes_to_two_zsa_notes() {
+fn create_native_note(keys: &Keychain) -> Note {
     let mut rng = OsRng;
-    let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
-    let asset_descr = "zsa_asset";
-
-    // Create a issuance bundle
-    let mut unauthorized = IssueBundle::new(ik);
-
-    // Add 2 output ZSA notes
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr.to_string(),
-            recipient,
-            NoteValue::from_raw(40),
-            false,
-            &mut rng,
-        )
-        .is_ok());
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr.to_string(),
-            recipient,
-            NoteValue::from_raw(2),
-            false,
-            &mut rng,
-        )
-        .is_ok());
-
-    let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
-
-    // Take notes from first action
-    let note1 = issuing_bundle.get_all_notes()[0];
-    let note2 = issuing_bundle.get_all_notes()[1];
-
-    assert!(verify_issue_bundle(
-        &issuing_bundle,
-        issuing_bundle.commitment().into(),
-        &mut HashSet::new(),
-    )
-    .is_ok());
-
-    let (merkle_path1, merkle_path2, anchor) = build_merkle_path_with_two_leaves(note1, note2);
-
-    // Create a shielded bundle spending the previous output
-    let shielded_bundle: Bundle<_, i64> = {
-        let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
-        // Add 2 ZSA spends
-        assert_eq!(builder.add_spend(fvk.clone(), *note1, merkle_path1), Ok(()));
-        assert_eq!(builder.add_spend(fvk, *note2, merkle_path2), Ok(()));
-        // and 2 ZSA outputs with different denominations
-        assert_eq!(
-            builder.add_recipient(
-                None,
-                recipient,
-                NoteValue::from_raw(41),
-                note1.note_type(),
-                None
-            ),
-            Ok(())
-        );
-        assert_eq!(
-            builder.add_recipient(
-                None,
-                recipient,
-                NoteValue::from_raw(1),
-                note1.note_type(),
-                None
-            ),
-            Ok(())
-        );
-        build_and_sign_issuing_bundle(builder, rng, pk, sk)
-    };
-
-    // Verify the shielded bundle
-    verify_bundle(&shielded_bundle, &vk);
-    assert_eq!(shielded_bundle.actions().len(), 2);
-}
-
-/// Issue single ZSA note and spend it, mixed with native notes (shielding)
-#[test]
-fn e2e_issue_one_zsa_note_to_one_zsa_note_with_native_shielding() {
-    let mut rng = OsRng;
-    let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
-    let asset_descr = "zsa_asset";
-
-    // Create a issuance bundle
-    let mut unauthorized = IssueBundle::new(ik);
-
-    // Add output ZSA note
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr.to_string(),
-            recipient,
-            NoteValue::from_raw(50),
-            false,
-            &mut rng,
-        )
-        .is_ok());
-
-    let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
-
-    // Take first note from first action
-    let note = issuing_bundle.get_all_notes()[0];
-
-    assert!(verify_issue_bundle(
-        &issuing_bundle,
-        issuing_bundle.commitment().into(),
-        &mut HashSet::new(),
-    )
-    .is_ok());
-
-    let (merkle_path, anchor) = build_merkle_path(note);
-
-    // Create a shielded bundle spending the previous output
-    let shielded_bundle: Bundle<_, i64> = {
-        let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
-        // Add single ZSA spend
-        assert_eq!(builder.add_spend(fvk, *note, merkle_path), Ok(()));
-        // and single ZSA output
-        assert_eq!(
-            builder.add_recipient(None, recipient, note.value(), note.note_type(), None),
-            Ok(())
-        );
-
-        // Add native output
-        assert_eq!(
-            builder.add_recipient(
-                None,
-                recipient,
-                NoteValue::from_raw(100),
-                NoteType::native(),
-                None
-            ),
-            Ok(())
-        );
-
-        build_and_sign_issuing_bundle(builder, rng, pk, sk)
-    };
-
-    // Verify the shielded bundle
-    verify_bundle(&shielded_bundle, &vk);
-    assert_eq!(shielded_bundle.actions().len(), 4);
-}
-
-/// Issue single ZSA note and spend it, mixed with native notes (shielded to shielded)
-#[test]
-fn e2e_issue_one_zsa_note_to_one_zsa_note_with_native_shielded() {
-    let mut rng = OsRng;
-    let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
-    let asset_descr = "zsa_asset";
-
-    // Create a shielding bundle
 
     let shielding_bundle: Bundle<_, i64> = {
         // Use the empty tree.
@@ -461,7 +186,7 @@ fn e2e_issue_one_zsa_note_to_one_zsa_note_with_native_shielded() {
         assert_eq!(
             builder.add_recipient(
                 None,
-                recipient,
+                keys.recipient,
                 NoteValue::from_raw(100),
                 NoteType::native(),
                 None
@@ -470,10 +195,10 @@ fn e2e_issue_one_zsa_note_to_one_zsa_note_with_native_shielded() {
         );
         let unauthorized = builder.build(&mut rng).unwrap();
         let sighash = unauthorized.commitment().into();
-        let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
+        let proven = unauthorized.create_proof(keys.pk(), &mut rng).unwrap();
         proven.apply_signatures(&mut rng, sighash, &[]).unwrap()
     };
-    let ivk = fvk.to_ivk(Scope::External);
+    let ivk = keys.fvk().to_ivk(Scope::External);
     let (native_note, _, _) = shielding_bundle
         .actions()
         .iter()
@@ -483,214 +208,318 @@ fn e2e_issue_one_zsa_note_to_one_zsa_note_with_native_shielded() {
         })
         .unwrap();
 
-    // Create a issuance bundle
-    let mut unauthorized = IssueBundle::new(ik);
+    native_note
+}
 
-    // Add output ZSA note
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr.to_string(),
-            recipient,
-            NoteValue::from_raw(50),
-            false,
-            &mut rng,
-        )
-        .is_ok());
+struct TestSpendInfo {
+    note: Note,
+    merkle_path: MerklePath,
+}
 
-    let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
+impl TestSpendInfo {
+    fn merkle_path(&self) -> &MerklePath {
+        &self.merkle_path
+    }
+}
 
-    // Take first note from first action
-    let note = issuing_bundle.get_all_notes()[0];
+struct TestOutputInfo {
+    value: NoteValue,
+    note_type: NoteType,
+}
 
-    assert!(verify_issue_bundle(
-        &issuing_bundle,
-        issuing_bundle.commitment().into(),
-        &mut HashSet::new(),
-    )
-    .is_ok());
-
-    let (merkle_path, native_merkle_path, anchor) =
-        build_merkle_path_with_two_leaves(note, &native_note);
-
-    // Create a shielded bundle spending the previous output
+fn build_and_test_bundle(
+    spends: Vec<&TestSpendInfo>,
+    outputs: Vec<TestOutputInfo>,
+    anchor: Anchor,
+    expected_num_actions: usize,
+    keys: &Keychain,
+) {
+    let rng = OsRng;
     let shielded_bundle: Bundle<_, i64> = {
         let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
-        // Add single ZSA spend
-        assert_eq!(builder.add_spend(fvk.clone(), *note, merkle_path), Ok(()));
-        // and single ZSA output
-        assert_eq!(
-            builder.add_recipient(None, recipient, note.value(), note.note_type(), None),
-            Ok(())
-        );
 
-        // Add native input
-        assert_eq!(
-            builder.add_spend(fvk, native_note, native_merkle_path),
-            Ok(())
-        );
-        // Add native output
-        assert_eq!(
-            builder.add_recipient(
-                None,
-                recipient,
-                NoteValue::from_raw(100),
-                NoteType::native(),
-                None
+        spends.iter().for_each(|spend| {
+            assert_eq!(
+                builder.add_spend(keys.fvk().clone(), spend.note, spend.merkle_path().clone()),
+                Ok(())
+            );
+        });
+        outputs.iter().for_each(|output| {
+            assert_eq!(
+                builder.add_recipient(None, keys.recipient, output.value, output.note_type, None),
+                Ok(())
+            )
+        });
+        build_and_sign_bundle(builder, rng, keys.pk(), keys.sk())
+    };
+
+    // Verify the shielded bundle
+    verify_bundle(&shielded_bundle, &keys.vk);
+    assert_eq!(shielded_bundle.actions().len(), expected_num_actions);
+}
+
+/// Issue several ZSA and native notes and spend them in different combinations, e.g. split and join
+#[test]
+fn e2e_test_zsa_issuance_and_transfer() {
+    // --------------------------- Setup -----------------------------------------
+
+    let keys = prepare_keys();
+    let asset_descr = "zsa_asset";
+
+    // Prepare ZSA
+    let (zsa_note1, zsa_note2) = issue_zsa_notes(asset_descr, &keys);
+
+    let (merkle_path1, merkle_path2, anchor) =
+        build_merkle_path_with_two_leaves(&zsa_note1, &zsa_note2);
+
+    let zsa_spend_1 = TestSpendInfo {
+        note: zsa_note1,
+        merkle_path: merkle_path1,
+    };
+    let zsa_spend_2 = TestSpendInfo {
+        note: zsa_note2,
+        merkle_path: merkle_path2,
+    };
+
+    // --------------------------- Tests -----------------------------------------
+
+    // 1. Spend single ZSA note
+    build_and_test_bundle(
+        vec![&zsa_spend_1],
+        vec![TestOutputInfo {
+            value: zsa_spend_1.note.value(),
+            note_type: zsa_spend_1.note.note_type(),
+        }],
+        anchor,
+        2,
+        &keys,
+    );
+
+    // 2. Split single ZSA note into 2 notes
+    build_and_test_bundle(
+        vec![&zsa_spend_1],
+        vec![
+            TestOutputInfo {
+                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - 2),
+                note_type: zsa_spend_1.note.note_type(),
+            },
+            TestOutputInfo {
+                value: NoteValue::from_raw(2),
+                note_type: zsa_spend_1.note.note_type(),
+            },
+        ],
+        anchor,
+        2,
+        &keys,
+    );
+
+    // 3. Join 2 ZSA notes into a single note
+    build_and_test_bundle(
+        vec![&zsa_spend_1, &zsa_spend_2],
+        vec![TestOutputInfo {
+            value: NoteValue::from_raw(
+                zsa_spend_1.note.value().inner() + zsa_spend_2.note.value().inner(),
             ),
-            Ok(())
-        );
-
-        build_and_sign_issuing_bundle(builder, rng, pk, sk)
-    };
-
-    // Verify the shielded bundle
-    verify_bundle(&shielded_bundle, &vk);
-    assert_eq!(shielded_bundle.actions().len(), 4);
-}
-
-/// Issue 2 ZSA notes of different asset types
-#[test]
-fn e2e_issue_two_zsa_notes_to_two_zsa_notes_with_different_types() {
-    let mut rng = OsRng;
-    let (pk, vk, sk, fvk, recipient, isk, ik) = prepare_keys();
-    let asset_descr1 = "zsa_asset";
-    let asset_descr2 = "zsa_asset2";
-
-    // Create a issuance bundle
-    let mut unauthorized = IssueBundle::new(ik);
-
-    // Add 2 output ZSA notes
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr1.to_string(),
-            recipient,
-            NoteValue::from_raw(40),
-            false,
-            &mut rng,
-        )
-        .is_ok());
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr2.to_string(),
-            recipient,
-            NoteValue::from_raw(2),
-            false,
-            &mut rng,
-        )
-        .is_ok());
-
-    let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
-
-    let note1 = issuing_bundle.get_all_notes()[0];
-    let note2 = issuing_bundle.get_all_notes()[1];
-
-    assert!(verify_issue_bundle(
-        &issuing_bundle,
-        issuing_bundle.commitment().into(),
-        &mut HashSet::new(),
-    )
-    .is_ok());
-
-    let (merkle_path1, merkle_path2, anchor) = build_merkle_path_with_two_leaves(note1, note2);
-
-    // Create a shielded bundle spending the previous output
-    let shielded_bundle: Bundle<_, i64> = {
-        let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
-        // Add 2 ZSA spends
-        assert_eq!(builder.add_spend(fvk.clone(), *note1, merkle_path1), Ok(()));
-        assert_eq!(builder.add_spend(fvk, *note2, merkle_path2), Ok(()));
-        // and 2 ZSA outputs with different denominations
-        assert_eq!(
-            builder.add_recipient(None, recipient, note1.value(), note1.note_type(), None),
-            Ok(())
-        );
-        assert_eq!(
-            builder.add_recipient(None, recipient, note2.value(), note2.note_type(), None),
-            Ok(())
-        );
-        build_and_sign_issuing_bundle(builder, rng, pk, sk)
-    };
-
-    // Verify the shielded bundle
-    verify_bundle(&shielded_bundle, &vk);
-    assert_eq!(shielded_bundle.actions().len(), 4);
-}
-
-/// Issue 2 ZSA notes of different asset types
-#[test]
-fn e2e_issue_two_zsa_notes_to_two_zsa_notes_with_different_types_wrong_denomination() {
-    let mut rng = OsRng;
-    let (_, _, _, fvk, recipient, isk, ik) = prepare_keys();
-    let asset_descr1 = "zsa_asset";
-    let asset_descr2 = "zsa_asset2";
-
-    // Create a issuance bundle
-    let mut unauthorized = IssueBundle::new(ik);
-
-    // Add 2 output ZSA notes
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr1.to_string(),
-            recipient,
-            NoteValue::from_raw(40),
-            false,
-            &mut rng,
-        )
-        .is_ok());
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr2.to_string(),
-            recipient,
-            NoteValue::from_raw(2),
-            false,
-            &mut rng,
-        )
-        .is_ok());
-
-    let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
-
-    let note1 = issuing_bundle.get_all_notes()[0];
-    let note2 = issuing_bundle.get_all_notes()[1];
-
-    assert!(verify_issue_bundle(
-        &issuing_bundle,
-        issuing_bundle.commitment().into(),
-        &mut HashSet::new(),
-    )
-    .is_ok());
-
-    let (merkle_path1, merkle_path2, anchor) = build_merkle_path_with_two_leaves(note1, note2);
-
-    // Create a shielded bundle spending the previous output
-    let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
-    // Add 2 ZSA spends
-    assert_eq!(builder.add_spend(fvk.clone(), *note1, merkle_path1), Ok(()));
-    assert_eq!(builder.add_spend(fvk, *note2, merkle_path2), Ok(()));
-    // and 2 ZSA outputs with different denominations
-    assert_eq!(
-        builder.add_recipient(
-            None,
-            recipient,
-            NoteValue::from_raw(41),
-            note1.note_type(),
-            None
-        ),
-        Ok(())
-    );
-    assert_eq!(
-        builder.add_recipient(
-            None,
-            recipient,
-            NoteValue::from_raw(1),
-            note2.note_type(),
-            None
-        ),
-        Ok(())
+            note_type: zsa_spend_1.note.note_type(),
+        }],
+        anchor,
+        2,
+        &keys,
     );
 
+    // 4. Take 2 ZSA notes and send them as 2 notes with different denomination
+    build_and_test_bundle(
+        vec![&zsa_spend_1, &zsa_spend_2],
+        vec![
+            TestOutputInfo {
+                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - 1),
+                note_type: zsa_spend_1.note.note_type(),
+            },
+            TestOutputInfo {
+                value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + 1),
+                note_type: zsa_spend_2.note.note_type(),
+            },
+        ],
+        anchor,
+        2,
+        &keys,
+    );
+
+    // 5. Spend single ZSA note, mixed with native note (shielding)
+    build_and_test_bundle(
+        vec![&zsa_spend_1],
+        vec![
+            TestOutputInfo {
+                value: zsa_spend_1.note.value(),
+                note_type: zsa_spend_1.note.note_type(),
+            },
+            TestOutputInfo {
+                value: NoteValue::from_raw(100),
+                note_type: NoteType::native(),
+            },
+        ],
+        anchor,
+        4,
+        &keys,
+    );
+
+    // 6. Spend single ZSA note, mixed with native note (shielded to shielded)
+    let native_note: Note = create_native_note(&keys);
+    let (native_merkle_path1, native_merkle_path2, native_anchor) =
+        build_merkle_path_with_two_leaves(&native_note, &zsa_note1);
+    let native_spend: TestSpendInfo = TestSpendInfo {
+        note: native_note,
+        merkle_path: native_merkle_path1,
+    };
+    let zsa_spend_with_native: TestSpendInfo = TestSpendInfo {
+        note: zsa_note1,
+        merkle_path: native_merkle_path2,
+    };
+
+    build_and_test_bundle(
+        vec![&zsa_spend_with_native, &native_spend],
+        vec![
+            TestOutputInfo {
+                value: zsa_spend_1.note.value(),
+                note_type: zsa_spend_1.note.note_type(),
+            },
+            TestOutputInfo {
+                value: native_spend.note.value(),
+                note_type: NoteType::native(),
+            },
+        ],
+        native_anchor,
+        4,
+        &keys,
+    );
+
+    // 7. Spend ZSA notes of different asset types
+    let (zsa_note_t7, _) = issue_zsa_notes("zsa_asset2", &keys);
+    let (merkle_path_t7_1, merkle_path_t7_2, anchor_t7) =
+        build_merkle_path_with_two_leaves(&zsa_note_t7, &zsa_note2);
+    let zsa_spend_t7_1: TestSpendInfo = TestSpendInfo {
+        note: zsa_note_t7,
+        merkle_path: merkle_path_t7_1,
+    };
+    let zsa_spend_t7_2: TestSpendInfo = TestSpendInfo {
+        note: zsa_note2,
+        merkle_path: merkle_path_t7_2,
+    };
+
+    build_and_test_bundle(
+        vec![&zsa_spend_t7_1, &zsa_spend_t7_2],
+        vec![
+            TestOutputInfo {
+                value: zsa_spend_t7_1.note.value(),
+                note_type: zsa_spend_t7_1.note.note_type(),
+            },
+            TestOutputInfo {
+                value: zsa_spend_t7_2.note.value(),
+                note_type: zsa_spend_t7_2.note.note_type(),
+            },
+        ],
+        anchor_t7,
+        4,
+        &keys,
+    );
+
+    // 8. Same but wrong denomination
     let result = std::panic::catch_unwind(|| {
-        let _res: Result<Bundle<_, i64>, _> = builder.build(OsRng);
+        build_and_test_bundle(
+            vec![&zsa_spend_t7_1, &zsa_spend_t7_2],
+            vec![
+                TestOutputInfo {
+                    value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + 1),
+                    note_type: zsa_spend_t7_1.note.note_type(),
+                },
+                TestOutputInfo {
+                    value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - 1),
+                    note_type: zsa_spend_t7_2.note.note_type(),
+                },
+            ],
+            anchor_t7,
+            4,
+            &keys,
+        );
     });
-
     assert!(result.is_err());
 }
+
+// /// Issue 2 ZSA notes of different asset types
+// #[test]
+// fn e2e_issue_two_zsa_notes_to_two_zsa_notes_with_different_types_wrong_denomination() {
+//     let mut rng = OsRng;
+//     let (_, _, _, fvk, recipient, isk, ik) = prepare_keys();
+//     let asset_descr1 = "zsa_asset";
+//     let asset_descr2 = "zsa_asset2";
+//
+//     // Create a issuance bundle
+//     let mut unauthorized = IssueBundle::new(ik);
+//
+//     // Add 2 output ZSA notes
+//     assert!(unauthorized
+//         .add_recipient(
+//             asset_descr1.to_string(),
+//             recipient,
+//             NoteValue::from_raw(40),
+//             false,
+//             &mut rng,
+//         )
+//         .is_ok());
+//     assert!(unauthorized
+//         .add_recipient(
+//             asset_descr2.to_string(),
+//             recipient,
+//             NoteValue::from_raw(2),
+//             false,
+//             &mut rng,
+//         )
+//         .is_ok());
+//
+//     let issuing_bundle = sign_issuing_bundle(unauthorized, rng, isk);
+//
+//     let note1 = issuing_bundle.get_all_notes()[0];
+//     let note2 = issuing_bundle.get_all_notes()[1];
+//
+//     assert!(verify_issue_bundle(
+//         &issuing_bundle,
+//         issuing_bundle.commitment().into(),
+//         &mut HashSet::new(),
+//     )
+//     .is_ok());
+//
+//     let (merkle_path1, merkle_path2, anchor) = build_merkle_path_with_two_leaves(note1, note2);
+//
+//     // Create a shielded bundle spending the previous output
+//     let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
+//     // Add 2 ZSA spends
+//     assert_eq!(builder.add_spend(fvk.clone(), *note1, merkle_path1), Ok(()));
+//     assert_eq!(builder.add_spend(fvk, *note2, merkle_path2), Ok(()));
+//     // and 2 ZSA outputs with different denominations
+//     assert_eq!(
+//         builder.add_recipient(
+//             None,
+//             recipient,
+//             NoteValue::from_raw(41),
+//             note1.note_type(),
+//             None
+//         ),
+//         Ok(())
+//     );
+//     assert_eq!(
+//         builder.add_recipient(
+//             None,
+//             recipient,
+//             NoteValue::from_raw(1),
+//             note2.note_type(),
+//             None
+//         ),
+//         Ok(())
+//     );
+//
+//     let result = std::panic::catch_unwind(|| {
+//         let _res: Result<Bundle<_, i64>, _> = builder.build(OsRng);
+//     });
+//
+//     assert!(result.is_err());
+// }
