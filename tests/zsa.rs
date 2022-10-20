@@ -71,7 +71,7 @@ fn prepare_keys() -> Keychain {
     }
 }
 
-fn sign_issuing_bundle(
+fn sign_issue_bundle(
     unauthorized: IssueBundle<Unauthorized>,
     mut rng: OsRng,
     isk: IssuerAuthorizingKey,
@@ -159,20 +159,21 @@ fn issue_zsa_notes(asset_descr: &str, keys: &Keychain) -> (Note, Note) {
         )
         .is_ok());
 
-    let issuing_bundle = sign_issuing_bundle(unauthorized, rng, keys.isk().clone());
+    let issue_bundle = sign_issue_bundle(unauthorized, rng, keys.isk().clone());
 
     // Take notes from first action
-    let note1 = *issuing_bundle.get_all_notes()[0];
-    let note2 = *issuing_bundle.get_all_notes()[1];
+    let notes = issue_bundle.get_all_notes();
+    let note1 = notes.get(0).unwrap();
+    let note2 = notes.get(1).unwrap();
 
     assert!(verify_issue_bundle(
-        &issuing_bundle,
-        issuing_bundle.commitment().into(),
+        &issue_bundle,
+        issue_bundle.commitment().into(),
         &mut HashSet::new(),
     )
     .is_ok());
 
-    (note1, note2)
+    (*note1, *note2)
 }
 
 fn create_native_note(keys: &Keychain) -> Note {
@@ -227,7 +228,7 @@ struct TestOutputInfo {
     note_type: NoteType,
 }
 
-fn build_and_test_bundle(
+fn build_and_verify_bundle(
     spends: Vec<&TestSpendInfo>,
     outputs: Vec<TestOutputInfo>,
     anchor: Anchor,
@@ -260,7 +261,7 @@ fn build_and_test_bundle(
 
 /// Issue several ZSA and native notes and spend them in different combinations, e.g. split and join
 #[test]
-fn e2e_test_zsa_issuance_and_transfer() {
+fn zsa_issue_and_transfer() {
     // --------------------------- Setup -----------------------------------------
 
     let keys = prepare_keys();
@@ -284,7 +285,7 @@ fn e2e_test_zsa_issuance_and_transfer() {
     // --------------------------- Tests -----------------------------------------
 
     // 1. Spend single ZSA note
-    build_and_test_bundle(
+    build_and_verify_bundle(
         vec![&zsa_spend_1],
         vec![TestOutputInfo {
             value: zsa_spend_1.note.value(),
@@ -296,7 +297,7 @@ fn e2e_test_zsa_issuance_and_transfer() {
     );
 
     // 2. Split single ZSA note into 2 notes
-    build_and_test_bundle(
+    build_and_verify_bundle(
         vec![&zsa_spend_1],
         vec![
             TestOutputInfo {
@@ -314,7 +315,7 @@ fn e2e_test_zsa_issuance_and_transfer() {
     );
 
     // 3. Join 2 ZSA notes into a single note
-    build_and_test_bundle(
+    build_and_verify_bundle(
         vec![&zsa_spend_1, &zsa_spend_2],
         vec![TestOutputInfo {
             value: NoteValue::from_raw(
@@ -328,7 +329,7 @@ fn e2e_test_zsa_issuance_and_transfer() {
     );
 
     // 4. Take 2 ZSA notes and send them as 2 notes with different denomination
-    build_and_test_bundle(
+    build_and_verify_bundle(
         vec![&zsa_spend_1, &zsa_spend_2],
         vec![
             TestOutputInfo {
@@ -346,7 +347,7 @@ fn e2e_test_zsa_issuance_and_transfer() {
     );
 
     // 5. Spend single ZSA note, mixed with native note (shielding)
-    build_and_test_bundle(
+    build_and_verify_bundle(
         vec![&zsa_spend_1],
         vec![
             TestOutputInfo {
@@ -364,7 +365,7 @@ fn e2e_test_zsa_issuance_and_transfer() {
     );
 
     // 6. Spend single ZSA note, mixed with native note (shielded to shielded)
-    let native_note: Note = create_native_note(&keys);
+    let native_note= create_native_note(&keys);
     let (native_merkle_path1, native_merkle_path2, native_anchor) =
         build_merkle_path_with_two_leaves(&native_note, &zsa_note1);
     let native_spend: TestSpendInfo = TestSpendInfo {
@@ -376,7 +377,7 @@ fn e2e_test_zsa_issuance_and_transfer() {
         merkle_path: native_merkle_path2,
     };
 
-    build_and_test_bundle(
+    build_and_verify_bundle(
         vec![&zsa_spend_with_native, &native_spend],
         vec![
             TestOutputInfo {
@@ -406,7 +407,7 @@ fn e2e_test_zsa_issuance_and_transfer() {
         merkle_path: merkle_path_t7_2,
     };
 
-    build_and_test_bundle(
+    build_and_verify_bundle(
         vec![&zsa_spend_t7_1, &zsa_spend_t7_2],
         vec![
             TestOutputInfo {
@@ -425,7 +426,7 @@ fn e2e_test_zsa_issuance_and_transfer() {
 
     // 8. Same but wrong denomination
     let result = std::panic::catch_unwind(|| {
-        build_and_test_bundle(
+        build_and_verify_bundle(
             vec![&zsa_spend_t7_1, &zsa_spend_t7_2],
             vec![
                 TestOutputInfo {
