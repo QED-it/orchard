@@ -361,7 +361,7 @@ impl Builder {
                 .cloned()
                 .unwrap();
 
-            // TODO: uncomment once the circuit is ready
+            // TODO: uncomment once the circuit is ready.
             // use the first spend to create split spend(s) or create a dummy if empty.
             // let dummy_spend = spends.first().map_or_else(
             //     || SpendInfo::dummy(note_type, &mut rng),
