@@ -297,15 +297,16 @@ fn zsa_issue_and_transfer() {
     );
 
     // 2. Split single ZSA note into 2 notes
+    let delta = 2; // arbitrary number for value manipulation
     build_and_verify_bundle(
         vec![&zsa_spend_1],
         vec![
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - 2),
+                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta),
                 note_type: zsa_spend_1.note.note_type(),
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(2),
+                value: NoteValue::from_raw(delta),
                 note_type: zsa_spend_1.note.note_type(),
             },
         ],
@@ -333,11 +334,11 @@ fn zsa_issue_and_transfer() {
         vec![&zsa_spend_1, &zsa_spend_2],
         vec![
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - 1),
+                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta),
                 note_type: zsa_spend_1.note.note_type(),
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + 1),
+                value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + delta),
                 note_type: zsa_spend_2.note.note_type(),
             },
         ],
@@ -365,7 +366,7 @@ fn zsa_issue_and_transfer() {
     );
 
     // 6. Spend single ZSA note, mixed with native note (shielded to shielded)
-    let native_note= create_native_note(&keys);
+    let native_note = create_native_note(&keys);
     let (native_merkle_path1, native_merkle_path2, native_anchor) =
         build_merkle_path_with_two_leaves(&native_note, &zsa_note1);
     let native_spend: TestSpendInfo = TestSpendInfo {
@@ -430,11 +431,11 @@ fn zsa_issue_and_transfer() {
             vec![&zsa_spend_t7_1, &zsa_spend_t7_2],
             vec![
                 TestOutputInfo {
-                    value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + 1),
+                    value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + delta),
                     note_type: zsa_spend_t7_1.note.note_type(),
                 },
                 TestOutputInfo {
-                    value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - 1),
+                    value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - delta),
                     note_type: zsa_spend_t7_2.note.note_type(),
                 },
             ],
