@@ -289,7 +289,7 @@ fn zsa_issue_and_transfer() {
         vec![&zsa_spend_1],
         vec![TestOutputInfo {
             value: zsa_spend_1.note.value(),
-            note_type: zsa_spend_1.note.asset(),
+            note_type: zsa_spend_1.note.note_type(),
         }],
         anchor,
         2,
@@ -303,11 +303,11 @@ fn zsa_issue_and_transfer() {
         vec![
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta),
-                note_type: zsa_spend_1.note.asset(),
+                note_type: zsa_spend_1.note.note_type(),
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta),
-                note_type: zsa_spend_1.note.asset(),
+                note_type: zsa_spend_1.note.note_type(),
             },
         ],
         anchor,
@@ -322,7 +322,7 @@ fn zsa_issue_and_transfer() {
             value: NoteValue::from_raw(
                 zsa_spend_1.note.value().inner() + zsa_spend_2.note.value().inner(),
             ),
-            note_type: zsa_spend_1.note.asset(),
+            note_type: zsa_spend_1.note.note_type(),
         }],
         anchor,
         2,
@@ -335,11 +335,11 @@ fn zsa_issue_and_transfer() {
         vec![
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta),
-                note_type: zsa_spend_1.note.asset(),
+                note_type: zsa_spend_1.note.note_type(),
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + delta),
-                note_type: zsa_spend_2.note.asset(),
+                note_type: zsa_spend_2.note.note_type(),
             },
         ],
         anchor,
@@ -353,7 +353,7 @@ fn zsa_issue_and_transfer() {
         vec![
             TestOutputInfo {
                 value: zsa_spend_1.note.value(),
-                note_type: zsa_spend_1.note.asset(),
+                note_type: zsa_spend_1.note.note_type(),
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(100),
@@ -383,7 +383,7 @@ fn zsa_issue_and_transfer() {
         vec![
             TestOutputInfo {
                 value: zsa_spend_1.note.value(),
-                note_type: zsa_spend_1.note.asset(),
+                note_type: zsa_spend_1.note.note_type(),
             },
             TestOutputInfo {
                 value: native_spend.note.value(),
@@ -413,11 +413,11 @@ fn zsa_issue_and_transfer() {
         vec![
             TestOutputInfo {
                 value: zsa_spend_t7_1.note.value(),
-                note_type: zsa_spend_t7_1.note.asset(),
+                note_type: zsa_spend_t7_1.note.note_type(),
             },
             TestOutputInfo {
                 value: zsa_spend_t7_2.note.value(),
-                note_type: zsa_spend_t7_2.note.asset(),
+                note_type: zsa_spend_t7_2.note.note_type(),
             },
         ],
         anchor_t7,
@@ -432,11 +432,11 @@ fn zsa_issue_and_transfer() {
             vec![
                 TestOutputInfo {
                     value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + delta),
-                    note_type: zsa_spend_t7_1.note.asset(),
+                    note_type: zsa_spend_t7_1.note.note_type(),
                 },
                 TestOutputInfo {
                     value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - delta),
-                    note_type: zsa_spend_t7_2.note.asset(),
+                    note_type: zsa_spend_t7_2.note.note_type(),
                 },
             ],
             anchor_t7,
