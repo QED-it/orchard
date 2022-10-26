@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
 use crate::constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_V_BYTES};
-use crate::keys::IssuerValidatingKey;
+use crate::keys::IssuanceValidatingKey;
 
 /// Note type identifier.
 #[derive(Clone, Copy, Debug, Eq)]
@@ -38,7 +38,7 @@ impl NoteType {
     ///
     /// [notetypes]: https://zips.z.cash/protocol/nu5.pdf#notetypes
     #[allow(non_snake_case)]
-    pub fn derive(ik: &IssuerValidatingKey, asset_desc: &str) -> Self {
+    pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &str) -> Self {
         assert!(!asset_desc.is_empty() && asset_desc.len() <= MAX_ASSET_DESCRIPTION_SIZE);
 
         let mut s = vec![];
@@ -85,7 +85,7 @@ pub mod testing {
 
     use proptest::prelude::*;
 
-    use crate::keys::{testing::arb_spending_key, IssuerAuthorizingKey, IssuerValidatingKey};
+    use crate::keys::{testing::arb_spending_key, IssuanceAuthorizingKey, IssuanceValidatingKey};
 
     prop_compose! {
         /// Generate a uniformly distributed note type
@@ -97,8 +97,8 @@ pub mod testing {
             if is_native {
                 NoteType::native()
             } else {
-                let isk = IssuerAuthorizingKey::from(&sk);
-                NoteType::derive(&IssuerValidatingKey::from(&isk), &str)
+                let isk = IssuanceAuthorizingKey::from(&sk);
+                NoteType::derive(&IssuanceValidatingKey::from(&isk), &str)
             }
         }
     }
@@ -117,8 +117,8 @@ pub mod testing {
             sk in arb_spending_key(),
             str in "[A-Za-z]{255}"
         ) -> NoteType {
-            let isk = IssuerAuthorizingKey::from(&sk);
-            NoteType::derive(&IssuerValidatingKey::from(&isk), &str)
+            let isk = IssuanceAuthorizingKey::from(&sk);
+            NoteType::derive(&IssuanceValidatingKey::from(&isk), &str)
         }
     }
 }
