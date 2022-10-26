@@ -197,9 +197,9 @@ impl SpendValidatingKey {
 /// This type enforces that the corresponding public point (ik^ℙ) has ỹ = 0.
 ///
 /// $\mathsf{isk}$ as defined in
-/// [Zcash Protocol Spec § 4.2.3: Orchard Key Components][orchardkeycomponents].
+/// [Issuance of Zcash Shielded Assets § Asset Identifier Generation (DRAFT ZIP)][IssuanceZSA].
 ///
-/// [orchardkeycomponents]: https://zips.z.cash/protocol/nu5.pdf#orchardkeycomponents
+/// [IssuanceZSA]: https://qed-it.github.io/zips/draft-ZIP-0227.html#asset-identifier-generation
 #[derive(Clone, Debug)]
 pub struct IssuerAuthorizingKey(redpallas::SigningKey<SpendAuth>);
 
