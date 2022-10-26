@@ -177,7 +177,7 @@ impl SpendValidatingKey {
         self.0.randomize(randomizer)
     }
 
-    /// Converts this spend validating key to its serialized form,
+    /// Converts this issuance validating key to its serialized form,
     /// I2LEOSP_256(ak).
     pub(crate) fn to_bytes(&self) -> [u8; 32] {
         // This is correct because the wrapped point must have ỹ = 0, and
@@ -197,7 +197,7 @@ impl SpendValidatingKey {
 /// This type enforces that the corresponding public point (ik^ℙ) has ỹ = 0.
 ///
 /// $\mathsf{isk}$ as defined in
-/// [Issuance of Zcash Shielded Assets § Asset Identifier Generation (DRAFT ZIP)][IssuanceZSA].
+/// [Issuance of Zcash Shielded Assets ZIP-0227 § Asset Identifier Generation (DRAFT ZIP)][IssuanceZSA].
 ///
 /// [IssuanceZSA]: https://qed-it.github.io/zips/draft-ZIP-0227.html#asset-identifier-generation
 #[derive(Clone, Debug)]
@@ -234,13 +234,13 @@ impl From<&SpendingKey> for IssuanceAuthorizingKey {
     }
 }
 
-/// A key used to validate Issuance authorization signatures.
+/// A key used to validate issuance authorization signatures.
 ///
-/// Defined in [Zcash Protocol Spec § 4.2.3: Orchard Key Components][orchardkeycomponents].
+/// Defined in [Issuance of Zcash Shielded Assets ZIP-0227 § Asset Identifier Generation (DRAFT PR)][IssuanceZSA].
 /// Note that this is $\mathsf{ik}^\mathbb{P}$, which by construction is equivalent to
 /// $\mathsf{ik}$ but stored here as a RedPallas verification key.
 ///
-/// [orchardkeycomponents]: https://zips.z.cash/protocol/nu5.pdf#orchardkeycomponents
+/// [IssuanceZSA]: https://qed-it.github.io/zips/draft-ZIP-0227.html#asset-identifier-generation
 #[derive(Debug, Clone, PartialOrd, Ord)]
 pub struct IssuanceValidatingKey(redpallas::VerificationKey<SpendAuth>);
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
@@ -291,9 +291,9 @@ impl IssuanceValidatingKey {
 
 /// A function to check structural validity of the validating keys for authorizing transfers and
 /// issuing assets
-/// Structural validity checks for ik_P:
+/// Structural validity checks for ak_P or ik_P:
 ///  - The point must not be the identity (which for Pallas is canonically encoded as all-zeroes).
-///  - The sign of the y-coordinate must be positive.
+///  - The compressed y-coordinate bit must be 0.
 fn check_structural_validity(
     verification_key_bytes: [u8; 32],
 ) -> Option<VerificationKey<SpendAuth>> {
