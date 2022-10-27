@@ -222,7 +222,7 @@ impl IssuanceAuthorizingKey {
 impl From<&SpendingKey> for IssuanceAuthorizingKey {
     fn from(sk: &SpendingKey) -> Self {
         let isk = Self::derive_inner(sk);
-        // IssuanceSigningKey cannot be constructed such that this assertion would fail.
+        // IssuanceAuthorizingKey cannot be constructed such that this assertion would fail.
         assert!(!bool::from(isk.is_zero()));
         let ret = IssuanceAuthorizingKey(isk.to_repr().try_into().unwrap());
         // If the last bit of repr_P(ik) is 1, negate isk.
