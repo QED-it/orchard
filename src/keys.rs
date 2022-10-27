@@ -193,6 +193,10 @@ impl SpendValidatingKey {
     }
 }
 
+
+/// We currently use `SpendAuth` as the `IssuanceAuth`.
+type IssuanceAuth = SpendAuth;
+
 /// An issuance authorizing key, used to create issuance authorization signatures.
 /// This type enforces that the corresponding public point (ik^ℙ) has ỹ = 0.
 ///
@@ -201,7 +205,7 @@ impl SpendValidatingKey {
 ///
 /// [IssuanceZSA]: https://qed-it.github.io/zips/draft-ZIP-0227.html#asset-identifier-generation
 #[derive(Clone, Debug)]
-pub struct IssuanceAuthorizingKey(redpallas::SigningKey<SpendAuth>);
+pub struct IssuanceAuthorizingKey(redpallas::SigningKey<IssuanceAuth>);
 
 impl IssuanceAuthorizingKey {
     /// Derives isk from sk. Internal use only, does not enforce all constraints.
@@ -214,7 +218,7 @@ impl IssuanceAuthorizingKey {
         &self,
         rng: &mut (impl RngCore + CryptoRng),
         msg: &[u8],
-    ) -> redpallas::Signature<SpendAuth> {
+    ) -> redpallas::Signature<IssuanceAuth> {
         self.0.sign(rng, msg)
     }
 }
@@ -242,7 +246,8 @@ impl From<&SpendingKey> for IssuanceAuthorizingKey {
 ///
 /// [IssuanceZSA]: https://qed-it.github.io/zips/draft-ZIP-0227.html#asset-identifier-generation
 #[derive(Debug, Clone, PartialOrd, Ord)]
-pub struct IssuanceValidatingKey(redpallas::VerificationKey<SpendAuth>);
+pub struct IssuanceValidatingKey(VerificationKey<IssuanceAuth>);
+
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
         IssuanceValidatingKey((&isk.0).into())
@@ -283,7 +288,7 @@ impl IssuanceValidatingKey {
     pub fn verify(
         &self,
         msg: &[u8],
-        signature: &redpallas::Signature<SpendAuth>,
+        signature: &redpallas::Signature<IssuanceAuth>,
     ) -> Result<(), reddsa::Error> {
         self.0.verify(msg, signature)
     }
