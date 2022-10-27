@@ -261,13 +261,13 @@ impl Domain for OrchardDomain {
 
     fn extract_memo(&self, plaintext: &NotePlaintextBytes) -> Self::Memo {
         let mut memo = [0; MEMO_SIZE];
-        match get_note_version(plaintext) {
+        match get_note_plaintext_version(plaintext) {
             0x02 => {
                 let full_memo = &plaintext.0[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE];
                 memo.copy_from_slice(full_memo);
             }
             0x03 => {
-                // ZSA note plaintext have a shorter memo.
+                // ZSA note plaintexts have a shorter memo.
                 let short_memo = &plaintext.0[COMPACT_ZSA_NOTE_SIZE..NOTE_PLAINTEXT_SIZE];
                 memo[..ZSA_MEMO_SIZE].copy_from_slice(short_memo);
             }
@@ -301,7 +301,7 @@ impl BatchDomain for OrchardDomain {
     }
 }
 
-fn get_note_version(plaintext: &NotePlaintextBytes) -> u8 {
+fn get_note_plaintext_version(plaintext: &NotePlaintextBytes) -> u8 {
     plaintext.0[0]
 }
 
@@ -411,7 +411,7 @@ mod tests {
         Address, Note,
     };
 
-    use super::{get_note_version, orchard_parse_note_plaintext_without_memo};
+    use super::{get_note_plaintext_version, orchard_parse_note_plaintext_without_memo};
 
     proptest! {
     #[test]
@@ -425,7 +425,7 @@ mod tests {
 
         // Decode.
         let domain = OrchardDomain { rho: note.rho() };
-        let parsed_version = get_note_version(&plaintext);
+        let parsed_version = get_note_plaintext_version(&plaintext);
         let parsed_memo = domain.extract_memo(&plaintext);
 
         let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &plaintext.0,
