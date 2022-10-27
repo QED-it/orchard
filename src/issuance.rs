@@ -339,7 +339,7 @@ fn is_asset_desc_valid(asset_desc: &str) -> bool {
 /// Validation for Orchard IssueBundles
 ///
 /// A set of previously finalized asset types must be provided.
-/// In case of success, `previously_finalized` will contain a set of the provided **and** the newly finalized `NoteType`s
+/// In case of success, `finalized` will contain a set of the provided **and** the newly finalized `NoteType`s
 ///
 /// The following checks are performed:
 /// * For the `IssueBundle`:
@@ -352,7 +352,7 @@ fn is_asset_desc_valid(asset_desc: &str) -> bool {
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
-    previously_finalized: &mut HashSet<NoteType>, // The current finalization set.
+    finalized: &mut HashSet<NoteType>, // The current finalization set.
 ) -> Result<(), Error> {
     if let Err(e) = bundle.ik.verify(&sighash, &bundle.authorization.signature) {
         return Err(IssueBundleInvalidSignature(e));
@@ -373,7 +373,7 @@ pub fn verify_issue_bundle(
             let note_type = action.are_note_types_derived_correctly(bundle.ik())?;
 
             // Fail if the current note_type was previously finalized.
-            if previously_finalized.contains(&note_type) || acc.contains(&note_type) {
+            if finalized.contains(&note_type) || acc.contains(&note_type) {
                 return Err(IssueActionPreviouslyFinalizedNoteType(note_type));
             }
 
@@ -386,7 +386,7 @@ pub fn verify_issue_bundle(
             Ok(acc)
         })?;
 
-    Ok(previously_finalized.extend(res.iter()))
+    Ok(finalized.extend(res.iter()))
 }
 
 /// Errors produced during the issuance process
