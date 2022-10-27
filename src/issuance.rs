@@ -354,7 +354,7 @@ pub fn verify_issue_bundle(
         return Err(IssueBundleInvalidSignature(e));
     };
 
-    let s= &mut HashSet::<AssetId>::new();
+    let s = &mut HashSet::<AssetId>::new();
 
     // An IssueAction could have just one properly derived AssetId.
     let newly_finalized = bundle
