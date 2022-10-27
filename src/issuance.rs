@@ -386,7 +386,8 @@ pub fn verify_issue_bundle(
             Ok(acc)
         })?;
 
-    Ok(finalized.extend(res.iter()))
+    finalized.extend(res.iter());
+    Ok(())
 }
 
 /// Errors produced during the issuance process
