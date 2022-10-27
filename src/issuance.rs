@@ -339,7 +339,7 @@ fn is_asset_desc_valid(asset_desc: &str) -> bool {
 /// Validation for Orchard IssueBundles
 ///
 /// A set of previously finalized asset types must be provided.
-/// In case of success, the `Result` will contain a set of the provided **and** the newly finalized `NoteType`s
+/// In case of success, `previously_finalized` will contain a set of the provided **and** the newly finalized `NoteType`s
 ///
 /// The following checks are performed:
 /// * For the `IssueBundle`:
@@ -348,21 +348,23 @@ fn is_asset_desc_valid(asset_desc: &str) -> bool {
 ///     * Asset description size is collect.
 ///     * `NoteType` for the `IssueAction` has not been previously finalized.
 /// * For each `Note` inside an `IssueAction`:
-///     * All notes have the same, correct `NoteType`
-pub fn verify_issue_bundle<'a>(
+///     * All notes have the same, correct `NoteType`.
+pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
-    previously_finalized: &'a mut HashSet<NoteType>, // The current note_type finalization set.
-) -> Result<&'a mut HashSet<NoteType>, Error> {
+    previously_finalized: &mut HashSet<NoteType>, // The current finalization set.
+) -> Result<(), Error> {
     if let Err(e) = bundle.ik.verify(&sighash, &bundle.authorization.signature) {
         return Err(IssueBundleInvalidSignature(e));
     };
 
+    let currently_finalized: &mut HashSet<NoteType> = &mut HashSet::new();
+
     // Any IssueAction could have just one properly derived NoteType.
-    bundle
+    let res = bundle
         .actions()
         .iter()
-        .try_fold(previously_finalized, |acc, action| {
+        .try_fold(currently_finalized, |acc, action| {
             if !is_asset_desc_valid(action.asset_desc()) {
                 return Err(WrongAssetDescSize);
             }
@@ -371,7 +373,7 @@ pub fn verify_issue_bundle<'a>(
             let note_type = action.are_note_types_derived_correctly(bundle.ik())?;
 
             // Fail if the current note_type was previously finalized.
-            if acc.contains(&note_type) {
+            if previously_finalized.contains(&note_type) || acc.contains(&note_type) {
                 return Err(IssueActionPreviouslyFinalizedNoteType(note_type));
             }
 
@@ -382,9 +384,9 @@ pub fn verify_issue_bundle<'a>(
 
             // Proceed with the new accumulated note_type finalization set.
             Ok(acc)
-        })
+        })?;
 
-    // The iterator will return the new finalization set or will fail.
+    Ok(previously_finalized.extend(res.iter()))
 }
 
 /// Errors produced during the issuance process
@@ -760,8 +762,9 @@ mod tests {
 
         let prev_finalized = &mut HashSet::new();
 
-        let finalized = verify_issue_bundle(&signed, sighash, prev_finalized);
-        assert!(finalized.unwrap().is_empty());
+        let res = verify_issue_bundle(&signed, sighash, prev_finalized);
+        assert!(res.is_ok());
+        assert!(prev_finalized.is_empty());
     }
 
     #[test]
@@ -784,12 +787,13 @@ mod tests {
 
         let prev_finalized = &mut HashSet::new();
 
-        let finalized = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
-        assert!(finalized.contains(&NoteType::derive(
+        let res = verify_issue_bundle(&signed, sighash, prev_finalized);
+        assert!(res.is_ok());
+        assert!(prev_finalized.contains(&NoteType::derive(
             &ik,
             &String::from("verify_with_finalize")
         )));
-        assert_eq!(finalized.len(), 1);
+        assert_eq!(prev_finalized.len(), 1);
     }
 
     #[test]
