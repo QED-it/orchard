@@ -12,7 +12,7 @@ use memuse::DynamicUsage;
 use nonempty::NonEmpty;
 use zcash_note_encryption::{try_note_decryption, try_output_recovery_with_ovk};
 
-use crate::note::NoteType;
+use crate::note::AssetId;
 use crate::{
     action::Action,
     address::Address,
@@ -378,9 +378,9 @@ impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
             .map(|a| a.cv_net())
             .sum::<ValueCommitment>()
             - ValueCommitment::derive(
-                ValueSum::from_raw(self.value_balance.into()),
-                ValueCommitTrapdoor::zero(),
-                NoteType::native(),
+            ValueSum::from_raw(self.value_balance.into()),
+            ValueCommitTrapdoor::zero(),
+            AssetId::native(),
             ))
         .into_bvk()
     }

@@ -9,7 +9,7 @@ use zcash_note_encryption::{
     OUT_PLAINTEXT_SIZE,
 };
 
-use crate::note::NoteType;
+use crate::note::AssetId;
 use crate::{
     action::Action,
     keys::{
@@ -72,7 +72,7 @@ where
 
     // Check note plaintext version
     // and parse the asset type accordingly.
-    let note_type = parse_version_and_asset_type(plaintext)?;
+    let asset = parse_version_and_asset_type(plaintext)?;
 
     // The unwraps below are guaranteed to succeed by the assertion above
     let diversifier = Diversifier::from_bytes(plaintext[1..12].try_into().unwrap());
@@ -86,19 +86,19 @@ where
 
     let recipient = Address::from_parts(diversifier, pk_d);
 
-    let note = Note::from_parts(recipient, value, note_type, domain.rho, rseed);
+    let note = Note::from_parts(recipient, value, asset, domain.rho, rseed);
     Some((note, recipient))
 }
 
-fn parse_version_and_asset_type(plaintext: &[u8]) -> Option<NoteType> {
+fn parse_version_and_asset_type(plaintext: &[u8]) -> Option<AssetId> {
     // TODO: make this constant-time?
     match plaintext[0] {
-        0x02 => Some(NoteType::native()),
+        0x02 => Some(AssetId::native()),
         0x03 if plaintext.len() >= COMPACT_ZSA_NOTE_SIZE => {
             let bytes = &plaintext[COMPACT_NOTE_SIZE..COMPACT_ZSA_NOTE_SIZE]
                 .try_into()
                 .unwrap();
-            NoteType::from_bytes(bytes).into()
+            AssetId::from_bytes(bytes).into()
         }
         _ => None,
     }
@@ -177,7 +177,7 @@ impl Domain for OrchardDomain {
         _: &Self::Recipient,
         memo: &Self::Memo,
     ) -> NotePlaintextBytes {
-        let is_native: bool = note.note_type().is_native().into();
+        let is_native: bool = note.asset().is_native().into();
 
         let mut np = [0; NOTE_PLAINTEXT_SIZE];
         np[0] = if is_native { 0x02 } else { 0x03 };
@@ -188,7 +188,7 @@ impl Domain for OrchardDomain {
         if is_native {
             np[52..].copy_from_slice(memo);
         } else {
-            let zsa_type = note.note_type().to_bytes();
+            let zsa_type = note.asset().to_bytes();
             np[52..84].copy_from_slice(&zsa_type);
             let short_memo = &memo[0..memo.len() - ZSA_TYPE_SIZE];
             np[84..].copy_from_slice(short_memo);
@@ -395,7 +395,7 @@ mod tests {
     };
 
     use super::{prf_ock_orchard, CompactAction, OrchardDomain, OrchardNoteEncryption};
-    use crate::note::NoteType;
+    use crate::note::AssetId;
     use crate::{
         action::Action,
         keys::{
@@ -439,7 +439,7 @@ mod tests {
         assert_eq!(parsed_note, note);
         assert_eq!(parsed_recipient, note.recipient());
 
-        if parsed_note.note_type().is_native().into() {
+        if parsed_note.asset().is_native().into() {
             assert_eq!(parsed_version, 0x02);
             assert_eq!(&parsed_memo, memo);
         } else {
@@ -494,8 +494,8 @@ mod tests {
             let recipient = Address::from_parts(d, pk_d);
 
             let note_type = match tv.note_type {
-                None => NoteType::native(),
-                Some(type_bytes) => NoteType::from_bytes(&type_bytes).unwrap(),
+                None => AssetId::native(),
+                Some(type_bytes) => AssetId::from_bytes(&type_bytes).unwrap(),
             };
 
             let note = Note::from_parts(recipient, value, note_type, rho, rseed);

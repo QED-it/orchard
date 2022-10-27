@@ -6,7 +6,7 @@ use incrementalmerkletree::{Hashable, Tree};
 use orchard::bundle::Authorized;
 use orchard::issuance::{verify_issue_bundle, IssueBundle, Signed, Unauthorized};
 use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
-use orchard::note::{ExtractedNoteCommitment, NoteType};
+use orchard::note::{ExtractedNoteCommitment, AssetId};
 use orchard::note_encryption::OrchardDomain;
 use orchard::tree::{MerkleHashOrchard, MerklePath};
 use orchard::{
@@ -189,7 +189,7 @@ fn create_native_note(keys: &Keychain) -> Note {
                 None,
                 keys.recipient,
                 NoteValue::from_raw(100),
-                NoteType::native(),
+                AssetId::native(),
                 None
             ),
             Ok(())
@@ -225,7 +225,7 @@ impl TestSpendInfo {
 
 struct TestOutputInfo {
     value: NoteValue,
-    note_type: NoteType,
+    note_type: AssetId,
 }
 
 fn build_and_verify_bundle(
@@ -289,7 +289,7 @@ fn zsa_issue_and_transfer() {
         vec![&zsa_spend_1],
         vec![TestOutputInfo {
             value: zsa_spend_1.note.value(),
-            note_type: zsa_spend_1.note.note_type(),
+            note_type: zsa_spend_1.note.asset(),
         }],
         anchor,
         2,
@@ -303,11 +303,11 @@ fn zsa_issue_and_transfer() {
         vec![
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta),
-                note_type: zsa_spend_1.note.note_type(),
+                note_type: zsa_spend_1.note.asset(),
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta),
-                note_type: zsa_spend_1.note.note_type(),
+                note_type: zsa_spend_1.note.asset(),
             },
         ],
         anchor,
@@ -322,7 +322,7 @@ fn zsa_issue_and_transfer() {
             value: NoteValue::from_raw(
                 zsa_spend_1.note.value().inner() + zsa_spend_2.note.value().inner(),
             ),
-            note_type: zsa_spend_1.note.note_type(),
+            note_type: zsa_spend_1.note.asset(),
         }],
         anchor,
         2,
@@ -335,11 +335,11 @@ fn zsa_issue_and_transfer() {
         vec![
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta),
-                note_type: zsa_spend_1.note.note_type(),
+                note_type: zsa_spend_1.note.asset(),
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + delta),
-                note_type: zsa_spend_2.note.note_type(),
+                note_type: zsa_spend_2.note.asset(),
             },
         ],
         anchor,
@@ -353,11 +353,11 @@ fn zsa_issue_and_transfer() {
         vec![
             TestOutputInfo {
                 value: zsa_spend_1.note.value(),
-                note_type: zsa_spend_1.note.note_type(),
+                note_type: zsa_spend_1.note.asset(),
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(100),
-                note_type: NoteType::native(),
+                note_type: AssetId::native(),
             },
         ],
         anchor,
@@ -383,11 +383,11 @@ fn zsa_issue_and_transfer() {
         vec![
             TestOutputInfo {
                 value: zsa_spend_1.note.value(),
-                note_type: zsa_spend_1.note.note_type(),
+                note_type: zsa_spend_1.note.asset(),
             },
             TestOutputInfo {
                 value: native_spend.note.value(),
-                note_type: NoteType::native(),
+                note_type: AssetId::native(),
             },
         ],
         native_anchor,
@@ -413,11 +413,11 @@ fn zsa_issue_and_transfer() {
         vec![
             TestOutputInfo {
                 value: zsa_spend_t7_1.note.value(),
-                note_type: zsa_spend_t7_1.note.note_type(),
+                note_type: zsa_spend_t7_1.note.asset(),
             },
             TestOutputInfo {
                 value: zsa_spend_t7_2.note.value(),
-                note_type: zsa_spend_t7_2.note.note_type(),
+                note_type: zsa_spend_t7_2.note.asset(),
             },
         ],
         anchor_t7,
@@ -432,11 +432,11 @@ fn zsa_issue_and_transfer() {
             vec![
                 TestOutputInfo {
                     value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + delta),
-                    note_type: zsa_spend_t7_1.note.note_type(),
+                    note_type: zsa_spend_t7_1.note.asset(),
                 },
                 TestOutputInfo {
                     value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - delta),
-                    note_type: zsa_spend_t7_2.note.note_type(),
+                    note_type: zsa_spend_t7_2.note.asset(),
                 },
             ],
             anchor_t7,

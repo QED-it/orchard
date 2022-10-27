@@ -10,7 +10,7 @@ use nonempty::NonEmpty;
 use pasta_curves::pallas;
 use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
-use crate::note::NoteType;
+use crate::note::AssetId;
 use crate::{
     action::Action,
     address::Address,
@@ -74,7 +74,7 @@ impl SpendInfo {
     /// Defined in [Zcash Protocol Spec § 4.8.3: Dummy Notes (Orchard)][orcharddummynotes].
     ///
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
-    fn dummy(note_type: NoteType, rng: &mut impl RngCore) -> Self {
+    fn dummy(note_type: AssetId, rng: &mut impl RngCore) -> Self {
         let (sk, fvk, note) = Note::dummy(rng, None, note_type);
         let merkle_path = MerklePath::dummy(rng);
 
@@ -104,7 +104,7 @@ struct RecipientInfo {
     ovk: Option<OutgoingViewingKey>,
     recipient: Address,
     value: NoteValue,
-    note_type: NoteType,
+    note_type: AssetId,
     memo: Option<[u8; 512]>,
 }
 
@@ -112,7 +112,7 @@ impl RecipientInfo {
     /// Defined in [Zcash Protocol Spec § 4.8.3: Dummy Notes (Orchard)][orcharddummynotes].
     ///
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
-    fn dummy(rng: &mut impl RngCore, note_type: NoteType) -> Self {
+    fn dummy(rng: &mut impl RngCore, note_type: AssetId) -> Self {
         let fvk: FullViewingKey = (&SpendingKey::random(rng)).into();
         let recipient = fvk.address_at(0u32, Scope::External);
 
@@ -166,7 +166,7 @@ impl ActionInfo {
     /// Panics if the asset types of the spent and output notes do not match.
     fn build(self, mut rng: impl RngCore) -> (Action<SigningMetadata>, Circuit) {
         assert_eq!(
-            self.spend.note.note_type(),
+            self.spend.note.asset(),
             self.output.note_type,
             "spend and recipient note types must be equal"
         );
@@ -326,7 +326,7 @@ impl Builder {
         ovk: Option<OutgoingViewingKey>,
         recipient: Address,
         value: NoteValue,
-        note_type: NoteType,
+        note_type: AssetId,
         memo: Option<[u8; 512]>,
     ) -> Result<(), &'static str> {
         if !self.flags.outputs_enabled() {
@@ -426,9 +426,9 @@ impl Builder {
         // Verify that bsk and bvk are consistent.
         let bvk = (actions.iter().map(|a| a.cv_net()).sum::<ValueCommitment>()
             - ValueCommitment::derive(
-                value_balance,
-                ValueCommitTrapdoor::zero(),
-                NoteType::native(),
+            value_balance,
+            ValueCommitTrapdoor::zero(),
+            AssetId::native(),
             ))
         .into_bvk();
         assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
@@ -450,11 +450,11 @@ impl Builder {
 fn partition_by_asset(
     spends: &[SpendInfo],
     recipients: &[RecipientInfo],
-) -> HashMap<NoteType, (Vec<SpendInfo>, Vec<RecipientInfo>)> {
+) -> HashMap<AssetId, (Vec<SpendInfo>, Vec<RecipientInfo>)> {
     let mut hm = HashMap::new();
 
     for s in spends {
-        hm.entry(s.note.note_type())
+        hm.entry(s.note.asset())
             .or_insert((vec![], vec![]))
             .0
             .push(s.clone());
@@ -734,7 +734,7 @@ pub mod testing {
     use proptest::collection::vec;
     use proptest::prelude::*;
 
-    use crate::note::NoteType;
+    use crate::note::AssetId;
     use crate::{
         address::testing::arb_address,
         bundle::{Authorized, Bundle, Flags},
@@ -762,7 +762,7 @@ pub mod testing {
         sk: SpendingKey,
         anchor: Anchor,
         notes: Vec<(Note, MerklePath)>,
-        recipient_amounts: Vec<(Address, NoteValue, NoteType)>,
+        recipient_amounts: Vec<(Address, NoteValue, AssetId)>,
     }
 
     impl<R: RngCore + CryptoRng> ArbitraryBundleInputs<R> {
@@ -816,7 +816,7 @@ pub mod testing {
                 arb_address().prop_flat_map(move |a| {
                     arb_positive_note_value(MAX_NOTE_VALUE / n_recipients as u64)
                         .prop_map(move |v| {
-                            (a,v, NoteType::native())
+                            (a,v, AssetId::native())
                         })
                 }),
                 n_recipients as usize,
@@ -867,7 +867,7 @@ mod tests {
     use rand::rngs::OsRng;
 
     use super::Builder;
-    use crate::note::NoteType;
+    use crate::note::AssetId;
     use crate::{
         bundle::{Authorized, Bundle, Flags},
         circuit::ProvingKey,
@@ -896,7 +896,7 @@ mod tests {
                 None,
                 recipient,
                 NoteValue::from_raw(5000),
-                NoteType::native(),
+                AssetId::native(),
                 None,
             )
             .unwrap();

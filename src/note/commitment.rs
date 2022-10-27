@@ -11,7 +11,7 @@ use crate::{
         fixed_bases::{NOTE_COMMITMENT_PERSONALIZATION, NOTE_ZSA_COMMITMENT_PERSONALIZATION},
         L_ORCHARD_BASE,
     },
-    note::note_type::NoteType,
+    note::note_type::AssetId,
     spec::extract_p,
     value::NoteValue,
 };
@@ -45,7 +45,7 @@ impl NoteCommitment {
         g_d: [u8; 32],
         pk_d: [u8; 32],
         v: NoteValue,
-        note_type: NoteType,
+        note_type: AssetId,
         rho: pallas::Base,
         psi: pallas::Base,
         rcm: NoteCommitTrapdoor,

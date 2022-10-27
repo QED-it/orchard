@@ -13,7 +13,7 @@ use crate::issuance::Error::{
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::note_type::MAX_ASSET_DESCRIPTION_SIZE;
-use crate::note::{NoteType, Nullifier};
+use crate::note::{AssetId, Nullifier};
 use crate::value::NoteValue;
 use crate::{
     primitives::redpallas::{self, SpendAuth},
@@ -85,19 +85,19 @@ impl IssueAction {
     fn are_note_types_derived_correctly(
         &self,
         ik: &IssuanceValidatingKey,
-    ) -> Result<NoteType, Error> {
+    ) -> Result<AssetId, Error> {
         match self
             .notes
             .iter()
-            .try_fold(self.notes().head.note_type(), |note_type, &note| {
+            .try_fold(self.notes().head.asset(), |note_type, &note| {
                 // Fail if not all note types are equal
-                note.note_type()
+                note.asset()
                     .eq(&note_type)
                     .then(|| note_type)
                     .ok_or(IssueActionIncorrectNoteType)
             }) {
             Ok(note_type) => note_type // check that the note_type was properly derived.
-                .eq(&NoteType::derive(ik, &self.asset_desc))
+                .eq(&AssetId::derive(ik, &self.asset_desc))
                 .then(|| note_type)
                 .ok_or(IssueBundleIkMismatchNoteType),
             Err(e) => Err(e),
@@ -163,11 +163,11 @@ impl<T: IssueAuth> IssueBundle<T> {
     }
 
     /// Find an action by `note_type` for a given `IssueBundle`.
-    pub fn get_action_by_type(&self, note_type: NoteType) -> Option<&IssueAction> {
+    pub fn get_action_by_type(&self, note_type: AssetId) -> Option<&IssueAction> {
         let action = self
             .actions
             .iter()
-            .find(|a| NoteType::derive(&self.ik, &a.asset_desc).eq(&note_type));
+            .find(|a| AssetId::derive(&self.ik, &a.asset_desc).eq(&note_type));
         action
     }
 
@@ -202,12 +202,12 @@ impl IssueBundle<Unauthorized> {
         value: NoteValue,
         finalize: bool,
         mut rng: impl RngCore,
-    ) -> Result<NoteType, Error> {
+    ) -> Result<AssetId, Error> {
         if !is_asset_desc_valid(&asset_desc) {
             return Err(WrongAssetDescSize);
         }
 
-        let note_type = NoteType::derive(&self.ik, &asset_desc);
+        let note_type = AssetId::derive(&self.ik, &asset_desc);
 
         let note = Note::new(
             recipient,
@@ -352,13 +352,13 @@ fn is_asset_desc_valid(asset_desc: &str) -> bool {
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
-    finalized: &mut HashSet<NoteType>, // The current finalization set.
+    finalized: &mut HashSet<AssetId>, // The current finalization set.
 ) -> Result<(), Error> {
     if let Err(e) = bundle.ik.verify(&sighash, &bundle.authorization.signature) {
         return Err(IssueBundleInvalidSignature(e));
     };
 
-    let currently_finalized: &mut HashSet<NoteType> = &mut HashSet::new();
+    let currently_finalized: &mut HashSet<AssetId> = &mut HashSet::new();
 
     // Any IssueAction could have just one properly derived NoteType.
     let res = bundle
@@ -408,7 +408,7 @@ pub enum Error {
     /// Invalid signature.
     IssueBundleInvalidSignature(reddsa::Error),
     /// The provided `NoteType` has been previously finalized.
-    IssueActionPreviouslyFinalizedNoteType(NoteType),
+    IssueActionPreviouslyFinalizedNoteType(AssetId),
 }
 
 impl std::error::Error for Error {}
@@ -459,7 +459,7 @@ mod tests {
     use crate::keys::{
         FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
-    use crate::note::{NoteType, Nullifier};
+    use crate::note::{AssetId, Nullifier};
     use crate::value::NoteValue;
     use crate::{Address, Note};
     use nonempty::NonEmpty;
@@ -545,17 +545,17 @@ mod tests {
         let action = bundle.get_action_by_type(note_type).unwrap();
         assert_eq!(action.notes.len(), 2);
         assert_eq!(action.notes.first().value().inner(), 5);
-        assert_eq!(action.notes.first().note_type(), note_type);
+        assert_eq!(action.notes.first().asset(), note_type);
         assert_eq!(action.notes.first().recipient(), recipient);
 
         assert_eq!(action.notes.tail().first().unwrap().value().inner(), 10);
-        assert_eq!(action.notes.tail().first().unwrap().note_type(), note_type);
+        assert_eq!(action.notes.tail().first().unwrap().asset(), note_type);
         assert_eq!(action.notes.tail().first().unwrap().recipient(), recipient);
 
         let action2 = bundle.get_action(str2).unwrap();
         assert_eq!(action2.notes.len(), 1);
         assert_eq!(action2.notes().first().value().inner(), 15);
-        assert_eq!(action2.notes().first().note_type(), third_note_type);
+        assert_eq!(action2.notes().first().asset(), third_note_type);
     }
 
     #[test]
@@ -723,7 +723,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            NoteType::derive(bundle.ik(), "Poisoned pill"),
+            AssetId::derive(bundle.ik(), "Poisoned pill"),
             Nullifier::dummy(&mut rng),
             &mut rng,
         );
@@ -790,7 +790,7 @@ mod tests {
 
         let res = verify_issue_bundle(&signed, sighash, prev_finalized);
         assert!(res.is_ok());
-        assert!(prev_finalized.contains(&NoteType::derive(
+        assert!(prev_finalized.contains(&AssetId::derive(
             &ik,
             &String::from("verify_with_finalize")
         )));
@@ -816,7 +816,7 @@ mod tests {
         let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
         let prev_finalized = &mut HashSet::new();
 
-        let final_type = NoteType::derive(&ik, &String::from("already final"));
+        let final_type = AssetId::derive(&ik, &String::from("already final"));
 
         prev_finalized.insert(final_type);
 
@@ -916,7 +916,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            NoteType::derive(signed.ik(), "Poisoned pill"),
+            AssetId::derive(signed.ik(), "Poisoned pill"),
             Nullifier::dummy(&mut rng),
             &mut rng,
         );
@@ -963,7 +963,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(55),
-            NoteType::derive(&incorrect_ik, asset_description),
+            AssetId::derive(&incorrect_ik, asset_description),
             Nullifier::dummy(&mut rng),
             &mut rng,
         );
