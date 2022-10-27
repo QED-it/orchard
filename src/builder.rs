@@ -74,8 +74,8 @@ impl SpendInfo {
     /// Defined in [Zcash Protocol Spec § 4.8.3: Dummy Notes (Orchard)][orcharddummynotes].
     ///
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
-    fn dummy(note_type: AssetId, rng: &mut impl RngCore) -> Self {
-        let (sk, fvk, note) = Note::dummy(rng, None, note_type);
+    fn dummy(asset: AssetId, rng: &mut impl RngCore) -> Self {
+        let (sk, fvk, note) = Note::dummy(rng, None, asset);
         let merkle_path = MerklePath::dummy(rng);
 
         SpendInfo {
@@ -104,7 +104,7 @@ struct RecipientInfo {
     ovk: Option<OutgoingViewingKey>,
     recipient: Address,
     value: NoteValue,
-    note_type: AssetId,
+    asset: AssetId,
     memo: Option<[u8; 512]>,
 }
 
@@ -112,7 +112,7 @@ impl RecipientInfo {
     /// Defined in [Zcash Protocol Spec § 4.8.3: Dummy Notes (Orchard)][orcharddummynotes].
     ///
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
-    fn dummy(rng: &mut impl RngCore, note_type: AssetId) -> Self {
+    fn dummy(rng: &mut impl RngCore, asset: AssetId) -> Self {
         let fvk: FullViewingKey = (&SpendingKey::random(rng)).into();
         let recipient = fvk.address_at(0u32, Scope::External);
 
@@ -120,7 +120,7 @@ impl RecipientInfo {
             ovk: None,
             recipient,
             value: NoteValue::zero(),
-            note_type,
+            asset,
             memo: None,
         }
     }
@@ -167,13 +167,13 @@ impl ActionInfo {
     fn build(self, mut rng: impl RngCore) -> (Action<SigningMetadata>, Circuit) {
         assert_eq!(
             self.spend.note.asset(),
-            self.output.note_type,
+            self.output.asset,
             "spend and recipient note types must be equal"
         );
 
         let v_net = self.value_sum();
-        let note_type = self.output.note_type;
-        let cv_net = ValueCommitment::derive(v_net, self.rcv, note_type);
+        let asset = self.output.asset;
+        let cv_net = ValueCommitment::derive(v_net, self.rcv, asset);
 
         let nf_old = self.spend.note.nullifier(&self.spend.fvk);
         let sender_address = self.spend.note.recipient();
@@ -187,7 +187,7 @@ impl ActionInfo {
         let note = Note::new(
             self.output.recipient,
             self.output.value,
-            self.output.note_type,
+            self.output.asset,
             nf_old,
             &mut rng,
         );
@@ -326,7 +326,7 @@ impl Builder {
         ovk: Option<OutgoingViewingKey>,
         recipient: Address,
         value: NoteValue,
-        note_type: AssetId,
+        asset: AssetId,
         memo: Option<[u8; 512]>,
     ) -> Result<(), &'static str> {
         if !self.flags.outputs_enabled() {
@@ -337,7 +337,7 @@ impl Builder {
             ovk,
             recipient,
             value,
-            note_type,
+            asset,
             memo,
         });
 
@@ -355,7 +355,7 @@ impl Builder {
         let mut pre_actions: Vec<_> = Vec::new();
 
         // Pair up the spends and recipients, extending with dummy values as necessary.
-        for (note_type, (mut spends, mut recipients)) in
+        for (asset, (mut spends, mut recipients)) in
             partition_by_asset(&self.spends, &self.recipients)
         {
             let num_spends = spends.len();
@@ -369,16 +369,16 @@ impl Builder {
             // TODO: uncomment once the circuit is ready.
             // use the first spend to create split spend(s) or create a dummy if empty.
             // let dummy_spend = spends.first().map_or_else(
-            //     || SpendInfo::dummy(note_type, &mut rng),
+            //     || SpendInfo::dummy(asset, &mut rng),
             //     |s| s.create_split_spend(),
             // );
-            let dummy_spend = SpendInfo::dummy(note_type, &mut rng);
+            let dummy_spend = SpendInfo::dummy(asset, &mut rng);
 
             // Extend the spends and recipients with dummy values.
             spends.extend(iter::repeat_with(|| dummy_spend.clone()).take(num_actions - num_spends));
 
             recipients.extend(
-                iter::repeat_with(|| RecipientInfo::dummy(&mut rng, note_type))
+                iter::repeat_with(|| RecipientInfo::dummy(&mut rng, asset))
                     .take(num_actions - num_recipients),
             );
 
@@ -461,7 +461,7 @@ fn partition_by_asset(
     }
 
     for r in recipients {
-        hm.entry(r.note_type)
+        hm.entry(r.asset)
             .or_insert((vec![], vec![]))
             .1
             .push(r.clone())
@@ -776,12 +776,12 @@ pub mod testing {
                 builder.add_spend(fvk.clone(), note, path).unwrap();
             }
 
-            for (addr, value, note_type) in self.recipient_amounts.into_iter() {
+            for (addr, value, asset) in self.recipient_amounts.into_iter() {
                 let scope = fvk.scope_for_address(&addr).unwrap();
                 let ovk = fvk.to_ovk(scope);
 
                 builder
-                    .add_recipient(Some(ovk.clone()), addr, value, note_type, None)
+                    .add_recipient(Some(ovk.clone()), addr, value, asset, None)
                     .unwrap();
             }
 

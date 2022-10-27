@@ -183,7 +183,7 @@ impl Domain for OrchardDomain {
         np[0] = if is_native { 0x02 } else { 0x03 };
         np[1..12].copy_from_slice(note.recipient().diversifier().as_array());
         np[12..20].copy_from_slice(&note.value().to_bytes());
-        // todo: add note_type
+        // todo: add asset_id
         np[20..52].copy_from_slice(note.rseed().as_bytes());
         if is_native {
             np[52..].copy_from_slice(memo);
@@ -493,12 +493,12 @@ mod tests {
 
             let recipient = Address::from_parts(d, pk_d);
 
-            let note_type = match tv.note_type {
+            let asset = match tv.asset {
                 None => AssetId::native(),
                 Some(type_bytes) => AssetId::from_bytes(&type_bytes).unwrap(),
             };
 
-            let note = Note::from_parts(recipient, value, note_type, rho, rseed);
+            let note = Note::from_parts(recipient, value, asset, rho, rseed);
             assert_eq!(ExtractedNoteCommitment::from(note.commitment()), cmx);
 
             let action = Action::from_parts(
@@ -537,7 +537,7 @@ mod tests {
                     assert_eq!(decrypted_note, note);
                     assert_eq!(decrypted_to, recipient);
                 }
-                None => assert!(tv.note_type.is_some(), "Compact note decryption failed"),
+                None => assert!(tv.asset.is_some(), "Compact note decryption failed"),
                 // Ignore that ZSA notes are not detected in compact decryption.
             }
 

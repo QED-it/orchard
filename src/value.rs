@@ -309,7 +309,7 @@ impl ValueCommitment {
     ///
     /// [concretehomomorphiccommit]: https://zips.z.cash/protocol/nu5.pdf#concretehomomorphiccommit
     #[allow(non_snake_case)]
-    pub(crate) fn derive(value: ValueSum, rcv: ValueCommitTrapdoor, note_type: AssetId) -> Self {
+    pub(crate) fn derive(value: ValueSum, rcv: ValueCommitTrapdoor, asset: AssetId) -> Self {
         let hasher = pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION);
         let R = hasher(&VALUE_COMMITMENT_R_BYTES);
         let abs_value = u64::try_from(value.0.abs()).expect("value must be in valid range");
@@ -320,7 +320,7 @@ impl ValueCommitment {
             pallas::Scalar::from(abs_value)
         };
 
-        let V_zsa = note_type.cv_base();
+        let V_zsa = asset.cv_base();
 
         ValueCommitment(V_zsa * value + R * rcv.0)
     }
@@ -425,7 +425,7 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
-    use crate::note::note_type::testing::{arb_asset_id, native_asset_id};
+    use crate::note::asset_id::testing::{arb_asset_id, native_asset_id};
 
     use crate::note::AssetId;
     use proptest::prelude::*;
@@ -446,7 +446,7 @@ mod tests {
             .iter()
             .cloned()
             .zip(neg_trapdoors.iter().cloned())
-            .map(|((value, _, note_type), rcv)| ((-value).unwrap(), rcv, note_type))
+            .map(|((value, _, asset), rcv)| ((-value).unwrap(), rcv, asset))
             .collect();
 
         let native_value_balance = native_values
@@ -465,7 +465,7 @@ mod tests {
 
         let bvk = (values
             .iter()
-            .map(|(value, rcv, note_type)| ValueCommitment::derive(*value, *rcv, *note_type))
+            .map(|(value, rcv, asset)| ValueCommitment::derive(*value, *rcv, *asset))
             .sum::<ValueCommitment>()
             - ValueCommitment::derive(
             native_value_balance,
