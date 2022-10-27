@@ -12,7 +12,7 @@ use crate::issuance::Error::{
     IssueBundleInvalidSignature, WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
-use crate::note::asset_id::{is_asset_desc_of_valid_size, MAX_ASSET_DESCRIPTION_SIZE};
+use crate::note::asset_id::is_asset_desc_of_valid_size;
 use crate::note::{asset_id, AssetId, Nullifier};
 use crate::value::NoteValue;
 use crate::{
