@@ -193,7 +193,6 @@ impl SpendValidatingKey {
     }
 }
 
-
 /// We currently use `SpendAuth` as the `IssuanceAuth`.
 type IssuanceAuth = SpendAuth;
 

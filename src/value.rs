@@ -468,9 +468,9 @@ mod tests {
             .map(|(value, rcv, asset)| ValueCommitment::derive(*value, *rcv, *asset))
             .sum::<ValueCommitment>()
             - ValueCommitment::derive(
-            native_value_balance,
-            ValueCommitTrapdoor::zero(),
-            AssetId::native(),
+                native_value_balance,
+                ValueCommitTrapdoor::zero(),
+                AssetId::native(),
             ))
         .into_bvk();
 

@@ -6,7 +6,7 @@ use incrementalmerkletree::{Hashable, Tree};
 use orchard::bundle::Authorized;
 use orchard::issuance::{verify_issue_bundle, IssueBundle, Signed, Unauthorized};
 use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
-use orchard::note::{ExtractedNoteCommitment, AssetId};
+use orchard::note::{AssetId, ExtractedNoteCommitment};
 use orchard::note_encryption::OrchardDomain;
 use orchard::tree::{MerkleHashOrchard, MerklePath};
 use orchard::{

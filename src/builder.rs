@@ -426,9 +426,9 @@ impl Builder {
         // Verify that bsk and bvk are consistent.
         let bvk = (actions.iter().map(|a| a.cv_net()).sum::<ValueCommitment>()
             - ValueCommitment::derive(
-            value_balance,
-            ValueCommitTrapdoor::zero(),
-            AssetId::native(),
+                value_balance,
+                ValueCommitTrapdoor::zero(),
+                AssetId::native(),
             ))
         .into_bvk();
         assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
