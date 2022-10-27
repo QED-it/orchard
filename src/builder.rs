@@ -66,7 +66,7 @@ struct SpendInfo {
     scope: Scope,
     note: Note,
     merkle_path: MerklePath,
-    // a flag to indicate whether the value of the note will be counted in the value sum of the action.
+    // If this flag is true, the value of the note will not be counted in the value sum of the action.
     split_flag: bool,
 }
 
@@ -90,7 +90,7 @@ impl SpendInfo {
         }
     }
 
-    /// Duplicates the spend info and set the split flag to `true`.
+    /// Return a copy of this note with the split flag set to `true`.
     fn create_split_spend(&self) -> Self {
         let mut split_spend = self.clone();
         split_spend.split_flag = true;
@@ -144,13 +144,13 @@ impl ActionInfo {
     }
 
     /// Returns the value sum for this action.
-    /// Split notes does not contribute to the value sum.
+    /// Split notes do not contribute to the value sum.
     fn value_sum(&self) -> ValueSum {
-        let spent_value = self
-            .spend
-            .split_flag
-            .then(NoteValue::zero)
-            .unwrap_or_else(|| self.spend.note.value());
+        let spent_value = if self.spend.split_flag {
+            NoteValue::zero()
+        } else {
+            self.spend.note.value()
+        };
 
         spent_value - self.output.value
     }
@@ -160,10 +160,14 @@ impl ActionInfo {
     /// Defined in [Zcash Protocol Spec § 4.7.3: Sending Notes (Orchard)][orchardsend].
     ///
     /// [orchardsend]: https://zips.z.cash/protocol/nu5.pdf#orchardsend
+    ///
+    /// # Panics
+    ///
+    /// Panics if the asset types of the spent and output notes do not match.
     fn build(self, mut rng: impl RngCore) -> (Action<SigningMetadata>, Circuit) {
         assert_eq!(
-            self.output.note_type,
             self.spend.note.note_type(),
+            self.output.note_type,
             "spend and recipient note types must be equal"
         );
 
@@ -179,12 +183,11 @@ impl ActionInfo {
         let ak: SpendValidatingKey = self.spend.fvk.clone().into();
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
-        let note_type = self.spend.note.note_type();
 
         let note = Note::new(
             self.output.recipient,
             self.output.value,
-            note_type,
+            self.output.note_type,
             nf_old,
             &mut rng,
         );
