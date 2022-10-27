@@ -42,7 +42,7 @@ impl AssetId {
     /// Panics if `asset_desc` is empty or greater than `MAX_ASSET_DESCRIPTION_SIZE`.
     #[allow(non_snake_case)]
     pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &str) -> Self {
-        assert!(!asset_desc.is_empty() && asset_desc.len() <= MAX_ASSET_DESCRIPTION_SIZE);
+        assert!(is_asset_desc_of_valid_size(asset_desc));
 
         let mut s = vec![];
         s.extend(ik.to_bytes());
@@ -72,6 +72,11 @@ impl Hash for AssetId {
         h.write(&self.to_bytes());
         h.finish();
     }
+}
+
+/// Check that `asset_desc` is of valid size.
+pub fn is_asset_desc_of_valid_size(asset_desc: &str) -> bool {
+    !asset_desc.is_empty() && asset_desc.bytes().len() <= MAX_ASSET_DESCRIPTION_SIZE
 }
 
 impl PartialEq for AssetId {

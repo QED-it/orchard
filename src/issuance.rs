@@ -12,8 +12,8 @@ use crate::issuance::Error::{
     IssueBundleInvalidSignature, WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
-use crate::note::asset_id::MAX_ASSET_DESCRIPTION_SIZE;
-use crate::note::{AssetId, Nullifier};
+use crate::note::asset_id::{is_asset_desc_of_valid_size, MAX_ASSET_DESCRIPTION_SIZE};
+use crate::note::{asset_id, AssetId, Nullifier};
 use crate::value::NoteValue;
 use crate::{
     primitives::redpallas::{self, SpendAuth},
@@ -203,7 +203,7 @@ impl IssueBundle<Unauthorized> {
         finalize: bool,
         mut rng: impl RngCore,
     ) -> Result<AssetId, Error> {
-        if !is_asset_desc_valid(&asset_desc) {
+        if !asset_id::is_asset_desc_of_valid_size(&asset_desc) {
             return Err(WrongAssetDescSize);
         }
 
@@ -247,7 +247,7 @@ impl IssueBundle<Unauthorized> {
     ///
     /// Panics if `asset_desc` is empty or longer than 512 bytes.
     pub fn finalize_action(&mut self, asset_desc: String) -> Result<(), Error> {
-        if !is_asset_desc_valid(&asset_desc) {
+        if !asset_id::is_asset_desc_of_valid_size(&asset_desc) {
             return Err(WrongAssetDescSize);
         }
 
@@ -332,10 +332,6 @@ impl IssueBundle<Signed> {
     }
 }
 
-fn is_asset_desc_valid(asset_desc: &str) -> bool {
-    !asset_desc.is_empty() && asset_desc.bytes().len() <= MAX_ASSET_DESCRIPTION_SIZE
-}
-
 /// Validation for Orchard IssueBundles
 ///
 /// A set of previously finalized asset types must be provided.
@@ -365,7 +361,7 @@ pub fn verify_issue_bundle(
         .actions()
         .iter()
         .try_fold(currently_finalized, |acc, action| {
-            if !is_asset_desc_valid(action.asset_desc()) {
+            if !is_asset_desc_of_valid_size(action.asset_desc()) {
                 return Err(WrongAssetDescSize);
             }
 
