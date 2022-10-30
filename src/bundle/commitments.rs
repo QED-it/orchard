@@ -4,6 +4,7 @@ use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::bundle::{Authorization, Authorized, Bundle};
 use crate::issuance::{IssueAuth, IssueBundle, Signed};
+use crate::note_encryption::EncNoteCiphertextZSA;
 
 const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
 const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActCHash";
@@ -42,14 +43,25 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         ch.update(&action.nullifier().to_bytes());
         ch.update(&action.cmx().to_bytes());
         ch.update(&action.encrypted_note().epk_bytes);
-        ch.update(&action.encrypted_note().enc_ciphertext[..52]);
-
-        mh.update(&action.encrypted_note().enc_ciphertext[52..564]);
 
         nh.update(&action.cv_net().to_bytes());
         nh.update(&<[u8; 32]>::from(action.rk()));
-        nh.update(&action.encrypted_note().enc_ciphertext[564..]);
+
+        match &action.encrypted_note().enc_ciphertext {
+            EncNoteCiphertextZSA::V2OLD(ncx) => {
+                ch.update(&ncx[..52]);
+                mh.update(&ncx[52..564]);
+                nh.update(&ncx[564..]);
+            },
+            EncNoteCiphertextZSA::V3ZSA(ncx) => {
+                ch.update(&ncx[..84]);
+                mh.update(&ncx[84..596]);
+                nh.update(&ncx[596..]);
+            }
+        }
+
         nh.update(&action.encrypted_note().out_ciphertext);
+
     }
 
     h.update(ch.finalize().as_bytes());
