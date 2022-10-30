@@ -3,11 +3,7 @@
 use blake2b_simd::{Hash, Params};
 use core::fmt;
 use group::ff::PrimeField;
-use zcash_note_encryption::{
-    BatchDomain, Domain, EphemeralKeyBytes, NotePlaintextBytes, OutPlaintextBytes,
-    OutgoingCipherKey, ShieldedOutput, COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, NOTE_PLAINTEXT_SIZE,
-    OUT_PLAINTEXT_SIZE,
-};
+use zcash_note_encryption::{BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes, OutgoingCipherKey, ShieldedOutput, COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, NOTE_PLAINTEXT_SIZE, OUT_PLAINTEXT_SIZE, NoteCiphertext};
 
 use crate::note::NoteType;
 use crate::{
@@ -26,12 +22,16 @@ const PRF_OCK_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_Orchardock";
 
 /// The size of the encoding of a ZSA asset type.
 const ZSA_TYPE_SIZE: usize = 32;
-/// The size of the ZSA variant of COMPACT_NOTE_SIZE.
+/// The size of the encoding of the note plaintext post ZSA.
+const ZSA_NOTE_PLAINTEXT_SIZE: usize = NOTE_PLAINTEXT_SIZE + ZSA_TYPE_SIZE;
+/// The size of the encrypted ciphertext of the ZSA variant of a note.
+const ZSA_ENC_CIPHERTEXT_SIZE: usize = ENC_CIPHERTEXT_SIZE + ZSA_TYPE_SIZE;
+/// The size of the ZSA variant of a compact note.
 const COMPACT_ZSA_NOTE_SIZE: usize = COMPACT_NOTE_SIZE + ZSA_TYPE_SIZE;
 /// The size of the memo.
 const MEMO_SIZE: usize = NOTE_PLAINTEXT_SIZE - COMPACT_NOTE_SIZE;
-/// The size of the ZSA variant of the memo.
-const ZSA_MEMO_SIZE: usize = NOTE_PLAINTEXT_SIZE - COMPACT_ZSA_NOTE_SIZE;
+/// The size of the AEAD tag.
+const AEAD_TAG_SIZE: usize = ZSA_ENC_CIPHERTEXT_SIZE - ZSA_NOTE_PLAINTEXT_SIZE;
 
 /// Defined in [Zcash Protocol Spec § 5.4.2: Pseudo Random Functions][concreteprfs].
 ///
@@ -58,6 +58,7 @@ pub(crate) fn prf_ock_orchard(
     )
 }
 
+// TODO: VA: Needs updating
 /// Domain-specific requirements:
 /// - If the note version is 3, the `plaintext` must contain a valid encoding of a ZSA asset type.
 fn orchard_parse_note_plaintext_without_memo<F>(
@@ -91,7 +92,6 @@ where
 }
 
 fn parse_version_and_asset_type(plaintext: &[u8]) -> Option<NoteType> {
-    // TODO: make this constant-time?
     match plaintext[0] {
         0x02 => Some(NoteType::native()),
         0x03 if plaintext.len() >= COMPACT_ZSA_NOTE_SIZE => {
@@ -108,6 +108,41 @@ fn parse_version_and_asset_type(plaintext: &[u8]) -> Option<NoteType> {
 #[derive(Debug)]
 pub struct OrchardDomain {
     rho: Nullifier,
+}
+
+pub struct NotePlaintextZSA (pub [u8; ZSA_NOTE_PLAINTEXT_SIZE]);
+
+impl AsMut<[u8]> for NotePlaintextZSA {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+}
+
+pub struct EncNoteCiphertextZSA (pub [u8; ZSA_ENC_CIPHERTEXT_SIZE]);
+
+impl From<(NotePlaintextZSA,[u8; AEAD_TAG_SIZE])> for EncNoteCiphertextZSA {
+    fn from((np,t): (NotePlaintextZSA, [u8; AEAD_TAG_SIZE])) -> Self {
+        let mut nc = [0u8; ZSA_ENC_CIPHERTEXT_SIZE];
+        nc[..ZSA_NOTE_PLAINTEXT_SIZE].copy_from_slice(&np.0);
+        nc[ZSA_NOTE_PLAINTEXT_SIZE..].copy_from_slice(&t);
+        EncNoteCiphertextZSA(nc)
+    }
+}
+
+pub struct CompactNoteZSA (pub [u8; COMPACT_ZSA_NOTE_SIZE]);
+
+impl AsMut<[u8]> for CompactNoteZSA {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+}
+
+impl From<NotePlaintextZSA> for CompactNoteZSA {
+    fn from(np: NotePlaintextZSA) -> Self {
+        let mut cnp = [0u8; COMPACT_ZSA_NOTE_SIZE];
+        cnp.copy_from_slice(&np.0[..COMPACT_ZSA_NOTE_SIZE]);
+        CompactNoteZSA(cnp)
+    }
 }
 
 impl OrchardDomain {
@@ -131,6 +166,10 @@ impl Domain for OrchardDomain {
     type SharedSecret = SharedSecret;
     type SymmetricKey = Hash;
     type Note = Note;
+    type NotePlaintextBytes = NotePlaintextZSA;
+    type EncNoteCiphertextBytes = EncNoteCiphertextZSA;
+    type CompactNotePlaintextBytes = CompactNoteZSA;
+    type CompactEncNoteCiphertextBytes = CompactNoteZSA;
     type Recipient = Address;
     type DiversifiedTransmissionKey = DiversifiedTransmissionKey;
     type IncomingViewingKey = IncomingViewingKey;
@@ -181,25 +220,17 @@ impl Domain for OrchardDomain {
         note: &Self::Note,
         _: &Self::Recipient,
         memo: &Self::Memo,
-    ) -> NotePlaintextBytes {
-        let is_native: bool = note.note_type().is_native().into();
+    ) -> NotePlaintextZSA {
 
-        let mut np = [0; NOTE_PLAINTEXT_SIZE];
-        np[0] = if is_native { 0x02 } else { 0x03 };
+        let mut np = [0u8; ZSA_NOTE_PLAINTEXT_SIZE];
+        np[0] = 0x03;
         np[1..12].copy_from_slice(note.recipient().diversifier().as_array());
         np[12..20].copy_from_slice(&note.value().to_bytes());
-        // todo: add note_type
         np[20..52].copy_from_slice(note.rseed().as_bytes());
-        if is_native {
-            np[52..].copy_from_slice(memo);
-        } else {
-            let zsa_type = note.note_type().to_bytes();
-            np[52..84].copy_from_slice(&zsa_type);
-            let short_memo = &memo[0..memo.len() - ZSA_TYPE_SIZE];
-            np[84..].copy_from_slice(short_memo);
-            // TODO: handle full-size memo or make short_memo explicit.
-        };
-        NotePlaintextBytes(np)
+        let zsa_type = note.note_type().to_bytes();
+        np[52..84].copy_from_slice(&zsa_type);
+        np[84..].copy_from_slice(memo);
+        NotePlaintextZSA(np)
     }
 
     fn derive_ock(
@@ -236,9 +267,9 @@ impl Domain for OrchardDomain {
     fn parse_note_plaintext_without_memo_ivk(
         &self,
         ivk: &Self::IncomingViewingKey,
-        plaintext: &[u8],
+        plaintext: &CompactNoteZSA,
     ) -> Option<(Self::Note, Self::Recipient)> {
-        orchard_parse_note_plaintext_without_memo(self, plaintext, |diversifier| {
+        orchard_parse_note_plaintext_without_memo(self, &plaintext.0, |diversifier| {
             Some(DiversifiedTransmissionKey::derive(ivk, diversifier))
         })
     }
@@ -248,7 +279,7 @@ impl Domain for OrchardDomain {
         pk_d: &Self::DiversifiedTransmissionKey,
         esk: &Self::EphemeralSecretKey,
         ephemeral_key: &EphemeralKeyBytes,
-        plaintext: &NotePlaintextBytes,
+        plaintext: &CompactNoteZSA,
     ) -> Option<(Self::Note, Self::Recipient)> {
         orchard_parse_note_plaintext_without_memo(self, &plaintext.0, |diversifier| {
             if esk
@@ -264,20 +295,9 @@ impl Domain for OrchardDomain {
         })
     }
 
-    fn extract_memo(&self, plaintext: &NotePlaintextBytes) -> Self::Memo {
-        let mut memo = [0; MEMO_SIZE];
-        match get_note_version(plaintext) {
-            0x02 => {
-                let full_memo = &plaintext.0[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE];
-                memo.copy_from_slice(full_memo);
-            }
-            0x03 => {
-                // ZSA note plaintext have a shorter memo.
-                let short_memo = &plaintext.0[COMPACT_ZSA_NOTE_SIZE..NOTE_PLAINTEXT_SIZE];
-                memo[..ZSA_MEMO_SIZE].copy_from_slice(short_memo);
-            }
-            _ => {}
-        };
+    fn extract_memo(&self, plaintext: &NotePlaintextZSA) -> Self::Memo {
+        let mut memo = [0u8; MEMO_SIZE];
+        memo.copy_from_slice(&plaintext.0[COMPACT_ZSA_NOTE_SIZE..]);
         memo
     }
 
@@ -288,6 +308,22 @@ impl Domain for OrchardDomain {
     fn extract_esk(out_plaintext: &OutPlaintextBytes) -> Option<Self::EphemeralSecretKey> {
         EphemeralSecretKey::from_bytes(out_plaintext.0[32..OUT_PLAINTEXT_SIZE].try_into().unwrap())
             .into()
+    }
+
+    fn separate_tag_from_ciphertext(enc_ciphertext: Self::EncNoteCiphertextBytes) -> (Self::NotePlaintextBytes, [u8; AEAD_TAG_SIZE]) {
+        let np = [0u8; ZSA_NOTE_PLAINTEXT_SIZE];
+        let tag = [0u8; AEAD_TAG_SIZE];
+
+        np.copy_from_slice(&enc_ciphertext.0[..ZSA_NOTE_PLAINTEXT_SIZE]);
+        tag.copy_from_slice(&enc_ciphertext.0[ZSA_NOTE_PLAINTEXT_SIZE..]);
+
+        (NotePlaintextZSA(np), tag)
+    }
+
+    fn convert_to_compact_plaintext_type(enc_ciphertext: Self::CompactEncNoteCiphertextBytes) -> Self::CompactNotePlaintextBytes {
+        let x = [0u8; COMPACT_ZSA_NOTE_SIZE];
+        x.copy_from_slice(&enc_ciphertext.0);
+        CompactNoteZSA(x)
     }
 }
 
@@ -306,14 +342,10 @@ impl BatchDomain for OrchardDomain {
     }
 }
 
-fn get_note_version(plaintext: &NotePlaintextBytes) -> u8 {
-    plaintext.0[0]
-}
-
 /// Implementation of in-band secret distribution for Orchard bundles.
 pub type OrchardNoteEncryption = zcash_note_encryption::NoteEncryption<OrchardDomain>;
 
-impl<T> ShieldedOutput<OrchardDomain, ENC_CIPHERTEXT_SIZE> for Action<T> {
+impl<T> ShieldedOutput<OrchardDomain> for Action<T> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.encrypted_note().epk_bytes)
     }
@@ -322,7 +354,7 @@ impl<T> ShieldedOutput<OrchardDomain, ENC_CIPHERTEXT_SIZE> for Action<T> {
         self.cmx().to_bytes()
     }
 
-    fn enc_ciphertext(&self) -> &[u8; ENC_CIPHERTEXT_SIZE] {
+    fn enc_ciphertext(&self) -> NoteCiphertext<OrchardDomain> {
         &self.encrypted_note().enc_ciphertext
     }
 }
@@ -354,7 +386,7 @@ impl<T> From<&Action<T>> for CompactAction {
     }
 }
 
-impl ShieldedOutput<OrchardDomain, COMPACT_NOTE_SIZE> for CompactAction {
+impl ShieldedOutput<OrchardDomain> for CompactAction {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.ephemeral_key.0)
     }
