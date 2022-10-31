@@ -354,9 +354,12 @@ pub fn verify_issue_bundle(
         return Err(IssueBundleInvalidSignature(e));
     };
 
-    let newly_finalized = bundle.actions().iter().try_fold(
-        &mut HashSet::<AssetId>::new(),
-        |newly_finalized, action| {
+    let s = &mut HashSet::<AssetId>::new();
+
+    let newly_finalized = bundle
+        .actions()
+        .iter()
+        .try_fold(s, |newly_finalized, action| {
             if !is_asset_desc_of_valid_size(action.asset_desc()) {
                 return Err(WrongAssetDescSize);
             }
@@ -376,8 +379,7 @@ pub fn verify_issue_bundle(
 
             // Proceed with the new finalization set.
             Ok(newly_finalized)
-        },
-    )?;
+        })?;
 
     finalized.extend(newly_finalized.iter());
     Ok(())
