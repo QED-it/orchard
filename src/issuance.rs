@@ -344,23 +344,19 @@ impl IssueBundle<Signed> {
 ///     * Asset description size is collect.
 ///     * `AssetId` for the `IssueAction` has not been previously finalized.
 /// * For each `Note` inside an `IssueAction`:
-///     * All notes have the same, correct `NoteType`.
+///     * All notes have the same, correct `AssetId`.
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
-    finalized: &mut HashSet<AssetId>, // The finalization set.
+    finalized: &mut HashSet<AssetId>,
 ) -> Result<(), Error> {
     if let Err(e) = bundle.ik.verify(&sighash, &bundle.authorization.signature) {
         return Err(IssueBundleInvalidSignature(e));
     };
 
-    let s = &mut HashSet::<AssetId>::new();
-
-    // An IssueAction could have just one properly derived AssetId.
-    let newly_finalized = bundle
-        .actions()
-        .iter()
-        .try_fold(s, |newly_finalized, action| {
+    let newly_finalized = bundle.actions().iter().try_fold(
+        &mut HashSet::<AssetId>::new(),
+        |newly_finalized, action| {
             if !is_asset_desc_of_valid_size(action.asset_desc()) {
                 return Err(WrongAssetDescSize);
             }
@@ -380,7 +376,8 @@ pub fn verify_issue_bundle(
 
             // Proceed with the new finalization set.
             Ok(newly_finalized)
-        })?;
+        },
+    )?;
 
     finalized.extend(newly_finalized.iter());
     Ok(())
