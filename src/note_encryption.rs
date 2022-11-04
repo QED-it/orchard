@@ -124,11 +124,10 @@ pub enum NotePlaintextZSA {
 
 impl AsMut<[u8]> for NotePlaintextZSA {
     fn as_mut(&mut self) -> &mut [u8] {
-        let ptr: &mut [u8];
-        match self {
-            NotePlaintextZSA::V2OLD(x) => ptr = x,
-            NotePlaintextZSA::V3ZSA(x) => ptr = x,
-        }
+        let ptr: &mut [u8] = match self {
+            NotePlaintextZSA::V2OLD(ref mut x) => x,
+            NotePlaintextZSA::V3ZSA(ref mut x) => x,
+        };
         ptr
     }
 }
@@ -183,11 +182,10 @@ pub enum CompactNoteZSA {
 
 impl AsMut<[u8]> for CompactNoteZSA {
     fn as_mut(&mut self) -> &mut [u8] {
-        let ptr: &mut [u8];
-        match self {
-            CompactNoteZSA::V2OLD(x) => ptr = x,
-            CompactNoteZSA::V3ZSA(x) => ptr = x,
-        }
+        let ptr: &mut [u8] = match self {
+            CompactNoteZSA::V2OLD(ref mut x) => x,
+            CompactNoteZSA::V3ZSA(ref mut x) => x,
+        };
         ptr
     }
 }
@@ -333,11 +331,10 @@ impl Domain for OrchardDomain {
         ivk: &Self::IncomingViewingKey,
         plaintext: &CompactNoteZSA,
     ) -> Option<(Self::Note, Self::Recipient)> {
-        let ptr: &[u8];
-        match plaintext {
-            CompactNoteZSA::V2OLD(x) => ptr = x,
-            CompactNoteZSA::V3ZSA(x) => ptr = x,
-        }
+        let ptr: &[u8] = match plaintext {
+            CompactNoteZSA::V2OLD(ref x) => x,
+            CompactNoteZSA::V3ZSA(ref x) => x,
+        };
         orchard_parse_note_plaintext_without_memo(self, ptr, |diversifier| {
             Some(DiversifiedTransmissionKey::derive(ivk, diversifier))
         })
@@ -350,11 +347,10 @@ impl Domain for OrchardDomain {
         ephemeral_key: &EphemeralKeyBytes,
         plaintext: &CompactNoteZSA,
     ) -> Option<(Self::Note, Self::Recipient)> {
-        let ptr: &[u8];
-        match plaintext {
-            CompactNoteZSA::V2OLD(x) => ptr = x,
-            CompactNoteZSA::V3ZSA(x) => ptr = x,
-        }
+        let ptr: &[u8] = match plaintext {
+            CompactNoteZSA::V2OLD(ref x) => x,
+            CompactNoteZSA::V3ZSA(ref x) => x,
+        };
         orchard_parse_note_plaintext_without_memo(self, ptr, |diversifier| {
             if esk
                 .derive_public(diversify_hash(diversifier.as_array()))
@@ -582,11 +578,12 @@ mod tests {
             testing::arb_note, ExtractedNoteCommitment, Nullifier, RandomSeed,
             TransmittedNoteCiphertext,
         },
-        note_encryption::get_note_version,
+        note_encryption::{get_note_version, NotePlaintextZSA},
         primitives::redpallas,
         value::{NoteValue, ValueCommitment},
         Address, Note,
     };
+    use crate::note_encryption::EncNoteCiphertextZSA;
 
     use super::orchard_parse_note_plaintext_without_memo;
 
@@ -605,7 +602,12 @@ mod tests {
         let parsed_version = get_note_version(&plaintext).unwrap();
         let parsed_memo = domain.extract_memo(&plaintext);
 
-        let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &plaintext.0,
+        let ptr: &[u8] = match plaintext {
+            NotePlaintextZSA::V2OLD(ref x) => x,
+            NotePlaintextZSA::V3ZSA(ref x) => x,
+        };
+
+        let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, ptr,
             |diversifier| {
                 assert_eq!(diversifier, &note.recipient().diversifier());
                 Some(*note.recipient().pk_d())
@@ -615,16 +617,8 @@ mod tests {
         // Check.
         assert_eq!(parsed_note, note);
         assert_eq!(parsed_recipient, note.recipient());
-
-        if parsed_note.note_type().is_native().into() {
-            assert_eq!(parsed_version, 0x02);
-            assert_eq!(&parsed_memo, memo);
-        } else {
-            assert_eq!(parsed_version, 0x03);
-            let mut short_memo = *memo;
-            short_memo[512 - 32..].copy_from_slice(&[0; 32]);
-            assert_eq!(parsed_memo, short_memo);
-        }
+        assert_eq!(&parsed_memo, memo);
+        assert_eq!(parsed_version, 0x03); // Since all new notes should be encoded as V3 notes.
     }
     }
 
@@ -686,7 +680,7 @@ mod tests {
                 cmx,
                 TransmittedNoteCiphertext {
                     epk_bytes: ephemeral_key.0,
-                    enc_ciphertext: tv.c_enc,
+                    enc_ciphertext: EncNoteCiphertextZSA::V2OLD(tv.c_enc), // TODO: VA: Would need a mix of V2 and V3 eventually
                     out_ciphertext: tv.c_out,
                 },
                 cv_net.clone(),
@@ -714,8 +708,7 @@ mod tests {
                     assert_eq!(decrypted_note, note);
                     assert_eq!(decrypted_to, recipient);
                 }
-                None => assert!(tv.note_type.is_some(), "Compact note decryption failed"),
-                // Ignore that ZSA notes are not detected in compact decryption.
+                None => panic!("Compact note decryption failed"),
             }
 
             match try_output_recovery_with_ovk(&domain, &ovk, &action, &cv_net, &tv.c_out) {
