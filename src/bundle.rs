@@ -144,6 +144,8 @@ pub struct Bundle<T: Authorization, V> {
     anchor: Anchor,
     /// The authorization for this bundle.
     authorization: T,
+    /// Value balance per asset burnt
+    assets_burnt: Vec<(AssetId, V)>
 }
 
 impl<T: Authorization, V: fmt::Debug> fmt::Debug for Bundle<T, V> {
@@ -174,6 +176,7 @@ impl<T: Authorization, V> Bundle<T, V> {
         value_balance: V,
         anchor: Anchor,
         authorization: T,
+        assets_burnt: Vec<(AssetId, V)>
     ) -> Self {
         Bundle {
             actions,
@@ -181,6 +184,7 @@ impl<T: Authorization, V> Bundle<T, V> {
             value_balance,
             anchor,
             authorization,
+            assets_burnt,
         }
     }
 
@@ -213,20 +217,22 @@ impl<T: Authorization, V> Bundle<T, V> {
         &self.authorization
     }
 
-    /// Construct a new bundle by applying a transformation that might fail
-    /// to the value balance.
-    pub fn try_map_value_balance<V0, E, F: FnOnce(V) -> Result<V0, E>>(
-        self,
-        f: F,
-    ) -> Result<Bundle<T, V0>, E> {
-        Ok(Bundle {
-            actions: self.actions,
-            flags: self.flags,
-            value_balance: f(self.value_balance)?,
-            anchor: self.anchor,
-            authorization: self.authorization,
-        })
-    }
+    // TODO
+    // /// Construct a new bundle by applying a transformation that might fail
+    // /// to the value balance.
+    // pub fn try_map_value_balance<V0, E, F: FnOnce(V) -> Result<V0, E>>(
+    //     self,
+    //     f: F,
+    // ) -> Result<Bundle<T, V0>, E> {
+    //     Ok(Bundle {
+    //         actions: self.actions,
+    //         flags: self.flags,
+    //         value_balance: f(self.value_balance)?,
+    //         anchor: self.anchor,
+    //         authorization: self.authorization,
+    //         assets_burnt: self.assets_burnt.iter().flat_map(| (assetId, value) | (assetId, f(value))?).into(),
+    //     })
+    // }
 
     /// Transitions this bundle from one authorization state to another.
     pub fn map_authorization<R, U: Authorization>(
@@ -244,6 +250,7 @@ impl<T: Authorization, V> Bundle<T, V> {
             value_balance: self.value_balance,
             anchor: self.anchor,
             authorization: step(context, authorization),
+            assets_burnt: self.assets_burnt,
         }
     }
 
@@ -267,6 +274,7 @@ impl<T: Authorization, V> Bundle<T, V> {
             value_balance: self.value_balance,
             anchor: self.anchor,
             authorization: step(context, authorization)?,
+            assets_burnt: self.assets_burnt,
         })
     }
 
@@ -498,6 +506,8 @@ pub mod testing {
     use super::{Action, Authorization, Authorized, Bundle, Flags};
 
     pub use crate::action::testing::{arb_action, arb_unauthorized_action};
+    use crate::note::asset_id::testing::zsa_asset_id;
+    use crate::note::AssetId;
 
     /// Marker for an unauthorized bundle with no proofs or signatures.
     #[derive(Debug)]
@@ -558,6 +568,13 @@ pub mod testing {
     }
 
     prop_compose! {
+        /// Create an arbitrary vector of burnt assets.
+        pub fn arb_asset_burnt()(assetId in zsa_asset_id(), value in any::<i64>()) -> (AssetId, ValueSum) {
+            (assetId, ValueSum::from_raw(value))
+        }
+    }
+
+    prop_compose! {
         /// Create an arbitrary set of flags.
         pub fn arb_flags()(spends_enabled in prop::bool::ANY, outputs_enabled in prop::bool::ANY) -> Flags {
             Flags::from_parts(spends_enabled, outputs_enabled)
@@ -584,7 +601,8 @@ pub mod testing {
         (
             acts in vec(arb_unauthorized_action_n(n_actions, flags), n_actions),
             anchor in arb_base().prop_map(Anchor::from),
-            flags in Just(flags)
+            flags in Just(flags),
+            assets_burnt in vec(arb_asset_burnt(), (1usize..10))
         ) -> Bundle<Unauthorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
 
@@ -593,7 +611,8 @@ pub mod testing {
                 flags,
                 balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
                 anchor,
-                Unauthorized
+                Unauthorized,
+                assets_burnt,
             )
         }
     }
@@ -613,7 +632,8 @@ pub mod testing {
             rng_seed in prop::array::uniform32(prop::num::u8::ANY),
             fake_proof in vec(prop::num::u8::ANY, 1973),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
-            flags in Just(flags)
+            flags in Just(flags),
+            assets_burnt in vec(arb_asset_burnt(), (1usize..10))
         ) -> Bundle<Authorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
             let rng = StdRng::from_seed(rng_seed);
@@ -626,7 +646,8 @@ pub mod testing {
                 Authorized {
                     proof: Proof::new(fake_proof),
                     binding_signature: sk.sign(rng, &fake_sighash),
-                }
+                },
+                assets_burnt
             )
         }
     }
