@@ -145,7 +145,7 @@ pub struct Bundle<T: Authorization, V> {
     /// The authorization for this bundle.
     authorization: T,
     /// Value balance per asset burnt
-    assets_burnt: Vec<(AssetId, V)>
+    assets_burnt: Vec<(AssetId, V)>,
 }
 
 impl<T: Authorization, V: fmt::Debug> fmt::Debug for Bundle<T, V> {
@@ -176,7 +176,7 @@ impl<T: Authorization, V> Bundle<T, V> {
         value_balance: V,
         anchor: Anchor,
         authorization: T,
-        assets_burnt: Vec<(AssetId, V)>
+        assets_burnt: Vec<(AssetId, V)>,
     ) -> Self {
         Bundle {
             actions,

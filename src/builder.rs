@@ -260,7 +260,7 @@ pub struct Builder {
     recipients: Vec<RecipientInfo>,
     flags: Flags,
     anchor: Anchor,
-    assets_burnt: Vec<(AssetId, i64)>
+    assets_burnt: Vec<(AssetId, i64)>,
 }
 
 impl Builder {
@@ -271,7 +271,7 @@ impl Builder {
             recipients: vec![],
             flags,
             anchor,
-            assets_burnt: vec![]
+            assets_burnt: vec![],
         }
     }
 
@@ -347,13 +347,9 @@ impl Builder {
     }
 
     /// Add an instruction to burn given amount os specific ZSA
-    pub fn add_burnt_asset(
-        &mut self,
-        asset: AssetId,
-        value: i64,
-    ) -> Result<(), &'static str> {
+    pub fn add_burnt_asset(&mut self, asset: AssetId, value: i64) -> Result<(), &'static str> {
         if value <= 0 {
-            return Err("Burning is only possible for positive amount of asset")
+            return Err("Burning is only possible for positive amount of asset");
         }
         self.assets_burnt.push((asset, value));
         Ok(())
@@ -445,12 +441,32 @@ impl Builder {
                 ValueCommitTrapdoor::zero(),
                 AssetId::native(),
             )
-            - self.assets_burnt.iter().map(| (asset, value) | ValueCommitment::derive(ValueSum::from_raw(*value), ValueCommitTrapdoor::zero(), *asset)).sum::<ValueCommitment>()
-        )
+            - self
+                .assets_burnt
+                .iter()
+                .map(|(asset, value)| {
+                    ValueCommitment::derive(
+                        ValueSum::from_raw(*value),
+                        ValueCommitTrapdoor::zero(),
+                        *asset,
+                    )
+                })
+                .sum::<ValueCommitment>())
         .into_bvk();
         assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
 
-        let burnt: Vec<(AssetId, V)> = self.assets_burnt.iter().map(| (asset, value) | (*asset, V::try_from(*value).map_err(|_| Error::ValueSum(value::OverflowError)).unwrap())).collect();
+        let burnt: Vec<(AssetId, V)> = self
+            .assets_burnt
+            .iter()
+            .map(|(asset, value)| {
+                (
+                    *asset,
+                    V::try_from(*value)
+                        .map_err(|_| Error::ValueSum(value::OverflowError))
+                        .unwrap(),
+                )
+            })
+            .collect();
 
         Ok(Bundle::from_parts(
             NonEmpty::from_vec(actions).unwrap(),
