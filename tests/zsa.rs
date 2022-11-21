@@ -445,4 +445,25 @@ fn zsa_issue_and_transfer() {
         );
     });
     assert!(result.is_err());
+
+    // 9. Burn ZSA assets
+    let value_to_burn = 3;
+    let value_to_transfer = zsa_spend_1.note.value().inner() - value_to_burn;
+
+    build_and_verify_bundle(
+        vec![&zsa_spend_1],
+        vec![
+            TestOutputInfo {
+                value: NoteValue::from_raw(value_to_transfer),
+                asset: zsa_spend_1.note.asset(),
+            },
+        ],
+        anchor,
+        2,
+        &keys,
+    );
+
+    // 10. Burn more than provided - should fail TODO
+
+    // 11. Burn native assets? TODO
 }
