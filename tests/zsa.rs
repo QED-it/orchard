@@ -231,6 +231,7 @@ struct TestOutputInfo {
 fn build_and_verify_bundle(
     spends: Vec<&TestSpendInfo>,
     outputs: Vec<TestOutputInfo>,
+    assets_to_burn: Vec<(AssetId, i64)>,
     anchor: Anchor,
     expected_num_actions: usize,
     keys: &Keychain,
@@ -251,6 +252,9 @@ fn build_and_verify_bundle(
                 Ok(())
             )
         });
+        assets_to_burn
+            .iter()
+            .for_each(|(asset, value)| assert_eq!(builder.add_burnt_asset(*asset, *value), Ok(())));
         build_and_sign_bundle(builder, rng, keys.pk(), keys.sk())
     };
 
@@ -291,6 +295,7 @@ fn zsa_issue_and_transfer() {
             value: zsa_spend_1.note.value(),
             asset: zsa_spend_1.note.asset(),
         }],
+        vec![],
         anchor,
         2,
         &keys,
@@ -310,6 +315,7 @@ fn zsa_issue_and_transfer() {
                 asset: zsa_spend_1.note.asset(),
             },
         ],
+        vec![],
         anchor,
         2,
         &keys,
@@ -324,6 +330,7 @@ fn zsa_issue_and_transfer() {
             ),
             asset: zsa_spend_1.note.asset(),
         }],
+        vec![],
         anchor,
         2,
         &keys,
@@ -342,6 +349,7 @@ fn zsa_issue_and_transfer() {
                 asset: zsa_spend_2.note.asset(),
             },
         ],
+        vec![],
         anchor,
         2,
         &keys,
@@ -360,6 +368,7 @@ fn zsa_issue_and_transfer() {
                 asset: AssetId::native(),
             },
         ],
+        vec![],
         anchor,
         4,
         &keys,
@@ -390,6 +399,7 @@ fn zsa_issue_and_transfer() {
                 asset: AssetId::native(),
             },
         ],
+        vec![],
         native_anchor,
         4,
         &keys,
@@ -420,6 +430,7 @@ fn zsa_issue_and_transfer() {
                 asset: zsa_spend_t7_2.note.asset(),
             },
         ],
+        vec![],
         anchor_t7,
         4,
         &keys,
@@ -439,6 +450,7 @@ fn zsa_issue_and_transfer() {
                     asset: zsa_spend_t7_2.note.asset(),
                 },
             ],
+            vec![],
             anchor_t7,
             4,
             &keys,
@@ -447,23 +459,31 @@ fn zsa_issue_and_transfer() {
     assert!(result.is_err());
 
     // 9. Burn ZSA assets
-    let value_to_burn = 3;
-    let value_to_transfer = zsa_spend_1.note.value().inner() - value_to_burn;
-
     build_and_verify_bundle(
         vec![&zsa_spend_1],
-        vec![
-            TestOutputInfo {
-                value: NoteValue::from_raw(value_to_transfer),
-                asset: zsa_spend_1.note.asset(),
-            },
-        ],
+        vec![],
+        vec![(
+            zsa_spend_1.note.asset(),
+            zsa_spend_1.note.value().inner() as i64,
+        )],
         anchor,
         2,
         &keys,
     );
 
-    // 10. Burn more than provided - should fail TODO
+    // 10. Burn a part of ZSA assets
+    let value_to_burn: i64 = 3;
+    let value_to_transfer: u64 = zsa_spend_1.note.value().inner() - value_to_burn as u64;
 
-    // 11. Burn native assets? TODO
+    build_and_verify_bundle(
+        vec![&zsa_spend_1],
+        vec![TestOutputInfo {
+            value: NoteValue::from_raw(value_to_transfer),
+            asset: zsa_spend_1.note.asset(),
+        }],
+        vec![(zsa_spend_1.note.asset(), value_to_burn)],
+        anchor,
+        2,
+        &keys,
+    );
 }

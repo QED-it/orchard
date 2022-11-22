@@ -230,7 +230,7 @@ impl<T: Authorization, V> Bundle<T, V> {
     //         value_balance: f(self.value_balance)?,
     //         anchor: self.anchor,
     //         authorization: self.authorization,
-    //         assets_burnt: self.assets_burnt.iter().flat_map(| (assetId, value) | (assetId, f(value))?).into(),
+    //         assets_burnt: self.assets_burnt.iter().map(| (assetId, value) | (*assetId, f(*value.clone())?)).collect(),
     //     })
     // }
 
@@ -389,7 +389,18 @@ impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
                 ValueSum::from_raw(self.value_balance.into()),
                 ValueCommitTrapdoor::zero(),
                 AssetId::native(),
-            ))
+            )
+            - self
+                .assets_burnt
+                .iter()
+                .map(|(asset, value)| {
+                    ValueCommitment::derive(
+                        ValueSum::from_raw(V::into(*value)),
+                        ValueCommitTrapdoor::zero(),
+                        *asset,
+                    )
+                })
+                .sum::<ValueCommitment>())
         .into_bvk()
     }
 }
@@ -569,8 +580,8 @@ pub mod testing {
 
     prop_compose! {
         /// Create an arbitrary vector of burnt assets.
-        pub fn arb_asset_burnt()(assetId in zsa_asset_id(), value in any::<i64>()) -> (AssetId, ValueSum) {
-            (assetId, ValueSum::from_raw(value))
+        pub fn arb_asset_burnt()(asset_id in zsa_asset_id(), value in any::<i64>()) -> (AssetId, ValueSum) {
+            (asset_id, ValueSum::from_raw(value))
         }
     }
 
@@ -602,7 +613,7 @@ pub mod testing {
             acts in vec(arb_unauthorized_action_n(n_actions, flags), n_actions),
             anchor in arb_base().prop_map(Anchor::from),
             flags in Just(flags),
-            assets_burnt in vec(arb_asset_burnt(), (1usize..10))
+            assets_burnt in vec(arb_asset_burnt(), 1usize..10)
         ) -> Bundle<Unauthorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
 
@@ -633,7 +644,7 @@ pub mod testing {
             fake_proof in vec(prop::num::u8::ANY, 1973),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
             flags in Just(flags),
-            assets_burnt in vec(arb_asset_burnt(), (1usize..10))
+            assets_burnt in vec(arb_asset_burnt(), 1usize..10)
         ) -> Bundle<Authorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
             let rng = StdRng::from_seed(rng_seed);

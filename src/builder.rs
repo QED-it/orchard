@@ -412,14 +412,15 @@ impl Builder {
         let anchor = self.anchor;
 
         // Determine the value balance for this bundle, ensuring it is valid.
-        let value_balance = pre_actions
+        let native_value_balance = pre_actions
             .iter()
+            .filter(|action| action.spend.note.asset() == AssetId::native())
             .fold(Some(ValueSum::zero()), |acc, action| {
                 acc? + action.value_sum()
             })
             .ok_or(OverflowError)?;
 
-        let result_value_balance: V = i64::try_from(value_balance)
+        let result_native_value_balance: V = i64::try_from(native_value_balance)
             .map_err(Error::ValueSum)
             .and_then(|i| V::try_from(i).map_err(|_| Error::ValueSum(value::OverflowError)))?;
 
@@ -437,7 +438,7 @@ impl Builder {
         // Verify that bsk and bvk are consistent.
         let bvk = (actions.iter().map(|a| a.cv_net()).sum::<ValueCommitment>()
             - ValueCommitment::derive(
-                value_balance,
+                native_value_balance,
                 ValueCommitTrapdoor::zero(),
                 AssetId::native(),
             )
@@ -471,7 +472,7 @@ impl Builder {
         Ok(Bundle::from_parts(
             NonEmpty::from_vec(actions).unwrap(),
             flags,
-            result_value_balance,
+            result_native_value_balance,
             anchor,
             InProgress {
                 proof: Unproven { circuits },
