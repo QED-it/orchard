@@ -145,7 +145,7 @@ pub struct Bundle<T: Authorization, V> {
     /// The authorization for this bundle.
     authorization: T,
     /// Value balance per asset burnt
-    assets_burnt: Vec<(AssetId, V)>,
+    assets_burnt: Vec<(AssetId, i64)>,
 }
 
 impl<T: Authorization, V: fmt::Debug> fmt::Debug for Bundle<T, V> {
@@ -176,7 +176,7 @@ impl<T: Authorization, V> Bundle<T, V> {
         value_balance: V,
         anchor: Anchor,
         authorization: T,
-        assets_burnt: Vec<(AssetId, V)>,
+        assets_burnt: Vec<(AssetId, i64)>,
     ) -> Self {
         Bundle {
             actions,
@@ -217,22 +217,21 @@ impl<T: Authorization, V> Bundle<T, V> {
         &self.authorization
     }
 
-    // TODO
-    // /// Construct a new bundle by applying a transformation that might fail
-    // /// to the value balance.
-    // pub fn try_map_value_balance<V0, E, F: FnOnce(V) -> Result<V0, E>>(
-    //     self,
-    //     f: F,
-    // ) -> Result<Bundle<T, V0>, E> {
-    //     Ok(Bundle {
-    //         actions: self.actions,
-    //         flags: self.flags,
-    //         value_balance: f(self.value_balance)?,
-    //         anchor: self.anchor,
-    //         authorization: self.authorization,
-    //         assets_burnt: self.assets_burnt.iter().map(| (assetId, value) | (*assetId, f(*value.clone())?)).collect(),
-    //     })
-    // }
+    /// Construct a new bundle by applying a transformation that might fail
+    /// to the value balance.
+    pub fn try_map_value_balance<V0, E, F: FnOnce(V) -> Result<V0, E>>(
+        self,
+        f: F,
+    ) -> Result<Bundle<T, V0>, E> {
+        Ok(Bundle {
+            actions: self.actions,
+            flags: self.flags,
+            value_balance: f(self.value_balance)?,
+            anchor: self.anchor,
+            authorization: self.authorization,
+            assets_burnt: self.assets_burnt,
+        })
+    }
 
     /// Transitions this bundle from one authorization state to another.
     pub fn map_authorization<R, U: Authorization>(
@@ -395,7 +394,7 @@ impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
                 .iter()
                 .map(|(asset, value)| {
                     ValueCommitment::derive(
-                        ValueSum::from_raw(V::into(*value)),
+                        ValueSum::from_raw(*value),
                         ValueCommitTrapdoor::zero(),
                         *asset,
                     )
@@ -580,8 +579,8 @@ pub mod testing {
 
     prop_compose! {
         /// Create an arbitrary vector of burnt assets.
-        pub fn arb_asset_burnt()(asset_id in zsa_asset_id(), value in any::<i64>()) -> (AssetId, ValueSum) {
-            (asset_id, ValueSum::from_raw(value))
+        pub fn arb_asset_burnt()(asset_id in zsa_asset_id(), value in any::<i64>()) -> (AssetId, i64) {
+            (asset_id, value)
         }
     }
 

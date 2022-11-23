@@ -459,19 +459,6 @@ impl Builder {
         .into_bvk();
         assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
 
-        let burnt: Vec<(AssetId, V)> = self
-            .assets_burnt
-            .iter()
-            .map(|(asset, value)| {
-                (
-                    *asset,
-                    V::try_from(*value)
-                        .map_err(|_| Error::ValueSum(value::OverflowError))
-                        .unwrap(),
-                )
-            })
-            .collect();
-
         Ok(Bundle::from_parts(
             NonEmpty::from_vec(actions).unwrap(),
             flags,
@@ -481,7 +468,7 @@ impl Builder {
                 proof: Unproven { circuits },
                 sigs: Unauthorized { bsk },
             },
-            burnt,
+            self.assets_burnt,
         ))
     }
 }
