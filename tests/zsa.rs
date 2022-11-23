@@ -286,6 +286,18 @@ fn zsa_issue_and_transfer() {
         merkle_path: merkle_path2,
     };
 
+    let native_note = create_native_note(&keys);
+    let (native_merkle_path1, native_merkle_path2, native_anchor) =
+        build_merkle_path_with_two_leaves(&native_note, &zsa_note1);
+    let native_spend: TestSpendInfo = TestSpendInfo {
+        note: native_note,
+        merkle_path: native_merkle_path1,
+    };
+    let zsa_spend_with_native: TestSpendInfo = TestSpendInfo {
+        note: zsa_note1,
+        merkle_path: native_merkle_path2,
+    };
+
     // --------------------------- Tests -----------------------------------------
 
     // 1. Spend single ZSA note
@@ -375,18 +387,6 @@ fn zsa_issue_and_transfer() {
     );
 
     // 6. Spend single ZSA note, mixed with native note (shielded to shielded)
-    let native_note = create_native_note(&keys);
-    let (native_merkle_path1, native_merkle_path2, native_anchor) =
-        build_merkle_path_with_two_leaves(&native_note, &zsa_note1);
-    let native_spend: TestSpendInfo = TestSpendInfo {
-        note: native_note,
-        merkle_path: native_merkle_path1,
-    };
-    let zsa_spend_with_native: TestSpendInfo = TestSpendInfo {
-        note: zsa_note1,
-        merkle_path: native_merkle_path2,
-    };
-
     build_and_verify_bundle(
         vec![&zsa_spend_with_native, &native_spend],
         vec![
@@ -486,4 +486,17 @@ fn zsa_issue_and_transfer() {
         2,
         &keys,
     );
+
+    // 11. Try to burn native asset - should fail
+    let result = std::panic::catch_unwind(|| {
+        build_and_verify_bundle(
+            vec![&native_spend],
+            vec![],
+            vec![(AssetId::native(), native_spend.note.value().inner() as i64)],
+            native_anchor,
+            2,
+            &keys,
+        );
+    });
+    assert!(result.is_err());
 }

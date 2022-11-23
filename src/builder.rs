@@ -351,6 +351,9 @@ impl Builder {
         if value <= 0 {
             return Err("Burning is only possible for positive amount of asset");
         }
+        if asset == AssetId::native() {
+            return Err("Burning is only possible for non-native assets");
+        }
         self.assets_burnt.push((asset, value));
         Ok(())
     }
