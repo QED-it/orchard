@@ -140,12 +140,12 @@ pub struct Bundle<T: Authorization, V> {
     ///
     /// This is the sum of Orchard spends minus the sum of Orchard outputs.
     value_balance: V,
+    /// Assets intended for burning
+    burn: Vec<(AssetId, V)>,
     /// The root of the Orchard commitment tree that this bundle commits to.
     anchor: Anchor,
     /// The authorization for this bundle.
     authorization: T,
-    /// Value balance per asset burnt
-    assets_burnt: Vec<(AssetId, i64)>,
 }
 
 impl<T: Authorization, V: fmt::Debug> fmt::Debug for Bundle<T, V> {
@@ -174,17 +174,17 @@ impl<T: Authorization, V> Bundle<T, V> {
         actions: NonEmpty<Action<T::SpendAuth>>,
         flags: Flags,
         value_balance: V,
+        burn: Vec<(AssetId, V)>,
         anchor: Anchor,
         authorization: T,
-        assets_burnt: Vec<(AssetId, i64)>,
     ) -> Self {
         Bundle {
             actions,
             flags,
             value_balance,
+            burn,
             anchor,
             authorization,
-            assets_burnt,
         }
     }
 
@@ -227,9 +227,9 @@ impl<T: Authorization, V> Bundle<T, V> {
             actions: self.actions,
             flags: self.flags,
             value_balance: f(self.value_balance)?,
+            burn: self.burn,
             anchor: self.anchor,
             authorization: self.authorization,
-            assets_burnt: self.assets_burnt,
         })
     }
 
@@ -249,7 +249,7 @@ impl<T: Authorization, V> Bundle<T, V> {
             value_balance: self.value_balance,
             anchor: self.anchor,
             authorization: step(context, authorization),
-            assets_burnt: self.assets_burnt,
+            burn: self.burn,
         }
     }
 
@@ -273,7 +273,7 @@ impl<T: Authorization, V> Bundle<T, V> {
             value_balance: self.value_balance,
             anchor: self.anchor,
             authorization: step(context, authorization)?,
-            assets_burnt: self.assets_burnt,
+            burn: self.burn,
         })
     }
 
@@ -390,7 +390,7 @@ impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
                 AssetId::native(),
             )
             - self
-                .assets_burnt
+                .burn
                 .iter()
                 .map(|(asset, value)| {
                     ValueCommitment::derive(
@@ -518,6 +518,7 @@ pub mod testing {
     pub use crate::action::testing::{arb_action, arb_unauthorized_action};
     use crate::note::asset_id::testing::zsa_asset_id;
     use crate::note::AssetId;
+    use crate::value::testing::arb_value_sum;
 
     /// Marker for an unauthorized bundle with no proofs or signatures.
     #[derive(Debug)]
@@ -579,7 +580,7 @@ pub mod testing {
 
     prop_compose! {
         /// Create an arbitrary vector of burnt assets.
-        pub fn arb_asset_burnt()(asset_id in zsa_asset_id(), value in any::<i64>()) -> (AssetId, i64) {
+        pub fn arb_asset_burnt()(asset_id in zsa_asset_id(), value in arb_value_sum()) -> (AssetId, ValueSum) {
             (asset_id, value)
         }
     }
@@ -612,7 +613,7 @@ pub mod testing {
             acts in vec(arb_unauthorized_action_n(n_actions, flags), n_actions),
             anchor in arb_base().prop_map(Anchor::from),
             flags in Just(flags),
-            assets_burnt in vec(arb_asset_burnt(), 1usize..10)
+            burn in vec(arb_asset_burnt(), 1usize..10)
         ) -> Bundle<Unauthorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
 
@@ -620,9 +621,9 @@ pub mod testing {
                 NonEmpty::from_vec(actions).unwrap(),
                 flags,
                 balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
+                burn,
                 anchor,
                 Unauthorized,
-                assets_burnt,
             )
         }
     }
@@ -643,7 +644,7 @@ pub mod testing {
             fake_proof in vec(prop::num::u8::ANY, 1973),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
             flags in Just(flags),
-            assets_burnt in vec(arb_asset_burnt(), 1usize..10)
+            burn in vec(arb_asset_burnt(), 1usize..10)
         ) -> Bundle<Authorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
             let rng = StdRng::from_seed(rng_seed);
@@ -652,12 +653,12 @@ pub mod testing {
                 NonEmpty::from_vec(actions).unwrap(),
                 flags,
                 balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
+                burn,
                 anchor,
                 Authorized {
                     proof: Proof::new(fake_proof),
                     binding_signature: sk.sign(rng, &fake_sighash),
                 },
-                assets_burnt
             )
         }
     }

@@ -20,6 +20,7 @@ use orchard::{
 use rand::rngs::OsRng;
 use std::collections::HashSet;
 use zcash_note_encryption::try_note_decryption;
+use orchard::value::ValueSum;
 
 #[derive(Debug)]
 struct Keychain {
@@ -231,36 +232,31 @@ struct TestOutputInfo {
 fn build_and_verify_bundle(
     spends: Vec<&TestSpendInfo>,
     outputs: Vec<TestOutputInfo>,
-    assets_to_burn: Vec<(AssetId, i64)>,
+    assets_to_burn: Vec<(AssetId, NoteValue)>,
     anchor: Anchor,
     expected_num_actions: usize,
     keys: &Keychain,
-) {
+) -> Result<(), &'static str> {
     let rng = OsRng;
     let shielded_bundle: Bundle<_, i64> = {
         let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
 
         spends.iter().for_each(|spend| {
-            assert_eq!(
-                builder.add_spend(keys.fvk().clone(), spend.note, spend.merkle_path().clone()),
-                Ok(())
-            );
+                builder.add_spend(keys.fvk().clone(), spend.note, spend.merkle_path().clone())?
         });
         outputs.iter().for_each(|output| {
-            assert_eq!(
-                builder.add_recipient(None, keys.recipient, output.value, output.asset, None),
-                Ok(())
-            )
+                builder.add_recipient(None, keys.recipient, output.value, output.asset, None)?
         });
         assets_to_burn
-            .iter()
-            .for_each(|(asset, value)| assert_eq!(builder.add_burnt_asset(*asset, *value), Ok(())));
+            .into_iter()
+            .for_each(|(asset, value)| builder.add_burn(asset, value)?);
         build_and_sign_bundle(builder, rng, keys.pk(), keys.sk())
     };
 
     // Verify the shielded bundle, currently without the proof.
     verify_bundle(&shielded_bundle, &keys.vk, false);
     assert_eq!(shielded_bundle.actions().len(), expected_num_actions);
+    Ok(())
 }
 
 /// Issue several ZSA and native notes and spend them in different combinations, e.g. split and join
@@ -464,7 +460,7 @@ fn zsa_issue_and_transfer() {
         vec![],
         vec![(
             zsa_spend_1.note.asset(),
-            zsa_spend_1.note.value().inner() as i64,
+            zsa_spend_1.note.value(),
         )],
         anchor,
         2,
@@ -472,8 +468,8 @@ fn zsa_issue_and_transfer() {
     );
 
     // 10. Burn a part of ZSA assets
-    let value_to_burn: i64 = 3;
-    let value_to_transfer: u64 = zsa_spend_1.note.value().inner() - value_to_burn as u64;
+    let value_to_burn: u64 = 3;
+    let value_to_transfer: u64 = zsa_spend_1.note.value().inner() - value_to_burn;
 
     build_and_verify_bundle(
         vec![&zsa_spend_1],
@@ -481,22 +477,24 @@ fn zsa_issue_and_transfer() {
             value: NoteValue::from_raw(value_to_transfer),
             asset: zsa_spend_1.note.asset(),
         }],
-        vec![(zsa_spend_1.note.asset(), value_to_burn)],
+        vec![(zsa_spend_1.note.asset(), NoteValue::from_raw(value_to_burn))],
         anchor,
         2,
         &keys,
     );
 
     // 11. Try to burn native asset - should fail
-    let result = std::panic::catch_unwind(|| {
+    let result =
         build_and_verify_bundle(
             vec![&native_spend],
             vec![],
-            vec![(AssetId::native(), native_spend.note.value().inner() as i64)],
+            vec![(AssetId::native(), native_spend.note.value())],
             native_anchor,
             2,
             &keys,
         );
-    });
-    assert!(result.is_err());
+    match result {
+        Ok(_) => panic!("Test should fail"),
+        Err(error) => assert_eq!(error, "Burning is only possible for non-native assets")
+    }
 }

@@ -181,13 +181,25 @@ impl ValueSum {
     }
 }
 
-impl Add for ValueSum {
+impl Add<ValueSum> for ValueSum {
     type Output = Option<ValueSum>;
 
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, rhs: Self) -> Self::Output {
         self.0
             .checked_add(rhs.0)
+            .filter(|v| VALUE_SUM_RANGE.contains(v))
+            .map(ValueSum)
+    }
+}
+
+impl Add<NoteValue> for ValueSum {
+    type Output = Option<ValueSum>;
+
+    #[allow(clippy::suspicious_arithmetic_impl)]
+    fn add(self, rhs: NoteValue) -> Self::Output {
+        self.0
+            .checked_add(rhs.0 as i128)
             .filter(|v| VALUE_SUM_RANGE.contains(v))
             .map(ValueSum)
     }
@@ -465,8 +477,8 @@ mod tests {
             .into_bsk();
 
         let bvk = (values
-            .iter()
-            .map(|(value, rcv, asset)| ValueCommitment::derive(*value, *rcv, *asset))
+            .into_iter()
+            .map(|(value, rcv, asset)| ValueCommitment::derive(value, rcv, asset))
             .sum::<ValueCommitment>()
             - ValueCommitment::derive(
                 native_value_balance,
@@ -493,7 +505,6 @@ mod tests {
                 )
             ),
         ) {
-            // Test with native note type (zec) only
             _bsk_consistent_with_bvk(&native_values, &[], &[], &[]);
         }
     }
@@ -512,7 +523,6 @@ mod tests {
                 ), prop::collection::vec(arb_trapdoor(), n_values))
             ),
         ) {
-            // Test with native note type (zec)
              _bsk_consistent_with_bvk(&native_values, &arb_values, &neg_trapdoors, &[]);
         }
     }
@@ -525,7 +535,6 @@ mod tests {
                 .prop_flat_map(move |bound| prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values))
             )
         ) {
-            // Test with native note type (zec)
              _bsk_consistent_with_bvk(&[], &[], &[], &assets_burnt);
         }
     }
@@ -543,7 +552,6 @@ mod tests {
                 .prop_flat_map(move |bound| prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values))
             )
         ) {
-            // Test with native note type (zec)
              _bsk_consistent_with_bvk(&native_values, &[], &[], &assets_burnt);
         }
     }
@@ -566,7 +574,6 @@ mod tests {
                 .prop_flat_map(move |bound| prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values))
             )
         ) {
-            // Test with native note type (zec)
              _bsk_consistent_with_bvk(&native_values, &arb_values, &neg_trapdoors, &assets_burnt);
         }
     }

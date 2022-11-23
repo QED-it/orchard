@@ -258,9 +258,9 @@ impl ActionInfo {
 pub struct Builder {
     spends: Vec<SpendInfo>,
     recipients: Vec<RecipientInfo>,
+    burn: HashMap<AssetId, ValueSum>,
     flags: Flags,
     anchor: Anchor,
-    assets_burnt: Vec<(AssetId, i64)>,
 }
 
 impl Builder {
@@ -269,9 +269,9 @@ impl Builder {
         Builder {
             spends: vec![],
             recipients: vec![],
+            burn: HashMap::new(),
             flags,
             anchor,
-            assets_burnt: vec![],
         }
     }
 
@@ -346,15 +346,12 @@ impl Builder {
         Ok(())
     }
 
-    /// Add an instruction to burn given amount os specific ZSA
-    pub fn add_burnt_asset(&mut self, asset: AssetId, value: i64) -> Result<(), &'static str> {
-        if value <= 0 {
-            return Err("Burning is only possible for positive amount of asset");
-        }
+    /// Add an instruction to burn a given amount of a specific asset.
+    pub fn add_burn(&mut self, asset: AssetId, value: NoteValue) -> Result<(), &'static str> {
         if asset == AssetId::native() {
             return Err("Burning is only possible for non-native assets");
         }
-        self.assets_burnt.push((asset, value));
+        self.burn[&asset] = (*self.burn.get(&asset).unwrap_or(&ValueSum::zero()) + value).ok_or("Orchard value operation overflowed")?;
         Ok(())
     }
 
@@ -446,11 +443,11 @@ impl Builder {
                 AssetId::native(),
             )
             - self
-                .assets_burnt
+                .burn
                 .iter()
                 .map(|(asset, value)| {
                     ValueCommitment::derive(
-                        ValueSum::from_raw(*value),
+                        *value,
                         ValueCommitTrapdoor::zero(),
                         *asset,
                     )
@@ -463,12 +460,12 @@ impl Builder {
             NonEmpty::from_vec(actions).unwrap(),
             flags,
             result_native_value_balance,
+            self.burn.into_iter().collect(), // TODO hashmap or vector here?
             anchor,
             InProgress {
                 proof: Unproven { circuits },
                 sigs: Unauthorized { bsk },
             },
-            self.assets_burnt,
         ))
     }
 }
