@@ -3,7 +3,7 @@
 use blake2b_simd::{Hash, Params};
 use core::fmt;
 use group::ff::PrimeField;
-use zcash_note_encryption::{BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes, OutgoingCipherKey, ShieldedOutput, COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, NOTE_PLAINTEXT_SIZE, OUT_PLAINTEXT_SIZE};
+use zcash_note_encryption::{BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes, AEADBytes, OutgoingCipherKey, ShieldedOutput, COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, NOTE_PLAINTEXT_SIZE, OUT_PLAINTEXT_SIZE};
 
 use crate::note::AssetId;
 use crate::{
@@ -141,19 +141,19 @@ pub enum EncNoteCiphertextZSA {
     V3ZSA([u8; ZSA_ENC_CIPHERTEXT_SIZE]),
 }
 
-impl From<(NotePlaintextZSA,[u8; AEAD_TAG_SIZE])> for EncNoteCiphertextZSA {
-    fn from((np,t): (NotePlaintextZSA, [u8; AEAD_TAG_SIZE])) -> Self {
+impl From<(NotePlaintextZSA, AEADBytes)> for EncNoteCiphertextZSA {
+    fn from((np,t): (NotePlaintextZSA, AEADBytes)) -> Self {
         match np {
             NotePlaintextZSA::V2OLD(npx) => {
                 let mut nc = [0u8; ENC_CIPHERTEXT_SIZE];
                 nc[..NOTE_PLAINTEXT_SIZE].copy_from_slice(&npx);
-                nc[NOTE_PLAINTEXT_SIZE..].copy_from_slice(&t);
+                nc[NOTE_PLAINTEXT_SIZE..].copy_from_slice(&t.0);
                 EncNoteCiphertextZSA::V2OLD(nc)
             },
             NotePlaintextZSA::V3ZSA(npx) => {
                 let mut nc = [0u8; ZSA_ENC_CIPHERTEXT_SIZE];
                 nc[..ZSA_NOTE_PLAINTEXT_SIZE].copy_from_slice(&npx);
-                nc[ZSA_NOTE_PLAINTEXT_SIZE..].copy_from_slice(&t);
+                nc[ZSA_NOTE_PLAINTEXT_SIZE..].copy_from_slice(&t.0);
                 EncNoteCiphertextZSA::V3ZSA(nc)
             },
         }
@@ -382,7 +382,7 @@ impl Domain for OrchardDomain {
             .into()
     }
 
-    fn separate_tag_from_ciphertext(enc_ciphertext: &Self::EncNoteCiphertextBytes) -> (Self::NotePlaintextBytes, [u8; AEAD_TAG_SIZE]) {
+    fn separate_tag_from_ciphertext(enc_ciphertext: &Self::EncNoteCiphertextBytes) -> (Self::NotePlaintextBytes, AEADBytes) {
         match enc_ciphertext {
             EncNoteCiphertextZSA::V2OLD(ncx) => {
                 let mut np = [0u8; NOTE_PLAINTEXT_SIZE];
@@ -391,7 +391,7 @@ impl Domain for OrchardDomain {
                 np.copy_from_slice(&ncx[..NOTE_PLAINTEXT_SIZE]);
                 tag.copy_from_slice(&ncx[NOTE_PLAINTEXT_SIZE..]);
 
-                (NotePlaintextZSA::V2OLD(np), tag)
+                (NotePlaintextZSA::V2OLD(np), AEADBytes(tag))
             },
             EncNoteCiphertextZSA::V3ZSA(ncx) => {
                 let mut np = [0u8; ZSA_NOTE_PLAINTEXT_SIZE];
@@ -400,25 +400,10 @@ impl Domain for OrchardDomain {
                 np.copy_from_slice(&ncx[..ZSA_NOTE_PLAINTEXT_SIZE]);
                 tag.copy_from_slice(&ncx[ZSA_NOTE_PLAINTEXT_SIZE..]);
 
-                (NotePlaintextZSA::V3ZSA(np), tag)
+                (NotePlaintextZSA::V3ZSA(np), AEADBytes(tag))
             },
         }
 
-    }
-
-    fn convert_to_compact_plaintext_type(enc_ciphertext: &Self::CompactEncNoteCiphertextBytes) -> Self::CompactNotePlaintextBytes {
-        match enc_ciphertext {
-            CompactNoteZSA::V2OLD(comp) => {
-                let mut comp_new = [0u8; COMPACT_NOTE_SIZE];
-                comp_new.copy_from_slice(comp);
-                CompactNoteZSA::V2OLD(comp_new)
-            },
-            CompactNoteZSA::V3ZSA(comp) => {
-                let mut comp_new = [0u8; COMPACT_ZSA_NOTE_SIZE];
-                comp_new.copy_from_slice(comp);
-                CompactNoteZSA::V3ZSA(comp_new)
-            },
-        }
     }
 }
 
