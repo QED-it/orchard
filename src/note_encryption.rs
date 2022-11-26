@@ -512,8 +512,7 @@ impl ShieldedOutput<OrchardDomain> for CompactAction {
     }
 
     fn enc_ciphertext_compact(&self) -> CompactNoteZSA {
-        let result = self.enc_ciphertext.clone();
-        result
+        self.enc_ciphertext.clone()
     }
 }
 
