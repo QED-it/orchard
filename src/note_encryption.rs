@@ -3,7 +3,7 @@
 use blake2b_simd::{Hash, Params};
 use core::fmt;
 use group::ff::PrimeField;
-use zcash_note_encryption::{BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes, AEADBytes, OutgoingCipherKey, ShieldedOutput, COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, NOTE_PLAINTEXT_SIZE, OUT_PLAINTEXT_SIZE};
+use zcash_note_encryption::{BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes, AEADBytes, OutgoingCipherKey, ShieldedOutput, COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, NOTE_PLAINTEXT_SIZE, OUT_PLAINTEXT_SIZE, AEAD_TAG_SIZE};
 
 use crate::note::AssetId;
 use crate::{
@@ -31,8 +31,6 @@ const ZSA_ENC_CIPHERTEXT_SIZE: usize = ENC_CIPHERTEXT_SIZE + ZSA_TYPE_SIZE;
 const COMPACT_ZSA_NOTE_SIZE: usize = COMPACT_NOTE_SIZE + ZSA_TYPE_SIZE;
 /// The size of the memo.
 const MEMO_SIZE: usize = NOTE_PLAINTEXT_SIZE - COMPACT_NOTE_SIZE;
-/// The size of the AEAD tag.
-const AEAD_TAG_SIZE: usize = ZSA_ENC_CIPHERTEXT_SIZE - ZSA_NOTE_PLAINTEXT_SIZE;
 
 /// Defined in [Zcash Protocol Spec § 5.4.2: Pseudo Random Functions][concreteprfs].
 ///

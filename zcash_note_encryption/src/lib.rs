@@ -52,7 +52,7 @@ pub const NOTE_PLAINTEXT_SIZE: usize = COMPACT_NOTE_SIZE + MEMO_SIZE;
 /// The size of [`OutPlaintextBytes`].
 pub const OUT_PLAINTEXT_SIZE: usize = 32 + // pk_d
     32; // esk
-const AEAD_TAG_SIZE: usize = 16;
+pub const AEAD_TAG_SIZE: usize = 16;
 /// The size of an encrypted note plaintext.
 pub const ENC_CIPHERTEXT_SIZE: usize = NOTE_PLAINTEXT_SIZE + AEAD_TAG_SIZE;
 /// The size of an encrypted outgoing plaintext.
