@@ -351,7 +351,9 @@ impl Builder {
         if asset == AssetId::native() {
             return Err("Burning is only possible for non-native assets");
         }
-        self.burn[&asset] = (*self.burn.get(&asset).unwrap_or(&ValueSum::zero()) + value).ok_or("Orchard value operation overflowed")?;
+        let sum = (*self.burn.get(&asset).unwrap_or(&ValueSum::zero()) + value)
+            .ok_or("Orchard value operation overflowed")?;
+        self.burn.insert(asset, sum);
         Ok(())
     }
 
@@ -446,11 +448,7 @@ impl Builder {
                 .burn
                 .iter()
                 .map(|(asset, value)| {
-                    ValueCommitment::derive(
-                        *value,
-                        ValueCommitTrapdoor::zero(),
-                        *asset,
-                    )
+                    ValueCommitment::derive(*value, ValueCommitTrapdoor::zero(), *asset)
                 })
                 .sum::<ValueCommitment>())
         .into_bvk();
@@ -460,7 +458,18 @@ impl Builder {
             NonEmpty::from_vec(actions).unwrap(),
             flags,
             result_native_value_balance,
-            self.burn.into_iter().collect(), // TODO hashmap or vector here?
+            self.burn
+                .into_iter()
+                .map(|(asset, value)| {
+                    let v_value: V = i64::try_from(value)
+                        .map_err(Error::ValueSum)
+                        .and_then(|i| {
+                            V::try_from(i).map_err(|_| Error::ValueSum(value::OverflowError))
+                        })
+                        .unwrap();
+                    (asset, v_value)
+                })
+                .collect(),
             anchor,
             InProgress {
                 proof: Unproven { circuits },

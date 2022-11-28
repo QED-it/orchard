@@ -219,8 +219,8 @@ impl<T: Authorization, V> Bundle<T, V> {
     }
 
     /// Construct a new bundle by applying a transformation that might fail
-    /// to the value balance.
-    pub fn try_map_value_balance<V0, E, F: FnOnce(V) -> Result<V0, E>>(
+    /// to the value balance and balances of assets to burn.
+    pub fn try_map_value_balance<V0, E, F: Fn(V) -> Result<V0, E>>(
         self,
         f: F,
     ) -> Result<Bundle<T, V0>, E> {
@@ -228,7 +228,17 @@ impl<T: Authorization, V> Bundle<T, V> {
             actions: self.actions,
             flags: self.flags,
             value_balance: f(self.value_balance)?,
-            burn: self.burn,
+            burn: self
+                .burn
+                .into_iter()
+                .map(|(asset, value)| {
+                    let v0_value = match f(value) {
+                        Ok(val) => val,
+                        Err(_) => panic!("Cannot map asset value"),
+                    };
+                    (asset, v0_value)
+                })
+                .collect(),
             anchor: self.anchor,
             authorization: self.authorization,
         })
@@ -395,7 +405,7 @@ impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
                 .iter()
                 .map(|(asset, value)| {
                     ValueCommitment::derive(
-                        ValueSum::from_raw(*value),
+                        ValueSum::from_raw(V::into(*value)),
                         ValueCommitTrapdoor::zero(),
                         *asset,
                     )

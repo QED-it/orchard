@@ -20,7 +20,6 @@ use orchard::{
 use rand::rngs::OsRng;
 use std::collections::HashSet;
 use zcash_note_encryption::try_note_decryption;
-use orchard::value::ValueSum;
 
 #[derive(Debug)]
 struct Keychain {
@@ -241,15 +240,15 @@ fn build_and_verify_bundle(
     let shielded_bundle: Bundle<_, i64> = {
         let mut builder = Builder::new(Flags::from_parts(true, true), anchor);
 
-        spends.iter().for_each(|spend| {
-                builder.add_spend(keys.fvk().clone(), spend.note, spend.merkle_path().clone())?
-        });
-        outputs.iter().for_each(|output| {
-                builder.add_recipient(None, keys.recipient, output.value, output.asset, None)?
-        });
+        spends.iter().try_for_each(|spend| {
+            builder.add_spend(keys.fvk().clone(), spend.note, spend.merkle_path().clone())
+        })?;
+        outputs.iter().try_for_each(|output| {
+            builder.add_recipient(None, keys.recipient, output.value, output.asset, None)
+        })?;
         assets_to_burn
             .into_iter()
-            .for_each(|(asset, value)| builder.add_burn(asset, value)?);
+            .try_for_each(|(asset, value)| builder.add_burn(asset, value))?;
         build_and_sign_bundle(builder, rng, keys.pk(), keys.sk())
     };
 
@@ -307,7 +306,8 @@ fn zsa_issue_and_transfer() {
         anchor,
         2,
         &keys,
-    );
+    )
+    .unwrap();
 
     // 2. Split single ZSA note into 2 notes
     let delta = 2; // arbitrary number for value manipulation
@@ -327,7 +327,8 @@ fn zsa_issue_and_transfer() {
         anchor,
         2,
         &keys,
-    );
+    )
+    .unwrap();
 
     // 3. Join 2 ZSA notes into a single note
     build_and_verify_bundle(
@@ -342,7 +343,8 @@ fn zsa_issue_and_transfer() {
         anchor,
         2,
         &keys,
-    );
+    )
+    .unwrap();
 
     // 4. Take 2 ZSA notes and send them as 2 notes with different denomination
     build_and_verify_bundle(
@@ -361,7 +363,8 @@ fn zsa_issue_and_transfer() {
         anchor,
         2,
         &keys,
-    );
+    )
+    .unwrap();
 
     // 5. Spend single ZSA note, mixed with native note (shielding)
     build_and_verify_bundle(
@@ -380,7 +383,8 @@ fn zsa_issue_and_transfer() {
         anchor,
         4,
         &keys,
-    );
+    )
+    .unwrap();
 
     // 6. Spend single ZSA note, mixed with native note (shielded to shielded)
     build_and_verify_bundle(
@@ -399,7 +403,8 @@ fn zsa_issue_and_transfer() {
         native_anchor,
         4,
         &keys,
-    );
+    )
+    .unwrap();
 
     // 7. Spend ZSA notes of different asset types
     let (zsa_note_t7, _) = issue_zsa_notes("zsa_asset2", &keys);
@@ -430,7 +435,8 @@ fn zsa_issue_and_transfer() {
         anchor_t7,
         4,
         &keys,
-    );
+    )
+    .unwrap();
 
     // 8. Same but wrong denomination
     let result = std::panic::catch_unwind(|| {
@@ -450,7 +456,8 @@ fn zsa_issue_and_transfer() {
             anchor_t7,
             4,
             &keys,
-        );
+        )
+        .unwrap();
     });
     assert!(result.is_err());
 
@@ -458,14 +465,12 @@ fn zsa_issue_and_transfer() {
     build_and_verify_bundle(
         vec![&zsa_spend_1],
         vec![],
-        vec![(
-            zsa_spend_1.note.asset(),
-            zsa_spend_1.note.value(),
-        )],
+        vec![(zsa_spend_1.note.asset(), zsa_spend_1.note.value())],
         anchor,
         2,
         &keys,
-    );
+    )
+    .unwrap();
 
     // 10. Burn a part of ZSA assets
     let value_to_burn: u64 = 3;
@@ -481,20 +486,20 @@ fn zsa_issue_and_transfer() {
         anchor,
         2,
         &keys,
-    );
+    )
+    .unwrap();
 
     // 11. Try to burn native asset - should fail
-    let result =
-        build_and_verify_bundle(
-            vec![&native_spend],
-            vec![],
-            vec![(AssetId::native(), native_spend.note.value())],
-            native_anchor,
-            2,
-            &keys,
-        );
+    let result = build_and_verify_bundle(
+        vec![&native_spend],
+        vec![],
+        vec![(AssetId::native(), native_spend.note.value())],
+        native_anchor,
+        2,
+        &keys,
+    );
     match result {
         Ok(_) => panic!("Test should fail"),
-        Err(error) => assert_eq!(error, "Burning is only possible for non-native assets")
+        Err(error) => assert_eq!(error, "Burning is only possible for non-native assets"),
     }
 }
