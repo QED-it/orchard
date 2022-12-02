@@ -267,30 +267,30 @@ fn zsa_issue_and_transfer() {
     let asset_descr = "zsa_asset";
 
     // Prepare ZSA
-    let (zsa_note1, zsa_note2) = issue_zsa_notes(asset_descr, &keys);
+    let (zsa_note_1, zsa_note_2) = issue_zsa_notes(asset_descr, &keys);
 
     let (merkle_path1, merkle_path2, anchor) =
-        build_merkle_path_with_two_leaves(&zsa_note1, &zsa_note2);
+        build_merkle_path_with_two_leaves(&zsa_note_1, &zsa_note_2);
 
     let zsa_spend_1 = TestSpendInfo {
-        note: zsa_note1,
+        note: zsa_note_1,
         merkle_path: merkle_path1,
     };
     let zsa_spend_2 = TestSpendInfo {
-        note: zsa_note2,
+        note: zsa_note_2,
         merkle_path: merkle_path2,
     };
 
     let native_note = create_native_note(&keys);
-    let (native_merkle_path1, native_merkle_path2, native_anchor) =
-        build_merkle_path_with_two_leaves(&native_note, &zsa_note1);
+    let (native_merkle_path_1, native_merkle_path_2, native_anchor) =
+        build_merkle_path_with_two_leaves(&native_note, &zsa_note_1);
     let native_spend: TestSpendInfo = TestSpendInfo {
         note: native_note,
-        merkle_path: native_merkle_path1,
+        merkle_path: native_merkle_path_1,
     };
     let zsa_spend_with_native: TestSpendInfo = TestSpendInfo {
-        note: zsa_note1,
-        merkle_path: native_merkle_path2,
+        note: zsa_note_1,
+        merkle_path: native_merkle_path_2,
     };
 
     // --------------------------- Tests -----------------------------------------
@@ -409,13 +409,13 @@ fn zsa_issue_and_transfer() {
     // 7. Spend ZSA notes of different asset types
     let (zsa_note_t7, _) = issue_zsa_notes("zsa_asset2", &keys);
     let (merkle_path_t7_1, merkle_path_t7_2, anchor_t7) =
-        build_merkle_path_with_two_leaves(&zsa_note_t7, &zsa_note2);
+        build_merkle_path_with_two_leaves(&zsa_note_t7, &zsa_note_2);
     let zsa_spend_t7_1: TestSpendInfo = TestSpendInfo {
         note: zsa_note_t7,
         merkle_path: merkle_path_t7_1,
     };
     let zsa_spend_t7_2: TestSpendInfo = TestSpendInfo {
-        note: zsa_note2,
+        note: zsa_note_2,
         merkle_path: merkle_path_t7_2,
     };
 
@@ -472,9 +472,9 @@ fn zsa_issue_and_transfer() {
     )
     .unwrap();
 
-    // 10. Burn a part of ZSA assets
-    let value_to_burn: u64 = 3;
-    let value_to_transfer: u64 = zsa_spend_1.note.value().inner() - value_to_burn;
+    // 10. Burn a partial amount of the ZSA assets
+    let value_to_burn = 3;
+    let value_to_transfer = zsa_spend_1.note.value().inner() - value_to_burn;
 
     build_and_verify_bundle(
         vec![&zsa_spend_1],

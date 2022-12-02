@@ -231,14 +231,8 @@ impl<T: Authorization, V> Bundle<T, V> {
             burn: self
                 .burn
                 .into_iter()
-                .map(|(asset, value)| {
-                    let v0_value = match f(value) {
-                        Ok(val) => val,
-                        Err(_) => panic!("Cannot map asset value"),
-                    };
-                    (asset, v0_value)
-                })
-                .collect(),
+                .map(|(asset, value)| Ok((asset, f(value)?)))
+                .collect::<Result<Vec<(AssetId, V0)>, E>>()?,
             anchor: self.anchor,
             authorization: self.authorization,
         })
@@ -402,12 +396,13 @@ impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
             )
             - self
                 .burn
-                .iter()
+                .clone()
+                .into_iter()
                 .map(|(asset, value)| {
                     ValueCommitment::derive(
-                        ValueSum::from_raw(V::into(*value)),
+                        ValueSum::from_raw(value.into()),
                         ValueCommitTrapdoor::zero(),
-                        *asset,
+                        asset,
                     )
                 })
                 .sum::<ValueCommitment>())
@@ -590,8 +585,8 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Create an arbitrary vector of burnt assets.
-        pub fn arb_asset_burnt()(asset_id in zsa_asset_id(), value in arb_value_sum()) -> (AssetId, ValueSum) {
+        /// Create an arbitrary vector of assets to burn.
+        pub fn arb_asset_to_burn()(asset_id in zsa_asset_id(), value in arb_value_sum()) -> (AssetId, ValueSum) {
             (asset_id, value)
         }
     }
@@ -624,7 +619,7 @@ pub mod testing {
             acts in vec(arb_unauthorized_action_n(n_actions, flags), n_actions),
             anchor in arb_base().prop_map(Anchor::from),
             flags in Just(flags),
-            burn in vec(arb_asset_burnt(), 1usize..10)
+            burn in vec(arb_asset_to_burn(), 1usize..10)
         ) -> Bundle<Unauthorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
 
@@ -655,7 +650,7 @@ pub mod testing {
             fake_proof in vec(prop::num::u8::ANY, 1973),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
             flags in Just(flags),
-            burn in vec(arb_asset_burnt(), 1usize..10)
+            burn in vec(arb_asset_to_burn(), 1usize..10)
         ) -> Bundle<Authorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
             let rng = StdRng::from_seed(rng_seed);

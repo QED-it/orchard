@@ -51,6 +51,7 @@ use pasta_curves::{
 use rand::RngCore;
 use subtle::CtOption;
 
+use crate::builder::Error;
 use crate::note::AssetId;
 use crate::{
     constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_R_BYTES},
@@ -178,6 +179,12 @@ impl ValueSum {
                 .expect("ValueSum magnitude is in range for u64 by construction"),
             sign,
         )
+    }
+
+    pub(crate) fn into<V: TryFrom<i64>>(self) -> Result<V, Error> {
+        i64::try_from(self)
+            .map_err(Error::ValueSum)
+            .and_then(|i| V::try_from(i).map_err(|_| Error::ValueSum(OverflowError)))
     }
 }
 
@@ -448,11 +455,11 @@ mod tests {
     };
     use crate::primitives::redpallas;
 
-    fn _bsk_consistent_with_bvk(
+    fn check_binding_signature(
         native_values: &[(ValueSum, ValueCommitTrapdoor, AssetId)],
         arb_values: &[(ValueSum, ValueCommitTrapdoor, AssetId)],
         neg_trapdoors: &[ValueCommitTrapdoor],
-        arb_values_burnt: &[(ValueSum, ValueCommitTrapdoor, AssetId)],
+        arb_values_to_burn: &[(ValueSum, ValueCommitTrapdoor, AssetId)],
     ) {
         // for each arb value, create a negative value with a different trapdoor
         let neg_arb_values: Vec<_> = arb_values
@@ -468,7 +475,13 @@ mod tests {
             .sum::<Result<ValueSum, OverflowError>>()
             .expect("we generate values that won't overflow");
 
-        let values = [native_values, arb_values, &neg_arb_values, arb_values_burnt].concat();
+        let values = [
+            native_values,
+            arb_values,
+            &neg_arb_values,
+            arb_values_to_burn,
+        ]
+        .concat();
 
         let bsk = values
             .iter()
@@ -485,7 +498,7 @@ mod tests {
                 ValueCommitTrapdoor::zero(),
                 AssetId::native(),
             )
-            - arb_values_burnt
+            - arb_values_to_burn
                 .iter()
                 .map(|(value, _, asset)| {
                     ValueCommitment::derive(*value, ValueCommitTrapdoor::zero(), *asset)
@@ -498,83 +511,26 @@ mod tests {
 
     proptest! {
         #[test]
-        fn bsk_consistent_with_bvk_native_only(
-            native_values in (1usize..10).prop_flat_map(|n_values|
-                arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), native_asset_id()), n_values)
-                )
-            ),
-        ) {
-            _bsk_consistent_with_bvk(&native_values, &[], &[], &[]);
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn bsk_consistent_with_bvk(
-            native_values in (1usize..10).prop_flat_map(|n_values|
-                arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), native_asset_id()), n_values)
-                )
-            ),
-            (arb_values,neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|
-                (arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values)
-                ), prop::collection::vec(arb_trapdoor(), n_values))
-            ),
-        ) {
-             _bsk_consistent_with_bvk(&native_values, &arb_values, &neg_trapdoors, &[]);
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn bsk_consistent_with_bvk_burning_only(
-            assets_burnt in (1usize..10).prop_flat_map(|n_values|
-                arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64)
-                .prop_flat_map(move |bound| prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values))
-            )
-        ) {
-             _bsk_consistent_with_bvk(&[], &[], &[], &assets_burnt);
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn bsk_consistent_with_bvk_native_with_zsa_burning(
-            native_values in (1usize..10).prop_flat_map(|n_values|
-                arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), native_asset_id()), n_values)
-                )
-            ),
-            assets_burnt in (1usize..10).prop_flat_map(|n_values|
-                arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64)
-                .prop_flat_map(move |bound| prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values))
-            )
-        ) {
-             _bsk_consistent_with_bvk(&native_values, &[], &[], &assets_burnt);
-        }
-    }
-
-    proptest! {
-        #[test]
         fn bsk_consistent_with_bvk_native_with_zsa_transfer_and_burning(
             native_values in (1usize..10).prop_flat_map(|n_values|
                 arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
                     prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), native_asset_id()), n_values)
                 )
             ),
-            (arb_values,neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|
+            (asset_values, neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|
                 (arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
                     prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values)
                 ), prop::collection::vec(arb_trapdoor(), n_values))
             ),
-            assets_burnt in (1usize..10).prop_flat_map(|n_values|
+            burn_values in (1usize..10).prop_flat_map(|n_values|
                 arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64)
                 .prop_flat_map(move |bound| prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values))
             )
         ) {
-             _bsk_consistent_with_bvk(&native_values, &arb_values, &neg_trapdoors, &assets_burnt);
+            check_binding_signature(&native_values, &[], &[], &[]);
+            check_binding_signature(&native_values, &[], &[], &burn_values);
+            check_binding_signature(&native_values, &asset_values, &neg_trapdoors, &[]);
+            check_binding_signature(&native_values, &asset_values, &neg_trapdoors, &burn_values);
         }
     }
 }

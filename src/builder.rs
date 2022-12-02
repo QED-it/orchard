@@ -348,11 +348,11 @@ impl Builder {
 
     /// Add an instruction to burn a given amount of a specific asset.
     pub fn add_burn(&mut self, asset: AssetId, value: NoteValue) -> Result<(), &'static str> {
-        if asset == AssetId::native() {
+        if asset.is_native().into() {
             return Err("Burning is only possible for non-native assets");
         }
-        let sum = (*self.burn.get(&asset).unwrap_or(&ValueSum::zero()) + value)
-            .ok_or("Orchard value operation overflowed")?;
+        let cur = *self.burn.get(&asset).unwrap_or(&ValueSum::zero());
+        let sum = (cur + value).ok_or("Orchard ValueSum operation overflowed")?;
         self.burn.insert(asset, sum);
         Ok(())
     }
@@ -414,17 +414,14 @@ impl Builder {
         let anchor = self.anchor;
 
         // Determine the value balance for this bundle, ensuring it is valid.
-        let native_value_balance = pre_actions
+        let native_value_balance: V = pre_actions
             .iter()
-            .filter(|action| action.spend.note.asset() == AssetId::native())
+            .filter(|action| action.spend.note.asset().is_native().into())
             .fold(Some(ValueSum::zero()), |acc, action| {
                 acc? + action.value_sum()
             })
-            .ok_or(OverflowError)?;
-
-        let result_native_value_balance: V = i64::try_from(native_value_balance)
-            .map_err(Error::ValueSum)
-            .and_then(|i| V::try_from(i).map_err(|_| Error::ValueSum(value::OverflowError)))?;
+            .ok_or(OverflowError)?
+            .into()?;
 
         // Compute the transaction binding signing key.
         let bsk = pre_actions
@@ -440,19 +437,11 @@ impl Builder {
         let bundle = Bundle::from_parts(
             NonEmpty::from_vec(actions).unwrap(),
             flags,
-            result_native_value_balance,
+            native_value_balance,
             self.burn
                 .into_iter()
-                .map(|(asset, value)| {
-                    let v_value: V = i64::try_from(value)
-                        .map_err(Error::ValueSum)
-                        .and_then(|i| {
-                            V::try_from(i).map_err(|_| Error::ValueSum(value::OverflowError))
-                        })
-                        .unwrap();
-                    (asset, v_value)
-                })
-                .collect(),
+                .map(|(asset, value)| Ok((asset, value.into()?)))
+                .collect::<Result<Vec<(AssetId, V)>, Error>>()?,
             anchor,
             InProgress {
                 proof: Unproven { circuits },
