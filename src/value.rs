@@ -128,6 +128,12 @@ impl From<&NoteValue> for Assigned<pallas::Base> {
     }
 }
 
+impl From<NoteValue> for i128 {
+    fn from(value: NoteValue) -> Self {
+        value.0 as i128
+    }
+}
+
 impl Sub for NoteValue {
     type Output = ValueSum;
 
@@ -188,25 +194,13 @@ impl ValueSum {
     }
 }
 
-impl Add<ValueSum> for ValueSum {
+impl<T: Into<i128>> Add<T> for ValueSum {
     type Output = Option<ValueSum>;
 
     #[allow(clippy::suspicious_arithmetic_impl)]
-    fn add(self, rhs: Self) -> Self::Output {
+    fn add(self, rhs: T) -> Self::Output {
         self.0
-            .checked_add(rhs.0)
-            .filter(|v| VALUE_SUM_RANGE.contains(v))
-            .map(ValueSum)
-    }
-}
-
-impl Add<NoteValue> for ValueSum {
-    type Output = Option<ValueSum>;
-
-    #[allow(clippy::suspicious_arithmetic_impl)]
-    fn add(self, rhs: NoteValue) -> Self::Output {
-        self.0
-            .checked_add(rhs.0 as i128)
+            .checked_add(rhs.into())
             .filter(|v| VALUE_SUM_RANGE.contains(v))
             .map(ValueSum)
     }
@@ -241,6 +235,12 @@ impl TryFrom<ValueSum> for i64 {
 
     fn try_from(v: ValueSum) -> Result<i64, Self::Error> {
         i64::try_from(v.0).map_err(|_| OverflowError)
+    }
+}
+
+impl From<ValueSum> for i128 {
+    fn from(value: ValueSum) -> Self {
+        value.0
     }
 }
 
