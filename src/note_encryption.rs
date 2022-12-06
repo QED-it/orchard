@@ -66,28 +66,27 @@ pub(crate) fn prf_ock_orchard(
 /// - If the note version is 3, the `plaintext` must contain a valid encoding of a ZSA asset type.
 fn orchard_parse_note_plaintext_without_memo<F>(
     domain: &OrchardDomain,
-    plaintext: &[u8],
+    plaintext: &CompactNote,
     get_validated_pk_d: F,
 ) -> Option<(Note, Address)>
 where
     F: FnOnce(&Diversifier) -> Option<DiversifiedTransmissionKey>,
 {
-    assert!(
-        plaintext.len() == COMPACT_NOTE_SIZE
-            || plaintext.len() == COMPACT_NOTE_SIZE_ZSA
-            || plaintext.len() == NOTE_PLAINTEXT_SIZE
-            || plaintext.len() == NOTE_PLAINTEXT_SIZE_ZSA
-    );
-
     // Check note plaintext version
     // and parse the asset type accordingly.
     let asset = parse_version_and_asset_type(plaintext)?;
 
+    let mut plaintext_inner = [0u8; COMPACT_NOTE_SIZE];
+    match plaintext {
+        CompactNote::V2(x) => plaintext_inner.copy_from_slice(&x[..COMPACT_NOTE_SIZE]),
+        CompactNote::V3(x) => plaintext_inner.copy_from_slice(&x[..COMPACT_NOTE_SIZE]),
+    }
+
     // The unwraps below are guaranteed to succeed by the assertion above
-    let diversifier = Diversifier::from_bytes(plaintext[1..12].try_into().unwrap());
-    let value = NoteValue::from_bytes(plaintext[12..20].try_into().unwrap());
+    let diversifier = Diversifier::from_bytes(plaintext_inner[1..12].try_into().unwrap());
+    let value = NoteValue::from_bytes(plaintext_inner[12..20].try_into().unwrap());
     let rseed = Option::from(RandomSeed::from_bytes(
-        plaintext[20..COMPACT_NOTE_SIZE].try_into().unwrap(),
+        plaintext_inner[20..COMPACT_NOTE_SIZE].try_into().unwrap(),
         &domain.rho,
     ))?;
 
@@ -98,15 +97,14 @@ where
     Some((note, recipient))
 }
 
-fn parse_version_and_asset_type(plaintext: &[u8]) -> Option<AssetId> {
-    match plaintext[0] {
-        0x02 if plaintext.len() == COMPACT_NOTE_SIZE || plaintext.len() == NOTE_PLAINTEXT_SIZE => {
+fn parse_version_and_asset_type(plaintext: &CompactNote) -> Option<AssetId> {
+    match plaintext {
+        CompactNote::V2(x) if x[0] == 0x02 => {
             Some(AssetId::native())
         }
-        0x03 if plaintext.len() == COMPACT_NOTE_SIZE_ZSA
-            || plaintext.len() == NOTE_PLAINTEXT_SIZE_ZSA =>
+        CompactNote::V3(x) if x[0] == 0x03 =>
         {
-            let bytes = &plaintext[COMPACT_NOTE_SIZE..COMPACT_NOTE_SIZE_ZSA]
+            let bytes = x[COMPACT_NOTE_SIZE..COMPACT_NOTE_SIZE_ZSA]
                 .try_into()
                 .unwrap();
             AssetId::from_bytes(bytes).into()
@@ -338,11 +336,7 @@ impl Domain for OrchardDomain {
         ivk: &Self::IncomingViewingKey,
         plaintext: &CompactNote,
     ) -> Option<(Self::Note, Self::Recipient)> {
-        let ptr: &[u8] = match plaintext {
-            CompactNote::V2(ref x) => x,
-            CompactNote::V3(ref x) => x,
-        };
-        orchard_parse_note_plaintext_without_memo(self, ptr, |diversifier| {
+        orchard_parse_note_plaintext_without_memo(self, plaintext, |diversifier| {
             Some(DiversifiedTransmissionKey::derive(ivk, diversifier))
         })
     }
@@ -354,11 +348,7 @@ impl Domain for OrchardDomain {
         ephemeral_key: &EphemeralKeyBytes,
         plaintext: &CompactNote,
     ) -> Option<(Self::Note, Self::Recipient)> {
-        let ptr: &[u8] = match plaintext {
-            CompactNote::V2(ref x) => x,
-            CompactNote::V3(ref x) => x,
-        };
-        orchard_parse_note_plaintext_without_memo(self, ptr, |diversifier| {
+        orchard_parse_note_plaintext_without_memo(self, plaintext, |diversifier| {
             if esk
                 .derive_public(diversify_hash(diversifier.as_array()))
                 .to_bytes()
@@ -593,12 +583,7 @@ mod tests {
         let parsed_version = get_version(&plaintext).unwrap();
         let parsed_memo = domain.extract_memo(&plaintext);
 
-        let ptr: &[u8] = match plaintext {
-            NotePlaintext::V2(ref x) => x,
-            NotePlaintext::V3(ref x) => x,
-        };
-
-        let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, ptr,
+        let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &plaintext.into(),
             |diversifier| {
                 assert_eq!(diversifier, &note.recipient().diversifier());
                 Some(*note.recipient().pk_d())
