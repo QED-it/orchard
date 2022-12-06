@@ -94,7 +94,9 @@ pub mod testing {
     use proptest::prelude::*;
     use std::str;
 
-    use crate::keys::{testing::arb_spending_key, IssuanceAuthorizingKey, IssuanceValidatingKey, SpendingKey};
+    use crate::keys::{
+        testing::arb_spending_key, IssuanceAuthorizingKey, IssuanceValidatingKey, SpendingKey,
+    };
     use crate::note::asset_id::asset_id_hasher;
 
     prop_compose! {
@@ -139,7 +141,10 @@ pub mod testing {
         for tv in test_vectors {
             let description = str::from_utf8(&tv.description).unwrap();
 
-            let calculated_asset_id = AssetId::derive(&IssuanceValidatingKey::from_bytes(&tv.key).unwrap(), &description);
+            let calculated_asset_id = AssetId::derive(
+                &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
+                &description,
+            );
             let test_vector_asset_id = AssetId::from_bytes(&tv.asset_id).unwrap();
 
             assert_eq!(calculated_asset_id, test_vector_asset_id);
