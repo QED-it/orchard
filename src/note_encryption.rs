@@ -563,7 +563,7 @@ mod tests {
         Address, Note,
     };
 
-    use super::{get_version, orchard_parse_note_plaintext_without_memo, NotePlaintext};
+    use super::{get_version, orchard_parse_note_plaintext_without_memo};
 
     proptest! {
     #[test]
