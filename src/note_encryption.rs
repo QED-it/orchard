@@ -99,11 +99,8 @@ where
 
 fn parse_version_and_asset_type(plaintext: &CompactNote) -> Option<AssetId> {
     match plaintext {
-        CompactNote::V2(x) if x[0] == 0x02 => {
-            Some(AssetId::native())
-        }
-        CompactNote::V3(x) if x[0] == 0x03 =>
-        {
+        CompactNote::V2(x) if x[0] == 0x02 => Some(AssetId::native()),
+        CompactNote::V3(x) if x[0] == 0x03 => {
             let bytes = x[COMPACT_NOTE_SIZE..COMPACT_NOTE_SIZE_ZSA]
                 .try_into()
                 .unwrap();
