@@ -159,7 +159,7 @@ pub(crate) mod testing {
             // FIXME: make a real one from the note.
             let encrypted_note = TransmittedNoteCiphertext {
                 epk_bytes: [0u8; 32],
-                enc_ciphertext: EncNoteCiphertext::V2([0u8; 580]), // TODO: VA: Will need to change to allow for both V2 and V3 eventually.
+                enc_ciphertext: EncNoteCiphertext::V3([0u8; 612]), // newly encrypted notes will be V3.
                 out_ciphertext: [0u8; 80]
             };
             Action {
@@ -193,7 +193,7 @@ pub(crate) mod testing {
             // FIXME: make a real one from the note.
             let encrypted_note = TransmittedNoteCiphertext {
                 epk_bytes: [0u8; 32],
-                enc_ciphertext: EncNoteCiphertext::V2([0u8; 580]), // TODO: VA: Will need to change to allow for both V2 and V3 eventually.
+                enc_ciphertext: EncNoteCiphertext::V3([0u8; 612]), // newly encrypted notes will be V3.
                 out_ciphertext: [0u8; 80]
             };
 

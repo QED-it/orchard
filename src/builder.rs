@@ -79,7 +79,12 @@ impl SpendInfo {
     /// Returns `None` if the `fvk` does not own the `note`.
     ///
     /// [`Builder::add_spend`]: Builder::add_spend
-    pub fn new(fvk: FullViewingKey, note: Note, merkle_path: MerklePath, split_flag: bool) -> Option<Self> {
+    pub fn new(
+        fvk: FullViewingKey,
+        note: Note,
+        merkle_path: MerklePath,
+        split_flag: bool,
+    ) -> Option<Self> {
         let scope = fvk.scope_for_address(&note.recipient())?;
         Some(SpendInfo {
             dummy_sk: None,

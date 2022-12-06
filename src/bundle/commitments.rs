@@ -52,7 +52,7 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
                 ch.update(&ncx[..52]);
                 mh.update(&ncx[52..564]);
                 nh.update(&ncx[564..]);
-            },
+            }
             EncNoteCiphertext::V3(ncx) => {
                 ch.update(&ncx[..84]);
                 mh.update(&ncx[84..596]);
@@ -61,7 +61,6 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         }
 
         nh.update(&action.encrypted_note().out_ciphertext);
-
     }
 
     h.update(ch.finalize().as_bytes());
