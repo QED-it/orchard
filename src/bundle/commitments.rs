@@ -8,13 +8,12 @@ use crate::note_encryption::EncNoteCiphertext;
 
 const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
 const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActCHash";
-const ZCASH_ORCHARD_ACTIONS_ASSETID_HASH_PERSONALIZATION: &[u8;16] = b"ZTxIdOrcActAHash";
+const ZCASH_ORCHARD_ACTIONS_ASSETID_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActAHash";
 const ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActMHash";
 const ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActNHash";
 const ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrchaHash";
 const ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcZSAIssue";
 const ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION: &[u8; 16] = b"ZTxAuthZSAOrHash";
-
 
 fn hasher(personal: &[u8; 16]) -> State {
     Params::new().hash_length(32).personal(personal).to_state()
@@ -71,7 +70,9 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
     }
 
     h.update(ch.finalize().as_bytes());
-    if v3_flag { h.update(ah.finalize().as_bytes()); }
+    if v3_flag {
+        h.update(ah.finalize().as_bytes());
+    }
     h.update(mh.finalize().as_bytes());
     h.update(nh.finalize().as_bytes());
     h.update(&[bundle.flags().to_byte()]);
