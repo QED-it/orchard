@@ -13,7 +13,7 @@ use orchard::{
     builder::Builder,
     bundle::Flags,
     circuit::{ProvingKey, VerifyingKey},
-    keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
+    keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     value::NoteValue,
     Address, Anchor, Bundle, Note,
 };
@@ -205,7 +205,7 @@ fn create_native_note(keys: &Keychain) -> Note {
         .iter()
         .find_map(|action| {
             let domain = OrchardDomain::for_action(action);
-            try_note_decryption(&domain, &ivk, action)
+            try_note_decryption(&domain, &PreparedIncomingViewingKey::new(&ivk), action)
         })
         .unwrap();
 

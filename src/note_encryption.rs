@@ -14,7 +14,7 @@ use crate::{
     action::Action,
     keys::{
         DiversifiedTransmissionKey, Diversifier, EphemeralPublicKey, EphemeralSecretKey,
-        IncomingViewingKey, OutgoingViewingKey, SharedSecret,
+        OutgoingViewingKey, PreparedEphemeralPublicKey, PreparedIncomingViewingKey, SharedSecret,
     },
     note::{ExtractedNoteCommitment, Nullifier, RandomSeed},
     spec::diversify_hash,
@@ -86,7 +86,7 @@ where
 
     let recipient = Address::from_parts(diversifier, pk_d);
 
-    let note = Note::from_parts(recipient, value, asset, domain.rho, rseed);
+    let note = Option::from(Note::from_parts(recipient, value, asset, domain.rho, rseed))?;
     Some((note, recipient))
 }
 
@@ -110,6 +110,16 @@ pub struct OrchardDomain {
     rho: Nullifier,
 }
 
+impl memuse::DynamicUsage for OrchardDomain {
+    fn dynamic_usage(&self) -> usize {
+        self.rho.dynamic_usage()
+    }
+
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        self.rho.dynamic_usage_bounds()
+    }
+}
+
 impl OrchardDomain {
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
     pub fn for_action<T>(act: &Action<T>) -> Self {
@@ -127,12 +137,13 @@ impl OrchardDomain {
 impl Domain for OrchardDomain {
     type EphemeralSecretKey = EphemeralSecretKey;
     type EphemeralPublicKey = EphemeralPublicKey;
+    type PreparedEphemeralPublicKey = PreparedEphemeralPublicKey;
     type SharedSecret = SharedSecret;
     type SymmetricKey = Hash;
     type Note = Note;
     type Recipient = Address;
     type DiversifiedTransmissionKey = DiversifiedTransmissionKey;
-    type IncomingViewingKey = IncomingViewingKey;
+    type IncomingViewingKey = PreparedIncomingViewingKey;
     type OutgoingViewingKey = OutgoingViewingKey;
     type ValueCommitment = ValueCommitment;
     type ExtractedCommitment = ExtractedNoteCommitment;
@@ -145,6 +156,10 @@ impl Domain for OrchardDomain {
 
     fn get_pk_d(note: &Self::Note) -> Self::DiversifiedTransmissionKey {
         *note.recipient().pk_d()
+    }
+
+    fn prepare_epk(epk: Self::EphemeralPublicKey) -> Self::PreparedEphemeralPublicKey {
+        PreparedEphemeralPublicKey::new(epk)
     }
 
     fn ka_derive_public(
@@ -163,7 +178,7 @@ impl Domain for OrchardDomain {
 
     fn ka_agree_dec(
         ivk: &Self::IncomingViewingKey,
-        epk: &Self::EphemeralPublicKey,
+        epk: &Self::PreparedEphemeralPublicKey,
     ) -> Self::SharedSecret {
         epk.agree(ivk)
     }
@@ -400,7 +415,7 @@ mod tests {
         action::Action,
         keys::{
             DiversifiedTransmissionKey, Diversifier, EphemeralSecretKey, IncomingViewingKey,
-            OutgoingViewingKey,
+            OutgoingViewingKey, PreparedIncomingViewingKey,
         },
         note::{
             testing::arb_note, ExtractedNoteCommitment, Nullifier, RandomSeed,
@@ -461,7 +476,9 @@ mod tests {
             //
 
             // Recipient key material
-            let ivk = IncomingViewingKey::from_bytes(&tv.incoming_viewing_key).unwrap();
+            let ivk = PreparedIncomingViewingKey::new(
+                &IncomingViewingKey::from_bytes(&tv.incoming_viewing_key).unwrap(),
+            );
             let ovk = OutgoingViewingKey::from(tv.ovk);
             let d = Diversifier::from_bytes(tv.default_d);
             let pk_d = DiversifiedTransmissionKey::from_bytes(&tv.default_pk_d).unwrap();
@@ -498,7 +515,7 @@ mod tests {
                 Some(type_bytes) => AssetId::from_bytes(&type_bytes).unwrap(),
             };
 
-            let note = Note::from_parts(recipient, value, asset, rho, rseed);
+            let note = Note::from_parts(recipient, value, asset, rho, rseed).unwrap();
             assert_eq!(ExtractedNoteCommitment::from(note.commitment()), cmx);
 
             let action = Action::from_parts(

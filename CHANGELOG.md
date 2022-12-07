@@ -7,13 +7,43 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+## [0.3.0] - 2022-10-19
+### Added
+- `orchard::Proof::add_to_batch`
+- `orchard::address::Address::diversifier`
+- `orchard::keys:`:
+  - `Diversifier::from_bytes`
+  - `PreparedEphemeralPublicKey`
+  - `PreparedIncomingViewingKey`
+- `orchard::note`:
+  - `RandomSeed`
+  - `Note::{from_parts, rseed}`
+  - `impl memuse::DynamicUsage for Nullifier`
+- `orchard::note_encryption`:
+  - `impl memuse::DynamicUsage for OrchardDomain`
+- `orchard::builder::SpendInfo::new`
+- `orchard::circuit::Circuit::from_action_context`
+- impls of `Eq` for:
+  - `orchard::zip32::ChildIndex`
+  - `orchard::value::ValueSum`
+
+### Changed
+- Migrated to `zcash_note_encryption 0.2`.
+
 ## [0.2.0] - 2022-06-24
 ### Added
 - `orchard::bundle::BatchValidator`
+- `orchard::builder::Builder::value_balance`
 - `orchard::note_encryption`:
   - `CompactAction::from_parts`
   - `CompactAction::nullifier`
   - `OrchardDomain::for_nullifier`
+- Low-level APIs in `orchard::value` for handling `ValueCommitment`s.
+  These are useful in code that constructs proof witnesses itself, but
+  note that doing so requires a detailed knowledge of the Zcash protocol
+  to avoid privacy and correctness pitfalls.
+  - `ValueCommitTrapdoor`
+  - `ValueCommitment::derive`
 
 ### Changed
 - Migrated to `halo2_proofs 0.2`.

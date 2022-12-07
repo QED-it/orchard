@@ -5,7 +5,6 @@ use core::iter;
 use std::collections::HashMap;
 
 use ff::Field;
-use halo2_proofs::circuit::Value;
 use nonempty::NonEmpty;
 use pasta_curves::pallas;
 use rand::{prelude::SliceRandom, CryptoRng, RngCore};
@@ -60,17 +59,38 @@ impl From<value::OverflowError> for Error {
 
 /// Information about a specific note to be spent in an [`Action`].
 #[derive(Debug, Clone)]
-struct SpendInfo {
-    dummy_sk: Option<SpendingKey>,
-    fvk: FullViewingKey,
-    scope: Scope,
-    note: Note,
-    merkle_path: MerklePath,
-    // If this flag is true, the value of the note will not be counted in the value sum of the action.
-    split_flag: bool,
+pub struct SpendInfo {
+    pub(crate) dummy_sk: Option<SpendingKey>,
+    pub(crate) fvk: FullViewingKey,
+    pub(crate) scope: Scope,
+    pub(crate) note: Note,
+    pub(crate) merkle_path: MerklePath,
+    // a flag to indicate whether the value of the note will be counted in the `ValueSum` of the action.
+    pub(crate) split_flag: bool,
 }
 
 impl SpendInfo {
+    /// This constructor is public to enable creation of custom builders.
+    /// If you are not creating a custom builder, use [`Builder::add_spend`] instead.
+    ///
+    /// Creates a `SpendInfo` from note, full viewing key owning the note,
+    /// and merkle path witness of the note.
+    ///
+    /// Returns `None` if the `fvk` does not own the `note`.
+    ///
+    /// [`Builder::add_spend`]: Builder::add_spend
+    pub fn new(fvk: FullViewingKey, note: Note, merkle_path: MerklePath) -> Option<Self> {
+        let scope = fvk.scope_for_address(&note.recipient())?;
+        Some(SpendInfo {
+            dummy_sk: None,
+            fvk,
+            scope,
+            note,
+            merkle_path,
+            split_flag: false,
+        })
+    }
+
     /// Defined in [Zcash Protocol Spec § 4.8.3: Dummy Notes (Orchard)][orcharddummynotes].
     ///
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
@@ -92,7 +112,8 @@ impl SpendInfo {
 
     /// Return a copy of this note with the split flag set to `true`.
     fn create_split_spend(&self) -> Self {
-        let mut split_spend = self.clone();
+        let mut split_spend = SpendInfo::new(self.fvk.clone(), self.note, self.merkle_path.clone())
+            .expect("The spend info is valid");
         split_spend.split_flag = true;
         split_spend
     }
@@ -176,10 +197,6 @@ impl ActionInfo {
         let cv_net = ValueCommitment::derive(v_net, self.rcv, asset);
 
         let nf_old = self.spend.note.nullifier(&self.spend.fvk);
-        let sender_address = self.spend.note.recipient();
-        let rho_old = self.spend.note.rho();
-        let psi_old = self.spend.note.rseed().psi(&rho_old);
-        let rcm_old = self.spend.note.rseed().rcm(&rho_old);
         let ak: SpendValidatingKey = self.spend.fvk.clone().into();
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
@@ -220,34 +237,10 @@ impl ActionInfo {
                 cv_net,
                 SigningMetadata {
                     dummy_ask: self.spend.dummy_sk.as_ref().map(SpendAuthorizingKey::from),
-                    parts: SigningParts {
-                        ak: ak.clone(),
-                        alpha,
-                    },
+                    parts: SigningParts { ak, alpha },
                 },
             ),
-            Circuit {
-                path: Value::known(self.spend.merkle_path.auth_path()),
-                pos: Value::known(self.spend.merkle_path.position()),
-                g_d_old: Value::known(sender_address.g_d()),
-                pk_d_old: Value::known(*sender_address.pk_d()),
-                v_old: Value::known(self.spend.note.value()),
-                // split_flag: Value::known(self.spend.split_flag),
-                rho_old: Value::known(rho_old),
-                psi_old: Value::known(psi_old),
-                rcm_old: Value::known(rcm_old),
-                cm_old: Value::known(self.spend.note.commitment()),
-                alpha: Value::known(alpha),
-                ak: Value::known(ak),
-                nk: Value::known(*self.spend.fvk.nk()),
-                rivk: Value::known(self.spend.fvk.rivk(self.spend.scope)),
-                g_d_new: Value::known(note.recipient().g_d()),
-                pk_d_new: Value::known(*note.recipient().pk_d()),
-                v_new: Value::known(note.value()),
-                psi_new: Value::known(note.rseed().psi(&note.rho())),
-                rcm_new: Value::known(note.rseed().rcm(&note.rho())),
-                rcv: Value::known(self.rcv),
-            },
+            Circuit::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
         )
     }
 }
@@ -357,6 +350,31 @@ impl Builder {
         Ok(())
     }
 
+    /// The net value of the bundle to be built. The value of all spends,
+    /// minus the value of all outputs.
+    ///
+    /// Useful for balancing a transaction, as the value balance of an individual bundle
+    /// can be non-zero. Each bundle's value balance is [added] to the transparent
+    /// transaction value pool, which [must not have a negative value]. (If it were
+    /// negative, the transaction would output more value than it receives in inputs.)
+    ///
+    /// [added]: https://zips.z.cash/protocol/protocol.pdf#orchardbalance
+    /// [must not have a negative value]: https://zips.z.cash/protocol/protocol.pdf#transactions
+    pub fn value_balance<V: TryFrom<i64>>(&self) -> Result<V, value::OverflowError> {
+        let value_balance = self
+            .spends
+            .iter()
+            .map(|spend| spend.note.value() - NoteValue::zero())
+            .chain(
+                self.recipients
+                    .iter()
+                    .map(|recipient| NoteValue::zero() - recipient.value),
+            )
+            .fold(Some(ValueSum::zero()), |acc, note_value| acc? + note_value)
+            .ok_or(OverflowError)?;
+        i64::try_from(value_balance).and_then(|i| V::try_from(i).map_err(|_| value::OverflowError))
+    }
+
     /// Builds a bundle containing the given spent notes and recipients.
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
@@ -455,6 +473,30 @@ impl Builder {
         );
         Ok(bundle)
     }
+}
+
+/// partition a list of spends and recipients by note types.
+fn partition_by_asset(
+    spends: &[SpendInfo],
+    recipients: &[RecipientInfo],
+) -> HashMap<AssetId, (Vec<SpendInfo>, Vec<RecipientInfo>)> {
+    let mut hm = HashMap::new();
+
+    for s in spends {
+        hm.entry(s.note.asset())
+            .or_insert((vec![], vec![]))
+            .0
+            .push(s.clone());
+    }
+
+    for r in recipients {
+        hm.entry(r.asset)
+            .or_insert((vec![], vec![]))
+            .1
+            .push(r.clone())
+    }
+
+    hm
 }
 
 /// partition a list of spends and recipients by note types.
@@ -912,6 +954,8 @@ mod tests {
                 None,
             )
             .unwrap();
+        let balance: i64 = builder.value_balance().unwrap();
+        assert_eq!(balance, -5000);
 
         let bundle: Bundle<Authorized, i64> = builder
             .build(&mut rng)
