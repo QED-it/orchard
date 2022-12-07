@@ -459,7 +459,7 @@ impl Builder {
             self.burn
                 .into_iter()
                 .map(|(asset, value)| Ok((asset, value.into()?)))
-                .collect::<Result<Vec<(AssetId, V)>, Error>>()?,
+                .collect::<Result<_, Error>>()?,
             anchor,
             InProgress {
                 proof: Unproven { circuits },
