@@ -38,8 +38,6 @@ pub enum Error {
     /// An overflow error occurred while attempting to construct the value
     /// for a bundle.
     ValueSum(value::OverflowError),
-    /// Value sum type conversion error
-    ValueSumTypeConversion,
     /// External signature is not valid.
     InvalidExternalSignature,
     /// A signature is valid for more than one input. This should never happen if `alpha`
@@ -381,7 +379,7 @@ impl Builder {
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
     /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
-    pub fn build<V: TryFrom<i64> + Copy + Into<i64> + TryFrom<ValueSum>>(
+    pub fn build<V: TryFrom<i64> + Copy + Into<i64>>(
         self,
         mut rng: impl RngCore,
     ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V>, Error> {
@@ -441,8 +439,7 @@ impl Builder {
                 acc? + action.value_sum()
             })
             .ok_or(OverflowError)?
-            .try_into()
-            .map_err(|_| Error::ValueSumTypeConversion)?;
+            .into()?;
 
         // Compute the transaction binding signing key.
         let bsk = pre_actions
@@ -461,14 +458,7 @@ impl Builder {
             native_value_balance,
             self.burn
                 .into_iter()
-                .map(|(asset, value)| {
-                    Ok((
-                        asset,
-                        value
-                            .try_into()
-                            .map_err(|_| Error::ValueSumTypeConversion)?,
-                    ))
-                })
+                .map(|(asset, value)| Ok((asset, value.into()?)))
                 .collect::<Result<Vec<(AssetId, V)>, Error>>()?,
             anchor,
             InProgress {
@@ -774,7 +764,6 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::note::AssetId;
-    use crate::value::ValueSum;
     use crate::{
         address::testing::arb_address,
         bundle::{Authorized, Bundle, Flags},
@@ -807,9 +796,7 @@ pub mod testing {
 
     impl<R: RngCore + CryptoRng> ArbitraryBundleInputs<R> {
         /// Create a bundle from the set of arbitrary bundle inputs.
-        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64> + TryFrom<ValueSum>>(
-            mut self,
-        ) -> Bundle<Authorized, V> {
+        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>>(mut self) -> Bundle<Authorized, V> {
             let fvk = FullViewingKey::from(&self.sk);
             let flags = Flags::from_parts(true, true);
             let mut builder = Builder::new(flags, self.anchor);
@@ -890,7 +877,7 @@ pub mod testing {
     }
 
     /// Produce an arbitrary valid Orchard bundle using a random spending key.
-    pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64> + TryFrom<ValueSum>>(
+    pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
     ) -> impl Strategy<Value = Bundle<Authorized, V>> {
         arb_spending_key()
             .prop_flat_map(arb_bundle_inputs)
@@ -898,7 +885,7 @@ pub mod testing {
     }
 
     /// Produce an arbitrary valid Orchard bundle using a specified spending key.
-    pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64> + TryFrom<ValueSum>>(
+    pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
         k: SpendingKey,
     ) -> impl Strategy<Value = Bundle<Authorized, V>> {
         arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V>())

@@ -53,6 +53,7 @@ use pasta_curves::{
 use rand::RngCore;
 use subtle::CtOption;
 
+use crate::builder::Error;
 use crate::note::AssetId;
 use crate::{
     constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_R_BYTES},
@@ -186,6 +187,12 @@ impl ValueSum {
                 .expect("ValueSum magnitude is in range for u64 by construction"),
             sign,
         )
+    }
+
+    pub(crate) fn into<V: TryFrom<i64>>(self) -> Result<V, Error> {
+        i64::try_from(self)
+            .map_err(Error::ValueSum)
+            .and_then(|i| V::try_from(i).map_err(|_| Error::ValueSum(OverflowError)))
     }
 }
 
