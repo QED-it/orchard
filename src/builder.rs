@@ -499,30 +499,6 @@ fn partition_by_asset(
     hm
 }
 
-/// partition a list of spends and recipients by note types.
-fn partition_by_asset(
-    spends: &[SpendInfo],
-    recipients: &[RecipientInfo],
-) -> HashMap<AssetId, (Vec<SpendInfo>, Vec<RecipientInfo>)> {
-    let mut hm = HashMap::new();
-
-    for s in spends {
-        hm.entry(s.note.asset())
-            .or_insert((vec![], vec![]))
-            .0
-            .push(s.clone());
-    }
-
-    for r in recipients {
-        hm.entry(r.asset)
-            .or_insert((vec![], vec![]))
-            .1
-            .push(r.clone())
-    }
-
-    hm
-}
-
 /// Marker trait representing bundle signatures in the process of being created.
 pub trait InProgressSignatures: fmt::Debug {
     /// The authorization type of an Orchard action in the process of being authorized.

@@ -220,18 +220,6 @@ impl Neg for ValueSum {
     }
 }
 
-impl Neg for ValueSum {
-    type Output = Option<ValueSum>;
-
-    #[allow(clippy::suspicious_arithmetic_impl)]
-    fn neg(self) -> Self::Output {
-        self.0
-            .checked_neg()
-            .filter(|v| VALUE_SUM_RANGE.contains(v))
-            .map(ValueSum)
-    }
-}
-
 impl<'a> Sum<&'a ValueSum> for Result<ValueSum, OverflowError> {
     fn sum<I: Iterator<Item = &'a ValueSum>>(iter: I) -> Self {
         iter.fold(Ok(ValueSum(0)), |acc, v| (acc? + *v).ok_or(OverflowError))
@@ -559,25 +547,6 @@ mod tests {
             check_binding_signature(&native_values, &[], &[], &burn_values);
             check_binding_signature(&native_values, &asset_values, &neg_trapdoors, &[]);
             check_binding_signature(&native_values, &asset_values, &neg_trapdoors, &burn_values);
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn bsk_consistent_with_bvk(
-            native_values in (1usize..10).prop_flat_map(|n_values|
-                arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), native_asset_id()), n_values)
-                )
-            ),
-            (arb_values,neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|
-                (arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values)
-                ), prop::collection::vec(arb_trapdoor(), n_values))
-            ),
-        ) {
-            // Test with native note type (zec)
-             _bsk_consistent_with_bvk(&native_values, &arb_values, &neg_trapdoors);
         }
     }
 }
