@@ -5,8 +5,8 @@ use core::fmt;
 use group::ff::PrimeField;
 use zcash_note_encryption::{
     AEADBytes, BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes, OutgoingCipherKey,
-    ShieldedOutput, AEAD_TAG_SIZE, COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, NOTE_PLAINTEXT_SIZE,
-    OUT_PLAINTEXT_SIZE,
+    ShieldedOutput, AEAD_TAG_SIZE, COMPACT_NOTE_SIZE_V2, ENC_CIPHERTEXT_SIZE_V2, NOTE_PLAINTEXT_SIZE_V2,
+    OUT_PLAINTEXT_SIZE, MEMO_SIZE,
 };
 
 use crate::note::AssetId;
@@ -24,17 +24,15 @@ use crate::{
 
 const PRF_OCK_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_Orchardock";
 
-// TODO: VA: Need to remove redundant definitions here, and move them from the top if Orchard domain specific
-/// The size of the encoding of a ZSA asset type.
-const ZSA_TYPE_SIZE: usize = 32;
-/// The size of the encoding of the note plaintext post ZSA.
-const NOTE_PLAINTEXT_SIZE_ZSA: usize = NOTE_PLAINTEXT_SIZE + ZSA_TYPE_SIZE;
+/// The size of the encoding of a ZSA asset id.
+const ZSA_ASSET_SIZE: usize = 32;
+/// The size of a v3 compact note.
+const COMPACT_NOTE_SIZE_V3: usize = COMPACT_NOTE_SIZE_V2 + ZSA_ASSET_SIZE;
+/// The size of [`NotePlaintextBytes`] for V3.
+const NOTE_PLAINTEXT_SIZE_V3: usize = COMPACT_NOTE_SIZE_V3 + MEMO_SIZE;
+
 /// The size of the encrypted ciphertext of the ZSA variant of a note.
-const ENC_CIPHERTEXT_SIZE_ZSA: usize = ENC_CIPHERTEXT_SIZE + ZSA_TYPE_SIZE;
-/// The size of the ZSA variant of a compact note.
-const COMPACT_NOTE_SIZE_ZSA: usize = COMPACT_NOTE_SIZE + ZSA_TYPE_SIZE;
-/// The size of the memo.
-const MEMO_SIZE: usize = NOTE_PLAINTEXT_SIZE - COMPACT_NOTE_SIZE;
+const ENC_CIPHERTEXT_SIZE_V3: usize = NOTE_PLAINTEXT_SIZE_V3 + AEAD_TAG_SIZE;
 
 /// Defined in [Zcash Protocol Spec § 5.4.2: Pseudo Random Functions][concreteprfs].
 ///
@@ -76,17 +74,17 @@ where
     // and parse the asset type accordingly.
     let asset = parse_version_and_asset_type(plaintext)?;
 
-    let mut plaintext_inner = [0u8; COMPACT_NOTE_SIZE];
+    let mut plaintext_inner = [0u8; COMPACT_NOTE_SIZE_V2];
     match plaintext {
-        CompactNote::V2(x) => plaintext_inner.copy_from_slice(&x[..COMPACT_NOTE_SIZE]),
-        CompactNote::V3(x) => plaintext_inner.copy_from_slice(&x[..COMPACT_NOTE_SIZE]),
+        CompactNote::V2(x) => plaintext_inner.copy_from_slice(&x[..COMPACT_NOTE_SIZE_V2]),
+        CompactNote::V3(x) => plaintext_inner.copy_from_slice(&x[..COMPACT_NOTE_SIZE_V2]),
     }
 
     // The unwraps below are guaranteed to succeed by the assertion above
     let diversifier = Diversifier::from_bytes(plaintext_inner[1..12].try_into().unwrap());
     let value = NoteValue::from_bytes(plaintext_inner[12..20].try_into().unwrap());
     let rseed = Option::from(RandomSeed::from_bytes(
-        plaintext_inner[20..COMPACT_NOTE_SIZE].try_into().unwrap(),
+        plaintext_inner[20..COMPACT_NOTE_SIZE_V2].try_into().unwrap(),
         &domain.rho,
     ))?;
 
@@ -101,7 +99,7 @@ fn parse_version_and_asset_type(plaintext: &CompactNote) -> Option<AssetId> {
     match plaintext {
         CompactNote::V2(x) if x[0] == 0x02 => Some(AssetId::native()),
         CompactNote::V3(x) if x[0] == 0x03 => {
-            let bytes = x[COMPACT_NOTE_SIZE..COMPACT_NOTE_SIZE_ZSA]
+            let bytes = x[COMPACT_NOTE_SIZE_V2..COMPACT_NOTE_SIZE_V3]
                 .try_into()
                 .unwrap();
             AssetId::from_bytes(bytes).into()
@@ -121,9 +119,9 @@ pub struct OrchardDomain {
 #[derive(Clone, Debug)]
 pub enum NotePlaintext {
     /// Variant for old note plaintexts.
-    V2([u8; NOTE_PLAINTEXT_SIZE]),
+    V2([u8; NOTE_PLAINTEXT_SIZE_V2]),
     /// Variant for the new note plaintexts post ZSA.
-    V3([u8; NOTE_PLAINTEXT_SIZE_ZSA]),
+    V3([u8; NOTE_PLAINTEXT_SIZE_V3]),
 }
 
 impl AsMut<[u8]> for NotePlaintext {
@@ -141,24 +139,24 @@ impl AsMut<[u8]> for NotePlaintext {
 #[derive(Clone, Debug)]
 pub enum EncNoteCiphertext {
     /// Variant for old encrypted note ciphertexts.
-    V2([u8; ENC_CIPHERTEXT_SIZE]),
+    V2([u8; ENC_CIPHERTEXT_SIZE_V2]),
     /// Variant for new encrypted note ciphertexts post ZSA.
-    V3([u8; ENC_CIPHERTEXT_SIZE_ZSA]),
+    V3([u8; ENC_CIPHERTEXT_SIZE_V3]),
 }
 
 impl From<(NotePlaintext, AEADBytes)> for EncNoteCiphertext {
     fn from((np, t): (NotePlaintext, AEADBytes)) -> Self {
         match np {
             NotePlaintext::V2(npx) => {
-                let mut nc = [0u8; ENC_CIPHERTEXT_SIZE];
-                nc[..NOTE_PLAINTEXT_SIZE].copy_from_slice(&npx);
-                nc[NOTE_PLAINTEXT_SIZE..].copy_from_slice(&t.0);
+                let mut nc = [0u8; ENC_CIPHERTEXT_SIZE_V2];
+                nc[..NOTE_PLAINTEXT_SIZE_V2].copy_from_slice(&npx);
+                nc[NOTE_PLAINTEXT_SIZE_V2..].copy_from_slice(&t.0);
                 EncNoteCiphertext::V2(nc)
             }
             NotePlaintext::V3(npx) => {
-                let mut nc = [0u8; ENC_CIPHERTEXT_SIZE_ZSA];
-                nc[..NOTE_PLAINTEXT_SIZE_ZSA].copy_from_slice(&npx);
-                nc[NOTE_PLAINTEXT_SIZE_ZSA..].copy_from_slice(&t.0);
+                let mut nc = [0u8; ENC_CIPHERTEXT_SIZE_V3];
+                nc[..NOTE_PLAINTEXT_SIZE_V3].copy_from_slice(&npx);
+                nc[NOTE_PLAINTEXT_SIZE_V3..].copy_from_slice(&t.0);
                 EncNoteCiphertext::V3(nc)
             }
         }
@@ -178,9 +176,9 @@ impl AsRef<[u8]> for EncNoteCiphertext {
 #[derive(Clone, Debug)]
 pub enum CompactNote {
     /// Variant for old compact notes.
-    V2([u8; COMPACT_NOTE_SIZE]),
+    V2([u8; COMPACT_NOTE_SIZE_V2]),
     /// Variant for new compact notes post ZSA.
-    V3([u8; COMPACT_NOTE_SIZE_ZSA]),
+    V3([u8; COMPACT_NOTE_SIZE_V3]),
 }
 
 impl AsMut<[u8]> for CompactNote {
@@ -197,13 +195,13 @@ impl From<NotePlaintext> for CompactNote {
     fn from(np: NotePlaintext) -> Self {
         match np {
             NotePlaintext::V2(npx) => {
-                let mut cnp = [0u8; COMPACT_NOTE_SIZE];
-                cnp.copy_from_slice(&npx[..COMPACT_NOTE_SIZE]);
+                let mut cnp = [0u8; COMPACT_NOTE_SIZE_V2];
+                cnp.copy_from_slice(&npx[..COMPACT_NOTE_SIZE_V2]);
                 CompactNote::V2(cnp)
             }
             NotePlaintext::V3(npx) => {
-                let mut cnp = [0u8; COMPACT_NOTE_SIZE_ZSA];
-                cnp.copy_from_slice(&npx[..COMPACT_NOTE_SIZE_ZSA]);
+                let mut cnp = [0u8; COMPACT_NOTE_SIZE_V3];
+                cnp.copy_from_slice(&npx[..COMPACT_NOTE_SIZE_V3]);
                 CompactNote::V3(cnp)
             }
         }
@@ -286,7 +284,7 @@ impl Domain for OrchardDomain {
         _: &Self::Recipient,
         memo: &Self::Memo,
     ) -> NotePlaintext {
-        let mut np = [0u8; NOTE_PLAINTEXT_SIZE_ZSA];
+        let mut np = [0u8; NOTE_PLAINTEXT_SIZE_V3];
         np[0] = 0x03;
         np[1..12].copy_from_slice(note.recipient().diversifier().as_array());
         np[12..20].copy_from_slice(&note.value().to_bytes());
@@ -362,8 +360,8 @@ impl Domain for OrchardDomain {
     fn extract_memo(&self, plaintext: &NotePlaintext) -> Self::Memo {
         let mut memo = [0u8; MEMO_SIZE];
         match plaintext {
-            NotePlaintext::V2(np) => memo.copy_from_slice(&np[COMPACT_NOTE_SIZE..]),
-            NotePlaintext::V3(np) => memo.copy_from_slice(&np[COMPACT_NOTE_SIZE_ZSA..]),
+            NotePlaintext::V2(np) => memo.copy_from_slice(&np[COMPACT_NOTE_SIZE_V2..]),
+            NotePlaintext::V3(np) => memo.copy_from_slice(&np[COMPACT_NOTE_SIZE_V3..]),
         }
         memo
     }
@@ -382,20 +380,20 @@ impl Domain for OrchardDomain {
     ) -> (Self::NotePlaintextBytes, AEADBytes) {
         match enc_ciphertext {
             EncNoteCiphertext::V2(ncx) => {
-                let mut np = [0u8; NOTE_PLAINTEXT_SIZE];
+                let mut np = [0u8; NOTE_PLAINTEXT_SIZE_V2];
                 let mut tag = [0u8; AEAD_TAG_SIZE];
 
-                np.copy_from_slice(&ncx[..NOTE_PLAINTEXT_SIZE]);
-                tag.copy_from_slice(&ncx[NOTE_PLAINTEXT_SIZE..]);
+                np.copy_from_slice(&ncx[..NOTE_PLAINTEXT_SIZE_V2]);
+                tag.copy_from_slice(&ncx[NOTE_PLAINTEXT_SIZE_V2..]);
 
                 (NotePlaintext::V2(np), AEADBytes(tag))
             }
             EncNoteCiphertext::V3(ncx) => {
-                let mut np = [0u8; NOTE_PLAINTEXT_SIZE_ZSA];
+                let mut np = [0u8; NOTE_PLAINTEXT_SIZE_V3];
                 let mut tag = [0u8; AEAD_TAG_SIZE];
 
-                np.copy_from_slice(&ncx[..NOTE_PLAINTEXT_SIZE_ZSA]);
-                tag.copy_from_slice(&ncx[NOTE_PLAINTEXT_SIZE_ZSA..]);
+                np.copy_from_slice(&ncx[..NOTE_PLAINTEXT_SIZE_V3]);
+                tag.copy_from_slice(&ncx[NOTE_PLAINTEXT_SIZE_V3..]);
 
                 (NotePlaintext::V3(np), AEADBytes(tag))
             }
@@ -446,13 +444,13 @@ impl<T> ShieldedOutput<OrchardDomain> for Action<T> {
     fn enc_ciphertext_compact(&self) -> CompactNote {
         match self.encrypted_note().enc_ciphertext {
             EncNoteCiphertext::V2(ncx) => {
-                let mut enc_ct_comp = [0u8; COMPACT_NOTE_SIZE];
-                enc_ct_comp.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE]);
+                let mut enc_ct_comp = [0u8; COMPACT_NOTE_SIZE_V2];
+                enc_ct_comp.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_V2]);
                 CompactNote::V2(enc_ct_comp)
             }
             EncNoteCiphertext::V3(ncx) => {
-                let mut enc_ct_comp = [0u8; COMPACT_NOTE_SIZE_ZSA];
-                enc_ct_comp.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_ZSA]);
+                let mut enc_ct_comp = [0u8; COMPACT_NOTE_SIZE_V3];
+                enc_ct_comp.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_V3]);
                 CompactNote::V3(enc_ct_comp)
             }
         }
@@ -477,13 +475,13 @@ impl<T> From<&Action<T>> for CompactAction {
     fn from(action: &Action<T>) -> Self {
         let comp_ciphertext: CompactNote = match action.encrypted_note().enc_ciphertext {
             EncNoteCiphertext::V2(ncx) => {
-                let mut comp_x = [0u8; COMPACT_NOTE_SIZE];
-                comp_x.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE]);
+                let mut comp_x = [0u8; COMPACT_NOTE_SIZE_V2];
+                comp_x.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_V2]);
                 CompactNote::V2(comp_x)
             }
             EncNoteCiphertext::V3(ncx) => {
-                let mut comp_x = [0u8; COMPACT_NOTE_SIZE_ZSA];
-                comp_x.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_ZSA]);
+                let mut comp_x = [0u8; COMPACT_NOTE_SIZE_V3];
+                comp_x.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_V3]);
                 CompactNote::V3(comp_x)
             }
         };
