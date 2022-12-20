@@ -1,4 +1,5 @@
-# orchard [![Crates.io](https://img.shields.io/crates/v/orchard.svg)](https://crates.io/crates/orchard) #
+# orchard [![Crates.io](https://img.shields.io/crates/v/orchard.svg)](https://crates.io/crates/orchard) [![CI checks](https://github.com/QED-it/orchard/actions/workflows/ci.yml/badge.svg)](https://github.com/QED-it/orchard/actions/workflows/ci.yml)
+#
 
 Requires Rust 1.61+.
 
