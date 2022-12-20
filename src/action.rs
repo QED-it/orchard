@@ -132,7 +132,7 @@ pub(crate) mod testing {
             commitment::ExtractedNoteCommitment, nullifier::testing::arb_nullifier,
             testing::arb_note, TransmittedNoteCiphertext,
         },
-        note_encryption::EncNoteCiphertext,
+        note_encryption::NoteCiphertextBytes,
         primitives::redpallas::{
             self,
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
@@ -159,7 +159,7 @@ pub(crate) mod testing {
             // FIXME: make a real one from the note.
             let encrypted_note = TransmittedNoteCiphertext {
                 epk_bytes: [0u8; 32],
-                enc_ciphertext: EncNoteCiphertext::V3([0u8; 612]), // newly encrypted notes will be V3.
+                enc_ciphertext: NoteCiphertextBytes::V3([0u8; 612]), // newly encrypted notes will be V3.
                 out_ciphertext: [0u8; 80]
             };
             Action {
@@ -193,7 +193,7 @@ pub(crate) mod testing {
             // FIXME: make a real one from the note.
             let encrypted_note = TransmittedNoteCiphertext {
                 epk_bytes: [0u8; 32],
-                enc_ciphertext: EncNoteCiphertext::V3([0u8; 612]), // newly encrypted notes will be V3.
+                enc_ciphertext: NoteCiphertextBytes::V3([0u8; 612]), // newly encrypted notes will be V3.
                 out_ciphertext: [0u8; 80]
             };
 

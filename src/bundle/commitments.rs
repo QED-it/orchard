@@ -4,7 +4,7 @@ use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::bundle::{Authorization, Authorized, Bundle};
 use crate::issuance::{IssueAuth, IssueBundle, Signed};
-use crate::note_encryption::EncNoteCiphertext;
+use crate::note_encryption::NoteCiphertextBytes;
 
 const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
 const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActCHash";
@@ -52,12 +52,12 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         nh.update(&<[u8; 32]>::from(action.rk()));
 
         match &action.encrypted_note().enc_ciphertext {
-            EncNoteCiphertext::V2(ncx) => {
+            NoteCiphertextBytes::V2(ncx) => {
                 ch.update(&ncx[..52]);
                 mh.update(&ncx[52..564]);
                 nh.update(&ncx[564..]);
             }
-            EncNoteCiphertext::V3(ncx) => {
+            NoteCiphertextBytes::V3(ncx) => {
                 v3_flag = true;
                 ch.update(&ncx[..52]);
                 ah.update(&ncx[52..84]);
