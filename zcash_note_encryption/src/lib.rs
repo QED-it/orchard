@@ -36,6 +36,7 @@ use chacha20poly1305::{
 use rand_core::RngCore;
 use subtle::{Choice, ConstantTimeEq};
 
+
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub mod batch;
@@ -104,12 +105,27 @@ enum NoteValidity {
 pub struct AEADBytes(pub [u8; AEAD_TAG_SIZE]);
 
 
-pub trait Bytes {
-    fn to_bytes(&self) -> &[u8];
+// pub trait AsSlice {
+//     fn from_slice(slice: &[u8]) -> Option<Self>
+//     where
+//         Self: Sized;
+//
+//     fn as_slice(&self) -> &[u8];
+//
+//     fn as_mut_slice(&mut self) -> &mut [u8];
+//
+// }
+
+pub trait FromSlice {
+    fn from_slice(s: &[u8]) -> Self where Self: Sized;
 }
-pub trait FromBytes {
-    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized;
-}
+
+// pub trait Bytes {
+//     fn to_bytes(&self) -> &[u8];
+// }
+// pub trait FromBytes {
+//     fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized;
+// }
 /// Trait that encapsulates protocol-specific note encryption types and logic.
 ///
 /// This trait enables most of the note encryption logic to be shared between Sapling and
@@ -132,8 +148,8 @@ pub trait Domain {
 
     type NotePlaintextBytes: AsMut<[u8]>;
     type NoteCiphertextBytes: From<(Self::NotePlaintextBytes, AEADBytes)>;
-    type CompactNotePlaintextBytes: FromBytes + From<Self::NotePlaintextBytes> + AsMut<[u8]>;
-    type CompactNoteCiphertextBytes: Bytes;
+    type CompactNotePlaintextBytes: FromSlice + From<Self::NotePlaintextBytes> + AsMut<[u8]>;
+    type CompactNoteCiphertextBytes: AsRef<[u8]>;
 
     /// Derives the `EphemeralSecretKey` corresponding to this note.
     ///
@@ -661,13 +677,8 @@ fn try_compact_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
     output: &Output,
     key: &D::SymmetricKey,
 ) -> Option<(D::Note, D::Recipient)> {
-
-    let enc_ciphertext = output.enc_ciphertext_compact();
-
     // Start from block 1 to skip over Poly1305 keying output
-    //let mut plaintext: D::CompactNotePlaintextBytes;
-    let a = enc_ciphertext.to_bytes();
-    let mut plaintext = D::CompactNotePlaintextBytes::from_bytes(a)?;
+    let mut plaintext = D::CompactNotePlaintextBytes::from_slice(output.enc_ciphertext_compact().as_ref());
     let mut keystream = ChaCha20::new(key.as_ref().into(), [0u8; 12][..].into());
     keystream.seek(64);
     keystream.apply_keystream(plaintext.as_mut());

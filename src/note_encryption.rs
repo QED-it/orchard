@@ -4,7 +4,7 @@ use blake2b_simd::{Hash, Params};
 use core::fmt;
 use group::ff::PrimeField;
 use zcash_note_encryption::{
-    AEADBytes, BatchDomain, Bytes, Domain, EphemeralKeyBytes, FromBytes, OutPlaintextBytes,
+    AEADBytes, BatchDomain, Domain, EphemeralKeyBytes, FromSlice, OutPlaintextBytes,
     OutgoingCipherKey, ShieldedOutput, AEAD_TAG_SIZE, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
 };
 
@@ -195,8 +195,8 @@ pub enum CompactNotePlaintextBytes {
     V3([u8; COMPACT_NOTE_SIZE_V3]),
 }
 
-impl Bytes for CompactNotePlaintextBytes {
-    fn to_bytes(&self) -> &[u8] {
+impl AsRef<[u8]> for CompactNotePlaintextBytes {
+    fn as_ref(&self) -> &[u8] {
         match self {
             CompactNotePlaintextBytes::V2(x) => x,
             CompactNotePlaintextBytes::V3(x) => x,
@@ -204,23 +204,24 @@ impl Bytes for CompactNotePlaintextBytes {
     }
 }
 
-impl FromBytes for CompactNotePlaintextBytes {
-    fn from_bytes(bytes: &[u8]) -> Option<Self>
+/// Panics if the given slice is not `COMPACT_NOTE_SIZE_V2` or `COMPACT_NOTE_SIZE_V3` bytes long.
+impl FromSlice for CompactNotePlaintextBytes {
+    fn from_slice(s: &[u8]) -> Self
     where
         Self: Sized,
     {
-        match bytes.len() {
+        match s.len() {
             COMPACT_NOTE_SIZE_V2 => {
                 let mut x = [0u8; COMPACT_NOTE_SIZE_V2];
-                x.copy_from_slice(bytes);
-                Some(CompactNotePlaintextBytes::V2(x))
+                x.copy_from_slice(s);
+                CompactNotePlaintextBytes::V2(x)
             }
             COMPACT_NOTE_SIZE_V3 => {
                 let mut x = [0u8; COMPACT_NOTE_SIZE_V3];
-                x.copy_from_slice(bytes);
-                Some(CompactNotePlaintextBytes::V3(x))
+                x.copy_from_slice(s);
+                CompactNotePlaintextBytes::V3(x)
             }
-            _ => None,
+            _ => panic!("Invalid length for compact note plaintext"),
         }
     }
 }
@@ -234,8 +235,8 @@ pub enum CompactNoteCiphertextBytes {
     V3([u8; COMPACT_NOTE_SIZE_V3]),
 }
 
-impl Bytes for CompactNoteCiphertextBytes {
-    fn to_bytes(&self) -> &[u8] {
+impl AsRef<[u8]> for CompactNoteCiphertextBytes {
+    fn as_ref(&self) -> &[u8] {
         match self {
             CompactNoteCiphertextBytes::V2(x) => x,
             CompactNoteCiphertextBytes::V3(x) => x,
@@ -243,23 +244,25 @@ impl Bytes for CompactNoteCiphertextBytes {
     }
 }
 
-impl FromBytes for CompactNoteCiphertextBytes {
-    fn from_bytes(bytes: &[u8]) -> Option<Self>
+/// Panics if the given slice is not `COMPACT_NOTE_SIZE_V2` or `COMPACT_NOTE_SIZE_V3` bytes long.
+/// Panic should be considered as an implementation error.
+impl FromSlice for CompactNoteCiphertextBytes {
+    fn from_slice(s: &[u8]) -> Self
     where
         Self: Sized,
     {
-        match bytes.len() {
+        match s.len() {
             COMPACT_NOTE_SIZE_V2 => {
                 let mut x = [0u8; COMPACT_NOTE_SIZE_V2];
-                x.copy_from_slice(bytes);
-                Some(CompactNoteCiphertextBytes::V2(x))
+                x.copy_from_slice(s);
+                CompactNoteCiphertextBytes::V2(x)
             }
             COMPACT_NOTE_SIZE_V3 => {
                 let mut x = [0u8; COMPACT_NOTE_SIZE_V3];
-                x.copy_from_slice(bytes);
-                Some(CompactNoteCiphertextBytes::V3(x))
+                x.copy_from_slice(s);
+                CompactNoteCiphertextBytes::V3(x)
             }
-            _ => None,
+            _ => panic!("Invalid length for compact note ciphertext"),
         }
     }
 }
