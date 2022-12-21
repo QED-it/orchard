@@ -101,31 +101,14 @@ enum NoteValidity {
     Invalid,
 }
 
+// todo: potentially remove this
 /// Newtype representing the bytes of the AEAD Tag.
 pub struct AEADBytes(pub [u8; AEAD_TAG_SIZE]);
-
-
-// pub trait AsSlice {
-//     fn from_slice(slice: &[u8]) -> Option<Self>
-//     where
-//         Self: Sized;
-//
-//     fn as_slice(&self) -> &[u8];
-//
-//     fn as_mut_slice(&mut self) -> &mut [u8];
-//
-// }
 
 pub trait FromSlice {
     fn from_slice(s: &[u8]) -> Self where Self: Sized;
 }
 
-// pub trait Bytes {
-//     fn to_bytes(&self) -> &[u8];
-// }
-// pub trait FromBytes {
-//     fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized;
-// }
 /// Trait that encapsulates protocol-specific note encryption types and logic.
 ///
 /// This trait enables most of the note encryption logic to be shared between Sapling and
@@ -146,9 +129,9 @@ pub trait Domain {
     type ExtractedCommitmentBytes: Eq + for<'a> From<&'a Self::ExtractedCommitment>;
     type Memo;
 
-    type NotePlaintextBytes: AsMut<[u8]>;
-    type NoteCiphertextBytes: From<(Self::NotePlaintextBytes, AEADBytes)>;
-    type CompactNotePlaintextBytes: FromSlice + From<Self::NotePlaintextBytes> + AsMut<[u8]>;
+    type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]>;
+    type NoteCiphertextBytes: FromSlice;
+    type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + FromSlice;
     type CompactNoteCiphertextBytes: AsRef<[u8]>;
 
     /// Derives the `EphemeralSecretKey` corresponding to this note.
@@ -284,13 +267,13 @@ pub trait Domain {
         plaintext: &Self::CompactNotePlaintextBytes,
     ) -> Option<(Self::Note, Self::Recipient)>;
 
-    /// Extracts the memo field from the given note plaintext.
+    /// Splits the memo field from the given note plaintext.
     ///
     /// # Compatibility
     ///
     /// `&self` is passed here in anticipation of future changes to memo handling, where
     /// the memos may no longer be part of the note plaintext.
-    fn extract_memo(&self, plaintext: &Self::NotePlaintextBytes) -> Self::Memo;
+    fn split_memo(&self, plaintext: &Self::NotePlaintextBytes) -> (Self::CompactNotePlaintextBytes, Self::Memo);
 
     /// Parses the `DiversifiedTransmissionKey` field of the outgoing plaintext.
     ///
@@ -494,7 +477,7 @@ impl<D: Domain> NoteEncryption<D> {
                 input.as_mut(),
             )
             .unwrap();
-        D::NoteCiphertextBytes::from((input, AEADBytes(tag.into())))
+        D::NoteCiphertextBytes::from_slice(&[input.as_ref(),tag.as_ref()].concat())
     }
 
     /// Generates `outCiphertext` for this note.
@@ -570,7 +553,7 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
     key: &D::SymmetricKey,
 ) -> Option<(D::Note, D::Recipient, D::Memo)> {
 
-    let enc_ciphertext: D::NoteCiphertextBytes = output.enc_ciphertext()?;
+    let enc_ciphertext = output.enc_ciphertext()?;
 
     let (enc_plaintext, tag) = D::split(&enc_ciphertext);
     let mut plaintext = enc_plaintext;
@@ -584,13 +567,13 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
         )
         .ok()?;
 
-    let memo = domain.extract_memo(&plaintext);
+    let (compact,memo) = domain.split_memo(&plaintext);
     let (note, to) = parse_note_plaintext_without_memo_ivk(
         domain,
         ivk,
         ephemeral_key,
         &output.cmstar_bytes(),
-        &plaintext.into(),
+        &compact,
     )?;
 
     Some((note, to, memo))
@@ -770,10 +753,10 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
         )
         .ok()?;
 
-    let memo = domain.extract_memo(&plaintext);
+    let (compact, memo) = domain.split_memo(&plaintext);
 
     let (note, to) =
-        domain.parse_note_plaintext_without_memo_ovk(&pk_d, &esk, &ephemeral_key, &plaintext.into())?;
+        domain.parse_note_plaintext_without_memo_ovk(&pk_d, &esk, &ephemeral_key, &compact)?;
 
     // ZIP 212: Check that the esk provided to this function is consistent with the esk we
     // can derive from the note.

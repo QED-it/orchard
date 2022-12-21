@@ -148,6 +148,16 @@ impl AsMut<[u8]> for NotePlaintextBytes {
     }
 }
 
+impl AsRef<[u8]> for NotePlaintextBytes {
+    fn as_ref(&self) -> &[u8] {
+        let ptr: &[u8] = match self {
+            NotePlaintextBytes::V2(ref x) => x,
+            NotePlaintextBytes::V3(ref x) => x,
+        };
+        ptr
+    }
+}
+
 /// Newtype for encoding the encrypted note ciphertext post ZSA.
 // pub struct EncNoteCiphertextZSA (pub [u8; ZSA_ENC_CIPHERTEXT_SIZE]);
 #[derive(Clone, Debug)]
@@ -158,21 +168,24 @@ pub enum NoteCiphertextBytes {
     V3([u8; ENC_CIPHERTEXT_SIZE_V3]),
 }
 
-impl From<(NotePlaintextBytes, AEADBytes)> for NoteCiphertextBytes {
-    fn from((np, t): (NotePlaintextBytes, AEADBytes)) -> Self {
-        match np {
-            NotePlaintextBytes::V2(npx) => {
-                let mut nc = [0u8; ENC_CIPHERTEXT_SIZE_V2];
-                nc[..NOTE_PLAINTEXT_SIZE_V2].copy_from_slice(&npx);
-                nc[NOTE_PLAINTEXT_SIZE_V2..].copy_from_slice(&t.0);
-                NoteCiphertextBytes::V2(nc)
+/// Panics if the given slice is not `ENC_CIPHERTEXT_SIZE_V2` or `ENC_CIPHERTEXT_SIZE_V3` bytes long.
+impl FromSlice for NoteCiphertextBytes {
+    fn from_slice(s: &[u8]) -> Self
+    where
+        Self: Sized,
+    {
+        match s.len() {
+            ENC_CIPHERTEXT_SIZE_V2 => {
+                let mut x = [0u8; ENC_CIPHERTEXT_SIZE_V2];
+                x.copy_from_slice(s);
+                NoteCiphertextBytes::V2(x)
             }
-            NotePlaintextBytes::V3(npx) => {
-                let mut nc = [0u8; ENC_CIPHERTEXT_SIZE_V3];
-                nc[..NOTE_PLAINTEXT_SIZE_V3].copy_from_slice(&npx);
-                nc[NOTE_PLAINTEXT_SIZE_V3..].copy_from_slice(&t.0);
-                NoteCiphertextBytes::V3(nc)
+            ENC_CIPHERTEXT_SIZE_V3 => {
+                let mut x = [0u8; ENC_CIPHERTEXT_SIZE_V3];
+                x.copy_from_slice(s);
+                NoteCiphertextBytes::V3(x)
             }
+            _ => panic!("Invalid length for compact note plaintext"),
         }
     }
 }
@@ -274,23 +287,6 @@ impl AsMut<[u8]> for CompactNotePlaintextBytes {
             CompactNotePlaintextBytes::V3(ref mut x) => x,
         };
         ptr
-    }
-}
-
-impl From<NotePlaintextBytes> for CompactNotePlaintextBytes {
-    fn from(np: NotePlaintextBytes) -> Self {
-        match np {
-            NotePlaintextBytes::V2(npx) => {
-                let mut cnp = [0u8; COMPACT_NOTE_SIZE_V2];
-                cnp.copy_from_slice(&npx[..COMPACT_NOTE_SIZE_V2]);
-                CompactNotePlaintextBytes::V2(cnp)
-            }
-            NotePlaintextBytes::V3(npx) => {
-                let mut cnp = [0u8; COMPACT_NOTE_SIZE_V3];
-                cnp.copy_from_slice(&npx[..COMPACT_NOTE_SIZE_V3]);
-                CompactNotePlaintextBytes::V3(cnp)
-            }
-        }
     }
 }
 
@@ -444,13 +440,26 @@ impl Domain for OrchardDomain {
         })
     }
 
-    fn extract_memo(&self, plaintext: &NotePlaintextBytes) -> Self::Memo {
-        let mut memo = [0u8; MEMO_SIZE];
+    fn split_memo(
+        &self,
+        plaintext: &NotePlaintextBytes,
+    ) -> (Self::CompactNotePlaintextBytes, Self::Memo) {
         match plaintext {
-            NotePlaintextBytes::V2(np) => memo.copy_from_slice(&np[COMPACT_NOTE_SIZE_V2..]),
-            NotePlaintextBytes::V3(np) => memo.copy_from_slice(&np[COMPACT_NOTE_SIZE_V3..]),
+            NotePlaintextBytes::V2(np) => {
+                let (c, m) = np.split_at(COMPACT_NOTE_SIZE_V2);
+                (
+                    CompactNotePlaintextBytes::V2(c.try_into().unwrap()),
+                    m.try_into().unwrap(),
+                )
+            }
+            NotePlaintextBytes::V3(np) => {
+                let (c, m) = np.split_at(COMPACT_NOTE_SIZE_V3);
+                (
+                    CompactNotePlaintextBytes::V3(c.try_into().unwrap()),
+                    m.try_into().unwrap(),
+                )
+            }
         }
-        memo
     }
 
     fn extract_pk_d(out_plaintext: &OutPlaintextBytes) -> Option<Self::DiversifiedTransmissionKey> {
@@ -662,9 +671,9 @@ mod tests {
         // Decode.
         let domain = OrchardDomain { rho: note.rho() };
         let parsed_version = get_version(&plaintext).unwrap();
-        let parsed_memo = domain.extract_memo(&plaintext);
+        let (compact,parsed_memo) = domain.split_memo(&plaintext);
 
-        let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &plaintext.into(),
+        let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &compact,
             |diversifier| {
                 assert_eq!(diversifier, &note.recipient().diversifier());
                 Some(*note.recipient().pk_d())
