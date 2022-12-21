@@ -4,9 +4,8 @@ use blake2b_simd::{Hash, Params};
 use core::fmt;
 use group::ff::PrimeField;
 use zcash_note_encryption::{
-    AEADBytes, BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes, OutgoingCipherKey,
-    ShieldedOutput, AEAD_TAG_SIZE,
-    OUT_PLAINTEXT_SIZE, MEMO_SIZE,
+    AEADBytes, BatchDomain, Bytes, Domain, EphemeralKeyBytes, FromBytes, OutPlaintextBytes,
+    OutgoingCipherKey, ShieldedOutput, AEAD_TAG_SIZE, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
 };
 
 use crate::note::AssetId;
@@ -85,15 +84,21 @@ where
 
     let mut plaintext_inner = [0u8; COMPACT_NOTE_SIZE_V2];
     match plaintext {
-        CompactNotePlaintextBytes::V2(x) => plaintext_inner.copy_from_slice(&x[..COMPACT_NOTE_SIZE_V2]),
-        CompactNotePlaintextBytes::V3(x) => plaintext_inner.copy_from_slice(&x[..COMPACT_NOTE_SIZE_V2]),
+        CompactNotePlaintextBytes::V2(x) => {
+            plaintext_inner.copy_from_slice(&x[..COMPACT_NOTE_SIZE_V2])
+        }
+        CompactNotePlaintextBytes::V3(x) => {
+            plaintext_inner.copy_from_slice(&x[..COMPACT_NOTE_SIZE_V2])
+        }
     }
 
     // The unwraps below are guaranteed to succeed by the assertion above
     let diversifier = Diversifier::from_bytes(plaintext_inner[1..12].try_into().unwrap());
     let value = NoteValue::from_bytes(plaintext_inner[12..20].try_into().unwrap());
     let rseed = Option::from(RandomSeed::from_bytes(
-        plaintext_inner[20..COMPACT_NOTE_SIZE_V2].try_into().unwrap(),
+        plaintext_inner[20..COMPACT_NOTE_SIZE_V2]
+            .try_into()
+            .unwrap(),
         &domain.rho,
     ))?;
 
@@ -190,6 +195,36 @@ pub enum CompactNotePlaintextBytes {
     V3([u8; COMPACT_NOTE_SIZE_V3]),
 }
 
+impl Bytes for CompactNotePlaintextBytes {
+    fn to_bytes(&self) -> &[u8] {
+        match self {
+            CompactNotePlaintextBytes::V2(x) => x,
+            CompactNotePlaintextBytes::V3(x) => x,
+        }
+    }
+}
+
+impl FromBytes for CompactNotePlaintextBytes {
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        match bytes.len() {
+            COMPACT_NOTE_SIZE_V2 => {
+                let mut x = [0u8; COMPACT_NOTE_SIZE_V2];
+                x.copy_from_slice(bytes);
+                Some(CompactNotePlaintextBytes::V2(x))
+            }
+            COMPACT_NOTE_SIZE_V3 => {
+                let mut x = [0u8; COMPACT_NOTE_SIZE_V3];
+                x.copy_from_slice(bytes);
+                Some(CompactNotePlaintextBytes::V3(x))
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Newtype for encoding a compact note
 #[derive(Clone, Debug)]
 pub enum CompactNoteCiphertextBytes {
@@ -197,6 +232,36 @@ pub enum CompactNoteCiphertextBytes {
     V2([u8; COMPACT_NOTE_SIZE_V2]),
     /// Variant for new compact notes post ZSA.
     V3([u8; COMPACT_NOTE_SIZE_V3]),
+}
+
+impl Bytes for CompactNoteCiphertextBytes {
+    fn to_bytes(&self) -> &[u8] {
+        match self {
+            CompactNoteCiphertextBytes::V2(x) => x,
+            CompactNoteCiphertextBytes::V3(x) => x,
+        }
+    }
+}
+
+impl FromBytes for CompactNoteCiphertextBytes {
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        match bytes.len() {
+            COMPACT_NOTE_SIZE_V2 => {
+                let mut x = [0u8; COMPACT_NOTE_SIZE_V2];
+                x.copy_from_slice(bytes);
+                Some(CompactNoteCiphertextBytes::V2(x))
+            }
+            COMPACT_NOTE_SIZE_V3 => {
+                let mut x = [0u8; COMPACT_NOTE_SIZE_V3];
+                x.copy_from_slice(bytes);
+                Some(CompactNoteCiphertextBytes::V3(x))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl AsMut<[u8]> for CompactNotePlaintextBytes {
@@ -259,7 +324,7 @@ impl Domain for OrchardDomain {
     type NotePlaintextBytes = NotePlaintextBytes;
     type NoteCiphertextBytes = NoteCiphertextBytes;
     type CompactNotePlaintextBytes = CompactNotePlaintextBytes;
-    type CompactNoteCiphertextBytes = CompactNotePlaintextBytes;
+    type CompactNoteCiphertextBytes = CompactNoteCiphertextBytes;
 
     fn derive_esk(note: &Self::Note) -> Option<Self::EphemeralSecretKey> {
         Some(note.esk())
@@ -394,9 +459,7 @@ impl Domain for OrchardDomain {
             .into()
     }
 
-    fn split(
-        note_ciphertext: &Self::NoteCiphertextBytes,
-    ) -> (Self::NotePlaintextBytes, AEADBytes) {
+    fn split(note_ciphertext: &Self::NoteCiphertextBytes) -> (Self::NotePlaintextBytes, AEADBytes) {
         match note_ciphertext {
             NoteCiphertextBytes::V2(ncx) => {
                 let mut np = [0u8; NOTE_PLAINTEXT_SIZE_V2];
@@ -460,17 +523,17 @@ impl<T> ShieldedOutput<OrchardDomain> for Action<T> {
         Some(result)
     }
 
-    fn enc_ciphertext_compact(&self) -> CompactNotePlaintextBytes {
+    fn enc_ciphertext_compact(&self) -> CompactNoteCiphertextBytes {
         match self.encrypted_note().enc_ciphertext {
             NoteCiphertextBytes::V2(ncx) => {
                 let mut enc_ct_comp = [0u8; COMPACT_NOTE_SIZE_V2];
                 enc_ct_comp.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_V2]);
-                CompactNotePlaintextBytes::V2(enc_ct_comp)
+                CompactNoteCiphertextBytes::V2(enc_ct_comp)
             }
             NoteCiphertextBytes::V3(ncx) => {
                 let mut enc_ct_comp = [0u8; COMPACT_NOTE_SIZE_V3];
                 enc_ct_comp.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_V3]);
-                CompactNotePlaintextBytes::V3(enc_ct_comp)
+                CompactNoteCiphertextBytes::V3(enc_ct_comp)
             }
         }
     }
@@ -481,7 +544,7 @@ pub struct CompactAction {
     nullifier: Nullifier,
     cmx: ExtractedNoteCommitment,
     ephemeral_key: EphemeralKeyBytes,
-    enc_ciphertext: CompactNotePlaintextBytes,
+    enc_ciphertext: CompactNoteCiphertextBytes,
 }
 
 impl fmt::Debug for CompactAction {
@@ -492,18 +555,19 @@ impl fmt::Debug for CompactAction {
 
 impl<T> From<&Action<T>> for CompactAction {
     fn from(action: &Action<T>) -> Self {
-        let comp_ciphertext: CompactNotePlaintextBytes = match action.encrypted_note().enc_ciphertext {
-            NoteCiphertextBytes::V2(ncx) => {
-                let mut comp_x = [0u8; COMPACT_NOTE_SIZE_V2];
-                comp_x.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_V2]);
-                CompactNotePlaintextBytes::V2(comp_x)
-            }
-            NoteCiphertextBytes::V3(ncx) => {
-                let mut comp_x = [0u8; COMPACT_NOTE_SIZE_V3];
-                comp_x.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_V3]);
-                CompactNotePlaintextBytes::V3(comp_x)
-            }
-        };
+        let comp_ciphertext: CompactNoteCiphertextBytes =
+            match action.encrypted_note().enc_ciphertext {
+                NoteCiphertextBytes::V2(ncx) => {
+                    let mut comp_x = [0u8; COMPACT_NOTE_SIZE_V2];
+                    comp_x.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_V2]);
+                    CompactNoteCiphertextBytes::V2(comp_x)
+                }
+                NoteCiphertextBytes::V3(ncx) => {
+                    let mut comp_x = [0u8; COMPACT_NOTE_SIZE_V3];
+                    comp_x.copy_from_slice(&ncx[..COMPACT_NOTE_SIZE_V3]);
+                    CompactNoteCiphertextBytes::V3(comp_x)
+                }
+            };
         CompactAction {
             nullifier: *action.nullifier(),
             cmx: *action.cmx(),
@@ -526,7 +590,7 @@ impl ShieldedOutput<OrchardDomain> for CompactAction {
         None
     }
 
-    fn enc_ciphertext_compact(&self) -> CompactNotePlaintextBytes {
+    fn enc_ciphertext_compact(&self) -> CompactNoteCiphertextBytes {
         self.enc_ciphertext.clone()
     }
 }
@@ -537,7 +601,7 @@ impl CompactAction {
         nullifier: Nullifier,
         cmx: ExtractedNoteCommitment,
         ephemeral_key: EphemeralKeyBytes,
-        enc_ciphertext: CompactNotePlaintextBytes,
+        enc_ciphertext: CompactNoteCiphertextBytes,
     ) -> Self {
         Self {
             nullifier,

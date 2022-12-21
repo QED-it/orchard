@@ -103,6 +103,13 @@ enum NoteValidity {
 /// Newtype representing the bytes of the AEAD Tag.
 pub struct AEADBytes(pub [u8; AEAD_TAG_SIZE]);
 
+
+pub trait Bytes {
+    fn to_bytes(&self) -> &[u8];
+}
+pub trait FromBytes {
+    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized;
+}
 /// Trait that encapsulates protocol-specific note encryption types and logic.
 ///
 /// This trait enables most of the note encryption logic to be shared between Sapling and
@@ -125,8 +132,8 @@ pub trait Domain {
 
     type NotePlaintextBytes: AsMut<[u8]>;
     type NoteCiphertextBytes: From<(Self::NotePlaintextBytes, AEADBytes)>;
-    type CompactNotePlaintextBytes: From<Self::NotePlaintextBytes> + From<Self::CompactNoteCiphertextBytes> + AsMut<[u8]>;
-    type CompactNoteCiphertextBytes: AsMut<[u8]>;
+    type CompactNotePlaintextBytes: FromBytes + From<Self::NotePlaintextBytes> + AsMut<[u8]>;
+    type CompactNoteCiphertextBytes: Bytes;
 
     /// Derives the `EphemeralSecretKey` corresponding to this note.
     ///
@@ -658,7 +665,9 @@ fn try_compact_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
     let enc_ciphertext = output.enc_ciphertext_compact();
 
     // Start from block 1 to skip over Poly1305 keying output
-    let mut plaintext: D::CompactNotePlaintextBytes = enc_ciphertext.into();
+    //let mut plaintext: D::CompactNotePlaintextBytes;
+    let a = enc_ciphertext.to_bytes();
+    let mut plaintext = D::CompactNotePlaintextBytes::from_bytes(a)?;
     let mut keystream = ChaCha20::new(key.as_ref().into(), [0u8; 12][..].into());
     keystream.seek(64);
     keystream.apply_keystream(plaintext.as_mut());
