@@ -103,7 +103,7 @@ enum NoteValidity {
 
 // todo: potentially remove this
 /// Newtype representing the bytes of the AEAD Tag.
-pub struct AEADBytes(pub [u8; AEAD_TAG_SIZE]);
+pub struct TagBytes(pub [u8; AEAD_TAG_SIZE]);
 
 pub trait FromSlice {
     fn from_slice(s: &[u8]) -> Self where Self: Sized;
@@ -287,7 +287,7 @@ pub trait Domain {
     /// `EphemeralSecretKey`.
     fn extract_esk(out_plaintext: &OutPlaintextBytes) -> Option<Self::EphemeralSecretKey>;
 
-    fn split(note_ciphertext: &Self::NoteCiphertextBytes) -> (Self::NotePlaintextBytes, AEADBytes);
+    fn split_tag(note_ciphertext: &Self::NoteCiphertextBytes) -> (Self::NotePlaintextBytes, TagBytes);
 }
 
 /// Trait that encapsulates protocol-specific batch trial decryption logic.
@@ -555,7 +555,7 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
 
     let enc_ciphertext = output.enc_ciphertext()?;
 
-    let (enc_plaintext, tag) = D::split(&enc_ciphertext);
+    let (enc_plaintext, tag) = D::split_tag(&enc_ciphertext);
     let mut plaintext = enc_plaintext;
 
     ChaCha20Poly1305::new(key.as_ref().into())
@@ -741,7 +741,7 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
     // be okay.
     let key = D::kdf(shared_secret, &ephemeral_key);
 
-    let (enc_plaintext, tag) = D::split(&enc_ciphertext);
+    let (enc_plaintext, tag) = D::split_tag(&enc_ciphertext);
     let mut plaintext = enc_plaintext;
 
     ChaCha20Poly1305::new(key.as_ref().into())
