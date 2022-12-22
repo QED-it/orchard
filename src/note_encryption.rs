@@ -5,7 +5,7 @@ use core::fmt;
 use group::ff::PrimeField;
 use zcash_note_encryption::{
     BatchDomain, Domain, EphemeralKeyBytes, FromSlice, OutPlaintextBytes, OutgoingCipherKey,
-    ShieldedOutput, TagBytes, AEAD_TAG_SIZE, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
+    ShieldedOutput, AEAD_TAG_SIZE, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
 };
 
 use crate::note::AssetId;
@@ -457,20 +457,20 @@ impl Domain for OrchardDomain {
 
     fn split_tag(
         note_ciphertext: &Self::NoteCiphertextBytes,
-    ) -> (Self::NotePlaintextBytes, TagBytes) {
+    ) -> (Self::NotePlaintextBytes, [u8; AEAD_TAG_SIZE]) {
         match note_ciphertext {
             NoteCiphertextBytes::V2(ncx) => {
                 let (np, tag) = ncx.split_at(NOTE_PLAINTEXT_SIZE_V2);
                 (
                     NotePlaintextBytes::V2(np.try_into().unwrap()),
-                    TagBytes(tag.try_into().unwrap()),
+                    tag.try_into().unwrap(),
                 )
             }
             NoteCiphertextBytes::V3(ncx) => {
                 let (np, tag) = ncx.split_at(NOTE_PLAINTEXT_SIZE_V3);
                 (
                     NotePlaintextBytes::V3(np.try_into().unwrap()),
-                    TagBytes(tag.try_into().unwrap()),
+                    tag.try_into().unwrap(),
                 )
             }
         }

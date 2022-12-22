@@ -101,10 +101,6 @@ enum NoteValidity {
     Invalid,
 }
 
-// todo: potentially remove this
-/// Newtype representing the bytes of the AEAD Tag.
-pub struct TagBytes(pub [u8; AEAD_TAG_SIZE]);
-
 pub trait FromSlice {
     fn from_slice(s: &[u8]) -> Self where Self: Sized;
 }
@@ -129,8 +125,8 @@ pub trait Domain {
     type ExtractedCommitmentBytes: Eq + for<'a> From<&'a Self::ExtractedCommitment>;
     type Memo;
 
-    type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]>;
-    type NoteCiphertextBytes: FromSlice;
+    type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> ;//+ FromSlice;
+    type NoteCiphertextBytes: AsRef<[u8]> + FromSlice;
     type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + FromSlice;
     type CompactNoteCiphertextBytes: AsRef<[u8]>;
 
@@ -287,7 +283,8 @@ pub trait Domain {
     /// `EphemeralSecretKey`.
     fn extract_esk(out_plaintext: &OutPlaintextBytes) -> Option<Self::EphemeralSecretKey>;
 
-    fn split_tag(note_ciphertext: &Self::NoteCiphertextBytes) -> (Self::NotePlaintextBytes, TagBytes);
+    /// Splits the AEAD tag field from the given `NoteCiphertextBytes`
+    fn split_tag(note_ciphertext: &Self::NoteCiphertextBytes) -> (Self::NotePlaintextBytes, [u8; AEAD_TAG_SIZE]);
 }
 
 /// Trait that encapsulates protocol-specific batch trial decryption logic.
@@ -563,7 +560,7 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
             [0u8; 12][..].into(),
             &[],
             plaintext.as_mut(),
-            &tag.0.into(),
+            &tag.into(),
         )
         .ok()?;
 
@@ -749,7 +746,7 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
             [0u8; 12][..].into(),
             &[],
             plaintext.as_mut(),
-            &tag.0.into(),
+            &tag.into(),
         )
         .ok()?;
 
