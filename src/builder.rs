@@ -405,6 +405,8 @@ impl Builder {
             // );
 
             // Extend the spends and recipients with dummy values.
+            // TODO: use this when client is ready to ignore duplicate nullifiers in split notes
+            // spends.extend(iter::repeat_with(|| dummy_spend.clone()).take(num_actions - num_spends));
             spends.extend(
                 iter::repeat_with(|| SpendInfo::dummy(asset, &mut rng))
                     .take(num_actions - num_spends),
