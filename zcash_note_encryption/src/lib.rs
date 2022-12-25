@@ -284,9 +284,6 @@ pub trait Domain {
     /// Returns `None` if `out_plaintext` does not contain a valid byte encoding of an
     /// `EphemeralSecretKey`.
     fn extract_esk(out_plaintext: &OutPlaintextBytes) -> Option<Self::EphemeralSecretKey>;
-
-    /// Splits the AEAD tag field from the given `NoteCiphertextBytes`
-    fn split_tag(note_ciphertext: &Self::NoteCiphertextBytes) -> (Self::NotePlaintextBytes, [u8; AEAD_TAG_SIZE]);
 }
 
 /// Trait that encapsulates protocol-specific batch trial decryption logic.
@@ -717,8 +714,6 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
     out_ciphertext: &[u8; OUT_CIPHERTEXT_SIZE],
 ) -> Option<(D::Note, D::Recipient, D::Memo)> {
 
-    let enc_ciphertext: D::NoteCiphertextBytes = output.enc_ciphertext()?;
-
     let mut op = OutPlaintextBytes([0; OUT_PLAINTEXT_SIZE]);
     op.0.copy_from_slice(&out_ciphertext[..OUT_PLAINTEXT_SIZE]);
 
@@ -741,19 +736,23 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
     // be okay.
     let key = D::kdf(shared_secret, &ephemeral_key);
 
-    let (enc_plaintext, tag) = D::split_tag(&enc_ciphertext);
-    let mut plaintext = enc_plaintext;
+    let mut enc_ciphertext= output.enc_ciphertext()?.as_ref().to_owned();
+
+    let tag_idx = enc_ciphertext.len() - AEAD_TAG_SIZE;
+    let (plaintext, tail) = enc_ciphertext.split_at_mut(tag_idx);
+
+    let tag:[u8;AEAD_TAG_SIZE] = tail.try_into().unwrap();
 
     ChaCha20Poly1305::new(key.as_ref().into())
         .decrypt_in_place_detached(
             [0u8; 12][..].into(),
             &[],
-            plaintext.as_mut(),
+            plaintext,
             &tag.into(),
         )
         .ok()?;
 
-    let (compact, memo) = domain.extract_memo(&plaintext);
+    let (compact, memo) = domain.extract_memo(&D::NotePlaintextBytes::from_slice(plaintext));
 
     let (note, to) =
         domain.parse_note_plaintext_without_memo_ovk(&pk_d, &esk, &ephemeral_key, &compact)?;
