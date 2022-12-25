@@ -119,7 +119,7 @@ pub trait Domain {
     type ExtractedCommitmentBytes: Eq + for<'a> From<&'a Self::ExtractedCommitment>;
     type Memo;
 
-    type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + From<Vec<u8>>;
+    type NotePlaintextBytes: AsRef<[u8]> + From<Vec<u8>>;
     type NoteCiphertextBytes: AsRef<[u8]> + From<Vec<u8>>;
     type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + From<Vec<u8>>;
     type CompactNoteCiphertextBytes: AsRef<[u8]>;
@@ -459,12 +459,14 @@ impl<D: Domain> NoteEncryption<D> {
         let pk_d = D::get_pk_d(&self.note);
         let shared_secret = D::ka_agree_enc(&self.esk, &pk_d);
         let key = D::kdf(shared_secret, &D::epk_bytes(&self.epk));
-        let mut input = D::note_plaintext_bytes(&self.note, &self.to, &self.memo);
+        let input = D::note_plaintext_bytes(&self.note, &self.to, &self.memo);
+
+        let mut output = input.as_ref().to_owned();
 
         let tag = ChaCha20Poly1305::new(key.as_ref().into())
-            .encrypt_in_place_detached([0u8; 12][..].into(), &[], input.as_mut())
+            .encrypt_in_place_detached([0u8; 12][..].into(), &[], output.as_mut())
             .unwrap();
-        D::NoteCiphertextBytes::from([input.as_ref(), tag.as_ref()].concat())
+        D::NoteCiphertextBytes::from([output, tag.to_vec()].concat())
     }
 
     /// Generates `outCiphertext` for this note.
