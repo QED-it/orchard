@@ -182,18 +182,14 @@ pub enum NoteCiphertextBytes {
 }
 
 /// Panics if the given slice is not `ENC_CIPHERTEXT_SIZE_V2` or `ENC_CIPHERTEXT_SIZE_V3` bytes long.
-impl FromByte for NoteCiphertextBytes {
-    fn from_byte(s: &[u8]) -> Self
+impl From<Vec<u8>> for NoteCiphertextBytes {
+    fn from(v: Vec<u8>) -> Self
     where
         Self: Sized,
     {
-        match s.len() {
-            ENC_CIPHERTEXT_SIZE_V2 => NoteCiphertextBytes::V2(s.try_into().unwrap()),
-            ENC_CIPHERTEXT_SIZE_V3 => {
-                let mut x = [0u8; ENC_CIPHERTEXT_SIZE_V3];
-                x.copy_from_slice(s);
-                NoteCiphertextBytes::V3(s.try_into().unwrap())
-            }
+        match v.len() {
+            ENC_CIPHERTEXT_SIZE_V2 => NoteCiphertextBytes::V2(v.try_into().unwrap()),
+            ENC_CIPHERTEXT_SIZE_V3 => NoteCiphertextBytes::V2(v.try_into().unwrap()),
             _ => panic!("Invalid length for compact note plaintext"),
         }
     }

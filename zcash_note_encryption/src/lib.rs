@@ -128,7 +128,7 @@ pub trait Domain {
     type Memo;
 
     type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + From<Vec<u8>>;
-    type NoteCiphertextBytes: AsRef<[u8]> + FromByte;
+    type NoteCiphertextBytes: AsRef<[u8]> + From<Vec<u8>>;
     type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + FromByte;
     type CompactNoteCiphertextBytes: AsRef<[u8]>;
 
@@ -473,7 +473,7 @@ impl<D: Domain> NoteEncryption<D> {
                 input.as_mut(),
             )
             .unwrap();
-        D::NoteCiphertextBytes::from_byte(&[input.as_ref(),tag.as_ref()].concat())
+        D::NoteCiphertextBytes::from([input.as_ref(),tag.as_ref()].concat())
     }
 
     /// Generates `outCiphertext` for this note.
