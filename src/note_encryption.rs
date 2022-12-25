@@ -4,7 +4,7 @@ use blake2b_simd::{Hash, Params};
 use core::fmt;
 use group::ff::PrimeField;
 use zcash_note_encryption::{
-    BatchDomain, Domain, EphemeralKeyBytes, FromSlice, OutPlaintextBytes, OutgoingCipherKey,
+    BatchDomain, Domain, EphemeralKeyBytes, FromByte, OutPlaintextBytes, OutgoingCipherKey,
     ShieldedOutput, AEAD_TAG_SIZE, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
 };
 
@@ -158,14 +158,14 @@ impl AsRef<[u8]> for NotePlaintextBytes {
     }
 }
 
-impl FromSlice for NotePlaintextBytes {
-    fn from_slice(s: &[u8]) -> Self
+impl From<Vec<u8>> for NotePlaintextBytes {
+    fn from(v: Vec<u8>) -> Self
     where
         Self: Sized,
     {
-        match s.len() {
-            NOTE_PLAINTEXT_SIZE_V2 => NotePlaintextBytes::V2(s.try_into().unwrap()),
-            NOTE_PLAINTEXT_SIZE_V3 => NotePlaintextBytes::V3(s.try_into().unwrap()),
+        match v.len() {
+            NOTE_PLAINTEXT_SIZE_V2 => NotePlaintextBytes::V2(v.try_into().unwrap()),
+            NOTE_PLAINTEXT_SIZE_V3 => NotePlaintextBytes::V3(v.try_into().unwrap()),
             _ => panic!("Invalid note plaintext size"),
         }
     }
@@ -182,8 +182,8 @@ pub enum NoteCiphertextBytes {
 }
 
 /// Panics if the given slice is not `ENC_CIPHERTEXT_SIZE_V2` or `ENC_CIPHERTEXT_SIZE_V3` bytes long.
-impl FromSlice for NoteCiphertextBytes {
-    fn from_slice(s: &[u8]) -> Self
+impl FromByte for NoteCiphertextBytes {
+    fn from_byte(s: &[u8]) -> Self
     where
         Self: Sized,
     {
@@ -227,8 +227,8 @@ impl AsRef<[u8]> for CompactNotePlaintextBytes {
 }
 
 /// Panics if the given slice is not `COMPACT_NOTE_SIZE_V2` or `COMPACT_NOTE_SIZE_V3` bytes long.
-impl FromSlice for CompactNotePlaintextBytes {
-    fn from_slice(s: &[u8]) -> Self
+impl FromByte for CompactNotePlaintextBytes {
+    fn from_byte(s: &[u8]) -> Self
     where
         Self: Sized,
     {
@@ -264,8 +264,8 @@ impl AsRef<[u8]> for CompactNoteCiphertextBytes {
 
 /// Panics if the given slice is not `COMPACT_NOTE_SIZE_V2` or `COMPACT_NOTE_SIZE_V3` bytes long.
 /// Panic should be considered as an implementation error.
-impl FromSlice for CompactNoteCiphertextBytes {
-    fn from_slice(s: &[u8]) -> Self
+impl FromByte for CompactNoteCiphertextBytes {
+    fn from_byte(s: &[u8]) -> Self
     where
         Self: Sized,
     {

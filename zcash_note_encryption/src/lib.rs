@@ -103,8 +103,8 @@ enum NoteValidity {
     Invalid,
 }
 
-pub trait FromSlice {
-    fn from_slice(s: &[u8]) -> Self where Self: Sized;
+pub trait FromByte {
+    fn from_byte(s: &[u8]) -> Self where Self: Sized;
 }
 
 /// Trait that encapsulates protocol-specific note encryption types and logic.
@@ -127,9 +127,9 @@ pub trait Domain {
     type ExtractedCommitmentBytes: Eq + for<'a> From<&'a Self::ExtractedCommitment>;
     type Memo;
 
-    type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + FromSlice;
-    type NoteCiphertextBytes: AsRef<[u8]> + FromSlice;
-    type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + FromSlice;
+    type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + From<Vec<u8>>;
+    type NoteCiphertextBytes: AsRef<[u8]> + FromByte;
+    type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + FromByte;
     type CompactNoteCiphertextBytes: AsRef<[u8]>;
 
     /// Derives the `EphemeralSecretKey` corresponding to this note.
@@ -473,7 +473,7 @@ impl<D: Domain> NoteEncryption<D> {
                 input.as_mut(),
             )
             .unwrap();
-        D::NoteCiphertextBytes::from_slice(&[input.as_ref(),tag.as_ref()].concat())
+        D::NoteCiphertextBytes::from_byte(&[input.as_ref(),tag.as_ref()].concat())
     }
 
     /// Generates `outCiphertext` for this note.
@@ -564,7 +564,7 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
         )
         .ok()?;
 
-    let (compact,memo) = domain.extract_memo(&D::NotePlaintextBytes::from_slice(plaintext));
+    let (compact,memo) = domain.extract_memo(&plaintext.to_owned().into());
     let (note, to) = parse_note_plaintext_without_memo_ivk(
         domain,
         ivk,
@@ -658,7 +658,7 @@ fn try_compact_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
     key: &D::SymmetricKey,
 ) -> Option<(D::Note, D::Recipient)> {
     // Start from block 1 to skip over Poly1305 keying output
-    let mut plaintext = D::CompactNotePlaintextBytes::from_slice(output.enc_ciphertext_compact().as_ref());
+    let mut plaintext = D::CompactNotePlaintextBytes::from_byte(output.enc_ciphertext_compact().as_ref());
     let mut keystream = ChaCha20::new(key.as_ref().into(), [0u8; 12][..].into());
     keystream.seek(64);
     keystream.apply_keystream(plaintext.as_mut());
@@ -752,7 +752,7 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
         )
         .ok()?;
 
-    let (compact, memo) = domain.extract_memo(&D::NotePlaintextBytes::from_slice(plaintext));
+    let (compact, memo) = domain.extract_memo(&plaintext.to_owned().into());
 
     let (note, to) =
         domain.parse_note_plaintext_without_memo_ovk(&pk_d, &esk, &ephemeral_key, &compact)?;
