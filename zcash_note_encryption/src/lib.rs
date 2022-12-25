@@ -21,6 +21,8 @@
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
+
+use alloc::borrow::ToOwned;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
@@ -125,7 +127,7 @@ pub trait Domain {
     type ExtractedCommitmentBytes: Eq + for<'a> From<&'a Self::ExtractedCommitment>;
     type Memo;
 
-    type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> ;//+ FromSlice;
+    type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + FromSlice;
     type NoteCiphertextBytes: AsRef<[u8]> + FromSlice;
     type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + FromSlice;
     type CompactNoteCiphertextBytes: AsRef<[u8]>;
@@ -269,7 +271,7 @@ pub trait Domain {
     ///
     /// `&self` is passed here in anticipation of future changes to memo handling, where
     /// the memos may no longer be part of the note plaintext.
-    fn split_memo(&self, plaintext: &Self::NotePlaintextBytes) -> (Self::CompactNotePlaintextBytes, Self::Memo);
+    fn extract_memo(&self, plaintext: &Self::NotePlaintextBytes) -> (Self::CompactNotePlaintextBytes, Self::Memo);
 
     /// Parses the `DiversifiedTransmissionKey` field of the outgoing plaintext.
     ///
@@ -549,22 +551,23 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
     output: &Output,
     key: &D::SymmetricKey,
 ) -> Option<(D::Note, D::Recipient, D::Memo)> {
+    let mut enc_ciphertext = output.enc_ciphertext()?.as_ref().to_owned();
 
-    let enc_ciphertext = output.enc_ciphertext()?;
+    let tag_loc = enc_ciphertext.len() - AEAD_TAG_SIZE;
+    let (plaintext, tail) = enc_ciphertext.split_at_mut(tag_loc);
 
-    let (enc_plaintext, tag) = D::split_tag(&enc_ciphertext);
-    let mut plaintext = enc_plaintext;
+    let tag:[u8;AEAD_TAG_SIZE] = tail.try_into().unwrap();
 
     ChaCha20Poly1305::new(key.as_ref().into())
         .decrypt_in_place_detached(
             [0u8; 12][..].into(),
             &[],
-            plaintext.as_mut(),
+            plaintext,
             &tag.into(),
         )
         .ok()?;
 
-    let (compact,memo) = domain.split_memo(&plaintext);
+    let (compact,memo) = domain.extract_memo(&D::NotePlaintextBytes::from_slice(plaintext));
     let (note, to) = parse_note_plaintext_without_memo_ivk(
         domain,
         ivk,
@@ -750,7 +753,7 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
         )
         .ok()?;
 
-    let (compact, memo) = domain.split_memo(&plaintext);
+    let (compact, memo) = domain.extract_memo(&plaintext);
 
     let (note, to) =
         domain.parse_note_plaintext_without_memo_ovk(&pk_d, &esk, &ephemeral_key, &compact)?;

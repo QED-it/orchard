@@ -158,6 +158,19 @@ impl AsRef<[u8]> for NotePlaintextBytes {
     }
 }
 
+impl FromSlice for NotePlaintextBytes {
+    fn from_slice(s: &[u8]) -> Self
+    where
+        Self: Sized,
+    {
+        match s.len() {
+            NOTE_PLAINTEXT_SIZE_V2 => NotePlaintextBytes::V2(s.try_into().unwrap()),
+            NOTE_PLAINTEXT_SIZE_V3 => NotePlaintextBytes::V3(s.try_into().unwrap()),
+            _ => panic!("Invalid note plaintext size"),
+        }
+    }
+}
+
 /// Newtype for encoding the encrypted note ciphertext post ZSA.
 // pub struct EncNoteCiphertextZSA (pub [u8; ZSA_ENC_CIPHERTEXT_SIZE]);
 #[derive(Clone, Debug)]
@@ -424,7 +437,7 @@ impl Domain for OrchardDomain {
         })
     }
 
-    fn split_memo(
+    fn extract_memo(
         &self,
         plaintext: &NotePlaintextBytes,
     ) -> (Self::CompactNotePlaintextBytes, Self::Memo) {
@@ -645,7 +658,7 @@ mod tests {
         // Decode.
         let domain = OrchardDomain { rho: note.rho() };
         let parsed_version = get_version(&plaintext).unwrap();
-        let (compact,parsed_memo) = domain.split_memo(&plaintext);
+        let (compact,parsed_memo) = domain.extract_memo(&plaintext);
 
         let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &compact,
             |diversifier| {
