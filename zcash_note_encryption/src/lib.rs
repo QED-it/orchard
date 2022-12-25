@@ -121,7 +121,7 @@ pub trait Domain {
 
     type NotePlaintextBytes: AsRef<[u8]> + From<Vec<u8>>;
     type NoteCiphertextBytes: AsRef<[u8]> + From<Vec<u8>>;
-    type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + From<Vec<u8>>;
+    type CompactNotePlaintextBytes: AsRef<[u8]> + From<Vec<u8>>;
     type CompactNoteCiphertextBytes: AsRef<[u8]>;
 
     /// Derives the `EphemeralSecretKey` corresponding to this note.
@@ -646,18 +646,20 @@ fn try_compact_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
     key: &D::SymmetricKey,
 ) -> Option<(D::Note, D::Recipient)> {
     // Start from block 1 to skip over Poly1305 keying output
-    let mut plaintext: D::CompactNotePlaintextBytes =
+    let plaintext: D::CompactNotePlaintextBytes =
         output.enc_ciphertext_compact().as_ref().to_owned().into();
+
     let mut keystream = ChaCha20::new(key.as_ref().into(), [0u8; 12][..].into());
     keystream.seek(64);
-    keystream.apply_keystream(plaintext.as_mut());
+    let mut op = plaintext.as_ref().to_owned();
+    keystream.apply_keystream(op.as_mut());
 
     parse_note_plaintext_without_memo_ivk(
         domain,
         ivk,
         ephemeral_key,
         &output.cmstar_bytes(),
-        &plaintext,
+        &op.into(),
     )
 }
 
