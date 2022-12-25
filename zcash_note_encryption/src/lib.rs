@@ -21,10 +21,8 @@
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
-
-use alloc::borrow::ToOwned;
 #[cfg(feature = "alloc")]
-use alloc::vec::Vec;
+use alloc::{borrow::ToOwned, vec::Vec};
 
 use chacha20::{
     cipher::{NewCipher, StreamCipher, StreamCipherSeek},
@@ -38,11 +36,9 @@ use chacha20poly1305::{
 use rand_core::RngCore;
 use subtle::{Choice, ConstantTimeEq};
 
-
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub mod batch;
-
 
 /// The size of the memo.
 pub const MEMO_SIZE: usize = 512;
@@ -103,10 +99,6 @@ enum NoteValidity {
     Invalid,
 }
 
-pub trait FromByte {
-    fn from_byte(s: &[u8]) -> Self where Self: Sized;
-}
-
 /// Trait that encapsulates protocol-specific note encryption types and logic.
 ///
 /// This trait enables most of the note encryption logic to be shared between Sapling and
@@ -129,7 +121,7 @@ pub trait Domain {
 
     type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + From<Vec<u8>>;
     type NoteCiphertextBytes: AsRef<[u8]> + From<Vec<u8>>;
-    type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + FromByte;
+    type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + From<Vec<u8>>;
     type CompactNoteCiphertextBytes: AsRef<[u8]>;
 
     /// Derives the `EphemeralSecretKey` corresponding to this note.
@@ -271,7 +263,10 @@ pub trait Domain {
     ///
     /// `&self` is passed here in anticipation of future changes to memo handling, where
     /// the memos may no longer be part of the note plaintext.
-    fn extract_memo(&self, plaintext: &Self::NotePlaintextBytes) -> (Self::CompactNotePlaintextBytes, Self::Memo);
+    fn extract_memo(
+        &self,
+        plaintext: &Self::NotePlaintextBytes,
+    ) -> (Self::CompactNotePlaintextBytes, Self::Memo);
 
     /// Parses the `DiversifiedTransmissionKey` field of the outgoing plaintext.
     ///
@@ -467,13 +462,9 @@ impl<D: Domain> NoteEncryption<D> {
         let mut input = D::note_plaintext_bytes(&self.note, &self.to, &self.memo);
 
         let tag = ChaCha20Poly1305::new(key.as_ref().into())
-            .encrypt_in_place_detached(
-                [0u8; 12][..].into(),
-                &[],
-                input.as_mut(),
-            )
+            .encrypt_in_place_detached([0u8; 12][..].into(), &[], input.as_mut())
             .unwrap();
-        D::NoteCiphertextBytes::from([input.as_ref(),tag.as_ref()].concat())
+        D::NoteCiphertextBytes::from([input.as_ref(), tag.as_ref()].concat())
     }
 
     /// Generates `outCiphertext` for this note.
@@ -553,18 +544,13 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
     let tag_loc = enc_ciphertext.len() - AEAD_TAG_SIZE;
     let (plaintext, tail) = enc_ciphertext.split_at_mut(tag_loc);
 
-    let tag:[u8;AEAD_TAG_SIZE] = tail.try_into().unwrap();
+    let tag: [u8; AEAD_TAG_SIZE] = tail.try_into().unwrap();
 
     ChaCha20Poly1305::new(key.as_ref().into())
-        .decrypt_in_place_detached(
-            [0u8; 12][..].into(),
-            &[],
-            plaintext,
-            &tag.into(),
-        )
+        .decrypt_in_place_detached([0u8; 12][..].into(), &[], plaintext, &tag.into())
         .ok()?;
 
-    let (compact,memo) = domain.extract_memo(&plaintext.to_owned().into());
+    let (compact, memo) = domain.extract_memo(&plaintext.to_owned().into());
     let (note, to) = parse_note_plaintext_without_memo_ivk(
         domain,
         ivk,
@@ -658,7 +644,8 @@ fn try_compact_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
     key: &D::SymmetricKey,
 ) -> Option<(D::Note, D::Recipient)> {
     // Start from block 1 to skip over Poly1305 keying output
-    let mut plaintext = D::CompactNotePlaintextBytes::from_byte(output.enc_ciphertext_compact().as_ref());
+    let mut plaintext: D::CompactNotePlaintextBytes =
+        output.enc_ciphertext_compact().as_ref().to_owned().into();
     let mut keystream = ChaCha20::new(key.as_ref().into(), [0u8; 12][..].into());
     keystream.seek(64);
     keystream.apply_keystream(plaintext.as_mut());
@@ -713,7 +700,6 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
     output: &Output,
     out_ciphertext: &[u8; OUT_CIPHERTEXT_SIZE],
 ) -> Option<(D::Note, D::Recipient, D::Memo)> {
-
     let mut op = OutPlaintextBytes([0; OUT_PLAINTEXT_SIZE]);
     op.0.copy_from_slice(&out_ciphertext[..OUT_PLAINTEXT_SIZE]);
 
@@ -736,20 +722,15 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
     // be okay.
     let key = D::kdf(shared_secret, &ephemeral_key);
 
-    let mut enc_ciphertext= output.enc_ciphertext()?.as_ref().to_owned();
+    let mut enc_ciphertext = output.enc_ciphertext()?.as_ref().to_owned();
 
     let tag_idx = enc_ciphertext.len() - AEAD_TAG_SIZE;
     let (plaintext, tail) = enc_ciphertext.split_at_mut(tag_idx);
 
-    let tag:[u8;AEAD_TAG_SIZE] = tail.try_into().unwrap();
+    let tag: [u8; AEAD_TAG_SIZE] = tail.try_into().unwrap();
 
     ChaCha20Poly1305::new(key.as_ref().into())
-        .decrypt_in_place_detached(
-            [0u8; 12][..].into(),
-            &[],
-            plaintext,
-            &tag.into(),
-        )
+        .decrypt_in_place_detached([0u8; 12][..].into(), &[], plaintext, &tag.into())
         .ok()?;
 
     let (compact, memo) = domain.extract_memo(&plaintext.to_owned().into());

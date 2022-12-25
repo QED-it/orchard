@@ -4,8 +4,8 @@ use blake2b_simd::{Hash, Params};
 use core::fmt;
 use group::ff::PrimeField;
 use zcash_note_encryption::{
-    BatchDomain, Domain, EphemeralKeyBytes, FromByte, OutPlaintextBytes, OutgoingCipherKey,
-    ShieldedOutput, AEAD_TAG_SIZE, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
+    BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes, OutgoingCipherKey, ShieldedOutput,
+    AEAD_TAG_SIZE, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
 };
 
 use crate::note::AssetId;
@@ -223,18 +223,14 @@ impl AsRef<[u8]> for CompactNotePlaintextBytes {
 }
 
 /// Panics if the given slice is not `COMPACT_NOTE_SIZE_V2` or `COMPACT_NOTE_SIZE_V3` bytes long.
-impl FromByte for CompactNotePlaintextBytes {
-    fn from_byte(s: &[u8]) -> Self
+impl From<Vec<u8>> for CompactNotePlaintextBytes {
+    fn from(v: Vec<u8>) -> Self
     where
         Self: Sized,
     {
-        match s.len() {
-            COMPACT_NOTE_SIZE_V2 => CompactNotePlaintextBytes::V2(s.try_into().unwrap()),
-            COMPACT_NOTE_SIZE_V3 => {
-                let mut x = [0u8; COMPACT_NOTE_SIZE_V3];
-                x.copy_from_slice(s);
-                CompactNotePlaintextBytes::V3(s.try_into().unwrap())
-            }
+        match v.len() {
+            COMPACT_NOTE_SIZE_V2 => CompactNotePlaintextBytes::V2(v.try_into().unwrap()),
+            COMPACT_NOTE_SIZE_V3 => CompactNotePlaintextBytes::V3(v.try_into().unwrap()),
             _ => panic!("Invalid length for compact note plaintext"),
         }
     }
@@ -254,21 +250,6 @@ impl AsRef<[u8]> for CompactNoteCiphertextBytes {
         match self {
             CompactNoteCiphertextBytes::V2(x) => x,
             CompactNoteCiphertextBytes::V3(x) => x,
-        }
-    }
-}
-
-/// Panics if the given slice is not `COMPACT_NOTE_SIZE_V2` or `COMPACT_NOTE_SIZE_V3` bytes long.
-/// Panic should be considered as an implementation error.
-impl FromByte for CompactNoteCiphertextBytes {
-    fn from_byte(s: &[u8]) -> Self
-    where
-        Self: Sized,
-    {
-        match s.len() {
-            COMPACT_NOTE_SIZE_V2 => CompactNoteCiphertextBytes::V2(s.try_into().unwrap()),
-            COMPACT_NOTE_SIZE_V3 => CompactNoteCiphertextBytes::V3(s.try_into().unwrap()),
-            _ => panic!("Invalid length for compact note ciphertext"),
         }
     }
 }
