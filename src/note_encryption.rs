@@ -203,8 +203,8 @@ pub enum CompactNotePlaintextBytes {
     V3([u8; COMPACT_NOTE_SIZE_V3]),
 }
 
-impl AsRef<[u8]> for CompactNotePlaintextBytes {
-    fn as_ref(&self) -> &[u8] {
+impl AsMut<[u8]> for CompactNotePlaintextBytes {
+    fn as_mut(&mut self) -> &mut [u8] {
         match self {
             CompactNotePlaintextBytes::V2(x) => x,
             CompactNotePlaintextBytes::V3(x) => x,
@@ -213,14 +213,14 @@ impl AsRef<[u8]> for CompactNotePlaintextBytes {
 }
 
 /// Panics if the given slice is not `COMPACT_NOTE_SIZE_V2` or `COMPACT_NOTE_SIZE_V3` bytes long.
-impl From<Vec<u8>> for CompactNotePlaintextBytes {
-    fn from(v: Vec<u8>) -> Self
+impl From<&[u8]> for CompactNotePlaintextBytes {
+    fn from(s: &[u8]) -> Self
     where
         Self: Sized,
     {
-        match v.len() {
-            COMPACT_NOTE_SIZE_V2 => CompactNotePlaintextBytes::V2(v.try_into().unwrap()),
-            COMPACT_NOTE_SIZE_V3 => CompactNotePlaintextBytes::V3(v.try_into().unwrap()),
+        match s.len() {
+            COMPACT_NOTE_SIZE_V2 => CompactNotePlaintextBytes::V2(s.try_into().unwrap()),
+            COMPACT_NOTE_SIZE_V3 => CompactNotePlaintextBytes::V3(s.try_into().unwrap()),
             _ => panic!("Invalid length for compact note plaintext"),
         }
     }
