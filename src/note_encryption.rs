@@ -138,13 +138,12 @@ pub enum NotePlaintextBytes {
     V3([u8; NOTE_PLAINTEXT_SIZE_V3]),
 }
 
-impl AsRef<[u8]> for NotePlaintextBytes {
-    fn as_ref(&self) -> &[u8] {
-        let ptr: &[u8] = match self {
-            NotePlaintextBytes::V2(ref x) => x,
-            NotePlaintextBytes::V3(ref x) => x,
-        };
-        ptr
+impl AsMut<[u8]> for NotePlaintextBytes {
+    fn as_mut(&mut self) -> &mut [u8] {
+        match self {
+            NotePlaintextBytes::V2(x) => x.as_mut(),
+            NotePlaintextBytes::V3(x) => x.as_mut(),
+        }
     }
 }
 
