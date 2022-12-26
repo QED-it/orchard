@@ -120,7 +120,7 @@ pub trait Domain {
     type Memo;
 
     type NotePlaintextBytes: AsRef<[u8]> + for<'a> From<&'a [u8]>;
-    type NoteCiphertextBytes: AsRef<[u8]> + From<Vec<u8>>;
+    type NoteCiphertextBytes: AsRef<[u8]> + for<'a> From<&'a [u8]>;
     type CompactNotePlaintextBytes: AsRef<[u8]> + From<Vec<u8>>;
     type CompactNoteCiphertextBytes: AsRef<[u8]>;
 
@@ -466,7 +466,7 @@ impl<D: Domain> NoteEncryption<D> {
         let tag = ChaCha20Poly1305::new(key.as_ref().into())
             .encrypt_in_place_detached([0u8; 12][..].into(), &[], output.as_mut())
             .unwrap();
-        D::NoteCiphertextBytes::from([output, tag.to_vec()].concat())
+        D::NoteCiphertextBytes::from([output, tag.to_vec()].concat().as_ref())
     }
 
     /// Generates `outCiphertext` for this note.

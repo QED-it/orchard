@@ -138,7 +138,6 @@ pub enum NotePlaintextBytes {
     V3([u8; NOTE_PLAINTEXT_SIZE_V3]),
 }
 
-
 impl AsRef<[u8]> for NotePlaintextBytes {
     fn as_ref(&self) -> &[u8] {
         let ptr: &[u8] = match self {
@@ -172,25 +171,25 @@ pub enum NoteCiphertextBytes {
     V3([u8; ENC_CIPHERTEXT_SIZE_V3]),
 }
 
-/// Panics if the given slice is not `ENC_CIPHERTEXT_SIZE_V2` or `ENC_CIPHERTEXT_SIZE_V3` bytes long.
-impl From<Vec<u8>> for NoteCiphertextBytes {
-    fn from(v: Vec<u8>) -> Self
-    where
-        Self: Sized,
-    {
-        match v.len() {
-            ENC_CIPHERTEXT_SIZE_V2 => NoteCiphertextBytes::V2(v.try_into().unwrap()),
-            ENC_CIPHERTEXT_SIZE_V3 => NoteCiphertextBytes::V2(v.try_into().unwrap()),
-            _ => panic!("Invalid length for compact note plaintext"),
-        }
-    }
-}
-
 impl AsRef<[u8]> for NoteCiphertextBytes {
     fn as_ref(&self) -> &[u8] {
         match self {
             NoteCiphertextBytes::V2(x) => x,
             NoteCiphertextBytes::V3(x) => x,
+        }
+    }
+}
+
+/// Panics if the given slice is not `ENC_CIPHERTEXT_SIZE_V2` or `ENC_CIPHERTEXT_SIZE_V3` bytes long.
+impl From<&[u8]> for NoteCiphertextBytes {
+    fn from(s: &[u8]) -> Self
+    where
+        Self: Sized,
+    {
+        match s.len() {
+            ENC_CIPHERTEXT_SIZE_V2 => NoteCiphertextBytes::V2(s.try_into().unwrap()),
+            ENC_CIPHERTEXT_SIZE_V3 => NoteCiphertextBytes::V3(s.try_into().unwrap()),
+            _ => panic!("Invalid length for compact note plaintext"),
         }
     }
 }
