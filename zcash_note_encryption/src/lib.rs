@@ -515,7 +515,7 @@ impl<D: Domain> NoteEncryption<D> {
 /// This function is only meant to be used with full notes, not compact notes.
 /// If the note is a compact note, then this function returns `None`.
 ///
-/// For compact notes, use 'try_compact_note_decryption` and `try_compact_note_decryption_inner`.
+/// For compact notes, use `try_compact_note_decryption`.
 pub fn try_note_decryption<D: Domain, Output: ShieldedOutput<D>>(
     domain: &D,
     ivk: &D::IncomingViewingKey,
@@ -533,7 +533,7 @@ pub fn try_note_decryption<D: Domain, Output: ShieldedOutput<D>>(
 /// This function is only meant to be used with full notes, not compact notes.
 /// If the note is a compact note, then this function returns `None`.
 ///
-/// For compact notes, use 'try_compact_note_decryption` and `try_compact_note_decryption_inner`.
+/// For compact notes, use `try_compact_note_decryption_inner`.
 fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
     domain: &D,
     ivk: &D::IncomingViewingKey,
@@ -543,17 +543,13 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
 ) -> Option<(D::Note, D::Recipient, D::Memo)> {
     let mut enc_ciphertext = output.enc_ciphertext()?.as_ref().to_owned();
 
-    // extract:
-    let tag_loc = enc_ciphertext.len() - AEAD_TAG_SIZE;
-    let (plaintext, tail) = enc_ciphertext.split_at_mut(tag_loc);
-
-    let tag: [u8; AEAD_TAG_SIZE] = tail.try_into().unwrap();
+    let (to_plaintext, tag) = extract_tag(&mut enc_ciphertext);
 
     ChaCha20Poly1305::new(key.as_ref().into())
-        .decrypt_in_place_detached([0u8; 12][..].into(), &[], plaintext, &tag.into())
+        .decrypt_in_place_detached([0u8; 12][..].into(), &[], to_plaintext, &tag.into())
         .ok()?;
 
-    let (compact, memo) = domain.extract_memo(&plaintext.as_ref().into());
+    let (compact, memo) = domain.extract_memo(&to_plaintext.as_ref().into());
     let (note, to) = parse_note_plaintext_without_memo_ivk(
         domain,
         ivk,
@@ -728,16 +724,13 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
 
     let mut enc_ciphertext = output.enc_ciphertext()?.as_ref().to_owned();
 
-    let tag_idx = enc_ciphertext.len() - AEAD_TAG_SIZE;
-    let (plaintext, tail) = enc_ciphertext.split_at_mut(tag_idx);
-
-    let tag: [u8; AEAD_TAG_SIZE] = tail.try_into().unwrap();
+    let (to_plaintext, tag) = extract_tag(&mut enc_ciphertext);
 
     ChaCha20Poly1305::new(key.as_ref().into())
-        .decrypt_in_place_detached([0u8; 12][..].into(), &[], plaintext, &tag.into())
+        .decrypt_in_place_detached([0u8; 12][..].into(), &[], to_plaintext, &tag.into())
         .ok()?;
 
-    let (compact, memo) = domain.extract_memo(&plaintext.as_ref().into());
+    let (compact, memo) = domain.extract_memo(&to_plaintext.as_ref().into());
 
     let (note, to) =
         domain.parse_note_plaintext_without_memo_ovk(&pk_d, &esk, &ephemeral_key, &compact)?;
@@ -757,4 +750,14 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
     } else {
         None
     }
+}
+
+// Splits the AEAD tag from the actual ciphertext .
+fn extract_tag(enc_ciphertext: &mut Vec<u8>) -> (&mut [u8], [u8; AEAD_TAG_SIZE]) {
+    let tag_loc = enc_ciphertext.len() - AEAD_TAG_SIZE;
+
+    let (plaintext, tail) = enc_ciphertext.split_at_mut(tag_loc);
+
+    let tag: [u8; AEAD_TAG_SIZE] = tail.try_into().unwrap();
+    (plaintext, tag)
 }
