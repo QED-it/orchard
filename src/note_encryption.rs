@@ -138,15 +138,6 @@ pub enum NotePlaintextBytes {
     V3([u8; NOTE_PLAINTEXT_SIZE_V3]),
 }
 
-impl AsMut<[u8]> for NotePlaintextBytes {
-    fn as_mut(&mut self) -> &mut [u8] {
-        let ptr: &mut [u8] = match self {
-            NotePlaintextBytes::V2(ref mut x) => x,
-            NotePlaintextBytes::V3(ref mut x) => x,
-        };
-        ptr
-    }
-}
 
 impl AsRef<[u8]> for NotePlaintextBytes {
     fn as_ref(&self) -> &[u8] {
@@ -158,14 +149,14 @@ impl AsRef<[u8]> for NotePlaintextBytes {
     }
 }
 
-impl From<Vec<u8>> for NotePlaintextBytes {
-    fn from(v: Vec<u8>) -> Self
+impl From<&[u8]> for NotePlaintextBytes {
+    fn from(s: &[u8]) -> Self
     where
         Self: Sized,
     {
-        match v.len() {
-            NOTE_PLAINTEXT_SIZE_V2 => NotePlaintextBytes::V2(v.try_into().unwrap()),
-            NOTE_PLAINTEXT_SIZE_V3 => NotePlaintextBytes::V3(v.try_into().unwrap()),
+        match s.len() {
+            NOTE_PLAINTEXT_SIZE_V2 => NotePlaintextBytes::V2(s.try_into().unwrap()),
+            NOTE_PLAINTEXT_SIZE_V3 => NotePlaintextBytes::V3(s.try_into().unwrap()),
             _ => panic!("Invalid note plaintext size"),
         }
     }
@@ -251,16 +242,6 @@ impl AsRef<[u8]> for CompactNoteCiphertextBytes {
             CompactNoteCiphertextBytes::V2(x) => x,
             CompactNoteCiphertextBytes::V3(x) => x,
         }
-    }
-}
-
-impl AsMut<[u8]> for CompactNotePlaintextBytes {
-    fn as_mut(&mut self) -> &mut [u8] {
-        let ptr: &mut [u8] = match self {
-            CompactNotePlaintextBytes::V2(ref mut x) => x,
-            CompactNotePlaintextBytes::V3(ref mut x) => x,
-        };
-        ptr
     }
 }
 

@@ -119,7 +119,7 @@ pub trait Domain {
     type ExtractedCommitmentBytes: Eq + for<'a> From<&'a Self::ExtractedCommitment>;
     type Memo;
 
-    type NotePlaintextBytes: AsRef<[u8]> + From<Vec<u8>>;
+    type NotePlaintextBytes: AsRef<[u8]> + for<'a> From<&'a [u8]>;
     type NoteCiphertextBytes: AsRef<[u8]> + From<Vec<u8>>;
     type CompactNotePlaintextBytes: AsRef<[u8]> + From<Vec<u8>>;
     type CompactNoteCiphertextBytes: AsRef<[u8]>;
@@ -543,6 +543,7 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
 ) -> Option<(D::Note, D::Recipient, D::Memo)> {
     let mut enc_ciphertext = output.enc_ciphertext()?.as_ref().to_owned();
 
+    // extract:
     let tag_loc = enc_ciphertext.len() - AEAD_TAG_SIZE;
     let (plaintext, tail) = enc_ciphertext.split_at_mut(tag_loc);
 
@@ -552,7 +553,7 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
         .decrypt_in_place_detached([0u8; 12][..].into(), &[], plaintext, &tag.into())
         .ok()?;
 
-    let (compact, memo) = domain.extract_memo(&plaintext.to_owned().into());
+    let (compact, memo) = domain.extract_memo(&plaintext.as_ref().into());
     let (note, to) = parse_note_plaintext_without_memo_ivk(
         domain,
         ivk,
@@ -737,7 +738,7 @@ pub fn try_output_recovery_with_ock<D: Domain, Output: ShieldedOutput<D>>(
         .decrypt_in_place_detached([0u8; 12][..].into(), &[], plaintext, &tag.into())
         .ok()?;
 
-    let (compact, memo) = domain.extract_memo(&plaintext.to_owned().into());
+    let (compact, memo) = domain.extract_memo(&plaintext.as_ref().into());
 
     let (note, to) =
         domain.parse_note_plaintext_without_memo_ovk(&pk_d, &esk, &ephemeral_key, &compact)?;
