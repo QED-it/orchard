@@ -549,10 +549,7 @@ fn try_note_decryption_inner<D: Domain, Output: ShieldedOutput<D>>(
         .decrypt_in_place_detached([0u8; 12][..].into(), &[], to_plaintext, &tag.into())
         .ok()?;
 
-    let a = D::NotePlaintextBytes::from(to_plaintext);
-    //let pt : D::NotePlaintextBytes = to_plaintext.as_ref().into();
-
-    let (compact, memo) = domain.extract_memo(&a);
+    let (compact, memo) = domain.extract_memo(&D::NotePlaintextBytes::from(to_plaintext));
     let (note, to) = parse_note_plaintext_without_memo_ivk(
         domain,
         ivk,
