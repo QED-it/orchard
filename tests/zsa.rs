@@ -457,7 +457,7 @@ fn zsa_issue_and_transfer() {
             4,
             &keys,
         )
-            .unwrap();
+        .unwrap();
     });
     assert!(result.is_err());
 

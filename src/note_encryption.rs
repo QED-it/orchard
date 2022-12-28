@@ -303,10 +303,7 @@ impl Domain for OrchardDomain {
         plaintext: &CompactNotePlaintextBytes,
     ) -> Option<(Self::Note, Self::Recipient)> {
         orchard_parse_note_plaintext_without_memo(self, &plaintext.0, |diversifier| {
-            Some(DiversifiedTransmissionKey::derive(
-                ivk,
-                diversifier,
-            ))
+            Some(DiversifiedTransmissionKey::derive(ivk, diversifier))
         })
     }
 
