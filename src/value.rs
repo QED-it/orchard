@@ -53,11 +53,13 @@ use pasta_curves::{
 use rand::RngCore;
 use subtle::CtOption;
 
-use crate::note::AssetId;
 use crate::{
     constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_R_BYTES},
     primitives::redpallas::{self, Binding},
 };
+
+use crate::builder::Error;
+use crate::note::AssetId;
 
 /// Maximum note value.
 pub const MAX_NOTE_VALUE: u64 = u64::MAX;
@@ -129,6 +131,12 @@ impl From<&NoteValue> for Assigned<pallas::Base> {
     }
 }
 
+impl From<NoteValue> for i128 {
+    fn from(value: NoteValue) -> Self {
+        value.0 as i128
+    }
+}
+
 impl Sub for NoteValue {
     type Output = ValueSum;
 
@@ -149,7 +157,7 @@ pub(crate) enum Sign {
 }
 
 /// A sum of Orchard note values.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ValueSum(i128);
 
 impl ValueSum {
@@ -181,15 +189,21 @@ impl ValueSum {
             sign,
         )
     }
+
+    pub(crate) fn into<V: TryFrom<i64>>(self) -> Result<V, Error> {
+        i64::try_from(self)
+            .map_err(Error::ValueSum)
+            .and_then(|i| V::try_from(i).map_err(|_| Error::ValueSum(OverflowError)))
+    }
 }
 
-impl Add for ValueSum {
+impl<T: Into<i128>> Add<T> for ValueSum {
     type Output = Option<ValueSum>;
 
     #[allow(clippy::suspicious_arithmetic_impl)]
-    fn add(self, rhs: Self) -> Self::Output {
+    fn add(self, rhs: T) -> Self::Output {
         self.0
-            .checked_add(rhs.0)
+            .checked_add(rhs.into())
             .filter(|v| VALUE_SUM_RANGE.contains(v))
             .map(ValueSum)
     }
@@ -227,6 +241,12 @@ impl TryFrom<ValueSum> for i64 {
     }
 }
 
+impl From<ValueSum> for i128 {
+    fn from(value: ValueSum) -> Self {
+        value.0
+    }
+}
+
 /// The blinding factor for a [`ValueCommitment`].
 #[derive(Clone, Copy, Debug)]
 pub struct ValueCommitTrapdoor(pallas::Scalar);
@@ -234,6 +254,20 @@ pub struct ValueCommitTrapdoor(pallas::Scalar);
 impl ValueCommitTrapdoor {
     pub(crate) fn inner(&self) -> pallas::Scalar {
         self.0
+    }
+
+    /// Constructs `ValueCommitTrapdoor` from the byte representation of a scalar.
+    /// Returns a `None` [`CtOption`] if `bytes` is not a canonical representation
+    /// of a Pallas scalar.
+    ///
+    /// This is a low-level API, requiring a detailed understanding of the
+    /// [use of value commitment trapdoors][orchardbalance] in the Zcash protocol
+    /// to use correctly and securely. It is intended to be used in combination
+    /// with [`ValueCommitment::derive`].
+    ///
+    /// [orchardbalance]: https://zips.z.cash/protocol/protocol.pdf#orchardbalance
+    pub fn from_bytes(bytes: [u8; 32]) -> CtOption<Self> {
+        pallas::Scalar::from_repr(bytes).map(ValueCommitTrapdoor)
     }
 }
 
@@ -305,13 +339,13 @@ impl<'a> Sum<&'a ValueCommitment> for ValueCommitment {
 }
 
 impl ValueCommitment {
-    /// $ValueCommit^Orchard$.
+    /// Derives a `ValueCommitment` by $\mathsf{ValueCommit^{Orchard}}$.
     ///
     /// Defined in [Zcash Protocol Spec § 5.4.8.3: Homomorphic Pedersen commitments (Sapling and Orchard)][concretehomomorphiccommit].
     ///
     /// [concretehomomorphiccommit]: https://zips.z.cash/protocol/nu5.pdf#concretehomomorphiccommit
     #[allow(non_snake_case)]
-    pub(crate) fn derive(value: ValueSum, rcv: ValueCommitTrapdoor, asset: AssetId) -> Self {
+    pub fn derive(value: ValueSum, rcv: ValueCommitTrapdoor, asset: AssetId) -> Self {
         let hasher = pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION);
         let R = hasher(&VALUE_COMMITMENT_R_BYTES);
         let abs_value = u64::try_from(value.0.abs()).expect("value must be in valid range");
@@ -438,10 +472,11 @@ mod tests {
     };
     use crate::primitives::redpallas;
 
-    fn _bsk_consistent_with_bvk(
+    fn check_binding_signature(
         native_values: &[(ValueSum, ValueCommitTrapdoor, AssetId)],
         arb_values: &[(ValueSum, ValueCommitTrapdoor, AssetId)],
         neg_trapdoors: &[ValueCommitTrapdoor],
+        arb_values_to_burn: &[(ValueSum, ValueCommitTrapdoor, AssetId)],
     ) {
         // for each arb value, create a negative value with a different trapdoor
         let neg_arb_values: Vec<_> = arb_values
@@ -457,7 +492,13 @@ mod tests {
             .sum::<Result<ValueSum, OverflowError>>()
             .expect("we generate values that won't overflow");
 
-        let values = [native_values, arb_values, &neg_arb_values].concat();
+        let values = [
+            native_values,
+            arb_values,
+            &neg_arb_values,
+            arb_values_to_burn,
+        ]
+        .concat();
 
         let bsk = values
             .iter()
@@ -466,14 +507,20 @@ mod tests {
             .into_bsk();
 
         let bvk = (values
-            .iter()
-            .map(|(value, rcv, asset)| ValueCommitment::derive(*value, *rcv, *asset))
+            .into_iter()
+            .map(|(value, rcv, asset)| ValueCommitment::derive(value, rcv, asset))
             .sum::<ValueCommitment>()
             - ValueCommitment::derive(
                 native_value_balance,
                 ValueCommitTrapdoor::zero(),
                 AssetId::native(),
-            ))
+            )
+            - arb_values_to_burn
+                .iter()
+                .map(|(value, _, asset)| {
+                    ValueCommitment::derive(*value, ValueCommitTrapdoor::zero(), *asset)
+                })
+                .sum::<ValueCommitment>())
         .into_bvk();
 
         assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
@@ -481,34 +528,26 @@ mod tests {
 
     proptest! {
         #[test]
-        fn bsk_consistent_with_bvk_native_only(
+        fn bsk_consistent_with_bvk_native_with_zsa_transfer_and_burning(
             native_values in (1usize..10).prop_flat_map(|n_values|
                 arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
                     prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), native_asset_id()), n_values)
                 )
             ),
-        ) {
-            // Test with native note type (zec) only
-            _bsk_consistent_with_bvk(&native_values, &[], &[]);
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn bsk_consistent_with_bvk(
-            native_values in (1usize..10).prop_flat_map(|n_values|
-                arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), native_asset_id()), n_values)
-                )
-            ),
-            (arb_values,neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|
+            (asset_values, neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|
                 (arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
                     prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values)
                 ), prop::collection::vec(arb_trapdoor(), n_values))
             ),
+            burn_values in (1usize..10).prop_flat_map(|n_values|
+                arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64)
+                .prop_flat_map(move |bound| prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_id()), n_values))
+            )
         ) {
-            // Test with native note type (zec)
-             _bsk_consistent_with_bvk(&native_values, &arb_values, &neg_trapdoors);
+            check_binding_signature(&native_values, &[], &[], &[]);
+            check_binding_signature(&native_values, &[], &[], &burn_values);
+            check_binding_signature(&native_values, &asset_values, &neg_trapdoors, &[]);
+            check_binding_signature(&native_values, &asset_values, &neg_trapdoors, &burn_values);
         }
     }
 }

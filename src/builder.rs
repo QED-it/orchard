@@ -65,7 +65,7 @@ pub struct SpendInfo {
     pub(crate) scope: Scope,
     pub(crate) note: Note,
     pub(crate) merkle_path: MerklePath,
-    // a flag to indicate whether the value of the note will be counted in the value sum of the action.
+    // a flag to indicate whether the value of the note will be counted in the `ValueSum` of the action.
     pub(crate) split_flag: bool,
 }
 
@@ -117,9 +117,7 @@ impl SpendInfo {
 
     /// Return a copy of this note with the split flag set to `true`.
     fn create_split_spend(&self) -> Self {
-        let mut split_spend = self.clone();
-        split_spend.split_flag = true;
-        split_spend
+        SpendInfo::new(self.fvk.clone(), self.note, self.merkle_path.clone(), true).unwrap()
     }
 }
 
@@ -255,6 +253,7 @@ impl ActionInfo {
 pub struct Builder {
     spends: Vec<SpendInfo>,
     recipients: Vec<RecipientInfo>,
+    burn: HashMap<AssetId, ValueSum>,
     flags: Flags,
     anchor: Anchor,
 }
@@ -265,6 +264,7 @@ impl Builder {
         Builder {
             spends: vec![],
             recipients: vec![],
+            burn: HashMap::new(),
             flags,
             anchor,
         }
@@ -341,11 +341,27 @@ impl Builder {
         Ok(())
     }
 
+    /// Add an instruction to burn a given amount of a specific asset.
+    pub fn add_burn(&mut self, asset: AssetId, value: NoteValue) -> Result<(), &'static str> {
+        if asset.is_native().into() {
+            return Err("Burning is only possible for non-native assets");
+        }
+        let cur = *self.burn.get(&asset).unwrap_or(&ValueSum::zero());
+        let sum = (cur + value).ok_or("Orchard ValueSum operation overflowed")?;
+        self.burn.insert(asset, sum);
+        Ok(())
+    }
+
     /// The net value of the bundle to be built. The value of all spends,
     /// minus the value of all outputs.
     ///
     /// Useful for balancing a transaction, as the value balance of an individual bundle
-    /// can be non-zero, but a transaction may not have a positive total value balance.  
+    /// can be non-zero. Each bundle's value balance is [added] to the transparent
+    /// transaction value pool, which [must not have a negative value]. (If it were
+    /// negative, the transaction would output more value than it receives in inputs.)
+    ///
+    /// [added]: https://zips.z.cash/protocol/protocol.pdf#orchardbalance
+    /// [must not have a negative value]: https://zips.z.cash/protocol/protocol.pdf#transactions
     pub fn value_balance<V: TryFrom<i64>>(&self) -> Result<V, value::OverflowError> {
         let value_balance = self
             .spends
@@ -365,7 +381,7 @@ impl Builder {
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
     /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
-    pub fn build<V: TryFrom<i64>>(
+    pub fn build<V: TryFrom<i64> + Copy + Into<i64>>(
         self,
         mut rng: impl RngCore,
     ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V>, Error> {
@@ -373,7 +389,7 @@ impl Builder {
 
         // Pair up the spends and recipients, extending with dummy values as necessary.
         for (asset, (mut spends, mut recipients)) in
-            partition_by_asset(&self.spends, &self.recipients)
+            partition_by_asset(&self.spends, &self.recipients, &mut rng)
         {
             let num_spends = spends.len();
             let num_recipients = recipients.len();
@@ -418,16 +434,14 @@ impl Builder {
         let anchor = self.anchor;
 
         // Determine the value balance for this bundle, ensuring it is valid.
-        let value_balance = pre_actions
+        let native_value_balance: V = pre_actions
             .iter()
+            .filter(|action| action.spend.note.asset().is_native().into())
             .fold(Some(ValueSum::zero()), |acc, action| {
                 acc? + action.value_sum()
             })
-            .ok_or(OverflowError)?;
-
-        let result_value_balance: V = i64::try_from(value_balance)
-            .map_err(Error::ValueSum)
-            .and_then(|i| V::try_from(i).map_err(|_| Error::ValueSum(value::OverflowError)))?;
+            .ok_or(OverflowError)?
+            .into()?;
 
         // Compute the transaction binding signing key.
         let bsk = pre_actions
@@ -440,33 +454,35 @@ impl Builder {
         let (actions, circuits): (Vec<_>, Vec<_>) =
             pre_actions.into_iter().map(|a| a.build(&mut rng)).unzip();
 
-        // Verify that bsk and bvk are consistent.
-        let bvk = (actions.iter().map(|a| a.cv_net()).sum::<ValueCommitment>()
-            - ValueCommitment::derive(
-                value_balance,
-                ValueCommitTrapdoor::zero(),
-                AssetId::native(),
-            ))
-        .into_bvk();
-        assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
-
-        Ok(Bundle::from_parts(
+        let bundle = Bundle::from_parts(
             NonEmpty::from_vec(actions).unwrap(),
             flags,
-            result_value_balance,
+            native_value_balance,
+            self.burn
+                .into_iter()
+                .map(|(asset, value)| Ok((asset, value.into()?)))
+                .collect::<Result<_, Error>>()?,
             anchor,
             InProgress {
                 proof: Unproven { circuits },
                 sigs: Unauthorized { bsk },
             },
-        ))
+        );
+
+        assert_eq!(
+            redpallas::VerificationKey::from(&bundle.authorization().sigs.bsk),
+            bundle.binding_validating_key()
+        );
+        Ok(bundle)
     }
 }
 
-/// partition a list of spends and recipients by note types.
+/// Partition a list of spends and recipients by note types.
+/// Method creates single dummy ZEC note if spends and recipients are both empty.
 fn partition_by_asset(
     spends: &[SpendInfo],
     recipients: &[RecipientInfo],
+    rng: &mut impl RngCore,
 ) -> HashMap<AssetId, (Vec<SpendInfo>, Vec<RecipientInfo>)> {
     let mut hm = HashMap::new();
 
@@ -482,6 +498,11 @@ fn partition_by_asset(
             .or_insert((vec![], vec![]))
             .1
             .push(r.clone())
+    }
+
+    if hm.is_empty() {
+        let dummy_spend = SpendInfo::dummy(AssetId::native(), rng);
+        hm.insert(dummy_spend.note.asset(), (vec![dummy_spend], vec![]));
     }
 
     hm
@@ -784,7 +805,7 @@ pub mod testing {
 
     impl<R: RngCore + CryptoRng> ArbitraryBundleInputs<R> {
         /// Create a bundle from the set of arbitrary bundle inputs.
-        fn into_bundle<V: TryFrom<i64>>(mut self) -> Bundle<Authorized, V> {
+        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>>(mut self) -> Bundle<Authorized, V> {
             let fvk = FullViewingKey::from(&self.sk);
             let flags = Flags::from_parts(true, true);
             let mut builder = Builder::new(flags, self.anchor);
@@ -865,14 +886,15 @@ pub mod testing {
     }
 
     /// Produce an arbitrary valid Orchard bundle using a random spending key.
-    pub fn arb_bundle<V: TryFrom<i64> + Debug>() -> impl Strategy<Value = Bundle<Authorized, V>> {
+    pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
+    ) -> impl Strategy<Value = Bundle<Authorized, V>> {
         arb_spending_key()
             .prop_flat_map(arb_bundle_inputs)
             .prop_map(|inputs| inputs.into_bundle::<V>())
     }
 
     /// Produce an arbitrary valid Orchard bundle using a specified spending key.
-    pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug>(
+    pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
         k: SpendingKey,
     ) -> impl Strategy<Value = Bundle<Authorized, V>> {
         arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V>())
@@ -917,6 +939,8 @@ mod tests {
                 None,
             )
             .unwrap();
+        let balance: i64 = builder.value_balance().unwrap();
+        assert_eq!(balance, -5000);
 
         let bundle: Bundle<Authorized, i64> = builder
             .build(&mut rng)

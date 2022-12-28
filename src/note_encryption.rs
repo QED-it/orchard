@@ -13,7 +13,7 @@ use crate::{
     action::Action,
     keys::{
         DiversifiedTransmissionKey, Diversifier, EphemeralPublicKey, EphemeralSecretKey,
-        IncomingViewingKey, OutgoingViewingKey, SharedSecret,
+        OutgoingViewingKey, PreparedEphemeralPublicKey, PreparedIncomingViewingKey, SharedSecret,
     },
     note::{ExtractedNoteCommitment, Nullifier, RandomSeed},
     spec::diversify_hash,
@@ -197,13 +197,13 @@ impl OrchardDomain {
 impl Domain for OrchardDomain {
     type EphemeralSecretKey = EphemeralSecretKey;
     type EphemeralPublicKey = EphemeralPublicKey;
-    type PreparedEphemeralPublicKey = EphemeralPublicKey;
+    type PreparedEphemeralPublicKey = PreparedEphemeralPublicKey;
     type SharedSecret = SharedSecret;
     type SymmetricKey = Hash;
     type Note = Note;
     type Recipient = Address;
     type DiversifiedTransmissionKey = DiversifiedTransmissionKey;
-    type IncomingViewingKey = IncomingViewingKey;
+    type IncomingViewingKey = PreparedIncomingViewingKey;
     type OutgoingViewingKey = OutgoingViewingKey;
     type ValueCommitment = ValueCommitment;
     type ExtractedCommitment = ExtractedNoteCommitment;
@@ -224,7 +224,7 @@ impl Domain for OrchardDomain {
     }
 
     fn prepare_epk(epk: Self::EphemeralPublicKey) -> Self::PreparedEphemeralPublicKey {
-        epk
+        PreparedEphemeralPublicKey::new(epk)
     }
 
     fn ka_derive_public(
@@ -303,7 +303,10 @@ impl Domain for OrchardDomain {
         plaintext: &CompactNotePlaintextBytes,
     ) -> Option<(Self::Note, Self::Recipient)> {
         orchard_parse_note_plaintext_without_memo(self, &plaintext.0, |diversifier| {
-            Some(DiversifiedTransmissionKey::derive(ivk, diversifier))
+            Some(DiversifiedTransmissionKey::derive(
+                ivk,
+                diversifier,
+            ))
         })
     }
 
@@ -470,7 +473,7 @@ mod tests {
         action::Action,
         keys::{
             DiversifiedTransmissionKey, Diversifier, EphemeralSecretKey, IncomingViewingKey,
-            OutgoingViewingKey,
+            OutgoingViewingKey, PreparedIncomingViewingKey,
         },
         note::{ExtractedNoteCommitment, Nullifier, RandomSeed, TransmittedNoteCiphertext},
         primitives::redpallas,
@@ -488,7 +491,9 @@ mod tests {
             //
 
             // Recipient key material
-            let ivk = IncomingViewingKey::from_bytes(&tv.incoming_viewing_key).unwrap();
+            let ivk = PreparedIncomingViewingKey::new(
+                &IncomingViewingKey::from_bytes(&tv.incoming_viewing_key).unwrap(),
+            );
             let ovk = OutgoingViewingKey::from(tv.ovk);
             let d = Diversifier::from_bytes(tv.default_d);
             let pk_d = DiversifiedTransmissionKey::from_bytes(&tv.default_pk_d).unwrap();
