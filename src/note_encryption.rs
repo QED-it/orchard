@@ -57,8 +57,8 @@ impl AsMut<[u8]> for NotePlaintextBytes {
 
 impl From<&[u8]> for NotePlaintextBytes {
     fn from(s: &[u8]) -> Self
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         NotePlaintextBytes(s.try_into().unwrap())
     }
@@ -72,8 +72,8 @@ impl AsRef<[u8]> for NoteCiphertextBytes {
 
 impl From<&[u8]> for NoteCiphertextBytes {
     fn from(s: &[u8]) -> Self
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         NoteCiphertextBytes(s.try_into().unwrap())
     }
@@ -88,8 +88,8 @@ impl AsMut<[u8]> for CompactNotePlaintextBytes {
 //todo consider https://crates.io/crates/duplicate macro
 impl From<&[u8]> for CompactNotePlaintextBytes {
     fn from(s: &[u8]) -> Self
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         CompactNotePlaintextBytes(s.try_into().unwrap())
     }
