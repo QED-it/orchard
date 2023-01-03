@@ -33,6 +33,70 @@ pub const NOTE_PLAINTEXT_SIZE_V2: usize = COMPACT_NOTE_SIZE_V2 + MEMO_SIZE;
 /// The size of an encrypted note plaintext.
 pub const ENC_CIPHERTEXT_SIZE_V2: usize = NOTE_PLAINTEXT_SIZE_V2 + AEAD_TAG_SIZE;
 
+#[derive(Clone, Debug)]
+pub struct NotePlaintextBytes(pub [u8; NOTE_PLAINTEXT_SIZE_V2]);
+
+#[derive(Clone, Debug)]
+pub struct NoteCiphertextBytes(pub [u8; ENC_CIPHERTEXT_SIZE_V2]);
+
+#[derive(Clone, Debug)]
+pub struct CompactNotePlaintextBytes(pub [u8; COMPACT_NOTE_SIZE_V2]);
+
+#[derive(Clone, Debug)]
+pub struct CompactNoteCiphertextBytes(pub [u8; COMPACT_NOTE_SIZE_V2]);
+
+impl AsMut<[u8]> for NotePlaintextBytes {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.0.as_mut()
+    }
+}
+
+impl From<&[u8]> for NotePlaintextBytes {
+    fn from(s: &[u8]) -> Self
+        where
+            Self: Sized,
+    {
+        NotePlaintextBytes(s.try_into().unwrap())
+    }
+}
+
+impl AsRef<[u8]> for NoteCiphertextBytes {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl From<&[u8]> for NoteCiphertextBytes {
+    fn from(s: &[u8]) -> Self
+        where
+            Self: Sized,
+    {
+        NoteCiphertextBytes(s.try_into().unwrap())
+    }
+}
+
+impl AsMut<[u8]> for CompactNotePlaintextBytes {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.0.as_mut()
+    }
+}
+
+//todo consider https://crates.io/crates/duplicate macro
+impl From<&[u8]> for CompactNotePlaintextBytes {
+    fn from(s: &[u8]) -> Self
+        where
+            Self: Sized,
+    {
+        CompactNotePlaintextBytes(s.try_into().unwrap())
+    }
+}
+
+impl AsRef<[u8]> for CompactNoteCiphertextBytes {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 /// Defined in [Zcash Protocol Spec § 5.4.2: Pseudo Random Functions][concreteprfs].
 ///
 /// [concreteprfs]: https://zips.z.cash/protocol/nu5.pdf#concreteprfs
@@ -108,7 +172,7 @@ pub struct OrchardDomain {
     rho: Nullifier,
 }
 
-// TODO: uncomment after upsteram update for this branch
+// TODO: uncomment after upstream update for this branch
 // impl memuse::DynamicUsage for OrchardDomain {
 //     fn dynamic_usage(&self) -> usize {
 //         self.rho.dynamic_usage()
@@ -118,75 +182,6 @@ pub struct OrchardDomain {
 //         self.rho.dynamic_usage_bounds()
 //     }
 // }
-
-/// Newtype for encoding the note plaintext post ZSA.
-// pub struct NotePlaintextZSA (pub [u8; ZSA_NOTE_PLAINTEXT_SIZE]);
-#[derive(Clone, Debug)]
-pub struct NotePlaintextBytes(pub [u8; NOTE_PLAINTEXT_SIZE_V2]);
-
-impl AsMut<[u8]> for NotePlaintextBytes {
-    fn as_mut(&mut self) -> &mut [u8] {
-        self.0.as_mut()
-    }
-}
-
-impl From<&[u8]> for NotePlaintextBytes {
-    fn from(s: &[u8]) -> Self
-    where
-        Self: Sized,
-    {
-        NotePlaintextBytes(s.try_into().unwrap())
-    }
-}
-
-/// Newtype for encoding the encrypted note ciphertext post ZSA.
-#[derive(Clone, Debug)]
-pub struct NoteCiphertextBytes(pub [u8; ENC_CIPHERTEXT_SIZE_V2]);
-
-impl AsRef<[u8]> for NoteCiphertextBytes {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-}
-
-impl From<&[u8]> for NoteCiphertextBytes {
-    fn from(s: &[u8]) -> Self
-    where
-        Self: Sized,
-    {
-        NoteCiphertextBytes(s.try_into().unwrap())
-    }
-}
-
-/// Newtype for encoding a compact note
-#[derive(Clone, Debug)]
-pub struct CompactNotePlaintextBytes(pub [u8; COMPACT_NOTE_SIZE_V2]);
-
-impl AsMut<[u8]> for CompactNotePlaintextBytes {
-    fn as_mut(&mut self) -> &mut [u8] {
-        self.0.as_mut()
-    }
-}
-
-//todo consider https://crates.io/crates/duplicate macro
-impl From<&[u8]> for CompactNotePlaintextBytes {
-    fn from(s: &[u8]) -> Self
-    where
-        Self: Sized,
-    {
-        CompactNotePlaintextBytes(s.try_into().unwrap())
-    }
-}
-
-/// Newtype for encoding a compact note
-#[derive(Clone, Debug)]
-pub struct CompactNoteCiphertextBytes(pub [u8; COMPACT_NOTE_SIZE_V2]);
-
-impl AsRef<[u8]> for CompactNoteCiphertextBytes {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-}
 
 impl OrchardDomain {
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
