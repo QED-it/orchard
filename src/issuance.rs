@@ -1025,7 +1025,8 @@ mod tests {
 pub mod testing {
     use crate::issuance::{IssueAction, IssueBundle, Prepared, Signed, Unauthorized};
     use crate::keys::testing::{arb_issuance_authorizing_key, arb_issuance_validating_key};
-    use crate::note::testing::arb_zsa_note;
+    use crate::note::testing::arb_note;
+    use crate::value::NoteValue;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
@@ -1035,7 +1036,7 @@ pub mod testing {
     prop_compose! {
         /// Generate an issue action given note value
         pub fn arb_issue_action()(
-            note in arb_zsa_note(),
+            note in arb_note(NoteValue::from_raw(10)),
             asset_descr in string_regex(".{1,512}").unwrap()
         ) -> IssueAction {
             IssueAction::new(asset_descr, &note)

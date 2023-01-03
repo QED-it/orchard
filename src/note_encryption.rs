@@ -58,6 +58,14 @@ pub(crate) fn prf_ock_orchard(
     )
 }
 
+fn version(plaintext: &[u8]) -> Option<u8> {
+    match plaintext[0] {
+        0x02 => Some(0x02),
+        0x03 => Some(0x03),
+        _ => None,
+    }
+}
+
 fn orchard_parse_note_plaintext_without_memo<F>(
     domain: &OrchardDomain,
     plaintext: &[u8],
@@ -69,7 +77,7 @@ where
     assert!(plaintext.len() >= COMPACT_NOTE_SIZE_V2);
 
     // Check note plaintext version
-    if plaintext[0] != 0x02 {
+    if version(plaintext).unwrap() != 0x02 {
         return None;
     }
 
@@ -87,7 +95,7 @@ where
     let note = Option::from(Note::from_parts(
         recipient,
         value,
-        AssetId::native(),
+        AssetId::native(), //V2 notes are always native.
         domain.rho,
         rseed,
     ))?;
@@ -457,26 +465,62 @@ impl CompactAction {
 
 #[cfg(test)]
 mod tests {
+    use proptest::proptest;
     use rand::rngs::OsRng;
     use zcash_note_encryption::{
-        try_compact_note_decryption, try_note_decryption, try_output_recovery_with_ovk,
+        try_compact_note_decryption, try_note_decryption, try_output_recovery_with_ovk, Domain,
         EphemeralKeyBytes,
     };
 
     use super::{prf_ock_orchard, CompactAction, OrchardDomain, OrchardNoteEncryption};
     use crate::note::AssetId;
-    use crate::note_encryption::NoteCiphertextBytes;
     use crate::{
         action::Action,
         keys::{
             DiversifiedTransmissionKey, Diversifier, EphemeralSecretKey, IncomingViewingKey,
             OutgoingViewingKey, PreparedIncomingViewingKey,
         },
-        note::{ExtractedNoteCommitment, Nullifier, RandomSeed, TransmittedNoteCiphertext},
+        note::{
+            testing::arb_native_note, ExtractedNoteCommitment, Nullifier, RandomSeed,
+            TransmittedNoteCiphertext,
+        },
+        note_encryption::{
+            orchard_parse_note_plaintext_without_memo, version, NoteCiphertextBytes,
+        },
         primitives::redpallas,
         value::{NoteValue, ValueCommitment},
         Address, Note,
     };
+
+    proptest! {
+        #[test]
+        fn test_encoding_roundtrip(
+            note in arb_native_note(),
+        ) {
+            let memo = &crate::test_vectors::note_encryption::test_vectors()[0].memo;
+
+            // Encode.
+            let mut plaintext = OrchardDomain::note_plaintext_bytes(&note, &note.recipient(), memo);
+
+            // Decode.
+            let domain = OrchardDomain { rho: note.rho() };
+            let parsed_version = version(plaintext.as_mut()).unwrap();
+            let (mut compact,parsed_memo) = domain.extract_memo(&plaintext);
+
+            let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &compact.as_mut(),
+                |diversifier| {
+                    assert_eq!(diversifier, &note.recipient().diversifier());
+                    Some(*note.recipient().pk_d())
+                }
+            ).expect("Plaintext parsing failed");
+
+            // Check.
+            assert_eq!(parsed_note, note);
+            assert_eq!(parsed_recipient, note.recipient());
+            assert_eq!(&parsed_memo, memo);
+            assert_eq!(parsed_version, 0x02);
+        }
+    }
 
     #[test]
     fn test_vectors() {

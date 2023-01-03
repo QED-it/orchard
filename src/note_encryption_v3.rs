@@ -440,13 +440,6 @@ impl BatchDomain for OrchardDomain {
     }
 }
 
-fn get_version(plaintext: &NotePlaintextBytes) -> Option<u8> {
-    match plaintext {
-        NotePlaintextBytes::V2(x) if x[0] == 0x02 => Some(0x02),
-        NotePlaintextBytes::V3(x) if x[0] == 0x03 => Some(0x03),
-        _ => None,
-    }
-}
 
 /// Implementation of in-band secret distribution for Orchard bundles.
 pub type OrchardNoteEncryption = zcash_note_encryption::NoteEncryption<OrchardDomain>;
@@ -578,36 +571,36 @@ mod tests {
         Address, Note,
     };
 
-    use super::{get_version, orchard_parse_note_plaintext_without_memo};
+    use super::{version, orchard_parse_note_plaintext_without_memo};
 
     proptest! {
-    #[test]
-    fn test_encoding_roundtrip(
-        note in arb_note(NoteValue::from_raw(10)),
-    ) {
-        let memo = &crate::test_vectors::note_encryption::test_vectors()[0].memo;
+        #[test]
+        fn test_encoding_roundtrip(
+            note in arb_note(NoteValue::from_raw(100)),
+        ) {
+            let memo = &crate::test_vectors::note_encryption::test_vectors()[0].memo;
 
-        // Encode.
-        let plaintext = OrchardDomain::note_plaintext_bytes(&note, &note.recipient(), memo);
+            // Encode.
+            let mut plaintext = OrchardDomain::note_plaintext_bytes(&note, &note.recipient(), memo);
 
-        // Decode.
-        let domain = OrchardDomain { rho: note.rho() };
-        let parsed_version = get_version(&plaintext).unwrap();
-        let (compact,parsed_memo) = domain.extract_memo(&plaintext);
+            // Decode.
+            let domain = OrchardDomain { rho: note.rho() };
+            let parsed_version = version(plaintext.as_mut()).unwrap();
+            let (mut compact,parsed_memo) = domain.extract_memo(&plaintext);
 
-        let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &compact,
-            |diversifier| {
-                assert_eq!(diversifier, &note.recipient().diversifier());
-                Some(*note.recipient().pk_d())
-            }
-        ).expect("Plaintext parsing failed");
+            let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &compact.as_mut(),
+                |diversifier| {
+                    assert_eq!(diversifier, &note.recipient().diversifier());
+                    Some(*note.recipient().pk_d())
+                }
+            ).expect("Plaintext parsing failed");
 
-        // Check.
-        assert_eq!(parsed_note, note);
-        assert_eq!(parsed_recipient, note.recipient());
-        assert_eq!(&parsed_memo, memo);
-        assert_eq!(parsed_version, 0x03); // Since all new notes should be encoded as V3 notes.
-    }
+            // Check.
+            assert_eq!(parsed_note, note);
+            assert_eq!(parsed_recipient, note.recipient());
+            assert_eq!(&parsed_memo, memo);
+            assert_eq!(parsed_version, 0x03);
+        }
     }
 
     #[test]

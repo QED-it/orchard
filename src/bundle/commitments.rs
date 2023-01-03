@@ -47,6 +47,7 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
 
         // two lines
         ch.update(&action.encrypted_note().enc_ciphertext.0[..52]);
+
         mh.update(&action.encrypted_note().enc_ciphertext.0[52..564]);
 
         nh.update(&action.cv_net().to_bytes());
