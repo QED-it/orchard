@@ -135,7 +135,7 @@ fn version(plaintext: &[u8]) -> Option<u8> {
 }
 
 fn orchard_parse_note_plaintext_without_memo<F>(
-    domain: &OrchardDomain,
+    domain: &OrchardDomainV2,
     plaintext: &[u8],
     get_validated_pk_d: F,
 ) -> Option<(Note, Address)>
@@ -172,11 +172,11 @@ where
 
 /// Orchard-specific note encryption logic.
 #[derive(Debug)]
-pub struct OrchardDomain {
+pub struct OrchardDomainV2 {
     rho: Nullifier,
 }
 
-impl memuse::DynamicUsage for OrchardDomain {
+impl memuse::DynamicUsage for OrchardDomainV2 {
     fn dynamic_usage(&self) -> usize {
         self.rho.dynamic_usage()
     }
@@ -186,21 +186,21 @@ impl memuse::DynamicUsage for OrchardDomain {
     }
 }
 
-impl OrchardDomain {
+impl OrchardDomainV2 {
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
     pub fn for_action<T>(act: &Action<T>) -> Self {
-        OrchardDomain {
+        OrchardDomainV2 {
             rho: *act.nullifier(),
         }
     }
 
     /// Constructs a domain from a nullifier.
     pub fn for_nullifier(nullifier: Nullifier) -> Self {
-        OrchardDomain { rho: nullifier }
+        OrchardDomainV2 { rho: nullifier }
     }
 }
 
-impl Domain for OrchardDomain {
+impl Domain for OrchardDomainV2 {
     type EphemeralSecretKey = EphemeralSecretKey;
     type EphemeralPublicKey = EphemeralPublicKey;
     type PreparedEphemeralPublicKey = PreparedEphemeralPublicKey;
@@ -352,7 +352,7 @@ impl Domain for OrchardDomain {
     }
 }
 
-impl BatchDomain for OrchardDomain {
+impl BatchDomain for OrchardDomainV2 {
     fn batch_kdf<'a>(
         items: impl Iterator<Item = (Option<Self::SharedSecret>, &'a EphemeralKeyBytes)>,
     ) -> Vec<Option<Self::SymmetricKey>> {
@@ -368,9 +368,9 @@ impl BatchDomain for OrchardDomain {
 }
 
 /// Implementation of in-band secret distribution for Orchard bundles.
-pub type OrchardNoteEncryption = zcash_note_encryption::NoteEncryption<OrchardDomain>;
+pub type OrchardNoteEncryption = zcash_note_encryption::NoteEncryption<OrchardDomainV2>;
 
-impl<T> ShieldedOutput<OrchardDomain> for Action<T> {
+impl<T> ShieldedOutput<OrchardDomainV2> for Action<T> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.encrypted_note().epk_bytes)
     }
@@ -421,7 +421,7 @@ impl<T> From<&Action<T>> for CompactAction {
     }
 }
 
-impl ShieldedOutput<OrchardDomain> for CompactAction {
+impl ShieldedOutput<OrchardDomainV2> for CompactAction {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.ephemeral_key.0)
     }
@@ -470,7 +470,7 @@ mod tests {
         EphemeralKeyBytes,
     };
 
-    use super::{prf_ock_orchard, CompactAction, OrchardDomain, OrchardNoteEncryption};
+    use super::{prf_ock_orchard, CompactAction, OrchardDomainV2, OrchardNoteEncryption};
     use crate::note::AssetId;
     use crate::{
         action::Action,
@@ -498,10 +498,10 @@ mod tests {
             let memo = &crate::test_vectors::note_encryption::test_vectors()[0].memo;
 
             // Encode.
-            let mut plaintext = OrchardDomain::note_plaintext_bytes(&note, &note.recipient(), memo);
+            let mut plaintext = OrchardDomainV2::note_plaintext_bytes(&note, &note.recipient(), memo);
 
             // Decode.
-            let domain = OrchardDomain { rho: note.rho() };
+            let domain = OrchardDomainV2 { rho: note.rho() };
             let parsed_version = version(plaintext.as_mut()).unwrap();
             let (mut compact,parsed_memo) = domain.extract_memo(&plaintext);
 
@@ -586,7 +586,7 @@ mod tests {
             // (Tested first because it only requires immutable references.)
             //
 
-            let domain = OrchardDomain { rho };
+            let domain = OrchardDomainV2 { rho };
 
             match try_note_decryption(&domain, &ivk, &action) {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {
