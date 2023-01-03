@@ -33,15 +33,19 @@ pub const NOTE_PLAINTEXT_SIZE_V2: usize = COMPACT_NOTE_SIZE_V2 + MEMO_SIZE;
 /// The size of an encrypted note plaintext.
 pub const ENC_CIPHERTEXT_SIZE_V2: usize = NOTE_PLAINTEXT_SIZE_V2 + AEAD_TAG_SIZE;
 
+/// a type to represent the raw bytes of a note plaintext.
 #[derive(Clone, Debug)]
 pub struct NotePlaintextBytes(pub [u8; NOTE_PLAINTEXT_SIZE_V2]);
 
+/// a type to represent the raw bytes of an encrypted note plaintext.
 #[derive(Clone, Debug)]
 pub struct NoteCiphertextBytes(pub [u8; ENC_CIPHERTEXT_SIZE_V2]);
 
+/// a type to represent the raw bytes of a compact note.
 #[derive(Clone, Debug)]
 pub struct CompactNotePlaintextBytes(pub [u8; COMPACT_NOTE_SIZE_V2]);
 
+/// a type to represent the raw bytes of an encrypted compact note.
 #[derive(Clone, Debug)]
 pub struct CompactNoteCiphertextBytes(pub [u8; COMPACT_NOTE_SIZE_V2]);
 
@@ -502,7 +506,7 @@ mod tests {
             let parsed_version = version(plaintext.as_mut()).unwrap();
             let (mut compact,parsed_memo) = domain.extract_memo(&plaintext);
 
-            let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &compact.as_mut(),
+            let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, compact.as_mut(),
                 |diversifier| {
                     assert_eq!(diversifier, &note.recipient().diversifier());
                     Some(*note.recipient().pk_d())
