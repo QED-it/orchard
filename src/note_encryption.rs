@@ -85,7 +85,6 @@ impl AsMut<[u8]> for CompactNotePlaintextBytes {
     }
 }
 
-//todo consider https://crates.io/crates/duplicate macro
 impl From<&[u8]> for CompactNotePlaintextBytes {
     fn from(s: &[u8]) -> Self
     where
@@ -126,7 +125,8 @@ pub(crate) fn prf_ock_orchard(
     )
 }
 
-fn version(plaintext: &[u8]) -> Option<u8> {
+/// note_version will return the version of the note plaintext.
+pub fn note_version(plaintext: &[u8]) -> Option<u8> {
     match plaintext[0] {
         0x02 => Some(0x02),
         0x03 => Some(0x03),
@@ -145,7 +145,7 @@ where
     assert!(plaintext.len() >= COMPACT_NOTE_SIZE_V2);
 
     // Check note plaintext version
-    if version(plaintext).unwrap() != 0x02 {
+    if note_version(plaintext).unwrap() != 0x02 {
         return None;
     }
 
@@ -406,7 +406,10 @@ impl fmt::Debug for CompactAction {
     }
 }
 
-impl<T> From<&Action<T>> for CompactAction {
+impl<T> From<&Action<T>> for CompactAction
+where
+    Action<T>: ShieldedOutput<OrchardDomainV2>,
+{
     fn from(action: &Action<T>) -> Self {
         CompactAction {
             nullifier: *action.nullifier(),
@@ -483,7 +486,7 @@ mod tests {
             TransmittedNoteCiphertext,
         },
         note_encryption::{
-            orchard_parse_note_plaintext_without_memo, version, NoteCiphertextBytes,
+            note_version, orchard_parse_note_plaintext_without_memo, NoteCiphertextBytes,
         },
         primitives::redpallas,
         value::{NoteValue, ValueCommitment},
@@ -502,7 +505,7 @@ mod tests {
 
             // Decode.
             let domain = OrchardDomainV2 { rho: note.rho() };
-            let parsed_version = version(plaintext.as_mut()).unwrap();
+            let parsed_version = note_version(plaintext.as_mut()).unwrap();
             let (mut compact,parsed_memo) = domain.extract_memo(&plaintext);
 
             let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, compact.as_mut(),
