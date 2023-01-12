@@ -136,7 +136,7 @@ pub fn note_version(plaintext: &[u8]) -> Option<u8> {
 
 fn orchard_parse_note_plaintext_without_memo<F>(
     domain: &OrchardDomainV2,
-    plaintext: &[u8],
+    plaintext: &[u8], // TODO: replace with CompactNotePlaintextBytes
     get_validated_pk_d: F,
 ) -> Option<(Note, Address)>
 where
@@ -380,12 +380,12 @@ impl<T> ShieldedOutput<OrchardDomainV2> for Action<T> {
     }
 
     fn enc_ciphertext(&self) -> Option<NoteCiphertextBytes> {
-        Some(self.encrypted_note().enc_ciphertext.clone())
+        Some(NoteCiphertextBytes(self.encrypted_note().enc_ciphertext))
     }
 
     fn enc_ciphertext_compact(&self) -> CompactNoteCiphertextBytes {
         CompactNoteCiphertextBytes(
-            self.encrypted_note().enc_ciphertext.0[..COMPACT_NOTE_SIZE_V2]
+            self.encrypted_note().enc_ciphertext[..COMPACT_NOTE_SIZE_V2]
                 .try_into()
                 .unwrap(),
         )
@@ -416,7 +416,7 @@ where
             cmx: *action.cmx(),
             ephemeral_key: action.ephemeral_key(),
             enc_ciphertext: CompactNoteCiphertextBytes(
-                action.encrypted_note().enc_ciphertext.0[..COMPACT_NOTE_SIZE_V2]
+                action.encrypted_note().enc_ciphertext[..COMPACT_NOTE_SIZE_V2]
                     .try_into()
                     .unwrap(),
             ),
@@ -506,9 +506,9 @@ mod tests {
             // Decode.
             let domain = OrchardDomainV2 { rho: note.rho() };
             let parsed_version = note_version(plaintext.as_mut()).unwrap();
-            let (mut compact,parsed_memo) = domain.extract_memo(&plaintext);
+            let (compact,parsed_memo) = domain.extract_memo(&plaintext);
 
-            let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, compact.as_mut(),
+            let (parsed_note, parsed_recipient) = orchard_parse_note_plaintext_without_memo(&domain, &compact.0,
                 |diversifier| {
                     assert_eq!(diversifier, &note.recipient().diversifier());
                     Some(*note.recipient().pk_d())
@@ -577,7 +577,7 @@ mod tests {
                 cmx,
                 TransmittedNoteCiphertext {
                     epk_bytes: ephemeral_key.0,
-                    enc_ciphertext: NoteCiphertextBytes(tv.c_enc),
+                    enc_ciphertext: tv.c_enc,
                     out_ciphertext: tv.c_out,
                 },
                 cv_net.clone(),

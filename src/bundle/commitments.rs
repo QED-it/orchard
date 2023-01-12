@@ -46,15 +46,15 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         ch.update(&action.encrypted_note().epk_bytes);
 
         // two lines
-        ch.update(&action.encrypted_note().enc_ciphertext.0[..52]);
+        ch.update(&action.encrypted_note().enc_ciphertext[..52]);
 
-        mh.update(&action.encrypted_note().enc_ciphertext.0[52..564]);
+        mh.update(&action.encrypted_note().enc_ciphertext[52..564]);
 
         nh.update(&action.cv_net().to_bytes());
         nh.update(&<[u8; 32]>::from(action.rk()));
 
         //one line
-        nh.update(&action.encrypted_note().enc_ciphertext.0[564..]);
+        nh.update(&action.encrypted_note().enc_ciphertext[564..]);
         nh.update(&action.encrypted_note().out_ciphertext);
 
         //TODO: extract into specific domain implementation
