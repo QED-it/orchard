@@ -6,9 +6,10 @@ use pasta_curves::pallas;
 use rand::RngCore;
 use subtle::CtOption;
 
+use crate::note_encryption::ENC_CIPHERTEXT_SIZE_V2;
+use crate::note_encryption_v3::ENC_CIPHERTEXT_SIZE_V3;
 use crate::{
     keys::{EphemeralSecretKey, FullViewingKey, Scope, SpendingKey},
-    note_encryption::NoteCiphertextBytes,
     spec::{to_base, to_scalar, NonZeroPallasScalar, PrfExpand},
     value::NoteValue,
     Address,
@@ -274,13 +275,22 @@ impl Note {
     }
 }
 
+/// A Enum used to distinguish between the different types of notes.
+#[derive(Clone, Debug)]
+pub enum EncCipherText {
+    /// The cipher text raw bytes for notes V2 with length of 580 bytes.
+    V2([u8; ENC_CIPHERTEXT_SIZE_V2]),
+    /// The cipher text raw bytes for notes V3 with a length of 612 bytes.
+    V3([u8; ENC_CIPHERTEXT_SIZE_V3]),
+}
+
 /// An encrypted note.
 #[derive(Clone)]
 pub struct TransmittedNoteCiphertext {
     /// The serialization of the ephemeral public key
     pub epk_bytes: [u8; 32],
     /// The encrypted note ciphertext
-    pub enc_ciphertext: [u8; 580],
+    pub enc_ciphertext: EncCipherText,
     /// An encrypted value that allows the holder of the outgoing cipher
     /// key for the note to recover the note plaintext.
     pub out_ciphertext: [u8; 80],
@@ -288,9 +298,14 @@ pub struct TransmittedNoteCiphertext {
 
 impl fmt::Debug for TransmittedNoteCiphertext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let hex_encode = match self.enc_ciphertext {
+            EncCipherText::V2(d) => hex::encode(&d),
+            EncCipherText::V3(d) => hex::encode(&d),
+        };
+
         f.debug_struct("TransmittedNoteCiphertext")
             .field("epk_bytes", &self.epk_bytes)
-            .field("enc_ciphertext", &hex::encode(&self.enc_ciphertext))
+            .field("enc_ciphertext", &hex_encode)
             .field("out_ciphertext", &hex::encode(self.out_ciphertext))
             .finish()
     }

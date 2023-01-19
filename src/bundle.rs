@@ -10,7 +10,7 @@ use core::fmt;
 use blake2b_simd::Hash as Blake2bHash;
 use memuse::DynamicUsage;
 use nonempty::NonEmpty;
-use zcash_note_encryption::{try_note_decryption, try_output_recovery_with_ovk};
+use zcash_note_encryption::{Domain, ShieldedOutput, try_note_decryption, try_output_recovery_with_ovk};
 
 use crate::note::AssetId;
 use crate::{
@@ -305,9 +305,10 @@ impl<T: Authorization, V> Bundle<T, V> {
             .iter()
             .enumerate()
             .filter_map(|(idx, action)| {
-                let domain = OrchardDomainV2::for_action(action);
+                let domain = action.domain();
+                //let a =  action as &dyn ShieldedOutput<_>;
                 prepared_keys.iter().find_map(|(ivk, prepared_ivk)| {
-                    try_note_decryption(&domain, prepared_ivk, action)
+                    try_note_decryption(&domain.into(), prepared_ivk, action)
                         .map(|(n, a, m)| (idx, (*ivk).clone(), n, a, m))
                 })
             })

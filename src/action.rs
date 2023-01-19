@@ -1,10 +1,16 @@
+use std::any::Any;
 use memuse::DynamicUsage;
+use zcash_note_encryption::Domain;
 
+use crate::note::EncCipherText;
+use crate::note_encryption::OrchardDomainV2;
+use crate::note_encryption_v3::OrchardDomainV3;
 use crate::{
     note::{ExtractedNoteCommitment, Nullifier, TransmittedNoteCiphertext},
     primitives::redpallas::{self, SpendAuth},
     value::ValueCommitment,
 };
+use crate::keys::PreparedIncomingViewingKey;
 
 /// An action applied to the global ledger.
 ///
@@ -103,6 +109,16 @@ impl<T> Action<T> {
             authorization: step(self.authorization)?,
         })
     }
+
+    /// Returns the relevant encryption domain
+    pub fn domain(&self) -> impl Domain {
+    //pub fn domain(&self) -> &dyn Any {
+        // match self.encrypted_note.enc_ciphertext {
+        //     EncCipherText::V2(_) => OrchardDomainV2::for_action(self),
+        //     EncCipherText::V3(_) => OrchardDomainV3::for_action(self),
+        // }
+        OrchardDomainV2::for_action(self)
+    }
 }
 
 impl DynamicUsage for Action<redpallas::Signature<SpendAuth>> {
@@ -130,7 +146,7 @@ pub(crate) mod testing {
     use crate::{
         note::{
             commitment::ExtractedNoteCommitment, nullifier::testing::arb_nullifier,
-            testing::arb_note, TransmittedNoteCiphertext,
+            testing::arb_note, EncCipherText::V3, TransmittedNoteCiphertext,
         },
         note_encryption::NoteCiphertextBytes,
         primitives::redpallas::{
@@ -159,7 +175,7 @@ pub(crate) mod testing {
             // FIXME: make a real one from the note.
             let encrypted_note = TransmittedNoteCiphertext {
                 epk_bytes: [0u8; 32],
-                enc_ciphertext: [0u8; 580], // newly encrypted notes will be V3.
+                enc_ciphertext: V3([0u8;612]),
                 out_ciphertext: [0u8; 80]
             };
             Action {
@@ -193,7 +209,7 @@ pub(crate) mod testing {
             // FIXME: make a real one from the note.
             let encrypted_note = TransmittedNoteCiphertext {
                 epk_bytes: [0u8; 32],
-                enc_ciphertext: [0u8; 580], // newly encrypted notes will be V3.
+                enc_ciphertext: V3( [0u8;612]),
                 out_ciphertext: [0u8; 80]
             };
 

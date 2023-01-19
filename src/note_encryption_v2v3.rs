@@ -1,3 +1,6 @@
+/// Not for review - alternative domain implementation.
+///
+///
 //! In-band secret distribution for Orchard bundles.
 
 use blake2b_simd::{Hash, Params};

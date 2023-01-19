@@ -10,6 +10,7 @@ use pasta_curves::pallas;
 use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
 use crate::note::AssetId;
+use crate::note::EncCipherText::V3;
 use crate::{
     action::Action,
     address::Address,
@@ -20,7 +21,7 @@ use crate::{
         SpendingKey,
     },
     note::{Note, TransmittedNoteCiphertext},
-    note_encryption::OrchardNoteEncryption,
+    note_encryption_v3::OrchardNoteEncryption,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -226,7 +227,7 @@ impl ActionInfo {
 
         let encrypted_note = TransmittedNoteCiphertext {
             epk_bytes: encryptor.epk().to_bytes().0,
-            enc_ciphertext: encryptor.encrypt_note_plaintext().0,
+            enc_ciphertext: V3(encryptor.encrypt_note_plaintext().0),
             out_ciphertext: encryptor.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut rng),
         };
 

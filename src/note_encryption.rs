@@ -8,7 +8,7 @@ use zcash_note_encryption::{
     AEAD_TAG_SIZE, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
 };
 
-use crate::note::AssetId;
+use crate::note::{AssetId, EncCipherText};
 use crate::{
     action::Action,
     keys::{
@@ -380,15 +380,23 @@ impl<T> ShieldedOutput<OrchardDomainV2> for Action<T> {
     }
 
     fn enc_ciphertext(&self) -> Option<NoteCiphertextBytes> {
-        Some(NoteCiphertextBytes(self.encrypted_note().enc_ciphertext))
+        match self.encrypted_note().enc_ciphertext {
+            EncCipherText::V2(enc_v2) => Some(NoteCiphertextBytes(enc_v2)),
+            EncCipherText::V3(_) => {
+                panic!("V3 notes should not be handled by OrchardDomainV2")
+            }
+        }
     }
 
     fn enc_ciphertext_compact(&self) -> CompactNoteCiphertextBytes {
-        CompactNoteCiphertextBytes(
-            self.encrypted_note().enc_ciphertext[..COMPACT_NOTE_SIZE_V2]
-                .try_into()
-                .unwrap(),
-        )
+        match self.encrypted_note().enc_ciphertext {
+            EncCipherText::V2(enc_v2) => {
+                CompactNoteCiphertextBytes(enc_v2[..COMPACT_NOTE_SIZE_V2].try_into().unwrap())
+            }
+            EncCipherText::V3(_) => {
+                panic!("V3 notes should not be handled by OrchardDomainV2")
+            }
+        }
     }
 }
 
@@ -411,15 +419,18 @@ where
     Action<T>: ShieldedOutput<OrchardDomainV2>,
 {
     fn from(action: &Action<T>) -> Self {
-        CompactAction {
-            nullifier: *action.nullifier(),
-            cmx: *action.cmx(),
-            ephemeral_key: action.ephemeral_key(),
-            enc_ciphertext: CompactNoteCiphertextBytes(
-                action.encrypted_note().enc_ciphertext[..COMPACT_NOTE_SIZE_V2]
-                    .try_into()
-                    .unwrap(),
-            ),
+        match action.encrypted_note().enc_ciphertext {
+            EncCipherText::V2(enc_v2) => CompactAction {
+                nullifier: *action.nullifier(),
+                cmx: *action.cmx(),
+                ephemeral_key: action.ephemeral_key(),
+                enc_ciphertext: CompactNoteCiphertextBytes(
+                    enc_v2[..COMPACT_NOTE_SIZE_V2].try_into().unwrap(),
+                ),
+            },
+            EncCipherText::V3(_) => {
+                panic!("V3 notes should not be handled by OrchardDomainV2")
+            }
         }
     }
 }
@@ -475,6 +486,7 @@ mod tests {
 
     use super::{prf_ock_orchard, CompactAction, OrchardDomainV2, OrchardNoteEncryption};
     use crate::note::AssetId;
+    use crate::note::EncCipherText::V2;
     use crate::{
         action::Action,
         keys::{
@@ -577,7 +589,7 @@ mod tests {
                 cmx,
                 TransmittedNoteCiphertext {
                     epk_bytes: ephemeral_key.0,
-                    enc_ciphertext: tv.c_enc,
+                    enc_ciphertext: V2(tv.c_enc),
                     out_ciphertext: tv.c_out,
                 },
                 cv_net.clone(),
