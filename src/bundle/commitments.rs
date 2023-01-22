@@ -36,7 +36,6 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
 ) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
     let mut ch = hasher(ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION);
-    //let mut ah = hasher(ZCASH_ORCHARD_ACTIONS_ASSETID_HASH_PERSONALIZATION);
     let mut mh = hasher(ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION);
     let mut nh = hasher(ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION);
 
@@ -44,40 +43,17 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         ch.update(&action.nullifier().to_bytes());
         ch.update(&action.cmx().to_bytes());
         ch.update(&action.encrypted_note().epk_bytes);
+        ch.update(&action.encrypted_note().enc_ciphertext[..84]); // TODO: make sure it is backward compatible with [..52]
 
-        // two lines
-        ch.update(&action.encrypted_note().enc_ciphertext[..52]);
-
-        mh.update(&action.encrypted_note().enc_ciphertext[52..564]);
+        mh.update(&action.encrypted_note().enc_ciphertext[84..596]);
 
         nh.update(&action.cv_net().to_bytes());
         nh.update(&<[u8; 32]>::from(action.rk()));
-
-        //one line
-        nh.update(&action.encrypted_note().enc_ciphertext[564..]);
+        nh.update(&action.encrypted_note().enc_ciphertext[596..]);
         nh.update(&action.encrypted_note().out_ciphertext);
-
-        //TODO: extract into specific domain implementation
-        // match &action.encrypted_note().enc_ciphertext {
-        //     NoteCiphertextBytes::V2(ncx) => {
-        //         ch.update(&ncx[..52]);
-        //         mh.update(&ncx[52..564]);
-        //         nh.update(&ncx[564..]);
-        //     }
-        //     NoteCiphertextBytes::V3(ncx) => {
-        //         v3_flag = true;
-        //         ch.update(&ncx[..52]);
-        //         ah.update(&ncx[52..84]);
-        //         mh.update(&ncx[84..596]);
-        //         nh.update(&ncx[596..]);
-        //     }
-        // }
     }
 
     h.update(ch.finalize().as_bytes());
-    // if v3_flag {
-    //     h.update(ah.finalize().as_bytes());
-    // }
     h.update(mh.finalize().as_bytes());
     h.update(nh.finalize().as_bytes());
     h.update(&[bundle.flags().to_byte()]);
