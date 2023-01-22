@@ -86,6 +86,5 @@ debug = true
 debug = true
 
 [patch.crates-io]
-#zcash_note_encryption = { git = "https://github.com/QED-it/librustzcash.git", rev = "bc136f2b84bda94eecfbed29d9a0fea2a44f00f8" }
-zcash_note_encryption = { path = "./zcash_note_encryption"}
+zcash_note_encryption = { git = "https://github.com/QED-it/librustzcash.git", rev = "d318627d44bdcb4a2de08dafa0bf75ecd3c63aa7" }
 group = { git = "https://github.com/zkcrypto/group.git", rev = "a7f3ceb2373e9fe536996f7b4d55c797f3e667f0" }

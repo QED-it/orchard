@@ -20,7 +20,7 @@ use crate::{
         SpendingKey,
     },
     note::{Note, TransmittedNoteCiphertext},
-    note_encryption::OrchardNoteEncryption,
+    note_encryption_v3::OrchardNoteEncryption,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},

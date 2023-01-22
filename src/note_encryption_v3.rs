@@ -1,6 +1,6 @@
 //! In-band secret distribution for Orchard bundles.
 
-use blake2b_simd::Hash;
+use blake2b_simd::{Hash, Params};
 use core::fmt;
 use group::ff::PrimeField;
 use zcash_note_encryption::{
@@ -21,9 +21,14 @@ use crate::{
     Address, Note,
 };
 
-use crate::note_encryption::{note_version, prf_ock_orchard, COMPACT_NOTE_SIZE_V2};
-
 const PRF_OCK_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_Orchardock";
+
+/// The size of a v2 compact note.
+pub const COMPACT_NOTE_SIZE_V2: usize = 1 + // version
+    11 + // diversifier
+    8  + // value
+    32; // rseed (or rcm prior to ZIP 212)
+/// The size of [`NotePlaintextBytes`] for V2.
 
 /// The size of the encoding of a ZSA asset id.
 const ZSA_ASSET_SIZE: usize = 32;
@@ -101,6 +106,40 @@ impl AsRef<[u8]> for CompactNoteCiphertextBytes {
     }
 }
 
+/// Defined in [Zcash Protocol Spec § 5.4.2: Pseudo Random Functions][concreteprfs].
+///
+/// [concreteprfs]: https://zips.z.cash/protocol/nu5.pdf#concreteprfs
+pub(crate) fn prf_ock_orchard(
+    ovk: &OutgoingViewingKey,
+    cv: &ValueCommitment,
+    cmx_bytes: &[u8; 32],
+    ephemeral_key: &EphemeralKeyBytes,
+) -> OutgoingCipherKey {
+    OutgoingCipherKey(
+        Params::new()
+            .hash_length(32)
+            .personal(PRF_OCK_ORCHARD_PERSONALIZATION)
+            .to_state()
+            .update(ovk.as_ref())
+            .update(&cv.to_bytes())
+            .update(cmx_bytes)
+            .update(ephemeral_key.as_ref())
+            .finalize()
+            .as_bytes()
+            .try_into()
+            .unwrap(),
+    )
+}
+
+/// note_version will return the version of the note plaintext.
+pub fn note_version(plaintext: &[u8]) -> Option<u8> {
+    match plaintext[0] {
+        0x02 => Some(0x02),
+        0x03 => Some(0x03),
+        _ => None,
+    }
+}
+
 /// Domain-specific requirements:
 /// - If the note version is 3, the `plaintext` must contain a valid encoding of a ZSA asset type.
 fn orchard_parse_note_plaintext_without_memo<F>(
@@ -121,10 +160,8 @@ where
     let pk_d = get_validated_pk_d(&diversifier)?;
     let recipient = Address::from_parts(diversifier, pk_d);
 
-    let asset= match note_version(plaintext.0.as_ref())? {
-        0x02 => {
-            AssetId::native()
-        }
+    let asset = match note_version(plaintext.0.as_ref())? {
+        0x02 => AssetId::native(),
         0x03 => {
             let bytes = plaintext.0[COMPACT_NOTE_SIZE_V2..COMPACT_NOTE_SIZE_V3]
                 .try_into()
@@ -172,7 +209,7 @@ impl Domain for OrchardDomainV3 {
     type ValueCommitment = ValueCommitment;
     type ExtractedCommitment = ExtractedNoteCommitment;
     type ExtractedCommitmentBytes = [u8; 32];
-    type Memo = [u8; MEMO_SIZE]; // TODO use a more interesting type
+    type Memo = [u8; MEMO_SIZE];
 
     type NotePlaintextBytes = NotePlaintextBytes;
     type NoteCiphertextBytes = NoteCiphertextBytes;
@@ -342,8 +379,9 @@ impl<T> ShieldedOutput<OrchardDomainV3> for Action<T> {
     }
 
     fn enc_ciphertext(&self) -> Option<NoteCiphertextBytes> {
-        //Some(self.encrypted_note().enc_ciphertext.clone()) TODO
-        None
+        Some(NoteCiphertextBytes(
+            self.encrypted_note().enc_ciphertext,
+        ))
     }
 
     fn enc_ciphertext_compact(&self) -> CompactNoteCiphertextBytes {
@@ -436,26 +474,24 @@ mod tests {
         EphemeralKeyBytes,
     };
 
-    use super::{prf_ock_orchard, CompactAction, OrchardDomainV3, OrchardNoteEncryption};
-    use crate::keys::PreparedIncomingViewingKey;
-    use crate::note::AssetId;
-    use crate::note_encryption::NoteCiphertextBytes;
+    use super::{
+        note_version, orchard_parse_note_plaintext_without_memo, prf_ock_orchard, CompactAction,
+        OrchardDomainV3, OrchardNoteEncryption,
+    };
     use crate::{
         action::Action,
         keys::{
             DiversifiedTransmissionKey, Diversifier, EphemeralSecretKey, IncomingViewingKey,
-            OutgoingViewingKey,
+            OutgoingViewingKey, PreparedIncomingViewingKey,
         },
         note::{
-            testing::arb_note, ExtractedNoteCommitment, Nullifier, RandomSeed,
+            testing::arb_note, AssetId, ExtractedNoteCommitment, Nullifier, RandomSeed,
             TransmittedNoteCiphertext,
         },
         primitives::redpallas,
         value::{NoteValue, ValueCommitment},
         Address, Note,
     };
-
-    use super::{orchard_parse_note_plaintext_without_memo, note_version};
 
     proptest! {
         #[test]
@@ -487,117 +523,114 @@ mod tests {
         }
     }
 
-    // #[ignore]
-    // fn test_vectors() {
-    //     let test_vectors = crate::test_vectors::note_encryption_v3::test_vectors();
-    //
-    //     for tv in test_vectors {
-    //         //
-    //         // Load the test vector components
-    //         //
-    //
-    //         // Recipient key material
-    //         let ivk = PreparedIncomingViewingKey::new(
-    //             &IncomingViewingKey::from_bytes(&tv.incoming_viewing_key).unwrap(),
-    //         );
-    //         let ovk = OutgoingViewingKey::from(tv.ovk);
-    //         let d = Diversifier::from_bytes(tv.default_d);
-    //         let pk_d = DiversifiedTransmissionKey::from_bytes(&tv.default_pk_d).unwrap();
-    //
-    //         // Received Action
-    //         let cv_net = ValueCommitment::from_bytes(&tv.cv_net).unwrap();
-    //         let rho = Nullifier::from_bytes(&tv.rho).unwrap();
-    //         let cmx = ExtractedNoteCommitment::from_bytes(&tv.cmx).unwrap();
-    //
-    //         let esk = EphemeralSecretKey::from_bytes(&tv.esk).unwrap();
-    //         let ephemeral_key = EphemeralKeyBytes(tv.ephemeral_key);
-    //
-    //         // Details about the expected note
-    //         let value = NoteValue::from_raw(tv.v);
-    //         let rseed = RandomSeed::from_bytes(tv.rseed, &rho).unwrap();
-    //
-    //         //
-    //         // Test the individual components
-    //         //
-    //
-    //         let shared_secret = esk.agree(&pk_d);
-    //         assert_eq!(shared_secret.to_bytes(), tv.shared_secret);
-    //
-    //         let k_enc = shared_secret.kdf_orchard(&ephemeral_key);
-    //         assert_eq!(k_enc.as_bytes(), tv.k_enc);
-    //
-    //         let ock = prf_ock_orchard(&ovk, &cv_net, &cmx.to_bytes(), &ephemeral_key);
-    //         assert_eq!(ock.as_ref(), tv.ock);
-    //
-    //         let recipient = Address::from_parts(d, pk_d);
-    //
-    //         let asset = match tv.asset {
-    //             None => AssetId::native(),
-    //             Some(type_bytes) => AssetId::from_bytes(&type_bytes).unwrap(),
-    //         };
-    //
-    //         let note = Note::from_parts(recipient, value, asset, rho, rseed).unwrap();
-    //         assert_eq!(ExtractedNoteCommitment::from(note.commitment()), cmx);
-    //
-    //         let action = Action::from_parts(
-    //             // rho is the nullifier in the receiving Action.
-    //             rho,
-    //             // We don't need a valid rk for this test.
-    //             redpallas::VerificationKey::dummy(),
-    //             cmx,
-    //             TransmittedNoteCiphertext {
-    //                 epk_bytes: ephemeral_key.0,
-    //                 enc_ciphertext: tv.c_enc[..580], // TODO: VA: Would need a mix of V2 and V3 eventually
-    //                 out_ciphertext: tv.c_out,
-    //             },
-    //             cv_net.clone(),
-    //             (),
-    //         );
-    //
-    //         //
-    //         // Test decryption
-    //         // (Tested first because it only requires immutable references.)
-    //         //
-    //
-    //         let domain = OrchardDomainV3 { rho };
-    //
-    //         match try_note_decryption(&domain, &ivk, &action) {
-    //             Some((decrypted_note, decrypted_to, decrypted_memo)) => {
-    //                 assert_eq!(decrypted_note, note);
-    //                 assert_eq!(decrypted_to, recipient);
-    //                 assert_eq!(&decrypted_memo[..], &tv.memo[..]);
-    //             }
-    //             None => panic!("Note decryption failed"),
-    //         }
-    //
-    //         match try_compact_note_decryption(&domain, &ivk, &CompactAction::from(&action)) {
-    //             Some((decrypted_note, decrypted_to)) => {
-    //                 assert_eq!(decrypted_note, note);
-    //                 assert_eq!(decrypted_to, recipient);
-    //             }
-    //             None => panic!("Compact note decryption failed"),
-    //         }
-    //
-    //         match try_output_recovery_with_ovk(&domain, &ovk, &action, &cv_net, &tv.c_out) {
-    //             Some((decrypted_note, decrypted_to, decrypted_memo)) => {
-    //                 assert_eq!(decrypted_note, note);
-    //                 assert_eq!(decrypted_to, recipient);
-    //                 assert_eq!(&decrypted_memo[..], &tv.memo[..]);
-    //             }
-    //             None => panic!("Output recovery failed"),
-    //         }
-    //
-    //         //
-    //         // Test encryption
-    //         //
-    //
-    //         let ne = OrchardNoteEncryption::new_with_esk(esk, Some(ovk), note, recipient, tv.memo);
-    //
-    //         // assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
-    //         assert_eq!(
-    //             &ne.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut OsRng)[..],
-    //             &tv.c_out[..]
-    //         );
-    //     }
-    // }
+    #[test]
+    fn test_vectors() {
+        let test_vectors = crate::test_vectors::note_encryption_v3::test_vectors();
+
+        for tv in test_vectors {
+            //
+            // Load the test vector components
+            //
+
+            // Recipient key material
+            let ivk = PreparedIncomingViewingKey::new(
+                &IncomingViewingKey::from_bytes(&tv.incoming_viewing_key).unwrap(),
+            );
+            let ovk = OutgoingViewingKey::from(tv.ovk);
+            let d = Diversifier::from_bytes(tv.default_d);
+            let pk_d = DiversifiedTransmissionKey::from_bytes(&tv.default_pk_d).unwrap();
+
+            // Received Action
+            let cv_net = ValueCommitment::from_bytes(&tv.cv_net).unwrap();
+            let rho = Nullifier::from_bytes(&tv.rho).unwrap();
+            let cmx = ExtractedNoteCommitment::from_bytes(&tv.cmx).unwrap();
+
+            let esk = EphemeralSecretKey::from_bytes(&tv.esk).unwrap();
+            let ephemeral_key = EphemeralKeyBytes(tv.ephemeral_key);
+
+            // Details about the expected note
+            let value = NoteValue::from_raw(tv.v);
+            let rseed = RandomSeed::from_bytes(tv.rseed, &rho).unwrap();
+
+            //
+            // Test the individual components
+            //
+
+            let shared_secret = esk.agree(&pk_d);
+            assert_eq!(shared_secret.to_bytes(), tv.shared_secret);
+
+            let k_enc = shared_secret.kdf_orchard(&ephemeral_key);
+            assert_eq!(k_enc.as_bytes(), tv.k_enc);
+
+            let ock = prf_ock_orchard(&ovk, &cv_net, &cmx.to_bytes(), &ephemeral_key);
+            assert_eq!(ock.as_ref(), tv.ock);
+
+            let recipient = Address::from_parts(d, pk_d);
+
+            let asset = AssetId::from_bytes(&tv.asset).unwrap();
+
+            let note = Note::from_parts(recipient, value, asset, rho, rseed).unwrap();
+            assert_eq!(ExtractedNoteCommitment::from(note.commitment()), cmx);
+
+            let action = Action::from_parts(
+                // rho is the nullifier in the receiving Action.
+                rho,
+                // We don't need a valid rk for this test.
+                redpallas::VerificationKey::dummy(),
+                cmx,
+                TransmittedNoteCiphertext {
+                    epk_bytes: ephemeral_key.0,
+                    enc_ciphertext: tv.c_enc,
+                    out_ciphertext: tv.c_out,
+                },
+                cv_net.clone(),
+                (),
+            );
+
+            //
+            // Test decryption
+            // (Tested first because it only requires immutable references.)
+            //
+
+            let domain = OrchardDomainV3 { rho };
+
+            match try_note_decryption(&domain, &ivk, &action) {
+                Some((decrypted_note, decrypted_to, decrypted_memo)) => {
+                    assert_eq!(decrypted_note, note);
+                    assert_eq!(decrypted_to, recipient);
+                    assert_eq!(&decrypted_memo[..], &tv.memo[..]);
+                }
+                None => panic!("Note decryption failed"),
+            }
+
+            match try_compact_note_decryption(&domain, &ivk, &CompactAction::from(&action)) {
+                Some((decrypted_note, decrypted_to)) => {
+                    assert_eq!(decrypted_note, note);
+                    assert_eq!(decrypted_to, recipient);
+                }
+                None => panic!("Compact note decryption failed"),
+            }
+
+            match try_output_recovery_with_ovk(&domain, &ovk, &action, &cv_net, &tv.c_out) {
+                Some((decrypted_note, decrypted_to, decrypted_memo)) => {
+                    assert_eq!(decrypted_note, note);
+                    assert_eq!(decrypted_to, recipient);
+                    assert_eq!(&decrypted_memo[..], &tv.memo[..]);
+                }
+                None => panic!("Output recovery failed"),
+            }
+
+            //
+            // Test encryption
+            //
+
+            let ne = OrchardNoteEncryption::new_with_esk(esk, Some(ovk), note, recipient, tv.memo);
+
+            assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
+            assert_eq!(
+                &ne.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut OsRng)[..],
+                &tv.c_out[..]
+            );
+        }
+    }
 }
