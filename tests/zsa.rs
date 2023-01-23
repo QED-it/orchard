@@ -159,7 +159,7 @@ fn issue_zsa_notes(asset_descr: &str, keys: &Keychain) -> (Note, Note) {
         )
         .is_ok());
 
-    let issue_bundle = sign_issue_bundle(unauthorized, rng, keys.isk().clone());
+    let issue_bundle = sign_issue_bundle(unauthorized, rng, *keys.isk());
 
     // Take notes from first action
     let notes = issue_bundle.get_all_notes();

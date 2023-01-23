@@ -204,7 +204,7 @@ type IssuanceAuth = SpendAuth;
 /// [Issuance of Zcash Shielded Assets ZIP-0227 § Asset Identifier Generation (DRAFT ZIP)][IssuanceZSA].
 ///
 /// [IssuanceZSA]: https://qed-it.github.io/zips/draft-ZIP-0227.html#asset-identifier-generation
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct IssuanceAuthorizingKey(redpallas::SigningKey<IssuanceAuth>);
 
 impl IssuanceAuthorizingKey {
