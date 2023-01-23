@@ -379,9 +379,7 @@ impl<T> ShieldedOutput<OrchardDomainV3> for Action<T> {
     }
 
     fn enc_ciphertext(&self) -> Option<NoteCiphertextBytes> {
-        Some(NoteCiphertextBytes(
-            self.encrypted_note().enc_ciphertext,
-        ))
+        Some(NoteCiphertextBytes(self.encrypted_note().enc_ciphertext))
     }
 
     fn enc_ciphertext_compact(&self) -> CompactNoteCiphertextBytes {
