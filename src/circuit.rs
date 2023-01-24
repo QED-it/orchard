@@ -56,7 +56,7 @@ use halo2_gadgets::{
             MerklePath,
         },
     },
-    utilities::lookup_range_check::LookupRangeCheckConfig,
+    utilities::{bool_check, lookup_range_check::LookupRangeCheckConfig},
 };
 
 mod commit_ivk;
@@ -119,6 +119,7 @@ pub struct Circuit {
     pub(crate) psi_new: Value<pallas::Base>,
     pub(crate) rcm_new: Value<NoteCommitTrapdoor>,
     pub(crate) rcv: Value<ValueCommitTrapdoor>,
+    pub(crate) split_flag: Value<bool>,
 }
 
 impl Circuit {
@@ -182,6 +183,7 @@ impl Circuit {
             psi_new: Value::known(psi_new),
             rcm_new: Value::known(rcm_new),
             rcv: Value::known(rcv),
+            split_flag: Value::known(spend.split_flag),
         }
     }
 }
@@ -209,10 +211,12 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             meta.advice_column(),
         ];
 
-        // Constrain v_old - v_new = magnitude * sign    (https://p.z.cash/ZKS:action-cv-net-integrity?partial).
-        // Either v_old = 0, or calculated root = anchor (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
+        // Constrain split_flag to be boolean
+        // Constrain v_old * (1 - split_flag) - v_new = magnitude * sign    (https://p.z.cash/ZKS:action-cv-net-integrity?partial).
+        // Constrain v_old = 0 or calculated root = anchor (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
         // Constrain v_old = 0 or enable_spends = 1      (https://p.z.cash/ZKS:action-enable-spend).
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
+        // Constrain split_flag = 1 or nf_old = nf_old_pub
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -227,17 +231,25 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let enable_spends = meta.query_advice(advices[6], Rotation::cur());
             let enable_outputs = meta.query_advice(advices[7], Rotation::cur());
 
+            let split_flag = meta.query_advice(advices[8], Rotation::cur());
+
+            let nf_old = meta.query_advice(advices[0], Rotation::next());
+            let nf_old_pub = meta.query_advice(advices[1], Rotation::next());
+
             let one = Expression::Constant(pallas::Base::one());
 
             Constraints::with_selector(
                 q_orchard,
                 [
+                    ("bool_check split_flag", bool_check(split_flag.clone())),
                     (
-                        "v_old - v_new = magnitude * sign",
-                        v_old.clone() - v_new.clone() - magnitude * sign,
+                        "v_old * (1 - split_flag) - v_new = magnitude * sign",
+                        v_old.clone() * (one.clone() - split_flag.clone())
+                            - v_new.clone()
+                            - magnitude * sign,
                     ),
                     (
-                        "Either v_old = 0, or root = anchor",
+                        "v_old = 0 or root = anchor",
                         v_old.clone() * (root - anchor),
                     ),
                     (
@@ -246,7 +258,11 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     ),
                     (
                         "v_new = 0 or enable_outputs = 1",
-                        v_new * (one - enable_outputs),
+                        v_new * (one.clone() - enable_outputs),
+                    ),
+                    (
+                        "split_flag = 1 or nf_old = nf_old_pub",
+                        (one - split_flag) * (nf_old - nf_old_pub),
                     ),
                 ],
             )
@@ -474,7 +490,17 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         let v_net_magnitude_sign = {
             // Witness the magnitude and sign of v_net = v_old - v_new
             let v_net_magnitude_sign = {
-                let v_net = self.v_old - self.v_new;
+                // v_net is equal to
+                //   (-v_new) if split_flag = true
+                //   v_old - v_new if split_flag = false
+                let v_net = self.split_flag.and_then(|split_flag| {
+                    if split_flag {
+                        Value::known(crate::value::NoteValue::zero()) - self.v_new
+                    } else {
+                        self.v_old - self.v_new
+                    }
+                });
+
                 let magnitude_sign = v_net.map(|v_net| {
                     let (magnitude, sign) = v_net.magnitude_sign();
 
@@ -540,9 +566,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 &cm_old,
                 nk.clone(),
             )?;
-
-            // Constrain nf_old to equal public input
-            layouter.constrain_instance(nf_old.inner().cell(), config.primary, NF_OLD)?;
 
             nf_old
         };
@@ -743,6 +766,27 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     ENABLE_OUTPUT,
                     config.advices[7],
                     0,
+                )?;
+
+                region.assign_advice(
+                    || "split_flag",
+                    config.advices[8],
+                    0,
+                    || {
+                        self.split_flag
+                            .map(|split_flag| pallas::Base::from(split_flag as u64))
+                    },
+                )?;
+
+                nf_old
+                    .inner()
+                    .copy_advice(|| "nf_old", &mut region, config.advices[0], 1)?;
+                region.assign_advice_from_instance(
+                    || "nf_old pub",
+                    config.primary,
+                    NF_OLD,
+                    config.advices[1],
+                    1,
                 )?;
 
                 config.q_orchard.enable(&mut region, 0)
@@ -1018,6 +1062,7 @@ mod tests {
                 psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
                 rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
                 rcv: Value::known(rcv),
+                split_flag: Value::known(false),
             },
             Instance {
                 anchor,
@@ -1204,6 +1249,7 @@ mod tests {
             psi_new: Value::unknown(),
             rcm_new: Value::unknown(),
             rcv: Value::unknown(),
+            split_flag: Value::unknown(),
         };
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)
