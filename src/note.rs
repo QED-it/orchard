@@ -289,7 +289,7 @@ impl fmt::Debug for TransmittedNoteCiphertext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TransmittedNoteCiphertext")
             .field("epk_bytes", &self.epk_bytes)
-            .field("enc_ciphertext", &hex::encode(&self.enc_ciphertext))
+            .field("enc_ciphertext", &hex::encode(self.enc_ciphertext))
             .field("out_ciphertext", &hex::encode(self.out_ciphertext))
             .finish()
     }
