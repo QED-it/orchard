@@ -344,7 +344,7 @@ impl IssueBundle<Signed> {
 ///     * Asset description size is collect.
 ///     * `AssetId` for the `IssueAction` has not been previously finalized.
 /// * For each `Note` inside an `IssueAction`:
-///     * All notes have the same, correct `NoteType`.
+///     * All notes have the same, correct `AssetId`.
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
@@ -356,7 +356,6 @@ pub fn verify_issue_bundle(
 
     let s = &mut HashSet::<AssetId>::new();
 
-    // An IssueAction could have just one properly derived AssetId.
     let newly_finalized = bundle
         .actions()
         .iter()
@@ -373,7 +372,7 @@ pub fn verify_issue_bundle(
                 return Err(IssueActionPreviouslyFinalizedNoteType(asset));
             }
 
-            // Add to finalization set, if needed.
+            // Add to the finalization set, if needed.
             if action.is_finalized() {
                 newly_finalized.insert(asset);
             }
@@ -1041,7 +1040,7 @@ pub mod testing {
         (
             note in arb_zsa_note(asset),
         )-> IssueAction {
-            IssueAction::new(asset_desc.clone(), &note)
+            IssueAction::new(asset_desc, &note)
         }
     }
 
