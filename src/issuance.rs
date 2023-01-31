@@ -1040,7 +1040,7 @@ pub mod testing {
         (
             note in arb_zsa_note(asset),
         )-> IssueAction {
-            IssueAction::new(asset_desc, &note)
+            IssueAction::new(asset_desc.clone(), &note)
         }
     }
 
