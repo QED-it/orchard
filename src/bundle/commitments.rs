@@ -7,7 +7,6 @@ use crate::issuance::{IssueAuth, IssueBundle, Signed};
 
 const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
 const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActCHash";
-const ZCASH_ORCHARD_ACTIONS_ASSETID_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActAHash";
 const ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActMHash";
 const ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActNHash";
 const ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrchaHash";
@@ -43,7 +42,7 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         ch.update(&action.nullifier().to_bytes());
         ch.update(&action.cmx().to_bytes());
         ch.update(&action.encrypted_note().epk_bytes);
-        ch.update(&action.encrypted_note().enc_ciphertext[..84]); // TODO: make sure it is backward compatible with [..52]
+        ch.update(&action.encrypted_note().enc_ciphertext[..84]); // TODO: make sure it is backward compatible with Orchard [..52]
 
         mh.update(&action.encrypted_note().enc_ciphertext[84..596]);
 

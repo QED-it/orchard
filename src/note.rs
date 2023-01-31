@@ -352,4 +352,22 @@ pub mod testing {
             }
         }
     }
+
+    prop_compose! {
+        /// Generate an arbitrary zsa note
+        pub fn arb_zsa_note(asset: AssetId)(
+            recipient in arb_address(),
+            value in arb_note_value(),
+            rho in arb_nullifier(),
+            rseed in arb_rseed(),
+        ) -> Note {
+            Note {
+                recipient,
+                value,
+                asset,
+                rho,
+                rseed,
+            }
+        }
+    }
 }
