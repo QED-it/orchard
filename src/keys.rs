@@ -277,7 +277,7 @@ impl IssuanceValidatingKey {
         <[u8; 32]>::from(&self.0)
     }
 
-    pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         <[u8; 32]>::try_from(bytes)
             .ok()
             .and_then(check_structural_validity)
