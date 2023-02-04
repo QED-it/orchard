@@ -277,6 +277,7 @@ impl IssuanceValidatingKey {
         <[u8; 32]>::from(&self.0)
     }
 
+    /// Creates a spend validating key from its serialized form
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         <[u8; 32]>::try_from(bytes)
             .ok()
