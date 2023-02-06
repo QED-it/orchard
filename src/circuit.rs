@@ -36,7 +36,7 @@ use crate::{
     note::{
         commitment::{NoteCommitTrapdoor, NoteCommitment},
         nullifier::Nullifier,
-        ExtractedNoteCommitment, Note,
+        AssetId, ExtractedNoteCommitment, Note,
     },
     primitives::redpallas::{SpendAuth, VerificationKey},
     spec::NonIdentityPallasPoint,
@@ -109,6 +109,7 @@ pub struct Circuit {
     pub(crate) psi_old: Value<pallas::Base>,
     pub(crate) rcm_old: Value<NoteCommitTrapdoor>,
     pub(crate) cm_old: Value<NoteCommitment>,
+    pub(crate) asset_old: Value<AssetId>,
     pub(crate) alpha: Value<pallas::Scalar>,
     pub(crate) ak: Value<SpendValidatingKey>,
     pub(crate) nk: Value<NullifierDerivingKey>,
@@ -118,6 +119,7 @@ pub struct Circuit {
     pub(crate) v_new: Value<NoteValue>,
     pub(crate) psi_new: Value<pallas::Base>,
     pub(crate) rcm_new: Value<NoteCommitTrapdoor>,
+    pub(crate) asset_new: Value<AssetId>,
     pub(crate) rcv: Value<ValueCommitTrapdoor>,
     pub(crate) split_flag: Value<bool>,
 }
@@ -173,6 +175,7 @@ impl Circuit {
             psi_old: Value::known(psi_old),
             rcm_old: Value::known(rcm_old),
             cm_old: Value::known(spend.note.commitment()),
+            asset_old: Value::known(spend.note.asset()),
             alpha: Value::known(alpha),
             ak: Value::known(spend.fvk.clone().into()),
             nk: Value::known(*spend.fvk.nk()),
@@ -182,6 +185,7 @@ impl Circuit {
             v_new: Value::known(output_note.value()),
             psi_new: Value::known(psi_new),
             rcm_new: Value::known(rcm_new),
+            asset_new: Value::known(output_note.asset()),
             rcv: Value::known(rcv),
             split_flag: Value::known(spend.split_flag),
         }
@@ -470,6 +474,23 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
             (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new)
         };
+
+        // Verify that asset_old and asset_new are equals
+        {
+            let asset_old = NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "witness asset_old"),
+                self.asset_old
+                    .map(|asset_old| asset_old.cv_base().to_affine()),
+            )?;
+            let asset_new = NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "asset equality"),
+                self.asset_new
+                    .map(|asset_new| asset_new.cv_base().to_affine()),
+            )?;
+            asset_old.constrain_equal(layouter.namespace(|| "pk_d_old equality"), &asset_new)?;
+        }
 
         // Merkle path validity check (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
         let root = {
@@ -1052,6 +1073,7 @@ mod tests {
                 psi_old: Value::known(spent_note.rseed().psi(&spent_note.rho())),
                 rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
                 cm_old: Value::known(spent_note.commitment()),
+                asset_old: Value::known(spent_note.asset()),
                 alpha: Value::known(alpha),
                 ak: Value::known(ak),
                 nk: Value::known(nk),
@@ -1061,6 +1083,7 @@ mod tests {
                 v_new: Value::known(output_note.value()),
                 psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
                 rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
+                asset_new: Value::known(output_note.asset()),
                 rcv: Value::known(rcv),
                 split_flag: Value::known(false),
             },
@@ -1239,6 +1262,7 @@ mod tests {
             psi_old: Value::unknown(),
             rcm_old: Value::unknown(),
             cm_old: Value::unknown(),
+            asset_old: Value::unknown(),
             alpha: Value::unknown(),
             ak: Value::unknown(),
             nk: Value::unknown(),
@@ -1248,6 +1272,7 @@ mod tests {
             v_new: Value::unknown(),
             psi_new: Value::unknown(),
             rcm_new: Value::unknown(),
+            asset_new: Value::unknown(),
             rcv: Value::unknown(),
             split_flag: Value::unknown(),
         };
