@@ -204,7 +204,7 @@ type IssuanceAuth = SpendAuth;
 /// [Issuance of Zcash Shielded Assets ZIP-0227 § Asset Identifier Generation (DRAFT ZIP)][IssuanceZSA].
 ///
 /// [IssuanceZSA]: https://qed-it.github.io/zips/draft-ZIP-0227.html#asset-identifier-generation
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct IssuanceAuthorizingKey(redpallas::SigningKey<IssuanceAuth>);
 
 impl IssuanceAuthorizingKey {
@@ -277,7 +277,9 @@ impl IssuanceValidatingKey {
         <[u8; 32]>::from(&self.0)
     }
 
-    /// Creates a spend validating key from its serialized form
+    /// Constructs an Orchard issuance validating key from uniformly-random bytes.
+    ///
+    /// Returns `None` if the bytes do not correspond to a valid key.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         <[u8; 32]>::try_from(bytes)
             .ok()
