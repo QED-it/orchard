@@ -406,12 +406,7 @@ impl Builder {
             );
             spends.extend(iter::repeat_with(|| dummy_spend.clone()).take(num_actions - num_spends));
 
-            // Extend the spends and recipients with dummy values.
-            spends.extend(
-                iter::repeat_with(|| SpendInfo::dummy(asset, &mut rng))
-                    .take(num_actions - num_spends),
-            );
-
+            // Extend the recipients with dummy values.
             recipients.extend(
                 iter::repeat_with(|| RecipientInfo::dummy(&mut rng, asset))
                     .take(num_actions - num_recipients),
@@ -423,6 +418,7 @@ impl Builder {
             spends.shuffle(&mut rng);
             recipients.shuffle(&mut rng);
 
+            assert_eq!(spends.len(), recipients.len());
             pre_actions.extend(
                 spends
                     .into_iter()
