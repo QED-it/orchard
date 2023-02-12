@@ -764,7 +764,7 @@ mod tests {
     }
 
     #[test]
-    fn issue_bundle_Verify with finalize() {
+    fn issue_bundle_verify_with_finalize() {
         let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let mut bundle = IssueBundle::new(ik.clone());
