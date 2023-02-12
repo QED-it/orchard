@@ -561,7 +561,7 @@ mod tests {
 
         bundle
             .add_recipient(
-                String::from("Precious NFT"),
+                String::from("NFT"),
                 recipient,
                 NoteValue::from_raw(u64::MIN),
                 false,
@@ -570,13 +570,13 @@ mod tests {
             .expect("Should properly add recipient");
 
         bundle
-            .finalize_action(String::from("Precious NFT"))
+            .finalize_action(String::from("NFT"))
             .expect("Should finalize properly");
 
         assert_eq!(
             bundle
                 .add_recipient(
-                    String::from("Precious NFT"),
+                    String::from("NFT"),
                     recipient,
                     NoteValue::unsplittable(),
                     false,
@@ -588,7 +588,7 @@ mod tests {
 
         assert_eq!(
             bundle
-                .finalize_action(String::from("Another precious NFT"))
+                .finalize_action(String::from("Another NFT"))
                 .unwrap_err(),
             IssueActionNotFound
         );
@@ -607,7 +607,7 @@ mod tests {
 
         bundle
             .add_recipient(
-                String::from("Another precious NFT"),
+                String::from("Another NFT"),
                 recipient,
                 NoteValue::unsplittable(),
                 true,
@@ -618,7 +618,7 @@ mod tests {
         assert_eq!(
             bundle
                 .add_recipient(
-                    String::from("Another precious NFT"),
+                    String::from("Another NFT"),
                     recipient,
                     NoteValue::unsplittable(),
                     true,
@@ -718,7 +718,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            AssetBase::derive(bundle.ik(), "Poisoned pill"),
+            AssetBase::derive(bundle.ik(), "zsa_asset"),
             Nullifier::dummy(&mut rng),
             &mut rng,
         );
@@ -764,14 +764,14 @@ mod tests {
     }
 
     #[test]
-    fn issue_bundle_verify_with_finalize() {
+    fn issue_bundle_Verify with finalize() {
         let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let mut bundle = IssueBundle::new(ik.clone());
 
         bundle
             .add_recipient(
-                String::from("verify_with_finalize"),
+                String::from("Verify with finalize"),
                 recipient,
                 NoteValue::from_raw(7),
                 true,
@@ -787,7 +787,7 @@ mod tests {
         assert!(res.is_ok());
         assert!(prev_finalized.contains(&AssetBase::derive(
             &ik,
-            &String::from("verify_with_finalize")
+            &String::from("Verify with finalize")
         )));
         assert_eq!(prev_finalized.len(), 1);
     }
@@ -868,7 +868,7 @@ mod tests {
 
         bundle
             .add_recipient(
-                String::from("Good description"),
+                String::from("Asset description"),
                 recipient,
                 NoteValue::from_raw(5),
                 false,
@@ -897,7 +897,7 @@ mod tests {
 
         bundle
             .add_recipient(
-                String::from("Good description"),
+                String::from("Asset description"),
                 recipient,
                 NoteValue::from_raw(5),
                 false,
@@ -911,7 +911,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            AssetBase::derive(signed.ik(), "Poisoned pill"),
+            AssetBase::derive(signed.ik(), "zsa_asset"),
             Nullifier::dummy(&mut rng),
             &mut rng,
         );
@@ -932,7 +932,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_incorrect_ik() {
-        let asset_description = "asset";
+        let asset_description = "Asset";
 
         let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
@@ -986,7 +986,7 @@ mod tests {
 
         bundle
             .add_recipient(
-                String::from("Good description"),
+                String::from("Asset description"),
                 recipient,
                 NoteValue::from_raw(5),
                 false,
