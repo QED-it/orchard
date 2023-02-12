@@ -12,14 +12,18 @@ use crate::keys::IssuanceValidatingKey;
 
 /// Note type identifier.
 #[derive(Clone, Copy, Debug, Eq)]
-pub struct AssetId(pallas::Point);
+pub struct AssetBase(pallas::Point);
 
 pub const MAX_ASSET_DESCRIPTION_SIZE: usize = 512;
 
 /// Personalization for the ZSA asset digest generator
 pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZZSA-AssetDigest";
 
-/// AssetDigest for the ZSA asset
+///    AssetDigest for the ZSA asset
+///
+///    Defined in [Transfer and Burn of Zcash Shielded Assets][AssetDigest].
+///
+///    [assetdigest]: https://qed-it.github.io/zips/draft-ZIP-0226.html#asset-digest
 pub fn asset_digest(
     asset_id: Vec<u8>,
 ) -> Blake2bHash {
@@ -31,22 +35,16 @@ pub fn asset_digest(
         .finalize()
 }
 
-// the hasher used to derive the assetID
-fn zsa_value_base(msg: &[u8]) -> pallas::Point {
-    pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(msg)
-}
-
-impl AssetId {
+impl AssetBase {
     /// Deserialize the asset_id from a byte array.
     pub fn from_bytes(bytes: &[u8; 32]) -> CtOption<Self> {
-        pallas::Point::from_bytes(bytes).map(AssetId)
+        pallas::Point::from_bytes(bytes).map(AssetBase)
     }
 
     /// Serialize the asset_id to its canonical byte representation.
     pub fn to_bytes(self) -> [u8; 32] {
         self.0.to_bytes()
     }
-
 
     /// Note type derivation$.
     ///
@@ -64,18 +62,18 @@ impl AssetId {
         // EncodeAssetId(ik, asset_desc) = ik || asset_desc
         let EncodeAssetId = [&ik.to_bytes(), asset_desc.as_bytes()].concat();
 
-        // AssetDigest : BLAKE2b-256(EncodeAssetId)
+        // AssetDigest = BLAKE2b-256(EncodeAssetId)
         let AssetDigest = asset_digest(EncodeAssetId);
 
-        //AssetBase : ZSAValueBase(AssetDigest)
-        AssetId(zsa_value_base(AssetDigest.as_bytes()))
+        // AssetBase = ZSAValueBase(AssetDigest)
+        AssetBase(pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(AssetDigest.as_bytes()))
     }
 
     /// Note type for the "native" currency (zec), maintains backward compatibility with Orchard untyped notes.
     pub fn native() -> Self {
         // TODO: should we rename "VALUE_COMMITMENT_PERSONALIZATION" to Be "Native_ASSET_BASE_PERSONALIZATION"?
         // TODO: Same for VALUE_COMMITMENT_V_BYTES?
-        AssetId(pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION)(&VALUE_COMMITMENT_V_BYTES[..]))
+        AssetBase(pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION)(&VALUE_COMMITMENT_V_BYTES[..]))
     }
 
     /// The base point used in value commitments.
@@ -89,7 +87,7 @@ impl AssetId {
     }
 }
 
-impl Hash for AssetId {
+impl Hash for AssetBase {
     fn hash<H: Hasher>(&self, h: &mut H) {
         h.write(&self.to_bytes());
         h.finish();
@@ -101,7 +99,7 @@ pub fn is_asset_desc_of_valid_size(asset_desc: &str) -> bool {
     !asset_desc.is_empty() && asset_desc.bytes().len() <= MAX_ASSET_DESCRIPTION_SIZE
 }
 
-impl PartialEq for AssetId {
+impl PartialEq for AssetBase {
     fn eq(&self, other: &Self) -> bool {
         bool::from(self.0.ct_eq(&other.0))
     }
@@ -111,7 +109,7 @@ impl PartialEq for AssetId {
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
-    use super::AssetId;
+    use super::AssetBase;
 
     use proptest::prelude::*;
 
@@ -123,21 +121,21 @@ pub mod testing {
             is_native in prop::bool::ANY,
             sk in arb_spending_key(),
             str in "[A-Za-z]{255}",
-        ) -> AssetId {
+        ) -> AssetBase {
             if is_native {
-                AssetId::native()
+                AssetBase::native()
             } else {
                 let isk = IssuanceAuthorizingKey::from(&sk);
-                AssetId::derive(&IssuanceValidatingKey::from(&isk), &str)
+                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str)
             }
         }
     }
 
     prop_compose! {
         /// Generate the native note type
-        pub fn native_asset_id()(_i in 0..10) -> AssetId {
+        pub fn native_asset_id()(_i in 0..10) -> AssetBase {
             // TODO: remove _i
-            AssetId::native()
+            AssetBase::native()
         }
     }
 
@@ -146,9 +144,9 @@ pub mod testing {
         pub fn arb_zsa_asset_id()(
             sk in arb_spending_key(),
             str in "[A-Za-z]{255}"
-        ) -> AssetId {
+        ) -> AssetBase {
             let isk = IssuanceAuthorizingKey::from(&sk);
-            AssetId::derive(&IssuanceValidatingKey::from(&isk), &str)
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str)
         }
     }
 
@@ -156,10 +154,10 @@ pub mod testing {
         /// Generate an asset ID using a specific description
         pub fn zsa_asset_id(asset_desc: String)(
             sk in arb_spending_key(),
-        ) -> AssetId {
+        ) -> AssetBase {
             assert!(super::is_asset_desc_of_valid_size(&asset_desc));
             let isk = IssuanceAuthorizingKey::from(&sk);
-            AssetId::derive(&IssuanceValidatingKey::from(&isk), &asset_desc)
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc)
         }
     }
 
@@ -170,11 +168,11 @@ pub mod testing {
         for tv in test_vectors {
             let description = std::str::from_utf8(&tv.description).unwrap();
 
-            let calculated_asset_id = AssetId::derive(
+            let calculated_asset_id = AssetBase::derive(
                 &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
                 description,
             );
-            let test_vector_asset_id = AssetId::from_bytes(&tv.asset_id).unwrap();
+            let test_vector_asset_id = AssetBase::from_bytes(&tv.asset_id).unwrap();
 
             assert_eq!(calculated_asset_id, test_vector_asset_id);
         }
