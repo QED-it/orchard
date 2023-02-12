@@ -2,10 +2,12 @@ use group::GroupEncoding;
 use halo2_proofs::arithmetic::CurveExt;
 use pasta_curves::pallas;
 use std::hash::{Hash, Hasher};
+use blake2b_simd::{Hash as Blake2bHash, Params};
+
 
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
-use crate::constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_V_BYTES};
+use crate::constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_V_BYTES, ZSA_ASSET_BASE_PERSONALIZATION};
 use crate::keys::IssuanceValidatingKey;
 
 /// Note type identifier.
@@ -14,10 +16,24 @@ pub struct AssetId(pallas::Point);
 
 pub const MAX_ASSET_DESCRIPTION_SIZE: usize = 512;
 
+/// Personalization for the ZSA asset digest generator
+pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZZSA-AssetDigest";
+
+/// AssetDigest for the ZSA asset
+pub fn asset_digest(
+    asset_id: Vec<u8>,
+) -> Blake2bHash {
+    Params::new()
+        .hash_length(32)
+        .personal(ZSA_ASSET_DIGEST_PERSONALIZATION)
+        .to_state()
+        .update(&asset_id)
+        .finalize()
+}
+
 // the hasher used to derive the assetID
-fn asset_id_hasher(msg: Vec<u8>) -> pallas::Point {
-    // TODO(zsa) replace personalization
-    pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION)(&msg)
+fn zsa_value_base(msg: &[u8]) -> pallas::Point {
+    pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(msg)
 }
 
 impl AssetId {
@@ -31,11 +47,12 @@ impl AssetId {
         self.0.to_bytes()
     }
 
+
     /// Note type derivation$.
     ///
-    /// Defined in [Transfer and Burn of Zcash Shielded Assets][notetypes].
+    /// Defined in [Transfer and Burn of Zcash Shielded Assets][AssetBase].
     ///
-    /// [notetypes]: https://qed-it.github.io/zips/draft-ZIP-0226.html#asset-types
+    /// [notetypes]: https://qed-it.github.io/zips/draft-ZIP-0226.html#asset-base
     ///
     /// # Panics
     ///
@@ -44,16 +61,21 @@ impl AssetId {
     pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &str) -> Self {
         assert!(is_asset_desc_of_valid_size(asset_desc));
 
-        let mut s = vec![];
-        s.extend(ik.to_bytes());
-        s.extend(asset_desc.as_bytes());
+        // EncodeAssetId(ik, asset_desc) = ik || asset_desc
+        let EncodeAssetId = [&ik.to_bytes(), asset_desc.as_bytes()].concat();
 
-        AssetId(asset_id_hasher(s))
+        // AssetDigest : BLAKE2b-256(EncodeAssetId)
+        let AssetDigest = asset_digest(EncodeAssetId);
+
+        //AssetBase : ZSAValueBase(AssetDigest)
+        AssetId(zsa_value_base(AssetDigest.as_bytes()))
     }
 
     /// Note type for the "native" currency (zec), maintains backward compatibility with Orchard untyped notes.
     pub fn native() -> Self {
-        AssetId(asset_id_hasher(VALUE_COMMITMENT_V_BYTES.to_vec()))
+        // TODO: should we rename "VALUE_COMMITMENT_PERSONALIZATION" to Be "Native_ASSET_BASE_PERSONALIZATION"?
+        // TODO: Same for VALUE_COMMITMENT_V_BYTES?
+        AssetId(pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION)(&VALUE_COMMITMENT_V_BYTES[..]))
     }
 
     /// The base point used in value commitments.
