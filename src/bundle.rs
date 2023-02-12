@@ -527,7 +527,7 @@ pub mod testing {
     use super::{Action, Authorization, Authorized, Bundle, Flags};
 
     pub use crate::action::testing::{arb_action, arb_unauthorized_action};
-    use crate::note::asset_id::testing::arb_zsa_asset_id;
+    use crate::note::asset_base::testing::arb_zsa_asset_id;
     use crate::note::AssetBase;
     use crate::value::testing::arb_value_sum;
 

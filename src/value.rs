@@ -461,7 +461,7 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
-    use crate::note::asset_id::testing::{arb_asset_id, native_asset_id};
+    use crate::note::asset_base::testing::{arb_asset_id, native_asset_id};
 
     use crate::note::AssetBase;
     use proptest::prelude::*;

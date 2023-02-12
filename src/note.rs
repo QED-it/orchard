@@ -19,8 +19,8 @@ pub use self::commitment::{ExtractedNoteCommitment, NoteCommitment};
 pub(crate) mod nullifier;
 pub use self::nullifier::Nullifier;
 
-pub(crate) mod asset_id;
-pub use self::asset_id::AssetBase;
+pub(crate) mod asset_base;
+pub use self::asset_base::AssetBase;
 
 /// The ZIP 212 seed randomness for a note.
 #[derive(Copy, Clone, Debug)]
@@ -301,7 +301,7 @@ impl fmt::Debug for TransmittedNoteCiphertext {
 pub mod testing {
     use proptest::prelude::*;
 
-    use crate::note::asset_id::testing::arb_asset_id;
+    use crate::note::asset_base::testing::arb_asset_id;
     use crate::note::AssetBase;
     use crate::value::testing::arb_note_value;
     use crate::{

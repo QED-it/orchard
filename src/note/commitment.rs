@@ -11,7 +11,7 @@ use crate::{
         fixed_bases::{NOTE_COMMITMENT_PERSONALIZATION, NOTE_ZSA_COMMITMENT_PERSONALIZATION},
         L_ORCHARD_BASE,
     },
-    note::asset_id::AssetBase,
+    note::asset_base::AssetBase,
     spec::extract_p,
     value::NoteValue,
 };

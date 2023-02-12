@@ -12,7 +12,7 @@ use crate::issuance::Error::{
     IssueBundleInvalidSignature, WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
-use crate::note::asset_id::is_asset_desc_of_valid_size;
+use crate::note::asset_base::is_asset_desc_of_valid_size;
 use crate::note::{AssetBase, Nullifier};
 use crate::value::NoteValue;
 use crate::{
@@ -1025,7 +1025,7 @@ mod tests {
 pub mod testing {
     use crate::issuance::{IssueAction, IssueBundle, Prepared, Signed, Unauthorized};
     use crate::keys::testing::{arb_issuance_authorizing_key, arb_issuance_validating_key};
-    use crate::note::asset_id::testing::zsa_asset_id;
+    use crate::note::asset_base::testing::zsa_asset_id;
     use crate::note::testing::arb_zsa_note;
     use proptest::collection::vec;
     use proptest::prelude::*;
