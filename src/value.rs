@@ -511,9 +511,9 @@ mod tests {
             .map(|(value, rcv, asset)| ValueCommitment::derive(value, rcv, asset))
             .sum::<ValueCommitment>()
             - ValueCommitment::derive(
-            native_value_balance,
-            ValueCommitTrapdoor::zero(),
-            AssetBase::native(),
+                native_value_balance,
+                ValueCommitTrapdoor::zero(),
+                AssetBase::native(),
             )
             - arb_values_to_burn
                 .iter()

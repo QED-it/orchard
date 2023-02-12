@@ -1,13 +1,14 @@
+use blake2b_simd::{Hash as Blake2bHash, Params};
 use group::GroupEncoding;
 use halo2_proofs::arithmetic::CurveExt;
 use pasta_curves::pallas;
 use std::hash::{Hash, Hasher};
-use blake2b_simd::{Hash as Blake2bHash, Params};
-
 
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
-use crate::constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_V_BYTES, ZSA_ASSET_BASE_PERSONALIZATION};
+use crate::constants::fixed_bases::{
+    VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_V_BYTES, ZSA_ASSET_BASE_PERSONALIZATION,
+};
 use crate::keys::IssuanceValidatingKey;
 
 /// Note type identifier.
@@ -24,9 +25,7 @@ pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZZSA-AssetDigest";
 ///    Defined in [Transfer and Burn of Zcash Shielded Assets][AssetDigest].
 ///
 ///    [assetdigest]: https://qed-it.github.io/zips/draft-ZIP-0226.html#asset-digest
-pub fn asset_digest(
-    asset_id: Vec<u8>,
-) -> Blake2bHash {
+pub fn asset_digest(asset_id: Vec<u8>) -> Blake2bHash {
     Params::new()
         .hash_length(32)
         .personal(ZSA_ASSET_DIGEST_PERSONALIZATION)
@@ -66,14 +65,18 @@ impl AssetBase {
         let AssetDigest = asset_digest(EncodeAssetId);
 
         // AssetBase = ZSAValueBase(AssetDigest)
-        AssetBase(pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(AssetDigest.as_bytes()))
+        AssetBase(
+            pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(AssetDigest.as_bytes()),
+        )
     }
 
     /// Note type for the "native" currency (zec), maintains backward compatibility with Orchard untyped notes.
     pub fn native() -> Self {
         // TODO: should we rename "VALUE_COMMITMENT_PERSONALIZATION" to Be "Native_ASSET_BASE_PERSONALIZATION"?
         // TODO: Same for VALUE_COMMITMENT_V_BYTES?
-        AssetBase(pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION)(&VALUE_COMMITMENT_V_BYTES[..]))
+        AssetBase(pallas::Point::hash_to_curve(
+            VALUE_COMMITMENT_PERSONALIZATION,
+        )(&VALUE_COMMITMENT_V_BYTES[..]))
     }
 
     /// The base point used in value commitments.

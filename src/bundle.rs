@@ -395,9 +395,9 @@ impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
             .map(|a| a.cv_net())
             .sum::<ValueCommitment>()
             - ValueCommitment::derive(
-            ValueSum::from_raw(self.value_balance.into()),
-            ValueCommitTrapdoor::zero(),
-            AssetBase::native(),
+                ValueSum::from_raw(self.value_balance.into()),
+                ValueCommitTrapdoor::zero(),
+                AssetBase::native(),
             )
             - self
                 .burn

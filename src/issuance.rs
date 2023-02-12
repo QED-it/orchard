@@ -785,9 +785,10 @@ mod tests {
 
         let res = verify_issue_bundle(&signed, sighash, prev_finalized);
         assert!(res.is_ok());
-        assert!(
-            prev_finalized.contains(&AssetBase::derive(&ik, &String::from("verify_with_finalize")))
-        );
+        assert!(prev_finalized.contains(&AssetBase::derive(
+            &ik,
+            &String::from("verify_with_finalize")
+        )));
         assert_eq!(prev_finalized.len(), 1);
     }
 
