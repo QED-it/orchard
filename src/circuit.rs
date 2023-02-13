@@ -1033,6 +1033,7 @@ mod tests {
     use rand::{rngs::OsRng, RngCore};
 
     use super::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K};
+    use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey, SpendingKey};
     use crate::note::AssetId;
     use crate::{
         keys::SpendValidatingKey,
@@ -1153,6 +1154,46 @@ mod tests {
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(&vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
+    }
+
+    #[test]
+    fn test_not_equal_asset_ids() {
+        let mut rng = OsRng;
+
+        let (mut circuits, instances): (Vec<_>, Vec<_>) = iter::once(())
+            .map(|()| generate_circuit_instance(&mut rng))
+            .unzip();
+
+        // Modify asset_new to not be equal to asset_old
+        let random_asset_id = {
+            let sk = SpendingKey::random(&mut rng);
+            let isk = IssuanceAuthorizingKey::from(&sk);
+            let ik = IssuanceValidatingKey::from(&isk);
+            let asset_descr = "zsa_asset";
+            AssetId::derive(&ik, asset_descr)
+        };
+        circuits[0].asset_new = Value::known(random_asset_id);
+
+        let vk = VerifyingKey::build();
+
+        for (circuit, instance) in circuits.iter().zip(instances.iter()) {
+            assert!(MockProver::run(
+                K,
+                circuit,
+                instance
+                    .to_halo2_instance()
+                    .iter()
+                    .map(|p| p.to_vec())
+                    .collect()
+            )
+            .unwrap()
+            .verify()
+            .is_err());
+        }
+
+        let pk = ProvingKey::build();
+        let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
+        assert!(proof.verify(&vk, &instances).is_err());
     }
 
     #[test]
