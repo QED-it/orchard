@@ -14,6 +14,7 @@ use crate::issuance::Error::{
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_id::is_asset_desc_of_valid_size;
 use crate::note::{AssetId, Nullifier};
+use crate::primitives::redpallas::Signature;
 use crate::value::NoteValue;
 use crate::{
     primitives::redpallas::{self, SpendAuth},
@@ -129,6 +130,11 @@ impl Signed {
     pub fn signature(&self) -> &redpallas::Signature<SpendAuth> {
         &self.signature
     }
+
+    /// Constructs an `Signed` from its constituent parts.
+    pub fn from_parts(signature: Signature<SpendAuth>) -> Self {
+        Signed { signature }
+    }
 }
 
 impl IssueAuth for Unauthorized {}
@@ -175,6 +181,19 @@ impl<T: IssueAuth> IssueBundle<T> {
     /// a transaction ID.
     pub fn commitment(&self) -> IssueBundleCommitment {
         IssueBundleCommitment(hash_issue_bundle_txid_data(self))
+    }
+
+    /// Constructs an `IssueBundle` from its constituent parts.
+    pub fn from_parts(
+        ik: IssuanceValidatingKey,
+        actions: Vec<IssueAction>,
+        authorization: T,
+    ) -> Self {
+        IssueBundle {
+            ik,
+            actions,
+            authorization,
+        }
     }
 }
 
