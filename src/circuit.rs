@@ -237,8 +237,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
             let split_flag = meta.query_advice(advices[8], Rotation::cur());
 
-            let nf_old = meta.query_advice(advices[0], Rotation::next());
-            let nf_old_pub = meta.query_advice(advices[1], Rotation::next());
+            let nf_old = meta.query_advice(advices[9], Rotation::cur());
+            let nf_old_pub = meta.query_advice(advices[0], Rotation::next());
 
             let one = Expression::Constant(pallas::Base::one());
 
@@ -489,7 +489,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 self.asset_new
                     .map(|asset_new| asset_new.cv_base().to_affine()),
             )?;
-            asset_old.constrain_equal(layouter.namespace(|| "pk_d_old equality"), &asset_new)?;
+            asset_old.constrain_equal(layouter.namespace(|| "asset equality"), &asset_new)?;
         }
 
         // Merkle path validity check (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
@@ -801,12 +801,12 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
                 nf_old
                     .inner()
-                    .copy_advice(|| "nf_old", &mut region, config.advices[0], 1)?;
+                    .copy_advice(|| "nf_old", &mut region, config.advices[9], 0)?;
                 region.assign_advice_from_instance(
                     || "nf_old pub",
                     config.primary,
                     NF_OLD,
-                    config.advices[1],
+                    config.advices[0],
                     1,
                 )?;
 
