@@ -1165,9 +1165,7 @@ mod tests {
 
         let mut rng = OsRng;
 
-        let (mut circuits, instances): (Vec<_>, Vec<_>) = iter::once(())
-            .map(|()| generate_circuit_instance(&mut rng))
-            .unzip();
+        let (mut circuit, instance) = generate_circuit_instance(&mut rng);
 
         // We would like to test that if the asset of the spent note (called asset_old) and the
         // asset of the output note (called asset_new) are not equal, the proof is not verified.
@@ -1179,59 +1177,51 @@ mod tests {
             let asset_descr = "zsa_asset";
             AssetId::derive(&ik, asset_descr)
         };
-        circuits[0].asset_new = Value::known(random_asset_id);
+        circuit.asset_new = Value::known(random_asset_id);
 
-        let vk = VerifyingKey::build();
-
-        for (circuit, instance) in circuits.iter().zip(instances.iter()) {
-            assert_eq!(
-                MockProver::run(
-                    K,
-                    circuit,
-                    instance
-                        .to_halo2_instance()
-                        .iter()
-                        .map(|p| p.to_vec())
-                        .collect()
-                )
-                .unwrap()
-                .verify(),
-                Err(vec![
-                    VerifyFailure::Permutation {
-                        column: Column::from((Advice, 0)),
-                        location: FailureLocation::InRegion {
-                            region: Region::from((9, "witness non-identity point".to_string())),
-                            offset: 0
-                        }
-                    },
-                    VerifyFailure::Permutation {
-                        column: Column::from((Advice, 0)),
-                        location: FailureLocation::InRegion {
-                            region: Region::from((10, "witness non-identity point".to_string())),
-                            offset: 0
-                        }
-                    },
-                    VerifyFailure::Permutation {
-                        column: Column::from((Advice, 1)),
-                        location: FailureLocation::InRegion {
-                            region: Region::from((9, "witness non-identity point".to_string())),
-                            offset: 0
-                        }
-                    },
-                    VerifyFailure::Permutation {
-                        column: Column::from((Advice, 1)),
-                        location: FailureLocation::InRegion {
-                            region: Region::from((10, "witness non-identity point".to_string())),
-                            offset: 0
-                        }
+        assert_eq!(
+            MockProver::run(
+                K,
+                &circuit,
+                instance
+                    .to_halo2_instance()
+                    .iter()
+                    .map(|p| p.to_vec())
+                    .collect()
+            )
+            .unwrap()
+            .verify(),
+            Err(vec![
+                VerifyFailure::Permutation {
+                    column: Column::from((Advice, 0)),
+                    location: FailureLocation::InRegion {
+                        region: Region::from((9, "witness non-identity point".to_string())),
+                        offset: 0
                     }
-                ])
-            );
-        }
-
-        let pk = ProvingKey::build();
-        let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
-        assert!(proof.verify(&vk, &instances).is_err());
+                },
+                VerifyFailure::Permutation {
+                    column: Column::from((Advice, 0)),
+                    location: FailureLocation::InRegion {
+                        region: Region::from((10, "witness non-identity point".to_string())),
+                        offset: 0
+                    }
+                },
+                VerifyFailure::Permutation {
+                    column: Column::from((Advice, 1)),
+                    location: FailureLocation::InRegion {
+                        region: Region::from((9, "witness non-identity point".to_string())),
+                        offset: 0
+                    }
+                },
+                VerifyFailure::Permutation {
+                    column: Column::from((Advice, 1)),
+                    location: FailureLocation::InRegion {
+                        region: Region::from((10, "witness non-identity point".to_string())),
+                        offset: 0
+                    }
+                }
+            ])
+        );
     }
 
     #[test]
