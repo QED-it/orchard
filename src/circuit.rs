@@ -1158,13 +1158,20 @@ mod tests {
 
     #[test]
     fn test_not_equal_asset_ids() {
+        use halo2_proofs::dev::{
+            metadata::Column, metadata::Region, FailureLocation, VerifyFailure,
+        };
+        use halo2_proofs::plonk::Any::Advice;
+
         let mut rng = OsRng;
 
         let (mut circuits, instances): (Vec<_>, Vec<_>) = iter::once(())
             .map(|()| generate_circuit_instance(&mut rng))
             .unzip();
 
-        // Modify asset_new to not be equal to asset_old
+        // We would like to test that if the asset of the spent note (called asset_old) and the
+        // asset of the output note (called asset_new) are not equal, the proof is not verified.
+        // To do that, we attribute a random value to asset_new.
         let random_asset_id = {
             let sk = SpendingKey::random(&mut rng);
             let isk = IssuanceAuthorizingKey::from(&sk);
@@ -1177,18 +1184,49 @@ mod tests {
         let vk = VerifyingKey::build();
 
         for (circuit, instance) in circuits.iter().zip(instances.iter()) {
-            assert!(MockProver::run(
-                K,
-                circuit,
-                instance
-                    .to_halo2_instance()
-                    .iter()
-                    .map(|p| p.to_vec())
-                    .collect()
-            )
-            .unwrap()
-            .verify()
-            .is_err());
+            assert_eq!(
+                MockProver::run(
+                    K,
+                    circuit,
+                    instance
+                        .to_halo2_instance()
+                        .iter()
+                        .map(|p| p.to_vec())
+                        .collect()
+                )
+                .unwrap()
+                .verify(),
+                Err(vec![
+                    VerifyFailure::Permutation {
+                        column: Column::from((Advice, 0)),
+                        location: FailureLocation::InRegion {
+                            region: Region::from((9, "witness non-identity point".to_string())),
+                            offset: 0
+                        }
+                    },
+                    VerifyFailure::Permutation {
+                        column: Column::from((Advice, 0)),
+                        location: FailureLocation::InRegion {
+                            region: Region::from((10, "witness non-identity point".to_string())),
+                            offset: 0
+                        }
+                    },
+                    VerifyFailure::Permutation {
+                        column: Column::from((Advice, 1)),
+                        location: FailureLocation::InRegion {
+                            region: Region::from((9, "witness non-identity point".to_string())),
+                            offset: 0
+                        }
+                    },
+                    VerifyFailure::Permutation {
+                        column: Column::from((Advice, 1)),
+                        location: FailureLocation::InRegion {
+                            region: Region::from((10, "witness non-identity point".to_string())),
+                            offset: 0
+                        }
+                    }
+                ])
+            );
         }
 
         let pk = ProvingKey::build();
