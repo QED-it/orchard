@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// A bundle of actions to be applied to the ledger.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IssueBundle<T: IssueAuth> {
     /// The issuer key for the note being created.
     ik: IssuanceValidatingKey,
@@ -107,20 +107,20 @@ impl IssueAction {
 }
 
 /// Defines the authorization type of an Issue bundle.
-pub trait IssueAuth: fmt::Debug {}
+pub trait IssueAuth: fmt::Debug + Clone {}
 
 /// Marker for an unauthorized bundle with no proofs or signatures.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Unauthorized;
 
 /// Marker for an unauthorized bundle with injected sighash.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Prepared {
     sighash: [u8; 32],
 }
 
 /// Marker for an authorized bundle.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Signed {
     signature: redpallas::Signature<SpendAuth>,
 }
