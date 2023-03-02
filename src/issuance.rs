@@ -14,6 +14,8 @@ use crate::issuance::Error::{
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
 use crate::note::{AssetBase, Nullifier};
+use crate::primitives::redpallas::Signature;
+
 use crate::value::NoteValue;
 use crate::{
     primitives::redpallas::{self, SpendAuth},
@@ -21,7 +23,7 @@ use crate::{
 };
 
 /// A bundle of actions to be applied to the ledger.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IssueBundle<T: IssueAuth> {
     /// The issuer key for the note being created.
     ik: IssuanceValidatingKey,
@@ -106,20 +108,20 @@ impl IssueAction {
 }
 
 /// Defines the authorization type of an Issue bundle.
-pub trait IssueAuth: fmt::Debug {}
+pub trait IssueAuth: fmt::Debug + Clone {}
 
 /// Marker for an unauthorized bundle with no proofs or signatures.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Unauthorized;
 
 /// Marker for an unauthorized bundle with injected sighash.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Prepared {
     sighash: [u8; 32],
 }
 
 /// Marker for an authorized bundle.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Signed {
     signature: redpallas::Signature<SpendAuth>,
 }
@@ -128,6 +130,11 @@ impl Signed {
     /// Returns the signature for this authorization.
     pub fn signature(&self) -> &redpallas::Signature<SpendAuth> {
         &self.signature
+    }
+
+    /// Constructs an `Signed` from its constituent parts.
+    pub fn from_parts(signature: Signature<SpendAuth>) -> Self {
+        Signed { signature }
     }
 }
 
@@ -175,6 +182,19 @@ impl<T: IssueAuth> IssueBundle<T> {
     /// a transaction ID.
     pub fn commitment(&self) -> IssueBundleCommitment {
         IssueBundleCommitment(hash_issue_bundle_txid_data(self))
+    }
+
+    /// Constructs an `IssueBundle` from its constituent parts.
+    pub fn from_parts(
+        ik: IssuanceValidatingKey,
+        actions: Vec<IssueAction>,
+        authorization: T,
+    ) -> Self {
+        IssueBundle {
+            ik,
+            actions,
+            authorization,
+        }
     }
 }
 

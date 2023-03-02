@@ -271,7 +271,7 @@ impl Eq for IssuanceValidatingKey {}
 impl IssuanceValidatingKey {
     /// Converts this spend validating key to its serialized form,
     /// I2LEOSP_256(ik).
-    pub(crate) fn to_bytes(&self) -> [u8; 32] {
+    pub fn to_bytes(&self) -> [u8; 32] {
         // This is correct because the wrapped point must have ỹ = 0, and
         // so the point repr is the same as I2LEOSP of its x-coordinate.
         <[u8; 32]>::from(&self.0)
