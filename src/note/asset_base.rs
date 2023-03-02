@@ -18,7 +18,7 @@ pub struct AssetBase(pallas::Point);
 pub const MAX_ASSET_DESCRIPTION_SIZE: usize = 512;
 
 /// Personalization for the ZSA asset digest generator
-pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZZSA-AssetDigest";
+pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
 
 ///    AssetDigest for the ZSA asset
 ///
