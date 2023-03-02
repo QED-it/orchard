@@ -58,8 +58,8 @@ impl AssetBase {
     pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &str) -> Self {
         assert!(is_asset_desc_of_valid_size(asset_desc));
 
-        // EncodeAssetId(ik, asset_desc) = ik || asset_desc
-        let EncodeAssetId = [&ik.to_bytes(), asset_desc.as_bytes()].concat();
+        // EncodeAssetId(ik, asset_desc) = 0x00 || ik || asset_desc
+        let EncodeAssetId = [0x00, &ik.to_bytes(), asset_desc.as_bytes()].concat();
 
         // AssetDigest = BLAKE2b-256(EncodeAssetId)
         let AssetDigest = asset_digest(EncodeAssetId);
