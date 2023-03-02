@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
 use crate::constants::fixed_bases::{
-    NATIVE_ASSET_BASE_PERSONALIZATION, NATIVE_ASSET_BASE_V_BYTES, ZSA_ASSET_BASE_PERSONALIZATION,
+    NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
 };
 use crate::keys::IssuanceValidatingKey;
 
@@ -59,7 +59,7 @@ impl AssetBase {
         assert!(is_asset_desc_of_valid_size(asset_desc));
 
         // EncodeAssetId(ik, asset_desc) = 0x00 || ik || asset_desc
-        let EncodeAssetId = [0x00, &ik.to_bytes(), asset_desc.as_bytes()].concat();
+        let EncodeAssetId = [&ik.to_bytes(), asset_desc.as_bytes()].concat();
 
         // AssetDigest = BLAKE2b-256(EncodeAssetId)
         let AssetDigest = asset_digest(EncodeAssetId);
@@ -73,7 +73,7 @@ impl AssetBase {
     /// Note type for the "native" currency (zec), maintains backward compatibility with Orchard untyped notes.
     pub fn native() -> Self {
         AssetBase(pallas::Point::hash_to_curve(
-            NATIVE_ASSET_BASE_PERSONALIZATION,
+            VALUE_COMMITMENT_PERSONALIZATION,
         )(&NATIVE_ASSET_BASE_V_BYTES[..]))
     }
 
