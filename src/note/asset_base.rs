@@ -24,7 +24,7 @@ pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
 ///
 ///    Defined in [Transfer and Burn of Zcash Shielded Assets][AssetDigest].
 ///
-///    [assetdigest]: https://qed-it.github.io/zips/draft-ZIP-0226.html#asset-digest
+///    [assetdigest]: https://qed-it.github.io/zips/zip-0226.html#asset-identifiers
 pub fn asset_digest(asset_id: Vec<u8>) -> Blake2bHash {
     Params::new()
         .hash_length(32)
