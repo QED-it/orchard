@@ -49,7 +49,7 @@ impl AssetBase {
     ///
     /// Defined in [Transfer and Burn of Zcash Shielded Assets][AssetBase].
     ///
-    /// [notetypes]: https://qed-it.github.io/zips/draft-ZIP-0226.html#asset-base
+    /// [notetypes]: https://qed-it.github.io/zips/zip-0226.html#asset-identifiers
     ///
     /// # Panics
     ///
