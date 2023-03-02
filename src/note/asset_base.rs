@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
 use crate::constants::fixed_bases::{
-    VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_V_BYTES, ZSA_ASSET_BASE_PERSONALIZATION,
+    NATIVE_ASSET_BASE_PERSONALIZATION, NATIVE_ASSET_BASE_V_BYTES, ZSA_ASSET_BASE_PERSONALIZATION,
 };
 use crate::keys::IssuanceValidatingKey;
 
@@ -72,11 +72,9 @@ impl AssetBase {
 
     /// Note type for the "native" currency (zec), maintains backward compatibility with Orchard untyped notes.
     pub fn native() -> Self {
-        // TODO: should we rename "VALUE_COMMITMENT_PERSONALIZATION" to Be "Native_ASSET_BASE_PERSONALIZATION"?
-        // TODO: Same for VALUE_COMMITMENT_V_BYTES?
         AssetBase(pallas::Point::hash_to_curve(
-            VALUE_COMMITMENT_PERSONALIZATION,
-        )(&VALUE_COMMITMENT_V_BYTES[..]))
+            NATIVE_ASSET_BASE_PERSONALIZATION,
+        )(&NATIVE_ASSET_BASE_V_BYTES[..]))
     }
 
     /// The base point used in value commitments.
