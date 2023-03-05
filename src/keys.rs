@@ -230,7 +230,6 @@ type IssuanceAuth = SpendAuth;
 pub struct IssuanceAuthorizingKey(redpallas::SigningKey<IssuanceAuth>);
 
 impl IssuanceAuthorizingKey {
-
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
     pub fn sign(
         &self,
