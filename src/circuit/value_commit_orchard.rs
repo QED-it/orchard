@@ -3,7 +3,8 @@ pub(in crate::circuit) mod gadgets {
 
     use crate::constants::{OrchardFixedBases, OrchardFixedBasesFull, ValueCommitV};
     use halo2_gadgets::ecc::{
-        EccInstructions, FixedPoint, FixedPointShort, Point, ScalarFixed, ScalarFixedShort,
+        EccInstructions, FixedPoint, FixedPointShort, NonIdentityPoint, Point, ScalarFixed,
+        ScalarFixedShort,
     };
     use halo2_proofs::{
         circuit::{AssignedCell, Layouter},
@@ -24,6 +25,7 @@ pub(in crate::circuit) mod gadgets {
         ecc_chip: EccChip,
         v: ScalarFixedShort<pallas::Affine, EccChip>,
         rcv: ScalarFixed<pallas::Affine, EccChip>,
+        _asset: NonIdentityPoint<pallas::Affine, EccChip>,
     ) -> Result<Point<pallas::Affine, EccChip>, plonk::Error> {
         // commitment = [v] ValueCommitV
         let (commitment, _) = {

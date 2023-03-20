@@ -110,7 +110,6 @@ pub struct Circuit {
     pub(crate) psi_old: Value<pallas::Base>,
     pub(crate) rcm_old: Value<NoteCommitTrapdoor>,
     pub(crate) cm_old: Value<NoteCommitment>,
-    pub(crate) asset_old: Value<AssetBase>,
     pub(crate) alpha: Value<pallas::Scalar>,
     pub(crate) ak: Value<SpendValidatingKey>,
     pub(crate) nk: Value<NullifierDerivingKey>,
@@ -120,8 +119,8 @@ pub struct Circuit {
     pub(crate) v_new: Value<NoteValue>,
     pub(crate) psi_new: Value<pallas::Base>,
     pub(crate) rcm_new: Value<NoteCommitTrapdoor>,
-    pub(crate) asset_new: Value<AssetBase>,
     pub(crate) rcv: Value<ValueCommitTrapdoor>,
+    pub(crate) asset: Value<AssetBase>,
     pub(crate) split_flag: Value<bool>,
 }
 
@@ -176,7 +175,6 @@ impl Circuit {
             psi_old: Value::known(psi_old),
             rcm_old: Value::known(rcm_old),
             cm_old: Value::known(spend.note.commitment()),
-            asset_old: Value::known(spend.note.asset()),
             alpha: Value::known(alpha),
             ak: Value::known(spend.fvk.clone().into()),
             nk: Value::known(*spend.fvk.nk()),
@@ -186,8 +184,8 @@ impl Circuit {
             v_new: Value::known(output_note.value()),
             psi_new: Value::known(psi_new),
             rcm_new: Value::known(rcm_new),
-            asset_new: Value::known(output_note.asset()),
             rcv: Value::known(rcv),
+            asset: Value::known(spend.note.asset()),
             split_flag: Value::known(spend.split_flag),
         }
     }
@@ -476,23 +474,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new)
         };
 
-        // Verify that asset_old and asset_new are equals
-        {
-            let asset_old = NonIdentityPoint::new(
-                ecc_chip.clone(),
-                layouter.namespace(|| "witness asset_old"),
-                self.asset_old
-                    .map(|asset_old| asset_old.cv_base().to_affine()),
-            )?;
-            let asset_new = NonIdentityPoint::new(
-                ecc_chip.clone(),
-                layouter.namespace(|| "asset equality"),
-                self.asset_new
-                    .map(|asset_new| asset_new.cv_base().to_affine()),
-            )?;
-            asset_old.constrain_equal(layouter.namespace(|| "asset equality"), &asset_new)?;
-        }
-
         // Merkle path validity check (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
         let root = {
             let path = self
@@ -561,11 +542,18 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 self.rcv.as_ref().map(|rcv| rcv.inner()),
             )?;
 
+            let asset = NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "witness asset"),
+                self.asset.map(|asset| asset.cv_base().to_affine()),
+            )?;
+
             let cv_net = gadget::value_commit_orchard(
                 layouter.namespace(|| "cv_net = ValueCommit^Orchard_rcv(v_net)"),
                 ecc_chip.clone(),
                 v_net,
                 rcv,
+                asset,
             )?;
 
             // Constrain cv_net to equal public input
@@ -1034,7 +1022,6 @@ mod tests {
     use rand::{rngs::OsRng, RngCore};
 
     use super::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K};
-    use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey, SpendingKey};
     use crate::note::AssetBase;
     use crate::{
         keys::SpendValidatingKey,
@@ -1075,7 +1062,6 @@ mod tests {
                 psi_old: Value::known(spent_note.rseed().psi(&spent_note.rho())),
                 rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
                 cm_old: Value::known(spent_note.commitment()),
-                asset_old: Value::known(spent_note.asset()),
                 alpha: Value::known(alpha),
                 ak: Value::known(ak),
                 nk: Value::known(nk),
@@ -1085,8 +1071,8 @@ mod tests {
                 v_new: Value::known(output_note.value()),
                 psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
                 rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
-                asset_new: Value::known(output_note.asset()),
                 rcv: Value::known(rcv),
+                asset: Value::known(spent_note.asset()),
                 split_flag: Value::known(false),
             },
             Instance {
@@ -1155,74 +1141,6 @@ mod tests {
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(&vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
-    }
-
-    #[test]
-    fn test_not_equal_asset_ids() {
-        use halo2_proofs::dev::{
-            metadata::Column, metadata::Region, FailureLocation, VerifyFailure,
-        };
-        use halo2_proofs::plonk::Any::Advice;
-
-        let mut rng = OsRng;
-
-        let (mut circuit, instance) = generate_circuit_instance(&mut rng);
-
-        // We would like to test that if the asset of the spent note (called asset_old) and the
-        // asset of the output note (called asset_new) are not equal, the proof is not verified.
-        // To do that, we attribute a random value to asset_new.
-        let random_asset_id = {
-            let sk = SpendingKey::random(&mut rng);
-            let isk = IssuanceAuthorizingKey::from(&sk);
-            let ik = IssuanceValidatingKey::from(&isk);
-            let asset_descr = "zsa_asset";
-            AssetBase::derive(&ik, asset_descr)
-        };
-        circuit.asset_new = Value::known(random_asset_id);
-
-        assert_eq!(
-            MockProver::run(
-                K,
-                &circuit,
-                instance
-                    .to_halo2_instance()
-                    .iter()
-                    .map(|p| p.to_vec())
-                    .collect()
-            )
-            .unwrap()
-            .verify(),
-            Err(vec![
-                VerifyFailure::Permutation {
-                    column: Column::from((Advice, 0)),
-                    location: FailureLocation::InRegion {
-                        region: Region::from((9, "witness non-identity point".to_string())),
-                        offset: 0
-                    }
-                },
-                VerifyFailure::Permutation {
-                    column: Column::from((Advice, 0)),
-                    location: FailureLocation::InRegion {
-                        region: Region::from((10, "witness non-identity point".to_string())),
-                        offset: 0
-                    }
-                },
-                VerifyFailure::Permutation {
-                    column: Column::from((Advice, 1)),
-                    location: FailureLocation::InRegion {
-                        region: Region::from((9, "witness non-identity point".to_string())),
-                        offset: 0
-                    }
-                },
-                VerifyFailure::Permutation {
-                    column: Column::from((Advice, 1)),
-                    location: FailureLocation::InRegion {
-                        region: Region::from((10, "witness non-identity point".to_string())),
-                        offset: 0
-                    }
-                }
-            ])
-        );
     }
 
     #[test]
@@ -1332,7 +1250,6 @@ mod tests {
             psi_old: Value::unknown(),
             rcm_old: Value::unknown(),
             cm_old: Value::unknown(),
-            asset_old: Value::unknown(),
             alpha: Value::unknown(),
             ak: Value::unknown(),
             nk: Value::unknown(),
@@ -1342,8 +1259,8 @@ mod tests {
             v_new: Value::unknown(),
             psi_new: Value::unknown(),
             rcm_new: Value::unknown(),
-            asset_new: Value::unknown(),
             rcv: Value::unknown(),
+            asset: Value::unknown(),
             split_flag: Value::unknown(),
         };
         halo2_proofs::dev::CircuitLayout::default()
