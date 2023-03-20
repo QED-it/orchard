@@ -1,13 +1,19 @@
 pub(in crate::circuit) mod gadgets {
     use pasta_curves::pallas;
 
-    use crate::constants::{OrchardFixedBases, OrchardFixedBasesFull, ValueCommitV};
-    use halo2_gadgets::ecc::{
-        EccInstructions, FixedPoint, FixedPointShort, NonIdentityPoint, Point, ScalarFixed,
-        ScalarFixedShort,
+    use crate::constants::{
+        OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
+        ValueCommitV,
+    };
+    use halo2_gadgets::{
+        ecc::{
+            EccInstructions, FixedPoint, FixedPointShort, NonIdentityPoint, Point, ScalarFixed,
+            ScalarFixedShort,
+        },
+        sinsemilla::{self, chip::SinsemillaChip},
     };
     use halo2_proofs::{
-        circuit::{AssignedCell, Layouter},
+        circuit::{AssignedCell, Chip, Layouter},
         plonk,
     };
 
@@ -22,11 +28,43 @@ pub(in crate::circuit) mod gadgets {
         >,
     >(
         mut layouter: impl Layouter<pallas::Base>,
+        sinsemilla_chip: SinsemillaChip<
+            OrchardHashDomains,
+            OrchardCommitDomains,
+            OrchardFixedBases,
+        >,
         ecc_chip: EccChip,
+        v_net_magnitude_sign: (
+            AssignedCell<pallas::Base, pallas::Base>,
+            AssignedCell<pallas::Base, pallas::Base>,
+        ),
+        // TODO to remove v
         v: ScalarFixedShort<pallas::Affine, EccChip>,
         rcv: ScalarFixed<pallas::Affine, EccChip>,
         _asset: NonIdentityPoint<pallas::Affine, EccChip>,
     ) -> Result<Point<pallas::Affine, EccChip>, plonk::Error> {
+        // Check that v.magnitude is 64 bits.
+        {
+            let lookup_config = sinsemilla_chip.config().lookup_config();
+            let (magnitude_words, magnitude_extra_bits) = (6, 4);
+            assert_eq!(
+                magnitude_words * sinsemilla::primitives::K + magnitude_extra_bits,
+                64
+            );
+            let magnitude_zs = lookup_config.copy_check(
+                layouter.namespace(|| "magnitude lowest 60 bits"),
+                v_net_magnitude_sign.0.clone(),
+                magnitude_words, // 6 windows of 10 bits.
+                false,           // Do not constrain the result here.
+            )?;
+            assert_eq!(magnitude_zs.len(), magnitude_words + 1);
+            lookup_config.copy_short_check(
+                layouter.namespace(|| "magnitude highest 4 bits"),
+                magnitude_zs[magnitude_words].clone(),
+                magnitude_extra_bits, // The 7th window must be a 4 bits value.
+            )?;
+        }
+
         // commitment = [v] ValueCommitV
         let (commitment, _) = {
             let value_commit_v = ValueCommitV;

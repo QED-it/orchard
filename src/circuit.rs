@@ -531,6 +531,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 (magnitude, sign)
             };
 
+            // TODO to remove
             let v_net = ScalarFixedShort::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "v_net"),
@@ -550,7 +551,9 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
             let cv_net = gadget::value_commit_orchard(
                 layouter.namespace(|| "cv_net = ValueCommit^Orchard_rcv(v_net)"),
+                config.sinsemilla_chip_1(),
                 ecc_chip.clone(),
+                v_net_magnitude_sign.clone(),
                 v_net,
                 rcv,
                 asset,
@@ -1115,8 +1118,8 @@ mod tests {
                     K as usize,
                     &circuits[0],
                 );
-            assert_eq!(usize::from(circuit_cost.proof_size(1)), 4992);
-            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7264);
+            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5024);
+            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7296);
             usize::from(circuit_cost.proof_size(instances.len()))
         };
 
@@ -1224,7 +1227,7 @@ mod tests {
             let test_case_bytes = include_bytes!("circuit_proof_test_case.bin");
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
-        assert_eq!(proof.0.len(), 4992);
+        assert_eq!(proof.0.len(), 5024);
 
         assert!(proof.verify(&vk, &[instance]).is_ok());
     }
