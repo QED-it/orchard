@@ -62,6 +62,7 @@ use halo2_gadgets::{
 mod commit_ivk;
 pub mod gadget;
 mod note_commit;
+mod value_commit_orchard;
 
 /// Size of the Orchard circuit.
 const K: u32 = 11;
