@@ -31,7 +31,7 @@ pub(in crate::circuit) mod gadgets {
         rcv: ScalarFixed<pallas::Affine, EccChip<OrchardFixedBases>>,
         asset: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases>>,
     ) -> Result<Point<pallas::Affine, EccChip<OrchardFixedBases>>, plonk::Error> {
-        // Check that v.magnitude is 64 bits.
+        // Check that magnitude is 64 bits.
         {
             let lookup_config = sinsemilla_chip.config().lookup_config();
             let (magnitude_words, magnitude_extra_bits) = (6, 4);
@@ -69,7 +69,11 @@ pub(in crate::circuit) mod gadgets {
             commitment
         };
 
-        // TODO apply sign
+        // signed_commitment = [sign] commitment = [v_net_magnitude_sign] asset
+        let signed_commitment = commitment.mul_sign(
+            layouter.namespace(|| "[sign] commitment"),
+            &v_net_magnitude_sign.1,
+        )?;
 
         // blind = [rcv] ValueCommitR
         let (blind, _rcv) = {
@@ -81,7 +85,7 @@ pub(in crate::circuit) mod gadgets {
         };
 
         // [v] ValueCommitV + [rcv] ValueCommitR
-        commitment.add(layouter.namespace(|| "cv"), &blind)
+        signed_commitment.add(layouter.namespace(|| "cv"), &blind)
     }
 }
 
@@ -304,18 +308,8 @@ mod tests {
         };
         for split_flag in [false, true] {
             for asset in [native_asset, random_asset] {
-                // TODO remove
-                if split_flag {
-                    continue;
-                }
-                // TODO remove
-                let v_old_value = rng.next_u64();
-                let v_new_value = rng.next_u64();
-                if v_old_value < v_new_value {
-                    continue;
-                }
-                let v_old = NoteValue::from_raw(v_old_value);
-                let v_new = NoteValue::from_raw(v_new_value);
+                let v_old = NoteValue::from_raw(rng.next_u64());
+                let v_new = NoteValue::from_raw(rng.next_u64());
                 let rcv = ValueCommitTrapdoor::random(&mut rng);
                 let v_net = if split_flag {
                     NoteValue::zero() - v_new
@@ -334,8 +328,6 @@ mod tests {
             }
         }
 
-        // TODO remove
-        println!("{} circuits", circuits.len());
         for (circuit, instance) in circuits.iter().zip(instances.iter()) {
             let prover = MockProver::<pallas::Base>::run(
                 K,
