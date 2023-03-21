@@ -46,7 +46,7 @@ use crate::{
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, EccConfig},
-        FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarFixedShort, ScalarVar,
+        FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar,
     },
     poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
     sinsemilla::{
@@ -531,12 +531,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 (magnitude, sign)
             };
 
-            // TODO to remove
-            let v_net = ScalarFixedShort::new(
-                ecc_chip.clone(),
-                layouter.namespace(|| "v_net"),
-                v_net_magnitude_sign.clone(),
-            )?;
             let rcv = ScalarFixed::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "rcv"),
@@ -550,11 +544,10 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             )?;
 
             let cv_net = gadget::value_commit_orchard(
-                layouter.namespace(|| "cv_net = ValueCommit^Orchard_rcv(v_net)"),
+                layouter.namespace(|| "cv_net = ValueCommit^Orchard_rcv(v_net_magnitude_sign)"),
                 config.sinsemilla_chip_1(),
                 ecc_chip.clone(),
                 v_net_magnitude_sign.clone(),
-                v_net,
                 rcv,
                 asset,
             )?;
