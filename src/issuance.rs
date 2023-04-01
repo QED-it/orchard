@@ -1286,7 +1286,20 @@ pub mod testing {
     use proptest::prelude::*;
     use proptest::prop_compose;
     use rand::{rngs::StdRng, SeedableRng};
-    use crate::keys::IssuanceValidatingKey;
+    use reddsa::orchard::SpendAuth;
+    use crate::primitives::redpallas::Signature;
+
+    prop_compose! {
+        /// Generate a uniformly distributed signature
+        pub(crate) fn arb_signature()(
+            half_bytes in prop::array::uniform32(prop::num::u8::ANY)
+        ) -> Signature<SpendAuth> {
+            // prop::array can only generate 32 elements max, so we duplicate it
+            let sig_bytes: [u8; 64] = [half_bytes, half_bytes].concat().try_into().unwrap();
+            let sig: Signature<SpendAuth> = Signature::from(sig_bytes);
+            sig
+        }
+    }
 
     prop_compose! {
         /// Generate an issue action
@@ -1339,17 +1352,14 @@ pub mod testing {
         pub fn arb_signed_issue_bundle(n_actions: usize)
         (
             actions in vec(arb_issue_action("asset_desc".to_string()), n_actions),
-            isk in arb_issuance_authorizing_key(),
-            rng_seed in prop::array::uniform32(prop::num::u8::ANY),
-            fake_sighash in prop::array::uniform32(prop::num::u8::ANY)
+            ik in arb_issuance_validating_key(),
+            fake_sig in arb_signature(),
         ) -> IssueBundle<Signed> {
-            let rng = StdRng::from_seed(rng_seed);
-
             IssueBundle {
-                ik: IssuanceValidatingKey::from(&isk),
+                ik,
                 actions,
-                authorization: Prepared { sighash: fake_sighash },
-            }.sign(rng, &isk).unwrap()
+                authorization: Signed { signature: fake_sig },
+            }
         }
     }
 }
