@@ -1030,6 +1030,7 @@ pub mod testing {
     use proptest::prelude::*;
     use proptest::prop_compose;
     use rand::{rngs::StdRng, SeedableRng};
+    use crate::keys::IssuanceValidatingKey;
 
     prop_compose! {
         /// Generate an issue action
@@ -1089,7 +1090,7 @@ pub mod testing {
             let rng = StdRng::from_seed(rng_seed);
 
             IssueBundle {
-                isk.ik,
+                ik: IssuanceValidatingKey::from(&isk),
                 actions,
                 authorization: Prepared { sighash: fake_sighash },
             }.sign(rng, &isk).unwrap()
