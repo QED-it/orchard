@@ -1338,7 +1338,6 @@ pub mod testing {
         pub fn arb_signed_issue_bundle(n_actions: usize)
         (
             actions in vec(arb_issue_action("asset_desc".to_string()), n_actions),
-            ik in arb_issuance_validating_key(),
             isk in arb_issuance_authorizing_key(),
             rng_seed in prop::array::uniform32(prop::num::u8::ANY),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY)
@@ -1346,7 +1345,7 @@ pub mod testing {
             let rng = StdRng::from_seed(rng_seed);
 
             IssueBundle {
-                ik,
+                isk.ik,
                 actions,
                 authorization: Prepared { sighash: fake_sighash },
             }.sign(rng, &isk).unwrap()
