@@ -1285,7 +1285,6 @@ pub mod testing {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
-    use rand::{rngs::StdRng, SeedableRng};
     use reddsa::orchard::SpendAuth;
     use crate::primitives::redpallas::Signature;
 
