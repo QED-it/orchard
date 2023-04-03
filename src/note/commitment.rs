@@ -70,7 +70,7 @@ impl NoteCommitment {
             .chain(rho_bits.iter().by_vals().take(L_ORCHARD_BASE))
             .chain(psi_bits_left.iter().by_vals());
 
-        let zec_suffix = psi_bits_right.clone().iter().by_vals().take(remaining_bits);
+        let zec_suffix = psi_bits_right.iter().by_vals().take(remaining_bits);
         let type_bits = BitArray::<_, Lsb0>::new(asset.to_bytes());
         let zsa_suffix = iter::empty()
             .chain(psi_bits_right.iter().by_vals().take(remaining_bits))
