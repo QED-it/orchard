@@ -89,7 +89,7 @@ impl NoteCommitment {
 
     /// Evaluates `SinsemillaCommit_{rcm}(personalization1, common_bits||suffix1)` and
     /// `SinsemillaCommit_{rcm}(personalization2, common_bits||suffix2)` and returns the commit
-    /// corresponding to the choice.
+    /// corresponding to the boolean  `choice`.
     ///
     /// We would like to have a constant time implementation even if suffix1 and suffix2 have not
     /// the same length.
@@ -177,3 +177,82 @@ impl PartialEq for ExtractedNoteCommitment {
 }
 
 impl Eq for ExtractedNoteCommitment {}
+
+#[cfg(test)]
+mod tests {
+    use crate::constants::fixed_bases::{
+        NOTE_COMMITMENT_PERSONALIZATION, NOTE_ZSA_COMMITMENT_PERSONALIZATION,
+    };
+    use crate::note::commitment::NoteCommitTrapdoor;
+    use crate::note::NoteCommitment;
+    use ff::Field;
+    use halo2_gadgets::sinsemilla::primitives as sinsemilla;
+    use pasta_curves::pallas;
+    use rand::{rngs::OsRng, Rng};
+
+    #[test]
+    fn test_double_constant_time_commit() {
+        let mut os_rng = OsRng::default();
+        let prefix: Vec<bool> = (0..30).map(|_| os_rng.gen::<bool>()).collect();
+        let suffix_zec: Vec<bool> = (0..6).map(|_| os_rng.gen::<bool>()).collect();
+        let suffix_zsa: Vec<bool> = (0..25).map(|_| os_rng.gen::<bool>()).collect();
+
+        let rcm = NoteCommitTrapdoor(pallas::Scalar::random(&mut os_rng));
+
+        let commit_zec = {
+            let domain = sinsemilla::CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);
+            domain
+                .commit(
+                    prefix
+                        .clone()
+                        .into_iter()
+                        .chain(suffix_zec.clone().into_iter()),
+                    &rcm.0,
+                )
+                .unwrap()
+        };
+
+        assert_eq!(
+            commit_zec,
+            NoteCommitment::double_constant_time_commit(
+                NOTE_COMMITMENT_PERSONALIZATION,
+                NOTE_ZSA_COMMITMENT_PERSONALIZATION,
+                prefix.clone().into_iter(),
+                suffix_zec.clone().into_iter(),
+                suffix_zsa.clone().into_iter(),
+                rcm.clone(),
+                true
+            )
+            .unwrap()
+            .0
+        );
+
+        let commit_zsa = {
+            let domain = sinsemilla::CommitDomain::new(NOTE_ZSA_COMMITMENT_PERSONALIZATION);
+            domain
+                .commit(
+                    prefix
+                        .clone()
+                        .into_iter()
+                        .chain(suffix_zsa.clone().into_iter()),
+                    &rcm.0,
+                )
+                .unwrap()
+        };
+
+        assert_eq!(
+            commit_zsa,
+            NoteCommitment::double_constant_time_commit(
+                NOTE_COMMITMENT_PERSONALIZATION,
+                NOTE_ZSA_COMMITMENT_PERSONALIZATION,
+                prefix.into_iter(),
+                suffix_zec.into_iter(),
+                suffix_zsa.into_iter(),
+                rcm,
+                false
+            )
+            .unwrap()
+            .0
+        );
+    }
+}
