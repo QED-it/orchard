@@ -145,3 +145,34 @@ impl PartialEq for ExtractedNoteCommitment {
 }
 
 impl Eq for ExtractedNoteCommitment {}
+
+#[cfg(test)]
+mod tests {
+    use crate::constants::fixed_bases::NOTE_COMMITMENT_PERSONALIZATION;
+    use crate::note::commitment::NoteCommitTrapdoor;
+    use ff::Field;
+    use halo2_gadgets::sinsemilla::primitives as sinsemilla;
+    use pasta_curves::pallas;
+    use rand::{rngs::OsRng, Rng};
+    use subtle::CtOption;
+
+    #[test]
+    fn test_note_commit() {
+        let mut os_rng = OsRng::default();
+        let msg: Vec<bool> = (0..36).map(|_| os_rng.gen::<bool>()).collect();
+
+        let rcm = NoteCommitTrapdoor(pallas::Scalar::random(&mut os_rng));
+
+        let domain = sinsemilla::CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);
+
+        let expected_commit = domain.commit(msg.clone().into_iter(), &rcm.0);
+
+        let commit = {
+            let hash_point = domain.hash_to_point_inner(msg.into_iter());
+            let blind_factor = domain.blinding_factor(&rcm.0);
+            CtOption::<pallas::Point>::from(hash_point).map(|p| p + blind_factor)
+        };
+
+        assert_eq!(expected_commit.unwrap(), commit.unwrap());
+    }
+}
