@@ -63,28 +63,33 @@ impl NoteCommitment {
             .chain(rho_bits.iter().by_vals().take(L_ORCHARD_BASE))
             .chain(psi_bits.iter().by_vals().take(L_ORCHARD_BASE));
 
-        // TODO: make this constant-time.
+        let type_bits = BitArray::<_, Lsb0>::new(asset.to_bytes());
+        let zsa_note_bits = iter::empty()
+            .chain(g_d_bits.iter().by_vals())
+            .chain(pk_d_bits.iter().by_vals())
+            .chain(v_bits.iter().by_vals())
+            .chain(rho_bits.iter().by_vals().take(L_ORCHARD_BASE))
+            .chain(psi_bits.iter().by_vals().take(L_ORCHARD_BASE))
+            .chain(type_bits.iter().by_vals());
+
+        let zec_domain = sinsemilla::CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);
+        let zsa_domain = sinsemilla::CommitDomain::new(NOTE_ZSA_COMMITMENT_PERSONALIZATION);
+
+        let zec_hash_point = zec_domain.hash_to_point_inner(zec_note_bits);
+        let zsa_hash_point = zsa_domain.hash_to_point_inner(zsa_note_bits);
+
+        let zec_blind = zec_domain.blinding_factor(&rcm.0);
+        let zsa_blind = zsa_domain.blinding_factor(&rcm.0);
+
         if asset.is_native().into() {
-            // Commit to ZEC notes as per the Orchard protocol.
-            Self::commit(NOTE_COMMITMENT_PERSONALIZATION, zec_note_bits, rcm)
+            CtOption::<pallas::Point>::from(zec_hash_point)
+                .map(|p| p + zec_blind)
+                .map(NoteCommitment)
         } else {
-            // Commit to non-ZEC notes as per the ZSA protocol.
-            // Append the note type to the Orchard note encoding.
-            let type_bits = BitArray::<_, Lsb0>::new(asset.to_bytes());
-            let zsa_note_bits = zec_note_bits.chain(type_bits.iter().by_vals());
-
-            // Commit in a different domain than Orchard notes.
-            Self::commit(NOTE_ZSA_COMMITMENT_PERSONALIZATION, zsa_note_bits, rcm)
+            CtOption::<pallas::Point>::from(zsa_hash_point)
+                .map(|p| p + zsa_blind)
+                .map(NoteCommitment)
         }
-    }
-
-    fn commit(
-        personalization: &str,
-        bits: impl Iterator<Item = bool>,
-        rcm: NoteCommitTrapdoor,
-    ) -> CtOption<Self> {
-        let domain = sinsemilla::CommitDomain::new(personalization);
-        domain.commit(bits, &rcm.0).map(NoteCommitment)
     }
 }
 
