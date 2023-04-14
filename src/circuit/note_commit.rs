@@ -2013,18 +2013,14 @@ pub(in crate::circuit) mod gadgets {
 
 #[cfg(test)]
 mod tests {
-    use core::iter;
-
     use super::NoteCommitConfig;
     use crate::{
         circuit::{
             gadget::assign_free_advice,
             note_commit::{gadgets, NoteCommitChip},
         },
-        constants::{
-            fixed_bases::NOTE_COMMITMENT_PERSONALIZATION, OrchardCommitDomains, OrchardFixedBases,
-            OrchardHashDomains, L_ORCHARD_BASE, L_VALUE, T_Q,
-        },
+        constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_Q},
+        note::{commitment::NoteCommitTrapdoor, AssetBase, NoteCommitment},
         value::NoteValue,
     };
     use halo2_gadgets::{
@@ -2033,18 +2029,20 @@ mod tests {
             NonIdentityPoint, ScalarFixed,
         },
         sinsemilla::chip::SinsemillaChip,
-        sinsemilla::primitives::CommitDomain,
         utilities::lookup_range_check::LookupRangeCheckConfig,
     };
 
-    use ff::{Field, PrimeField, PrimeFieldBits};
-    use group::Curve;
+    use ff::{Field, PrimeField};
+    use group::{Curve, Group, GroupEncoding};
     use halo2_proofs::{
         circuit::{Layouter, SimpleFloorPlanner, Value},
         dev::MockProver,
         plonk::{Circuit, ConstraintSystem, Error},
     };
-    use pasta_curves::{arithmetic::CurveAffine, pallas};
+    use pasta_curves::{
+        arithmetic::CurveAffine,
+        pallas, EpAffine,
+    };
 
     use rand::{rngs::OsRng, RngCore};
 
@@ -2052,10 +2050,8 @@ mod tests {
     fn note_commit() {
         #[derive(Default)]
         struct MyCircuit {
-            gd_x: Value<pallas::Base>,
-            gd_y_lsb: Value<pallas::Base>,
-            pkd_x: Value<pallas::Base>,
-            pkd_y_lsb: Value<pallas::Base>,
+            g_d: Value<EpAffine>,
+            pk_d: Value<EpAffine>,
             rho: Value<pallas::Base>,
             psi: Value<pallas::Base>,
         }
@@ -2158,40 +2154,18 @@ mod tests {
                 let note_commit_chip = NoteCommitChip::construct(note_commit_config.clone());
 
                 // Witness g_d
-                let g_d = {
-                    let g_d = self.gd_x.zip(self.gd_y_lsb).map(|(x, y_lsb)| {
-                        // Calculate y = (x^3 + 5).sqrt()
-                        let mut y = (x.square() * x + pallas::Affine::b()).sqrt().unwrap();
-                        if bool::from(y.is_odd() ^ y_lsb.is_odd()) {
-                            y = -y;
-                        }
-                        pallas::Affine::from_xy(x, y).unwrap()
-                    });
-
-                    NonIdentityPoint::new(
-                        ecc_chip.clone(),
-                        layouter.namespace(|| "witness g_d"),
-                        g_d,
-                    )?
-                };
+                let g_d = NonIdentityPoint::new(
+                    ecc_chip.clone(),
+                    layouter.namespace(|| "witness g_d"),
+                    self.g_d,
+                )?;
 
                 // Witness pk_d
-                let pk_d = {
-                    let pk_d = self.pkd_x.zip(self.pkd_y_lsb).map(|(x, y_lsb)| {
-                        // Calculate y = (x^3 + 5).sqrt()
-                        let mut y = (x.square() * x + pallas::Affine::b()).sqrt().unwrap();
-                        if bool::from(y.is_odd() ^ y_lsb.is_odd()) {
-                            y = -y;
-                        }
-                        pallas::Affine::from_xy(x, y).unwrap()
-                    });
-
-                    NonIdentityPoint::new(
-                        ecc_chip.clone(),
-                        layouter.namespace(|| "witness pk_d"),
-                        pk_d,
-                    )?
-                };
+                let pk_d = NonIdentityPoint::new(
+                    ecc_chip.clone(),
+                    layouter.namespace(|| "witness pk_d"),
+                    self.pk_d,
+                )?;
 
                 // Witness a random non-negative u64 note value
                 // A note value cannot be negative.
@@ -2241,114 +2215,142 @@ mod tests {
                     rcm_gadget,
                 )?;
                 let expected_cm = {
-                    let domain = CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);
                     // Hash g★_d || pk★_d || i2lebsp_{64}(v) || rho || psi
-                    let lsb = |y_lsb: pallas::Base| y_lsb == pallas::Base::one();
-                    let point = self
-                        .gd_x
-                        .zip(self.gd_y_lsb)
-                        .zip(self.pkd_x.zip(self.pkd_y_lsb))
-                        .zip(self.rho.zip(self.psi))
-                        .map(|(((gd_x, gd_y_lsb), (pkd_x, pkd_y_lsb)), (rho, psi))| {
-                            domain
-                                .commit(
-                                    iter::empty()
-                                        .chain(
-                                            gd_x.to_le_bits().iter().by_vals().take(L_ORCHARD_BASE),
-                                        )
-                                        .chain(Some(lsb(gd_y_lsb)))
-                                        .chain(
-                                            pkd_x
-                                                .to_le_bits()
-                                                .iter()
-                                                .by_vals()
-                                                .take(L_ORCHARD_BASE),
-                                        )
-                                        .chain(Some(lsb(pkd_y_lsb)))
-                                        .chain(value.to_le_bits().iter().by_vals().take(L_VALUE))
-                                        .chain(
-                                            rho.to_le_bits().iter().by_vals().take(L_ORCHARD_BASE),
-                                        )
-                                        .chain(
-                                            psi.to_le_bits().iter().by_vals().take(L_ORCHARD_BASE),
-                                        ),
-                                    &rcm,
-                                )
-                                .unwrap()
-                                .to_affine()
-                        });
+                    let point = self.g_d.zip(self.pk_d).zip(self.rho.zip(self.psi)).map(
+                        |((g_d, pk_d), (rho, psi))| {
+                            NoteCommitment::derive(
+                                g_d.to_bytes(),
+                                pk_d.to_bytes(),
+                                value,
+                                AssetBase::native(),
+                                rho,
+                                psi,
+                                NoteCommitTrapdoor(rcm),
+                            )
+                            .unwrap()
+                            .inner()
+                            .to_affine()
+                        },
+                    );
                     NonIdentityPoint::new(ecc_chip, layouter.namespace(|| "witness cm"), point)?
                 };
                 cm.constrain_equal(layouter.namespace(|| "cm == expected cm"), &expected_cm)
             }
         }
 
+        fn affine_point_from_coordinates(x_coord: pallas::Base, y_lsb: pallas::Base) -> EpAffine {
+            // Calculate y = (x^3 + 5).sqrt()
+            let mut y = (x_coord.square() * x_coord + pallas::Affine::b())
+                .sqrt()
+                .unwrap();
+            if bool::from(y.is_odd() ^ y_lsb.is_odd()) {
+                y = -y;
+            }
+            pallas::Affine::from_xy(x_coord, y).unwrap()
+        }
+
         let two_pow_254 = pallas::Base::from_u128(1 << 127).square();
+        let mut rng = OsRng;
         // Test different values of `ak`, `nk`
         let circuits = [
             // `gd_x` = -1, `pkd_x` = -1 (these have to be x-coordinates of curve points)
             // `rho` = 0, `psi` = 0
             MyCircuit {
-                gd_x: Value::known(-pallas::Base::one()),
-                gd_y_lsb: Value::known(pallas::Base::one()),
-                pkd_x: Value::known(-pallas::Base::one()),
-                pkd_y_lsb: Value::known(pallas::Base::one()),
+                g_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::one(),
+                )),
+                pk_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::one(),
+                )),
                 rho: Value::known(pallas::Base::zero()),
                 psi: Value::known(pallas::Base::zero()),
             },
             // `rho` = T_Q - 1, `psi` = T_Q - 1
             MyCircuit {
-                gd_x: Value::known(-pallas::Base::one()),
-                gd_y_lsb: Value::known(pallas::Base::zero()),
-                pkd_x: Value::known(-pallas::Base::one()),
-                pkd_y_lsb: Value::known(pallas::Base::zero()),
+                g_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::zero(),
+                )),
+                pk_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::zero(),
+                )),
                 rho: Value::known(pallas::Base::from_u128(T_Q - 1)),
                 psi: Value::known(pallas::Base::from_u128(T_Q - 1)),
             },
             // `rho` = T_Q, `psi` = T_Q
             MyCircuit {
-                gd_x: Value::known(-pallas::Base::one()),
-                gd_y_lsb: Value::known(pallas::Base::one()),
-                pkd_x: Value::known(-pallas::Base::one()),
-                pkd_y_lsb: Value::known(pallas::Base::zero()),
+                g_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::one(),
+                )),
+                pk_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::zero(),
+                )),
                 rho: Value::known(pallas::Base::from_u128(T_Q)),
                 psi: Value::known(pallas::Base::from_u128(T_Q)),
             },
             // `rho` = 2^127 - 1, `psi` = 2^127 - 1
             MyCircuit {
-                gd_x: Value::known(-pallas::Base::one()),
-                gd_y_lsb: Value::known(pallas::Base::zero()),
-                pkd_x: Value::known(-pallas::Base::one()),
-                pkd_y_lsb: Value::known(pallas::Base::one()),
+                g_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::zero(),
+                )),
+                pk_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::one(),
+                )),
                 rho: Value::known(pallas::Base::from_u128((1 << 127) - 1)),
                 psi: Value::known(pallas::Base::from_u128((1 << 127) - 1)),
             },
             // `rho` = 2^127, `psi` = 2^127
             MyCircuit {
-                gd_x: Value::known(-pallas::Base::one()),
-                gd_y_lsb: Value::known(pallas::Base::zero()),
-                pkd_x: Value::known(-pallas::Base::one()),
-                pkd_y_lsb: Value::known(pallas::Base::zero()),
+                g_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::zero(),
+                )),
+                pk_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::zero(),
+                )),
                 rho: Value::known(pallas::Base::from_u128(1 << 127)),
                 psi: Value::known(pallas::Base::from_u128(1 << 127)),
             },
             // `rho` = 2^254 - 1, `psi` = 2^254 - 1
             MyCircuit {
-                gd_x: Value::known(-pallas::Base::one()),
-                gd_y_lsb: Value::known(pallas::Base::one()),
-                pkd_x: Value::known(-pallas::Base::one()),
-                pkd_y_lsb: Value::known(pallas::Base::one()),
+                g_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::one(),
+                )),
+                pk_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::one(),
+                )),
                 rho: Value::known(two_pow_254 - pallas::Base::one()),
                 psi: Value::known(two_pow_254 - pallas::Base::one()),
             },
             // `rho` = 2^254, `psi` = 2^254
             MyCircuit {
-                gd_x: Value::known(-pallas::Base::one()),
-                gd_y_lsb: Value::known(pallas::Base::one()),
-                pkd_x: Value::known(-pallas::Base::one()),
-                pkd_y_lsb: Value::known(pallas::Base::zero()),
+                g_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::one(),
+                )),
+                pk_d: Value::known(affine_point_from_coordinates(
+                    -pallas::Base::one(),
+                    pallas::Base::zero(),
+                )),
                 rho: Value::known(two_pow_254),
                 psi: Value::known(two_pow_254),
+            },
+            // Random values
+            MyCircuit {
+                g_d: Value::known(pallas::Point::random(rng).to_affine()),
+                pk_d: Value::known(pallas::Point::random(rng).to_affine()),
+                rho: Value::known(pallas::Base::random(&mut rng)),
+                psi: Value::known(pallas::Base::random(&mut rng)),
             },
         ];
 
