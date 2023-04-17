@@ -1668,11 +1668,11 @@ pub(in crate::circuit) mod gadgets {
                 ],
             );
             let domain = CommitDomain::new(chip, ecc_chip, &OrchardCommitDomains::NoteCommit);
-            domain.commit(
-                layouter.namespace(|| "Process NoteCommit inputs"),
-                message,
-                rcm,
-            )?
+            let blinding_factor = domain.blinding_factor(layouter.namespace(|| "[r] R"), rcm)?;
+            let (hash_point, zs) = domain.hash(layouter.namespace(|| "M"), message)?;
+            let commitment =
+                hash_point.add(layouter.namespace(|| "M + [r] R"), &blinding_factor)?;
+            (commitment, zs)
         };
 
         // `CommitDomain::commit` returns the running sum for each `MessagePiece`. Grab
