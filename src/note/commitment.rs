@@ -63,31 +63,35 @@ impl NoteCommitment {
             .chain(rho_bits.iter().by_vals().take(L_ORCHARD_BASE))
             .chain(psi_bits.iter().by_vals().take(L_ORCHARD_BASE));
 
-        // TODO: make this constant-time.
-        if asset.is_native().into() {
-            // Commit to ZEC notes as per the Orchard protocol.
-            Self::commit(NOTE_COMMITMENT_PERSONALIZATION, zec_note_bits, rcm)
-        } else {
-            // Commit to non-ZEC notes as per the ZSA protocol.
-            // Append the note type to the Orchard note encoding.
-            let type_bits = BitArray::<_, Lsb0>::new(asset.to_bytes());
-            let zsa_note_bits = zec_note_bits.chain(type_bits.iter().by_vals());
+        let type_bits = BitArray::<_, Lsb0>::new(asset.to_bytes());
+        let zsa_note_bits = iter::empty()
+            .chain(g_d_bits.iter().by_vals())
+            .chain(pk_d_bits.iter().by_vals())
+            .chain(v_bits.iter().by_vals())
+            .chain(rho_bits.iter().by_vals().take(L_ORCHARD_BASE))
+            .chain(psi_bits.iter().by_vals().take(L_ORCHARD_BASE))
+            .chain(type_bits.iter().by_vals());
 
-            // Commit in a different domain than Orchard notes.
-            Self::commit(NOTE_ZSA_COMMITMENT_PERSONALIZATION, zsa_note_bits, rcm)
-        }
-    }
-
-    fn commit(
-        personalization: &str,
-        bits: impl Iterator<Item = bool>,
-        rcm: NoteCommitTrapdoor,
-    ) -> CtOption<Self> {
-        let domain = sinsemilla::CommitDomain::new_with_two_personalizations(
-            personalization,
+        let zec_domain = sinsemilla::CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);
+        let zsa_domain = sinsemilla::CommitDomain::new_with_two_personalizations(
+            NOTE_ZSA_COMMITMENT_PERSONALIZATION,
             NOTE_COMMITMENT_PERSONALIZATION,
         );
-        domain.commit(bits, &rcm.0).map(NoteCommitment)
+
+        let zec_hash_point = zec_domain.M.hash_to_point(zec_note_bits);
+        let zsa_hash_point = zsa_domain.M.hash_to_point(zsa_note_bits);
+
+        let hash_point = if asset.is_native().into() {
+            zec_hash_point
+        } else {
+            zsa_hash_point
+        };
+
+        // To evaluate the commitment from the hash_point, we could use either zec_domain or
+        // zsa_domain because they have both the same `R` constant.
+        zec_domain
+            .commit_from_hash_point(hash_point, &rcm.0)
+            .map(NoteCommitment)
     }
 }
 
@@ -143,3 +147,40 @@ impl PartialEq for ExtractedNoteCommitment {
 }
 
 impl Eq for ExtractedNoteCommitment {}
+
+#[cfg(test)]
+mod tests {
+    use crate::constants::fixed_bases::{
+        NOTE_COMMITMENT_PERSONALIZATION, NOTE_ZSA_COMMITMENT_PERSONALIZATION,
+    };
+    use crate::note::commitment::NoteCommitTrapdoor;
+    use ff::Field;
+    use halo2_gadgets::sinsemilla::primitives as sinsemilla;
+    use pasta_curves::pallas;
+    use rand::{rngs::OsRng, Rng};
+
+    #[test]
+    fn test_note_commit() {
+        let mut os_rng = OsRng::default();
+        let msg: Vec<bool> = (0..36).map(|_| os_rng.gen::<bool>()).collect();
+
+        let rcm = NoteCommitTrapdoor(pallas::Scalar::random(&mut os_rng));
+
+        let domain_zec = sinsemilla::CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);
+        let domain_zsa = sinsemilla::CommitDomain::new_with_two_personalizations(
+            NOTE_ZSA_COMMITMENT_PERSONALIZATION,
+            NOTE_COMMITMENT_PERSONALIZATION,
+        );
+
+        let expected_commit = domain_zsa.commit(msg.clone().into_iter(), &rcm.0);
+
+        // Evaluating the commitment in one step with `commit` or in two steps with `hash_to_point`
+        // and `commit_from_hash_point` must give the same commitment.
+        let hash_point = domain_zsa.M.hash_to_point(msg.into_iter());
+        let commit_r_zsa = domain_zsa.commit_from_hash_point(hash_point, &rcm.0);
+        assert_eq!(expected_commit.unwrap(), commit_r_zsa.unwrap());
+
+        // ZEC and ZSA note commitments must use the same R constant
+        assert_eq!(domain_zec.R(), domain_zsa.R());
+    }
+}

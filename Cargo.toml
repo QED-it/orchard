@@ -29,8 +29,8 @@ blake2b_simd = "1"
 ff = "0.12"
 fpe = "0.5"
 group = { version = "0.12.1", features = ["wnaf-memuse"] }
-halo2_gadgets = {git = "https://github.com/QED-it/halo2", branch = "commit_doamin_from_two_personalizations"}
-halo2_proofs = {git = "https://github.com/QED-it/halo2", branch = "commit_doamin_from_two_personalizations"}
+halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "add_sinsemilla_functionalities_v2" }
+halo2_proofs = { git = "https://github.com/QED-it/halo2", branch = "add_sinsemilla_functionalities_v2"}
 hex = "0.4"
 lazy_static = "1"
 memuse = { version = "0.2.1", features = ["nonempty"] }
@@ -52,7 +52,7 @@ plotters = { version = "0.3.0", optional = true }
 
 [dev-dependencies]
 criterion = "0.3"
-halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "commit_doamin_from_two_personalizations", features = ["test-dependencies"] }
+halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "add_sinsemilla_functionalities_v2", features = ["test-dependencies"] }
 hex = "0.4"
 proptest = "1.0.0"
 zcash_note_encryption = { version = "0.2", features = ["pre-zip-212"] }
