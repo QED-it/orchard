@@ -83,7 +83,10 @@ impl NoteCommitment {
         bits: impl Iterator<Item = bool>,
         rcm: NoteCommitTrapdoor,
     ) -> CtOption<Self> {
-        let domain = sinsemilla::CommitDomain::new(personalization);
+        let domain = sinsemilla::CommitDomain::new_with_two_personalizations(
+            personalization,
+            NOTE_COMMITMENT_PERSONALIZATION,
+        );
         domain.commit(bits, &rcm.0).map(NoteCommitment)
     }
 }
