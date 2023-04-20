@@ -134,7 +134,7 @@ impl CommitDomains<pallas::Affine, OrchardFixedBases, OrchardHashDomains> for Or
     fn r(&self) -> OrchardFixedBasesFull {
         match self {
             Self::NoteCommit => OrchardFixedBasesFull::NoteCommitR,
-            Self::NoteZsaCommit => OrchardFixedBasesFull::NoteZsaCommitR,
+            Self::NoteZsaCommit => OrchardFixedBasesFull::NoteCommitR,
             Self::CommitIvk => OrchardFixedBasesFull::CommitIvkR,
         }
     }

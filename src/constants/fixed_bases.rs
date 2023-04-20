@@ -9,7 +9,6 @@ use pasta_curves::pallas;
 
 pub mod commit_ivk_r;
 pub mod note_commit_r;
-pub mod note_zsa_commit_r;
 pub mod nullifier_k;
 pub mod spend_auth_g;
 pub mod value_commit_r;
@@ -86,7 +85,6 @@ impl From<NullifierK> for OrchardFixedBases {
 pub enum OrchardFixedBasesFull {
     CommitIvkR,
     NoteCommitR,
-    NoteZsaCommitR,
     ValueCommitR,
     SpendAuthG,
 }
@@ -112,7 +110,6 @@ impl FixedPoint<pallas::Affine> for OrchardFixedBasesFull {
         match self {
             Self::CommitIvkR => commit_ivk_r::generator(),
             Self::NoteCommitR => note_commit_r::generator(),
-            Self::NoteZsaCommitR => note_zsa_commit_r::generator(),
             Self::ValueCommitR => value_commit_r::generator(),
             Self::SpendAuthG => spend_auth_g::generator(),
         }
@@ -122,7 +119,6 @@ impl FixedPoint<pallas::Affine> for OrchardFixedBasesFull {
         match self {
             Self::CommitIvkR => commit_ivk_r::U.to_vec(),
             Self::NoteCommitR => note_commit_r::U.to_vec(),
-            Self::NoteZsaCommitR => note_zsa_commit_r::U.to_vec(),
             Self::ValueCommitR => value_commit_r::U.to_vec(),
             Self::SpendAuthG => spend_auth_g::U.to_vec(),
         }
@@ -132,7 +128,6 @@ impl FixedPoint<pallas::Affine> for OrchardFixedBasesFull {
         match self {
             Self::CommitIvkR => commit_ivk_r::Z.to_vec(),
             Self::NoteCommitR => note_commit_r::Z.to_vec(),
-            Self::NoteZsaCommitR => note_zsa_commit_r::Z.to_vec(),
             Self::ValueCommitR => value_commit_r::Z.to_vec(),
             Self::SpendAuthG => spend_auth_g::Z.to_vec(),
         }
