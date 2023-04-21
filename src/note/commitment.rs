@@ -72,7 +72,7 @@ impl NoteCommitment {
             .chain(type_bits.iter().by_vals());
 
         let zec_domain = sinsemilla::CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);
-        let zsa_domain = sinsemilla::CommitDomain::new_with_two_personalizations(
+        let zsa_domain = sinsemilla::CommitDomain::new_with_personalization(
             NOTE_ZSA_COMMITMENT_PERSONALIZATION,
             NOTE_COMMITMENT_PERSONALIZATION,
         );
@@ -166,7 +166,7 @@ mod tests {
         let rcm = NoteCommitTrapdoor(pallas::Scalar::random(&mut os_rng));
 
         let domain_zec = sinsemilla::CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);
-        let domain_zsa = sinsemilla::CommitDomain::new_with_two_personalizations(
+        let domain_zsa = sinsemilla::CommitDomain::new_with_personalization(
             NOTE_ZSA_COMMITMENT_PERSONALIZATION,
             NOTE_COMMITMENT_PERSONALIZATION,
         );
