@@ -7,8 +7,8 @@ use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::issuance::Error::{
-    IssueActionAlreadyFinalized, IssueActionIncorrectNoteType, IssueActionNotFound,
-    IssueActionPreviouslyFinalizedNoteType, IssueBundleIkMismatchNoteType,
+    IssueActionAlreadyFinalized, IssueActionIncorrectAssetBase, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
     IssueBundleInvalidSignature, ValueSumOverflow, WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
@@ -31,6 +31,46 @@ pub struct IssueBundle<T: IssueAuth> {
     actions: Vec<IssueAction>,
     /// The authorization for this action.
     authorization: T,
+}
+
+/// Represents the amount of an asset and its finalization status.
+#[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct AssetSupply {
+    /// The amount of the asset.
+    amount: ValueSum,
+    /// Whether or not the asset is finalized.
+    is_finalized: bool,
+}
+
+impl AssetSupply {
+    /// Creates a new AssetSupply instance with the given amount and finalization status.
+    pub fn new(amount: ValueSum, is_finalized: bool) -> Self {
+        Self {
+            amount,
+            is_finalized,
+        }
+    }
+}
+
+/// Contains information about the supply of assets.
+#[derive(Debug, Clone, Default)]
+pub struct SupplyInfo {
+    /// A map of asset bases to their respective supply information.
+    assets: HashMap<AssetBase, AssetSupply>,
+}
+
+impl SupplyInfo {
+    /// Attempts to insert an asset's supply information into the supply info map.
+    /// Returns true on success or false if the supply for the asset was already inserted and finalized.
+    pub fn try_insert_asset_supply(&mut self, asset: AssetBase, supply: AssetSupply) -> bool {
+        // FIXME: Determine the proper behavior if `assets` already contains the
+        // asset, but is_finalized for it is false. Currently, it will be simply overwritten
+        // by the supply_info.insert call (with new value_sum and is_finalized values).
+        self.assets
+            .insert(asset, supply)
+            .map_or(true, |supply| !supply.is_finalized)
+    }
 }
 
 /// An issue action applied to the global ledger.
@@ -83,38 +123,58 @@ impl IssueAction {
         self.finalize
     }
 
-    /// Return the (`AssetBase`, `ValueSum`) tuple if the provided `ik` is used to derive
-    /// the `asset_id` for **all** internal notes.
-    // FIXME: consider renaming this function as it not only validates assets in notes
-    // but also calculates the sum of the note values.
-    fn are_note_asset_ids_derived_correctly(
+    /// Computes the new asset supply for an `IssueAction`.
+    ///
+    /// This function calculates the total value of the asset by summing the values of all its notes
+    /// and ensures that all note types are equal. It returns the asset and its supply as a tuple
+    /// (`AssetBase`, `AssetSupply`) or an error if the asset was not properly derived or an
+    /// overflow occurred during the supply amount calculation.
+    ///
+    /// # Arguments
+    ///
+    /// * `ik` - A reference to the `IssuanceValidatingKey` used for deriving the asset.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a tuple with an `AssetBase` and an `AssetSupply`, or an `Error`.
+    ///
+    /// # Errors
+    ///
+    /// This function may return an error in any of the following cases:
+    ///
+    /// * `IssueActionIncorrectAssetBase`: If the asset type of any note in the `IssueAction` is
+    ///   not equal to the asset type of the first note.
+    ///
+    /// * `ValueSumOverflow`: If the total amount value of all notes in the `IssueAction` overflows.
+    ///
+    /// * `IssueBundleIkMismatchAssetBase`: If the provided `ik` is not used to derive the
+    ///   `asset_id` for **all** internal notes.
+    fn compute_new_supply(
         &self,
         ik: &IssuanceValidatingKey,
-    ) -> Result<(AssetBase, ValueSum), Error> {
+    ) -> Result<(AssetBase, AssetSupply), Error> {
         // Calculate the value of the asset as a sum of values of all its notes
         // and ensure all note types are equal
         let (asset, value_sum) = self.notes.iter().try_fold(
             (self.notes().head.asset(), ValueSum::zero()),
             |(asset, value_sum), &note| {
-                // Update asset value (fail if not all note types are equal
-                // or if overflow occured)
-                if note.asset().eq(&asset) {
-                    let updated_value_sum =
-                        (value_sum + i128::from(note.value())).ok_or(ValueSumOverflow)?;
-                    Ok((asset, updated_value_sum))
-                } else {
-                    Err(IssueActionIncorrectNoteType)
-                }
+                // All assets should have the same asset
+                note.asset()
+                    .eq(&asset)
+                    .then(|| ())
+                    .ok_or(IssueActionIncorrectAssetBase)?;
+
+                // The total amount should not overflow
+                Ok((asset, (value_sum + note.value()).ok_or(ValueSumOverflow)?))
             },
         )?;
 
-        // Return the asset and its value (check that the asset was properly
-        // derived before returning)
-        if asset.eq(&AssetBase::derive(ik, &self.asset_desc)) {
-            Ok((asset, value_sum))
-        } else {
-            Err(IssueBundleIkMismatchNoteType)
-        }
+        // Return the asset and its value (or an error if the asset was not properly
+        // derived)
+        asset
+            .eq(&AssetBase::derive(ik, &self.asset_desc))
+            .then(|| Ok((asset, AssetSupply::new(value_sum, self.is_finalized()))))
+            .ok_or(IssueBundleIkMismatchAssetBase)?
     }
 }
 
@@ -319,11 +379,9 @@ impl IssueBundle<Prepared> {
         let expected_ik: IssuanceValidatingKey = (isk).into();
 
         // Make sure the `expected_ik` matches the `asset` for all notes.
-        self.actions.iter().try_for_each(|action| {
-            action
-                .are_note_asset_ids_derived_correctly(&expected_ik)
-                .map(|_| ()) // Transform Result<NoteType,Error> into Result<(),Error)>.
-        })?;
+        self.actions
+            .iter()
+            .try_for_each(|action| action.compute_new_supply(&expected_ik).map(|_| ()))?;
 
         Ok(IssueBundle {
             ik: self.ik,
@@ -377,70 +435,64 @@ impl IssueBundle<Signed> {
 /// * For each `Note` inside an `IssueAction`:
 ///     * All notes have the same, correct `AssetBase`.
 ///
-/// Returns a `Result` with supply info stored in a `HashMap`. The `HashMap` uses
-/// `AssetBase` as the key, and a tuple as the value. The tuple contains a `ValueSum`
-/// (representing the total value of all notes for the asset) and a `bool` indicating
-/// whether the asset is finalized.
+// # Returns
 ///
-/// Possible errors:
+/// A Result containing a SupplyInfo struct, which stores supply information in a HashMap.
+/// The HashMap uses AssetBase as the key, and an AssetSupply struct as the value. The
+/// AssetSupply contains a ValueSum (representing the total value of all notes for the asset)
+/// and a bool indicating whether the asset is finalized.
+///
+/// # Errors
 ///
 /// * `IssueBundleInvalidSignature`: This error occurs if the signature verification
 ///    for the provided `sighash` fails.
 /// * `WrongAssetDescSize`: This error is raised if the asset description size for any
 ///    asset in the bundle is incorrect.
-/// * `IssueActionPreviouslyFinalizedNoteType`:  This error occurs if the asset has already been
+/// * `IssueActionPreviouslyFinalizedAssetBase`:  This error occurs if the asset has already been
 ///    finalized (inserted into the `finalized` collection).
-/// * `IssueActionIncorrectNoteType`: This error occurs if any note has an incorrect note type.
-/// * `ValueSumOverflow**: This error occurs if an overflow happens during the calculation of
+/// * `IssueActionIncorrectAssetBase`: This error occurs if any note has an incorrect note type.
+/// * `ValueSumOverflow`: This error occurs if an overflow happens during the calculation of
 ///     the value sum for the notes in the asset.
-/// * `IssueBundleIkMismatchNoteType`: This error is raised if the `AssetBase` derived from
+/// * `IssueBundleIkMismatchAssetBase`: This error is raised if the `AssetBase` derived from
 ///    the `ik` (Issuance Validating Key) and the `asset_desc` (Asset Description) does not match
 ///    the expected `AssetBase`.
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
     finalized: &mut HashSet<AssetBase>, // The finalization set.
-) -> Result<HashMap<AssetBase, (ValueSum, bool)>, Error> {
+) -> Result<SupplyInfo, Error> {
     if let Err(e) = bundle.ik.verify(&sighash, &bundle.authorization.signature) {
         return Err(IssueBundleInvalidSignature(e));
     };
 
-    let supply_info = bundle.actions().iter().try_fold(
-        HashMap::<AssetBase, (ValueSum, bool)>::new(),
-        // Rust uses move semantics here so supply_info is not copied but moved
-        |mut supply_info, action| {
-            if !is_asset_desc_of_valid_size(action.asset_desc()) {
-                return Err(WrongAssetDescSize);
-            }
+    let supply_info =
+        bundle
+            .actions()
+            .iter()
+            .try_fold(SupplyInfo::default(), |mut supply_info, action| {
+                if !is_asset_desc_of_valid_size(action.asset_desc()) {
+                    return Err(WrongAssetDescSize);
+                }
 
-            // Fail if any note in the IssueAction has an incorrect note type or
-            // an overflow occurred during value_sum calculation
-            let (asset, value_sum) = action.are_note_asset_ids_derived_correctly(bundle.ik())?;
+                let (asset, supply) = action.compute_new_supply(bundle.ik())?;
 
-            // Attempt to insert the asset into the supply info collection (fails if the asset was
-            // previously finalized or inserted into the supply info).
-            //
-            // FIXME: Use try_insert instead of insert when it's stabilized.
-            //
-            // FIXME: Determine the proper behavior if supply_info already contains the
-            // asset, but is_finalized for it is false. Currently, it will be simply overwritten
-            // by the supply_info.insert call (with new value_sum and is_finalized values).
-            if finalized.contains(&asset)
-                || supply_info
-                    .insert(asset, (value_sum, action.is_finalized()))
-                    .map_or(false, |(_, is_finalized)| is_finalized)
-            {
-                Err(IssueActionPreviouslyFinalizedNoteType(asset))
-            } else {
-                Ok(supply_info)
-            }
-        },
-    )?;
+                // Insert new supply into the supply info (fails if the asset was
+                // previously finalized or if the supply for the asset was already
+                // inserted and finalized)
+                if finalized.contains(&asset)
+                    || (!supply_info.try_insert_asset_supply(asset, supply))
+                {
+                    Err(IssueActionPreviouslyFinalizedAssetBase(asset))
+                } else {
+                    Ok(supply_info)
+                }
+            })?;
 
     finalized.extend(
         supply_info
+            .assets
             .iter()
-            .filter_map(|(asset, (_, is_finalized))| is_finalized.then(|| asset)),
+            .filter_map(|(asset, supply)| supply.is_finalized.then(|| asset)),
     );
 
     Ok(supply_info)
@@ -453,18 +505,18 @@ pub enum Error {
     IssueActionAlreadyFinalized,
     /// The requested IssueAction not exists in the bundle.
     IssueActionNotFound,
-    /// Not all `NoteType`s are the same inside the action.
-    IssueActionIncorrectNoteType,
+    /// Not all `AssetBase`s are the same inside the action.
+    IssueActionIncorrectAssetBase,
     /// The provided `isk` and the driven `ik` does not match at least one note type.
-    IssueBundleIkMismatchNoteType,
+    IssueBundleIkMismatchAssetBase,
     /// `asset_desc` should be between 1 and 512 bytes.
     WrongAssetDescSize,
 
     /// Verification errors:
     /// Invalid signature.
     IssueBundleInvalidSignature(reddsa::Error),
-    /// The provided `NoteType` has been previously finalized.
-    IssueActionPreviouslyFinalizedNoteType(AssetBase),
+    /// The provided `AssetBase` has been previously finalized.
+    IssueActionPreviouslyFinalizedAssetBase(AssetBase),
 
     /// Overflow error occurred while calculating the value of the asset
     ValueSumOverflow,
@@ -484,10 +536,10 @@ impl fmt::Display for Error {
             IssueActionNotFound => {
                 write!(f, "the requested IssueAction not exists in the bundle.")
             }
-            IssueActionIncorrectNoteType => {
-                write!(f, "not all `NoteType`s are the same inside the action")
+            IssueActionIncorrectAssetBase => {
+                write!(f, "not all `AssetBase`s are the same inside the action")
             }
-            IssueBundleIkMismatchNoteType => {
+            IssueBundleIkMismatchAssetBase => {
                 write!(
                     f,
                     "the provided `isk` and the driven `ik` does not match at least one note type"
@@ -499,8 +551,8 @@ impl fmt::Display for Error {
             IssueBundleInvalidSignature(_) => {
                 write!(f, "invalid signature")
             }
-            IssueActionPreviouslyFinalizedNoteType(_) => {
-                write!(f, "the provided `NoteType` has been previously finalized")
+            IssueActionPreviouslyFinalizedAssetBase(_) => {
+                write!(f, "the provided `AssetBase` has been previously finalized")
             }
             ValueSumOverflow => {
                 write!(
@@ -514,10 +566,10 @@ impl fmt::Display for Error {
 
 #[cfg(test)]
 mod tests {
-    use super::IssueBundle;
+    use super::{AssetSupply, IssueBundle};
     use crate::issuance::Error::{
-        IssueActionAlreadyFinalized, IssueActionIncorrectNoteType, IssueActionNotFound,
-        IssueActionPreviouslyFinalizedNoteType, IssueBundleIkMismatchNoteType,
+        IssueActionAlreadyFinalized, IssueActionIncorrectAssetBase, IssueActionNotFound,
+        IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         IssueBundleInvalidSignature, WrongAssetDescSize,
     };
     use crate::issuance::{verify_issue_bundle, IssueAction, Signed};
@@ -553,6 +605,109 @@ mod tests {
         rng.fill_bytes(&mut sighash);
 
         (rng, isk, ik, recipient, sighash)
+    }
+
+    fn setup_compute_new_supply_test_params(
+        asset_desc: &str,
+        note1_value: u64,
+        note2_value: u64,
+        note2_asset_desc: Option<&str>, // if None, both notes use the same asset
+        finalize: bool,
+    ) -> (IssuanceValidatingKey, AssetBase, IssueAction) {
+        let (mut rng, _, ik, recipient, _) = setup_params();
+
+        let asset = AssetBase::derive(&ik, asset_desc);
+        let note2_asset = note2_asset_desc.map_or(asset, |desc| AssetBase::derive(&ik, desc));
+
+        let note1 = Note::new(
+            recipient,
+            NoteValue::from_raw(note1_value),
+            asset,
+            Nullifier::dummy(&mut rng),
+            &mut rng,
+        );
+
+        let note2 = Note::new(
+            recipient,
+            NoteValue::from_raw(note2_value),
+            note2_asset,
+            Nullifier::dummy(&mut rng),
+            &mut rng,
+        );
+
+        (
+            ik,
+            asset,
+            IssueAction::from_parts(
+                asset_desc.into(),
+                NonEmpty {
+                    head: note1,
+                    tail: vec![note2],
+                },
+                finalize,
+            ),
+        )
+    }
+
+    #[test]
+    fn test_compute_new_supply_valid() {
+        let (ik, test_asset, action) =
+            setup_compute_new_supply_test_params("Asset 1", 10, 20, None, false);
+
+        let result = action.compute_new_supply(&ik);
+
+        assert!(result.is_ok());
+
+        let (asset, supply) = result.unwrap();
+
+        assert_eq!(asset, test_asset);
+        assert_eq!(supply.amount, ValueSum::from_raw(30));
+        assert!(!supply.is_finalized);
+    }
+
+    #[test]
+    fn test_compute_new_supply_finalized() {
+        let (ik, test_asset, action) =
+            setup_compute_new_supply_test_params("Asset 1", 10, 20, None, true);
+
+        let result = action.compute_new_supply(&ik);
+
+        assert!(result.is_ok());
+
+        let (asset, supply) = result.unwrap();
+
+        assert_eq!(asset, test_asset);
+        assert_eq!(supply.amount, ValueSum::from_raw(30));
+        assert!(supply.is_finalized);
+    }
+
+    // FIXME: Evaluate the feasibility of implementing this test. Note values are
+    // represented by the NoteValue type (u64), while the supply amount uses the
+    // ValueSum type (i128). Due to the difference in types, simulating a supply
+    // amount overflow (i.e., the sum of values of notes) is challenging.
+    #[test]
+    fn test_compute_new_supply_value_sum_overflow() {}
+
+    #[test]
+    fn test_compute_new_supply_incorrect_asset_base() {
+        let (ik, _, action) =
+            setup_compute_new_supply_test_params("Asset 1", 10, 20, Some("Asset 2"), false);
+
+        assert_eq!(
+            action.compute_new_supply(&ik),
+            Err(IssueActionIncorrectAssetBase)
+        );
+    }
+
+    #[test]
+    fn test_compute_new_supply_ik_mismatch_asset_base() {
+        let (_, _, action) = setup_compute_new_supply_test_params("Asset 1", 10, 20, None, false);
+        let (_, _, ik, _, _) = setup_params();
+
+        assert_eq!(
+            action.compute_new_supply(&ik),
+            Err(IssueBundleIkMismatchAssetBase)
+        );
     }
 
     #[test]
@@ -764,7 +919,7 @@ mod tests {
             .sign(rng, &wrong_isk)
             .expect_err("should not be able to sign");
 
-        assert_eq!(err, IssueBundleIkMismatchNoteType);
+        assert_eq!(err, IssueBundleIkMismatchAssetBase);
     }
 
     #[test]
@@ -805,7 +960,7 @@ mod tests {
             .sign(rng, &isk)
             .expect_err("should not be able to sign");
 
-        assert_eq!(err, IssueActionIncorrectNoteType);
+        assert_eq!(err, IssueActionIncorrectAssetBase);
     }
 
     #[test]
@@ -932,19 +1087,19 @@ mod tests {
 
         let supply_info = res.unwrap();
 
-        assert_eq!(supply_info.len(), 3);
+        assert_eq!(supply_info.assets.len(), 3);
 
         assert_eq!(
-            supply_info.get(&asset1_base),
-            Some(&(ValueSum::from_raw(15), true))
+            supply_info.assets.get(&asset1_base),
+            Some(&AssetSupply::new(ValueSum::from_raw(15), true))
         );
         assert_eq!(
-            supply_info.get(&asset2_base),
-            Some(&(ValueSum::from_raw(10), true))
+            supply_info.assets.get(&asset2_base),
+            Some(&AssetSupply::new(ValueSum::from_raw(10), true))
         );
         assert_eq!(
-            supply_info.get(&asset3_base),
-            Some(&(ValueSum::from_raw(5), false))
+            supply_info.assets.get(&asset3_base),
+            Some(&AssetSupply::new(ValueSum::from_raw(5), false))
         );
     }
 
@@ -974,7 +1129,7 @@ mod tests {
         let finalized = verify_issue_bundle(&signed, sighash, prev_finalized);
         assert_eq!(
             finalized.unwrap_err(),
-            IssueActionPreviouslyFinalizedNoteType(final_type)
+            IssueActionPreviouslyFinalizedAssetBase(final_type)
         );
     }
 
@@ -1083,7 +1238,7 @@ mod tests {
         let prev_finalized = &mut HashSet::new();
         let err = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err();
 
-        assert_eq!(err, IssueActionIncorrectNoteType);
+        assert_eq!(err, IssueActionIncorrectAssetBase);
     }
 
     #[test]
@@ -1124,7 +1279,7 @@ mod tests {
         let prev_finalized = &mut HashSet::new();
         let err = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err();
 
-        assert_eq!(err, IssueBundleIkMismatchNoteType);
+        assert_eq!(err, IssueBundleIkMismatchAssetBase);
     }
 
     #[test]
