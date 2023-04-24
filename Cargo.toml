@@ -93,6 +93,6 @@ debug = true
 debug = true
 
 [patch.crates-io]
-zcash_note_encryption = { git = "https://github.com/QED-it/librustzcash.git", rev = "ab7939c99c2e40678c06f56d2adab4d6130fab55" }
 bridgetree = { git = "https://github.com/zcash/incrementalmerkletree.git", rev = "ea1686e8f8f6c1e41aa97251a7eb4fadfd33df47" }
 incrementalmerkletree = { git = "https://github.com/zcash/incrementalmerkletree.git", rev = "ea1686e8f8f6c1e41aa97251a7eb4fadfd33df47" }
+zcash_note_encryption = { git = "https://github.com/QED-it/librustzcash.git", rev = "6f1ce041482809f6afbac31d247be83e37425d0b" }
