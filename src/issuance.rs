@@ -2,7 +2,7 @@
 use blake2b_simd::Hash as Blake2bHash;
 use nonempty::NonEmpty;
 use rand::{CryptoRng, RngCore};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
@@ -22,6 +22,8 @@ use crate::{
     Address, Note,
 };
 
+use crate::supply_info::{AssetSupply, SupplyInfo};
+
 /// A bundle of actions to be applied to the ledger.
 #[derive(Debug, Clone)]
 pub struct IssueBundle<T: IssueAuth> {
@@ -31,46 +33,6 @@ pub struct IssueBundle<T: IssueAuth> {
     actions: Vec<IssueAction>,
     /// The authorization for this action.
     authorization: T,
-}
-
-/// Represents the amount of an asset and its finalization status.
-#[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct AssetSupply {
-    /// The amount of the asset.
-    amount: ValueSum,
-    /// Whether or not the asset is finalized.
-    is_finalized: bool,
-}
-
-impl AssetSupply {
-    /// Creates a new AssetSupply instance with the given amount and finalization status.
-    pub fn new(amount: ValueSum, is_finalized: bool) -> Self {
-        Self {
-            amount,
-            is_finalized,
-        }
-    }
-}
-
-/// Contains information about the supply of assets.
-#[derive(Debug, Clone, Default)]
-pub struct SupplyInfo {
-    /// A map of asset bases to their respective supply information.
-    assets: HashMap<AssetBase, AssetSupply>,
-}
-
-impl SupplyInfo {
-    /// Attempts to insert an asset's supply information into the supply info map.
-    /// Returns true on success or false if the supply for the asset was already inserted and finalized.
-    pub fn try_insert_asset_supply(&mut self, asset: AssetBase, supply: AssetSupply) -> bool {
-        // FIXME: Determine the proper behavior if `assets` already contains the
-        // asset, but is_finalized for it is false. Currently, it will be simply overwritten
-        // by the supply_info.insert call (with new value_sum and is_finalized values).
-        self.assets
-            .insert(asset, supply)
-            .map_or(true, |supply| !supply.is_finalized)
-    }
 }
 
 /// An issue action applied to the global ledger.
@@ -123,12 +85,12 @@ impl IssueAction {
         self.finalize
     }
 
-    /// Computes the new asset supply for an `IssueAction`.
+    /// Verifies and computes the new asset supply for an `IssueAction`.
     ///
-    /// This function calculates the total value of the asset by summing the values of all its notes
-    /// and ensures that all note types are equal. It returns the asset and its supply as a tuple
-    /// (`AssetBase`, `AssetSupply`) or an error if the asset was not properly derived or an
-    /// overflow occurred during the supply amount calculation.
+    /// This function calculates the total value (supply) of the asset by summing the values
+    /// of all its notes and ensures that all note types are equal. It returns the asset and
+    /// its supply as a tuple (`AssetBase`, `AssetSupply`) or an error if the asset was not
+    ///  properly derived or an overflow occurred during the supply amount calculation.
     ///
     /// # Arguments
     ///
@@ -149,10 +111,7 @@ impl IssueAction {
     ///
     /// * `IssueBundleIkMismatchAssetBase`: If the provided `ik` is not used to derive the
     ///   `asset_id` for **all** internal notes.
-    fn compute_new_supply(
-        &self,
-        ik: &IssuanceValidatingKey,
-    ) -> Result<(AssetBase, AssetSupply), Error> {
+    fn verify_supply(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
         // Calculate the value of the asset as a sum of values of all its notes
         // and ensure all note types are equal
         let (asset, value_sum) = self.notes.iter().try_fold(
@@ -169,8 +128,7 @@ impl IssueAction {
             },
         )?;
 
-        // Return the asset and its value (or an error if the asset was not properly
-        // derived)
+        // Return the asset and its supply (or an error if the asset was not properly derived)
         asset
             .eq(&AssetBase::derive(ik, &self.asset_desc))
             .then(|| Ok((asset, AssetSupply::new(value_sum, self.is_finalized()))))
@@ -381,7 +339,7 @@ impl IssueBundle<Prepared> {
         // Make sure the `expected_ik` matches the `asset` for all notes.
         self.actions
             .iter()
-            .try_for_each(|action| action.compute_new_supply(&expected_ik).map(|_| ()))?;
+            .try_for_each(|action| action.verify_supply(&expected_ik).map(|_| ()))?;
 
         Ok(IssueBundle {
             ik: self.ik,
@@ -461,9 +419,10 @@ pub fn verify_issue_bundle(
     sighash: [u8; 32],
     finalized: &mut HashSet<AssetBase>, // The finalization set.
 ) -> Result<SupplyInfo, Error> {
-    if let Err(e) = bundle.ik.verify(&sighash, &bundle.authorization.signature) {
-        return Err(IssueBundleInvalidSignature(e));
-    };
+    bundle
+        .ik
+        .verify(&sighash, &bundle.authorization.signature)
+        .map_err(IssueBundleInvalidSignature)?;
 
     let supply_info =
         bundle
@@ -474,18 +433,16 @@ pub fn verify_issue_bundle(
                     return Err(WrongAssetDescSize);
                 }
 
-                let (asset, supply) = action.compute_new_supply(bundle.ik())?;
+                let (asset, supply) = action.verify_supply(bundle.ik())?;
 
-                // Insert new supply into the supply info (fails if the asset was
-                // previously finalized or if the supply for the asset was already
-                // inserted and finalized)
-                if finalized.contains(&asset)
-                    || (!supply_info.try_insert_asset_supply(asset, supply))
-                {
-                    Err(IssueActionPreviouslyFinalizedAssetBase(asset))
-                } else {
-                    Ok(supply_info)
+                // Fail if the asset was previously finalized.
+                if finalized.contains(&asset) {
+                    return Err(IssueActionPreviouslyFinalizedAssetBase(asset));
                 }
+
+                supply_info.add_supply(asset, supply)?;
+
+                Ok(supply_info)
             })?;
 
     finalized.extend(
@@ -607,7 +564,7 @@ mod tests {
         (rng, isk, ik, recipient, sighash)
     }
 
-    fn setup_compute_new_supply_test_params(
+    fn setup_verify_supply_test_params(
         asset_desc: &str,
         note1_value: u64,
         note2_value: u64,
@@ -650,11 +607,11 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_new_supply_valid() {
+    fn test_verify_supply_valid() {
         let (ik, test_asset, action) =
-            setup_compute_new_supply_test_params("Asset 1", 10, 20, None, false);
+            setup_verify_supply_test_params("Asset 1", 10, 20, None, false);
 
-        let result = action.compute_new_supply(&ik);
+        let result = action.verify_supply(&ik);
 
         assert!(result.is_ok());
 
@@ -666,11 +623,11 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_new_supply_finalized() {
+    fn test_verify_supply_finalized() {
         let (ik, test_asset, action) =
-            setup_compute_new_supply_test_params("Asset 1", 10, 20, None, true);
+            setup_verify_supply_test_params("Asset 1", 10, 20, None, true);
 
-        let result = action.compute_new_supply(&ik);
+        let result = action.verify_supply(&ik);
 
         assert!(result.is_ok());
 
@@ -681,31 +638,24 @@ mod tests {
         assert!(supply.is_finalized);
     }
 
-    // FIXME: Evaluate the feasibility of implementing this test. Note values are
-    // represented by the NoteValue type (u64), while the supply amount uses the
-    // ValueSum type (i128). Due to the difference in types, simulating a supply
-    // amount overflow (i.e., the sum of values of notes) is challenging.
     #[test]
-    fn test_compute_new_supply_value_sum_overflow() {}
-
-    #[test]
-    fn test_compute_new_supply_incorrect_asset_base() {
+    fn test_verify_supply_incorrect_asset_base() {
         let (ik, _, action) =
-            setup_compute_new_supply_test_params("Asset 1", 10, 20, Some("Asset 2"), false);
+            setup_verify_supply_test_params("Asset 1", 10, 20, Some("Asset 2"), false);
 
         assert_eq!(
-            action.compute_new_supply(&ik),
+            action.verify_supply(&ik),
             Err(IssueActionIncorrectAssetBase)
         );
     }
 
     #[test]
-    fn test_compute_new_supply_ik_mismatch_asset_base() {
-        let (_, _, action) = setup_compute_new_supply_test_params("Asset 1", 10, 20, None, false);
+    fn test_verify_supply_ik_mismatch_asset_base() {
+        let (_, _, action) = setup_verify_supply_test_params("Asset 1", 10, 20, None, false);
         let (_, _, ik, _, _) = setup_params();
 
         assert_eq!(
-            action.compute_new_supply(&ik),
+            action.verify_supply(&ik),
             Err(IssueBundleIkMismatchAssetBase)
         );
     }
