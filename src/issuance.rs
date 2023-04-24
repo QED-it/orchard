@@ -1026,11 +1026,11 @@ pub mod testing {
     use crate::keys::testing::{arb_issuance_authorizing_key, arb_issuance_validating_key};
     use crate::note::asset_id::testing::zsa_asset_id;
     use crate::note::testing::arb_zsa_note;
+    use crate::primitives::redpallas::Signature;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
     use reddsa::orchard::SpendAuth;
-    use crate::primitives::redpallas::Signature;
 
     prop_compose! {
         /// Generate a uniformly distributed signature
