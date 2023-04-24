@@ -83,7 +83,7 @@ impl NoteCommitment {
         // Select the desired hash point in constant-time
         let hash_point = zsa_hash_point.and_then(|zsa_hash| {
             zec_hash_point.map(|zec_hash| {
-                pallas::Point::conditional_select(&zsa_hash, &zec_hash, asset.is_native().into())
+                pallas::Point::conditional_select(&zsa_hash, &zec_hash, asset.is_native())
             })
         });
 
