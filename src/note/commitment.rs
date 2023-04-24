@@ -4,7 +4,7 @@ use bitvec::{array::BitArray, order::Lsb0};
 use group::ff::{PrimeField, PrimeFieldBits};
 use halo2_gadgets::sinsemilla::primitives as sinsemilla;
 use pasta_curves::pallas;
-use subtle::{ConstantTimeEq, CtOption};
+use subtle::{ConditionallySelectable, ConstantTimeEq, CtOption};
 
 use crate::{
     constants::{
@@ -80,11 +80,12 @@ impl NoteCommitment {
         let zec_hash_point = zec_domain.M.hash_to_point(zec_note_bits);
         let zsa_hash_point = zsa_domain.M.hash_to_point(zsa_note_bits);
 
-        let hash_point = if asset.is_native().into() {
-            zec_hash_point
-        } else {
-            zsa_hash_point
-        };
+        // Select the desired hash point in constant-time
+        let hash_point = zsa_hash_point.and_then(|zsa_hash| {
+            zec_hash_point.map(|zec_hash| {
+                pallas::Point::conditional_select(&zsa_hash, &zec_hash, asset.is_native().into())
+            })
+        });
 
         // To evaluate the commitment from the hash_point, we could use either zec_domain or
         // zsa_domain because they have both the same `R` constant.
