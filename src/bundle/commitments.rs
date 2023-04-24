@@ -94,6 +94,16 @@ pub fn hash_bundle_auth_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION).finalize()
 }
 
+/// Construct the commitment for an absent issue bundle
+pub fn hash_issue_bundle_auth_empty() -> Blake2bHash {
+    hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION).finalize()
+}
+
+/// Construct the commitment for the absent issue bundle
+pub fn hash_issue_bundle_txid_empty() -> Blake2bHash {
+    hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION).finalize()
+}
+
 /// Construct the commitment for the issue bundle
 pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION);
