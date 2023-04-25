@@ -381,8 +381,7 @@ impl IssueBundle<Signed> {
 
 /// Validation for Orchard IssueBundles
 ///
-/// A set of previously finalized asset types must be provided.
-/// In case of success, `finalized` will contain a set of the provided **and** the newly finalized `AssetBase`s
+/// A set of previously finalized asset types must be provided in `finalized` argument.
 ///
 /// The following checks are performed:
 /// * For the `IssueBundle`:
@@ -417,7 +416,7 @@ impl IssueBundle<Signed> {
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
-    finalized: &mut HashSet<AssetBase>, // The finalization set.
+    finalized: &HashSet<AssetBase>, // The finalization set.
 ) -> Result<SupplyInfo, Error> {
     bundle
         .ik
@@ -444,13 +443,6 @@ pub fn verify_issue_bundle(
 
                 Ok(supply_info)
             })?;
-
-    finalized.extend(
-        supply_info
-            .assets
-            .iter()
-            .filter_map(|(asset, supply)| supply.is_finalized.then(|| asset)),
-    );
 
     Ok(supply_info)
 }
@@ -930,11 +922,12 @@ mod tests {
             .unwrap();
 
         let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
-
         let prev_finalized = &mut HashSet::new();
 
-        let res = verify_issue_bundle(&signed, sighash, prev_finalized);
-        assert!(res.is_ok());
+        let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
+
+        supply_info.update_finalized_assets(prev_finalized);
+
         assert!(prev_finalized.is_empty());
     }
 
@@ -955,16 +948,14 @@ mod tests {
             .unwrap();
 
         let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
-
         let prev_finalized = &mut HashSet::new();
 
-        let res = verify_issue_bundle(&signed, sighash, prev_finalized);
-        assert!(res.is_ok());
-        assert!(prev_finalized.contains(&AssetBase::derive(
-            &ik,
-            &String::from("Verify with finalize")
-        )));
+        let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
+
+        supply_info.update_finalized_assets(prev_finalized);
+
         assert_eq!(prev_finalized.len(), 1);
+        assert!(prev_finalized.contains(&AssetBase::derive(&ik, "Verify with finalize")));
     }
 
     #[test]
@@ -1022,20 +1013,17 @@ mod tests {
             .unwrap();
 
         let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
-
         let prev_finalized = &mut HashSet::new();
 
-        let res = verify_issue_bundle(&signed, sighash, prev_finalized);
+        let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
 
-        assert!(res.is_ok());
+        supply_info.update_finalized_assets(prev_finalized);
 
         assert_eq!(prev_finalized.len(), 2);
 
         assert!(prev_finalized.contains(&asset1_base));
         assert!(prev_finalized.contains(&asset2_base));
         assert!(!prev_finalized.contains(&asset3_base));
-
-        let supply_info = res.unwrap();
 
         assert_eq!(supply_info.assets.len(), 3);
 
@@ -1076,9 +1064,8 @@ mod tests {
 
         prev_finalized.insert(final_type);
 
-        let finalized = verify_issue_bundle(&signed, sighash, prev_finalized);
         assert_eq!(
-            finalized.unwrap_err(),
+            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
             IssueActionPreviouslyFinalizedAssetBase(final_type)
         );
     }
@@ -1114,7 +1101,7 @@ mod tests {
             signature: wrong_isk.sign(&mut rng, &sighash),
         });
 
-        let prev_finalized = &mut HashSet::new();
+        let prev_finalized = &HashSet::new();
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
@@ -1139,13 +1126,10 @@ mod tests {
 
         let sighash: [u8; 32] = bundle.commitment().into();
         let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
-        let prev_finalized = &mut HashSet::new();
-
-        // 2. Try empty description
-        let finalized = verify_issue_bundle(&signed, random_sighash, prev_finalized);
+        let prev_finalized = &HashSet::new();
 
         assert_eq!(
-            finalized.unwrap_err(),
+            verify_issue_bundle(&signed, random_sighash, prev_finalized).unwrap_err(),
             IssueBundleInvalidSignature(InvalidSignature)
         );
     }
@@ -1185,10 +1169,12 @@ mod tests {
             .borrow_mut()
             .push(note);
 
-        let prev_finalized = &mut HashSet::new();
-        let err = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err();
+        let prev_finalized = &HashSet::new();
 
-        assert_eq!(err, IssueActionIncorrectAssetBase);
+        assert_eq!(
+            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            IssueActionIncorrectAssetBase
+        );
     }
 
     #[test]
@@ -1226,10 +1212,12 @@ mod tests {
 
         signed.actions.first_mut().unwrap().notes = NonEmpty::new(note);
 
-        let prev_finalized = &mut HashSet::new();
-        let err = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err();
+        let prev_finalized = &HashSet::new();
 
-        assert_eq!(err, IssueBundleIkMismatchAssetBase);
+        assert_eq!(
+            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            IssueBundleIkMismatchAssetBase
+        );
     }
 
     #[test]
@@ -1256,7 +1244,7 @@ mod tests {
             .unwrap();
 
         let mut signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
-        let prev_finalized = &mut HashSet::new();
+        let prev_finalized = HashSet::new();
 
         // 1. Try too long description
         signed
@@ -1264,9 +1252,11 @@ mod tests {
             .first_mut()
             .unwrap()
             .modify_descr(String::from_utf8(vec![b'X'; 513]).unwrap());
-        let finalized = verify_issue_bundle(&signed, sighash, prev_finalized);
 
-        assert_eq!(finalized.unwrap_err(), WrongAssetDescSize);
+        assert_eq!(
+            verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
+            WrongAssetDescSize
+        );
 
         // 2. Try empty description
         signed
@@ -1274,9 +1264,11 @@ mod tests {
             .first_mut()
             .unwrap()
             .modify_descr("".to_string());
-        let finalized = verify_issue_bundle(&signed, sighash, prev_finalized);
 
-        assert_eq!(finalized.unwrap_err(), WrongAssetDescSize);
+        assert_eq!(
+            verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
+            WrongAssetDescSize
+        );
     }
 }
 
