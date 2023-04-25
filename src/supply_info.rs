@@ -25,20 +25,28 @@ impl AssetSupply {
 }
 
 /// Contains information about the supply of assets.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SupplyInfo {
     /// A map of asset bases to their respective supply information.
     pub assets: HashMap<AssetBase, AssetSupply>,
 }
 
 impl SupplyInfo {
+    /// Creates a new, empty `SupplyInfo` instance.
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self {
+            assets: HashMap::new(),
+        }
+    }
+
     /// Inserts or updates an asset's supply information in the supply info map.
     /// If the asset exists, adds the amounts (unconditionally) and updates the finalization status
     /// (only if the new supply is finalized). If the asset is not found, inserts the new supply.
     pub fn add_supply(&mut self, asset: AssetBase, new_supply: AssetSupply) -> Result<(), Error> {
         match self.assets.entry(asset) {
-            hash_map::Entry::Occupied(mut entry) => {
-                let supply = entry.get_mut();
+            hash_map::Entry::Occupied(entry) => {
+                let supply = entry.into_mut();
                 supply.amount =
                     (supply.amount + new_supply.amount).ok_or(Error::ValueSumOverflow)?;
                 supply.is_finalized |= new_supply.is_finalized;
@@ -52,6 +60,12 @@ impl SupplyInfo {
     }
 }
 
+impl Default for SupplyInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,7 +73,7 @@ mod tests {
 
     #[test]
     fn test_add_supply_valid() {
-        let mut supply_info = SupplyInfo::default();
+        let mut supply_info = SupplyInfo::new();
 
         let asset = AssetBase::from_bytes(&[0u8; 32]).unwrap();
 
@@ -68,29 +82,35 @@ mod tests {
         let supply3 = AssetSupply::new(ValueSum::from_raw(10), false);
         let supply4 = AssetSupply::new(ValueSum::from_raw(10), true);
 
-        assert!(supply_info.add_supply(asset, supply1).is_ok());
+        assert_eq!(supply_info.assets.len(), 0);
 
+        // Add supply1
+        assert!(supply_info.add_supply(asset, supply1).is_ok());
+        assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset),
             Some(&AssetSupply::new(ValueSum::from_raw(20), false))
         );
 
+        // Add supply2
         assert!(supply_info.add_supply(asset, supply2).is_ok());
-
+        assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset),
             Some(&AssetSupply::new(ValueSum::from_raw(50), true))
         );
 
+        // Add supply3
         assert!(supply_info.add_supply(asset, supply3).is_ok());
-
+        assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset),
             Some(&AssetSupply::new(ValueSum::from_raw(60), true))
         );
 
+        // Add supply4
         assert!(supply_info.add_supply(asset, supply4).is_ok());
-
+        assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset),
             Some(&AssetSupply::new(ValueSum::from_raw(70), true))

@@ -110,14 +110,14 @@ impl IssueAction {
     /// * `ValueSumOverflow`: If the total amount value of all notes in the `IssueAction` overflows.
     ///
     /// * `IssueBundleIkMismatchAssetBase`: If the provided `ik` is not used to derive the
-    ///   `asset_id` for **all** internal notes.
+    ///   asset base for **all** internal notes.
     fn verify_supply(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
         // Calculate the value of the asset as a sum of values of all its notes
         // and ensure all note types are equal
         let (asset, value_sum) = self.notes.iter().try_fold(
             (self.notes().head.asset(), ValueSum::zero()),
             |(asset, value_sum), &note| {
-                // All assets should have the same asset
+                // All assets should have the same asset base
                 note.asset()
                     .eq(&asset)
                     .then(|| ())
@@ -428,7 +428,7 @@ pub fn verify_issue_bundle(
         bundle
             .actions()
             .iter()
-            .try_fold(SupplyInfo::default(), |mut supply_info, action| {
+            .try_fold(SupplyInfo::new(), |mut supply_info, action| {
                 if !is_asset_desc_of_valid_size(action.asset_desc()) {
                     return Err(WrongAssetDescSize);
                 }
