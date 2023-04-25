@@ -705,6 +705,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 v_old.clone(),
                 rho_old,
                 psi_old,
+                asset.inner(),
                 rcm_old,
                 is_native_asset.clone(),
             )?;
@@ -765,6 +766,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 v_new.clone(),
                 rho_new,
                 psi_new,
+                asset.inner(),
                 rcm_new,
                 is_native_asset.clone(),
             )?;
