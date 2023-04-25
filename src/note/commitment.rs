@@ -160,7 +160,7 @@ mod tests {
     use rand::{rngs::OsRng, Rng};
 
     #[test]
-    fn test_note_commit() {
+    fn test_commit_in_several_steps() {
         let mut os_rng = OsRng::default();
         let msg: Vec<bool> = (0..36).map(|_| os_rng.gen::<bool>()).collect();
 
