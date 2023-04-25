@@ -69,6 +69,10 @@ impl super::Config {
     pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip {
         NoteCommitChip::construct(self.old_note_commit_config.clone())
     }
+
+    pub(super) fn mux_chip(&self) -> mux_chip::MuxChip {
+        mux_chip::MuxChip::construct(self.mux_config.clone())
+    }
 }
 
 /// An instruction set for adding two circuit words (field elements).

@@ -9,6 +9,7 @@ use halo2_proofs::{
 use pasta_curves::pallas;
 
 use crate::{
+    circuit::gadget::mux_chip::{MuxChip, MuxInstructions},
     constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P},
     value::NoteValue,
 };
@@ -1574,12 +1575,14 @@ pub(in crate::circuit) mod gadgets {
         chip: SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
         ecc_chip: EccChip<OrchardFixedBases>,
         note_commit_chip: NoteCommitChip,
+        mux_chip: MuxChip,
         g_d: &NonIdentityEccPoint,
         pk_d: &NonIdentityEccPoint,
         value: AssignedCell<NoteValue, pallas::Base>,
         rho: AssignedCell<pallas::Base, pallas::Base>,
         psi: AssignedCell<pallas::Base, pallas::Base>,
         rcm: ScalarFixed<pallas::Affine, EccChip<OrchardFixedBases>>,
+        is_native_asset: AssignedCell<pallas::Base, pallas::Base>,
     ) -> Result<Point<pallas::Affine, EccChip<OrchardFixedBases>>, Error> {
         let lookup_config = chip.config().lookup_config();
 
@@ -1667,12 +1670,37 @@ pub(in crate::circuit) mod gadgets {
                     h.clone(),
                 ],
             );
-            let domain = CommitDomain::new(chip, ecc_chip, &OrchardCommitDomains::NoteCommit);
-            let blinding_factor = domain.blinding_factor(layouter.namespace(|| "[r] R"), rcm)?;
-            let (hash_point, zs) = domain.hash(layouter.namespace(|| "M"), message)?;
+            // TODO
+            let zec_domain = CommitDomain::new(
+                chip.clone(),
+                ecc_chip.clone(),
+                &OrchardCommitDomains::NoteCommit,
+            );
+            let zsa_domain =
+                CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteZsaCommit);
+
+            let (hash_point_zec, _zs_zec) =
+                zec_domain.hash(layouter.namespace(|| "M"), message.clone())?;
+            let (hash_point_zsa, zs_zsa) = zsa_domain.hash(layouter.namespace(|| "M"), message)?;
+
+            let hash_point = Point::from_inner(
+                ecc_chip,
+                mux_chip.mux(
+                    layouter.namespace(|| "hash mux"),
+                    &is_native_asset,
+                    &(hash_point_zsa.inner().clone().into()),
+                    &(hash_point_zec.inner().clone().into()),
+                )?,
+            );
+
+            // To evaluate the blinding factor, we could use either zec_domain or zsa_domain
+            // because they have both the same `R` constant.
+            let blinding_factor =
+                zec_domain.blinding_factor(layouter.namespace(|| "[r] R"), rcm)?;
             let commitment =
                 hash_point.add(layouter.namespace(|| "M + [r] R"), &blinding_factor)?;
-            (commitment, zs)
+            // TODO is it enough to verify only zs_zsa ?
+            (commitment, zs_zsa)
         };
 
         // `CommitDomain::commit` returns the running sum for each `MessagePiece`. Grab
@@ -2016,10 +2044,14 @@ mod tests {
     use super::NoteCommitConfig;
     use crate::{
         circuit::{
-            gadget::assign_free_advice,
+            gadget::{
+                assign_free_advice,
+                mux_chip::{MuxChip, MuxConfig},
+            },
             note_commit::{gadgets, NoteCommitChip},
         },
         constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_Q},
+        keys::{IssuanceAuthorizingKey, IssuanceValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, NoteCommitment},
         value::NoteValue,
     };
@@ -2054,10 +2086,11 @@ mod tests {
             pk_d: Value<EpAffine>,
             rho: Value<pallas::Base>,
             psi: Value<pallas::Base>,
+            asset: Value<AssetBase>,
         }
 
         impl Circuit<pallas::Base> for MyCircuit {
-            type Config = (NoteCommitConfig, EccConfig<OrchardFixedBases>);
+            type Config = (NoteCommitConfig, EccConfig<OrchardFixedBases>, MuxConfig);
             type FloorPlanner = SimpleFloorPlanner;
 
             fn without_witnesses(&self) -> Self {
@@ -2126,7 +2159,10 @@ mod tests {
                     range_check,
                 );
 
-                (note_commit_config, ecc_config)
+                let mux_config =
+                    MuxChip::configure(meta, advices[0], advices[1], advices[2], advices[3]);
+
+                (note_commit_config, ecc_config, mux_config)
             }
 
             fn synthesize(
@@ -2134,7 +2170,7 @@ mod tests {
                 config: Self::Config,
                 mut layouter: impl Layouter<pallas::Base>,
             ) -> Result<(), Error> {
-                let (note_commit_config, ecc_config) = config;
+                let (note_commit_config, ecc_config, mux_config) = config;
 
                 // Load the Sinsemilla generator lookup table used by the whole circuit.
                 SinsemillaChip::<
@@ -2152,6 +2188,9 @@ mod tests {
 
                 // Construct a NoteCommit chip
                 let note_commit_chip = NoteCommitChip::construct(note_commit_config.clone());
+
+                // Construct a Mux chip
+                let mux_chip = MuxChip::construct(mux_config);
 
                 // Witness g_d
                 let g_d = NonIdentityPoint::new(
@@ -2202,27 +2241,50 @@ mod tests {
                     Value::known(rcm),
                 )?;
 
+                let _asset = NonIdentityPoint::new(
+                    ecc_chip.clone(),
+                    layouter.namespace(|| "witness asset"),
+                    self.asset.map(|asset| asset.cv_base().to_affine()),
+                )?;
+
+                let is_native_asset = assign_free_advice(
+                    layouter.namespace(|| "witness is_native_asset"),
+                    note_commit_config.advices[0],
+                    self.asset.map(|asset| {
+                        if bool::from(asset.is_native()) {
+                            pallas::Base::one()
+                        } else {
+                            pallas::Base::zero()
+                        }
+                    }),
+                )?;
                 let cm = gadgets::note_commit(
                     layouter.namespace(|| "Hash NoteCommit pieces"),
                     sinsemilla_chip,
                     ecc_chip.clone(),
                     note_commit_chip,
+                    mux_chip,
                     g_d.inner(),
                     pk_d.inner(),
                     value_var,
                     rho,
                     psi,
                     rcm_gadget,
+                    is_native_asset,
                 )?;
                 let expected_cm = {
                     // Hash g★_d || pk★_d || i2lebsp_{64}(v) || rho || psi
-                    let point = self.g_d.zip(self.pk_d).zip(self.rho.zip(self.psi)).map(
-                        |((g_d, pk_d), (rho, psi))| {
+                    let point = self
+                        .g_d
+                        .zip(self.pk_d)
+                        .zip(self.rho.zip(self.psi))
+                        .zip(self.asset)
+                        .map(|(((g_d, pk_d), (rho, psi)), asset)| {
                             NoteCommitment::derive(
                                 g_d.to_bytes(),
                                 pk_d.to_bytes(),
                                 value,
-                                AssetBase::native(),
+                                asset,
                                 rho,
                                 psi,
                                 NoteCommitTrapdoor(rcm),
@@ -2230,8 +2292,7 @@ mod tests {
                             .unwrap()
                             .inner()
                             .to_affine()
-                        },
-                    );
+                        });
                     NonIdentityPoint::new(ecc_chip, layouter.namespace(|| "witness cm"), point)?
                 };
                 cm.constrain_equal(layouter.namespace(|| "cm == expected cm"), &expected_cm)
@@ -2251,6 +2312,13 @@ mod tests {
 
         let two_pow_254 = pallas::Base::from_u128(1 << 127).square();
         let mut rng = OsRng;
+        let _random_asset = {
+            let sk = SpendingKey::random(&mut rng);
+            let isk = IssuanceAuthorizingKey::from(&sk);
+            let ik = IssuanceValidatingKey::from(&isk);
+            let asset_descr = "zsa_asset";
+            AssetBase::derive(&ik, asset_descr)
+        };
         // Test different values of `ak`, `nk`
         let circuits = [
             // `gd_x` = -1, `pkd_x` = -1 (these have to be x-coordinates of curve points)
@@ -2266,6 +2334,7 @@ mod tests {
                 )),
                 rho: Value::known(pallas::Base::zero()),
                 psi: Value::known(pallas::Base::zero()),
+                asset: Value::known(AssetBase::native()),
             },
             // `rho` = T_Q - 1, `psi` = T_Q - 1
             MyCircuit {
@@ -2279,6 +2348,7 @@ mod tests {
                 )),
                 rho: Value::known(pallas::Base::from_u128(T_Q - 1)),
                 psi: Value::known(pallas::Base::from_u128(T_Q - 1)),
+                asset: Value::known(AssetBase::native()),
             },
             // `rho` = T_Q, `psi` = T_Q
             MyCircuit {
@@ -2292,6 +2362,7 @@ mod tests {
                 )),
                 rho: Value::known(pallas::Base::from_u128(T_Q)),
                 psi: Value::known(pallas::Base::from_u128(T_Q)),
+                asset: Value::known(AssetBase::native()),
             },
             // `rho` = 2^127 - 1, `psi` = 2^127 - 1
             MyCircuit {
@@ -2305,6 +2376,7 @@ mod tests {
                 )),
                 rho: Value::known(pallas::Base::from_u128((1 << 127) - 1)),
                 psi: Value::known(pallas::Base::from_u128((1 << 127) - 1)),
+                asset: Value::known(AssetBase::native()),
             },
             // `rho` = 2^127, `psi` = 2^127
             MyCircuit {
@@ -2318,6 +2390,7 @@ mod tests {
                 )),
                 rho: Value::known(pallas::Base::from_u128(1 << 127)),
                 psi: Value::known(pallas::Base::from_u128(1 << 127)),
+                asset: Value::known(AssetBase::native()),
             },
             // `rho` = 2^254 - 1, `psi` = 2^254 - 1
             MyCircuit {
@@ -2331,6 +2404,7 @@ mod tests {
                 )),
                 rho: Value::known(two_pow_254 - pallas::Base::one()),
                 psi: Value::known(two_pow_254 - pallas::Base::one()),
+                asset: Value::known(AssetBase::native()),
             },
             // `rho` = 2^254, `psi` = 2^254
             MyCircuit {
@@ -2344,6 +2418,7 @@ mod tests {
                 )),
                 rho: Value::known(two_pow_254),
                 psi: Value::known(two_pow_254),
+                asset: Value::known(AssetBase::native()),
             },
             // Random values
             MyCircuit {
@@ -2351,6 +2426,8 @@ mod tests {
                 pk_d: Value::known(pallas::Point::random(rng).to_affine()),
                 rho: Value::known(pallas::Base::random(&mut rng)),
                 psi: Value::known(pallas::Base::random(&mut rng)),
+                asset: Value::known(AssetBase::native()),
+                //asset: Value::known(random_asset),
             },
         ];
 

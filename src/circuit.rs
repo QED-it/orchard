@@ -26,6 +26,7 @@ use self::{
 };
 use crate::{
     builder::SpendInfo,
+    circuit::gadget::mux_chip::{MuxChip, MuxConfig},
     constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
         MERKLE_DEPTH_ORCHARD,
@@ -65,7 +66,7 @@ mod note_commit;
 mod value_commit_orchard;
 
 /// Size of the Orchard circuit.
-const K: u32 = 11;
+const K: u32 = 12;
 
 // Absolute offsets for public inputs.
 const ANCHOR: usize = 0;
@@ -96,6 +97,7 @@ pub struct Config {
     commit_ivk_config: CommitIvkConfig,
     old_note_commit_config: NoteCommitConfig,
     new_note_commit_config: NoteCommitConfig,
+    mux_config: MuxConfig,
 }
 
 /// The Orchard Action circuit.
@@ -404,6 +406,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         let new_note_commit_config =
             NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone());
 
+        let mux_config = MuxChip::configure(meta, advices[0], advices[1], advices[2], advices[3]);
+
         Config {
             primary,
             q_orchard,
@@ -418,6 +422,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             commit_ivk_config,
             old_note_commit_config,
             new_note_commit_config,
+            mux_config,
         }
     }
 
@@ -694,12 +699,14 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 config.sinsemilla_chip_1(),
                 config.ecc_chip(),
                 config.note_commit_chip_old(),
+                config.mux_chip(),
                 g_d_old.inner(),
                 pk_d_old.inner(),
                 v_old.clone(),
                 rho_old,
                 psi_old,
                 rcm_old,
+                is_native_asset.clone(),
             )?;
 
             // Constrain derived cm_old to equal witnessed cm_old
@@ -752,12 +759,14 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 config.sinsemilla_chip_2(),
                 config.ecc_chip(),
                 config.note_commit_chip_new(),
+                config.mux_chip(),
                 g_d_new.inner(),
                 pk_d_new.inner(),
                 v_new.clone(),
                 rho_new,
                 psi_new,
                 rcm_new,
+                is_native_asset.clone(),
             )?;
 
             let cmx = cm_new.extract_p();
@@ -1162,8 +1171,8 @@ mod tests {
                     K,
                     &circuits[0],
                 );
-            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5024);
-            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7296);
+            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5088);
+            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7360);
             usize::from(circuit_cost.proof_size(instances.len()))
         };
 
@@ -1272,7 +1281,7 @@ mod tests {
             let test_case_bytes = fs::read("src/circuit_proof_test_case.bin").unwrap();
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
-        assert_eq!(proof.0.len(), 5024);
+        assert_eq!(proof.0.len(), 5088);
 
         assert!(proof.verify(&vk, &[instance]).is_ok());
     }
