@@ -220,6 +220,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constrain v_old = 0 or enable_spends = 1      (https://p.z.cash/ZKS:action-enable-spend).
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
         // Constrain split_flag = 1 or nf_old = nf_old_pub
+        // Constraint is_native_asset * asset = native_asset
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -239,7 +240,19 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let nf_old = meta.query_advice(advices[9], Rotation::cur());
             let nf_old_pub = meta.query_advice(advices[0], Rotation::next());
 
+            let is_native_asset = meta.query_advice(advices[1], Rotation::next());
+            let asset_x = meta.query_advice(advices[2], Rotation::next());
+            let asset_y = meta.query_advice(advices[3], Rotation::next());
+
             let one = Expression::Constant(pallas::Base::one());
+
+            let native_asset = AssetBase::native()
+                .cv_base()
+                .to_affine()
+                .coordinates()
+                .unwrap();
+            let native_asset_x = Expression::Constant(*native_asset.x());
+            let native_asset_y = Expression::Constant(*native_asset.y());
 
             Constraints::with_selector(
                 q_orchard,
@@ -266,6 +279,14 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     (
                         "split_flag = 1 or nf_old = nf_old_pub",
                         (one - split_flag) * (nf_old - nf_old_pub),
+                    ),
+                    (
+                        "is_native_asset * asset_x = native_asset_x",
+                        is_native_asset.clone() * asset_x - native_asset_x,
+                    ),
+                    (
+                        "is_native_asset * asset_y = native_asset_y",
+                        is_native_asset * asset_y - native_asset_y,
                     ),
                 ],
             )
@@ -413,7 +434,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         let ecc_chip = config.ecc_chip();
 
         // Witness private inputs that are used across multiple checks.
-        let (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new) = {
+        let (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset) = {
             // Witness psi_old
             let psi_old = assign_free_advice(
                 layouter.namespace(|| "witness psi_old"),
@@ -471,8 +492,29 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 self.v_new,
             )?;
 
-            (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new)
+            // Witness asset
+            let asset = NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "witness asset"),
+                self.asset.map(|asset| asset.cv_base().to_affine()),
+            )?;
+
+            (
+                psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset,
+            )
         };
+
+        let is_native_asset = assign_free_advice(
+            layouter.namespace(|| "witness is_native_asset"),
+            config.advices[0],
+            self.asset.map(|asset| {
+                if bool::from(asset.is_native()) {
+                    pallas::Base::one()
+                } else {
+                    pallas::Base::zero()
+                }
+            }),
+        )?;
 
         // Merkle path validity check (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
         let root = {
@@ -537,19 +579,13 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 self.rcv.as_ref().map(|rcv| rcv.inner()),
             )?;
 
-            let asset = NonIdentityPoint::new(
-                ecc_chip.clone(),
-                layouter.namespace(|| "witness asset"),
-                self.asset.map(|asset| asset.cv_base().to_affine()),
-            )?;
-
             let cv_net = gadget::value_commit_orchard(
                 layouter.namespace(|| "cv_net = ValueCommit^Orchard_rcv(v_net_magnitude_sign)"),
                 config.sinsemilla_chip_1(),
                 ecc_chip.clone(),
                 v_net_magnitude_sign.clone(),
                 rcv,
-                asset,
+                asset.clone(),
             )?;
 
             // Constrain cv_net to equal public input
@@ -794,6 +830,21 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     config.advices[0],
                     1,
                 )?;
+
+                is_native_asset.copy_advice(
+                    || "is_native_asset",
+                    &mut region,
+                    config.advices[1],
+                    1,
+                )?;
+                asset
+                    .inner()
+                    .x()
+                    .copy_advice(|| "asset_x", &mut region, config.advices[2], 1)?;
+                asset
+                    .inner()
+                    .y()
+                    .copy_advice(|| "asset_y", &mut region, config.advices[3], 1)?;
 
                 config.q_orchard.enable(&mut region, 0)
             },
@@ -1141,6 +1192,7 @@ mod tests {
 
     #[test]
     fn serialized_proof_test_case() {
+        use std::fs;
         use std::io::{Read, Write};
 
         let vk = VerifyingKey::build();
@@ -1209,7 +1261,7 @@ mod tests {
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
-                let file = std::fs::File::create("circuit_proof_test_case.bin")?;
+                let file = std::fs::File::create("src/circuit_proof_test_case.bin")?;
                 write_test_case(file, &instance, &proof)
             };
             create_proof().expect("should be able to write new proof");
@@ -1217,7 +1269,7 @@ mod tests {
 
         // Parse the hardcoded proof test case.
         let (instance, proof) = {
-            let test_case_bytes = include_bytes!("circuit_proof_test_case.bin");
+            let test_case_bytes = fs::read("src/circuit_proof_test_case.bin").unwrap();
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
         assert_eq!(proof.0.len(), 5024);
