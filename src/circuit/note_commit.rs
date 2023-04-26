@@ -2515,10 +2515,11 @@ mod tests {
             AssetBase::derive(&ik, asset_descr)
         };
         // Test different values of `ak`, `nk`
-        let circuits = [
+        let mut circuits = vec![];
+        for asset in [random_asset, AssetBase::native()] {
             // `gd_x` = -1, `pkd_x` = -1 (these have to be x-coordinates of curve points)
             // `rho` = 0, `psi` = 0
-            MyCircuit {
+            circuits.push(MyCircuit {
                 g_d: Value::known(affine_point_from_coordinates(
                     -pallas::Base::one(),
                     pallas::Base::one(),
@@ -2529,10 +2530,10 @@ mod tests {
                 )),
                 rho: Value::known(pallas::Base::zero()),
                 psi: Value::known(pallas::Base::zero()),
-                asset: Value::known(AssetBase::native()),
-            },
+                asset: Value::known(asset),
+            });
             // `rho` = T_Q - 1, `psi` = T_Q - 1
-            MyCircuit {
+            circuits.push(MyCircuit {
                 g_d: Value::known(affine_point_from_coordinates(
                     -pallas::Base::one(),
                     pallas::Base::zero(),
@@ -2543,10 +2544,10 @@ mod tests {
                 )),
                 rho: Value::known(pallas::Base::from_u128(T_Q - 1)),
                 psi: Value::known(pallas::Base::from_u128(T_Q - 1)),
-                asset: Value::known(AssetBase::native()),
-            },
+                asset: Value::known(asset),
+            });
             // `rho` = T_Q, `psi` = T_Q
-            MyCircuit {
+            circuits.push(MyCircuit {
                 g_d: Value::known(affine_point_from_coordinates(
                     -pallas::Base::one(),
                     pallas::Base::one(),
@@ -2557,10 +2558,10 @@ mod tests {
                 )),
                 rho: Value::known(pallas::Base::from_u128(T_Q)),
                 psi: Value::known(pallas::Base::from_u128(T_Q)),
-                asset: Value::known(AssetBase::native()),
-            },
+                asset: Value::known(asset),
+            });
             // `rho` = 2^127 - 1, `psi` = 2^127 - 1
-            MyCircuit {
+            circuits.push(MyCircuit {
                 g_d: Value::known(affine_point_from_coordinates(
                     -pallas::Base::one(),
                     pallas::Base::zero(),
@@ -2571,10 +2572,10 @@ mod tests {
                 )),
                 rho: Value::known(pallas::Base::from_u128((1 << 127) - 1)),
                 psi: Value::known(pallas::Base::from_u128((1 << 127) - 1)),
-                asset: Value::known(AssetBase::native()),
-            },
+                asset: Value::known(asset),
+            });
             // `rho` = 2^127, `psi` = 2^127
-            MyCircuit {
+            circuits.push(MyCircuit {
                 g_d: Value::known(affine_point_from_coordinates(
                     -pallas::Base::one(),
                     pallas::Base::zero(),
@@ -2585,10 +2586,10 @@ mod tests {
                 )),
                 rho: Value::known(pallas::Base::from_u128(1 << 127)),
                 psi: Value::known(pallas::Base::from_u128(1 << 127)),
-                asset: Value::known(AssetBase::native()),
-            },
+                asset: Value::known(asset),
+            });
             // `rho` = 2^254 - 1, `psi` = 2^254 - 1
-            MyCircuit {
+            circuits.push(MyCircuit {
                 g_d: Value::known(affine_point_from_coordinates(
                     -pallas::Base::one(),
                     pallas::Base::one(),
@@ -2599,10 +2600,10 @@ mod tests {
                 )),
                 rho: Value::known(two_pow_254 - pallas::Base::one()),
                 psi: Value::known(two_pow_254 - pallas::Base::one()),
-                asset: Value::known(AssetBase::native()),
-            },
+                asset: Value::known(asset),
+            });
             // `rho` = 2^254, `psi` = 2^254
-            MyCircuit {
+            circuits.push(MyCircuit {
                 g_d: Value::known(affine_point_from_coordinates(
                     -pallas::Base::one(),
                     pallas::Base::one(),
@@ -2613,18 +2614,17 @@ mod tests {
                 )),
                 rho: Value::known(two_pow_254),
                 psi: Value::known(two_pow_254),
-                asset: Value::known(AssetBase::native()),
-            },
+                asset: Value::known(asset),
+            });
             // Random values
-            MyCircuit {
+            circuits.push(MyCircuit {
                 g_d: Value::known(pallas::Point::random(rng).to_affine()),
                 pk_d: Value::known(pallas::Point::random(rng).to_affine()),
                 rho: Value::known(pallas::Base::random(&mut rng)),
                 psi: Value::known(pallas::Base::random(&mut rng)),
-                //asset: Value::known(AssetBase::native()),
-                asset: Value::known(random_asset),
-            },
-        ];
+                asset: Value::known(asset),
+            });
+        }
 
         for circuit in circuits.iter() {
             let prover = MockProver::<pallas::Base>::run(11, circuit, vec![]).unwrap();
