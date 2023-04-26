@@ -222,6 +222,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constrain v_old = 0 or enable_spends = 1      (https://p.z.cash/ZKS:action-enable-spend).
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
         // Constrain split_flag = 1 or nf_old = nf_old_pub
+        // Constrain is_native_asset to be boolean
         // Constraint is_native_asset * asset = native_asset
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
@@ -281,6 +282,10 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     (
                         "split_flag = 1 or nf_old = nf_old_pub",
                         (one - split_flag) * (nf_old - nf_old_pub),
+                    ),
+                    (
+                        "bool_check is_native_asset",
+                        bool_check(is_native_asset.clone()),
                     ),
                     (
                         "is_native_asset * asset_x = native_asset_x",
