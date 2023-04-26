@@ -623,7 +623,7 @@ impl DecomposeH {
             // h_zec = h_0 + (2^5) h_1
             let zec_decomposition_check = h_zec - (h_0.clone() + h_1.clone() * two_pow_5);
 
-            // h_zsa = h_0 + (2^5) h_1 + (2^x) h_2
+            // h_zsa = h_0 + (2^5) h_1 + (2^6) h_2
             let zsa_decomposition_check = h_zsa - (h_0 + h_1.clone() * two_pow_5 + h_2 * two_pow_6);
 
             Constraints::with_selector(
@@ -1781,8 +1781,10 @@ pub(in crate::circuit) mod gadgets {
         let (g, g_0, g_1) =
             DecomposeG::decompose(&lookup_config, chip.clone(), &mut layouter, &rho, &psi)?;
 
-        // h = h_0 || h_1 || h_2
+        // h_zec = h_0 || h_1 || 0000
         //   = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
+        // h_zsa = h_0 || h_1 || h_2
+        //   = (bits 249..=253 of psi) || (bit 254 of psi) || (bits 0..=3 of x(asset))
         let (h_zec, h_zsa, h_0, h_1, h_2) =
             DecomposeH::decompose(&lookup_config, chip.clone(), &mut layouter, &psi, asset)?;
 
