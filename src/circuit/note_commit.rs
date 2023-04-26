@@ -1889,7 +1889,9 @@ pub(in crate::circuit) mod gadgets {
                 zec_domain.blinding_factor(layouter.namespace(|| "[r] R"), rcm)?;
             let commitment =
                 hash_point.add(layouter.namespace(|| "M + [r] R"), &blinding_factor)?;
-            // TODO is it enough to return only zs_zsa
+
+            // We only need zs_zsa to check the constraints
+            // TODO explain why
             (commitment, zs_zsa)
         };
 
@@ -1902,8 +1904,7 @@ pub(in crate::circuit) mod gadgets {
         let z1_g = zs[6][1].clone();
         let g_2 = z1_g.clone();
         let z13_g = zs[6][13].clone();
-
-        // TODO add some constraints on asset
+        let z13_i = zs[8][13].clone();
 
         // Witness and constrain the bounds we need to ensure canonicity.
         let (a_prime, z13_a_prime) = canon_bitshift_130(
@@ -1917,6 +1918,17 @@ pub(in crate::circuit) mod gadgets {
             layouter.namespace(|| "x(pk_d) canonicity"),
             b_3.clone(),
             c.inner().cell_value(),
+        )?;
+
+        // `asset` and `pk_d` have exactly the same decomposition.
+        // We will reuse the pk_d functions (`pkd_x_canonicity` and `pkd.assign`) to check that
+        // asset is a Pallas base field element and its decomposition is correct.
+        // We have just to replace b3, c by h2, i
+        let (h2_i_prime, z14_h2_i_prime) = pkd_x_canonicity(
+            &lookup_config,
+            layouter.namespace(|| "x(asset) canonicity"),
+            h_2.clone(),
+            i.inner().cell_value(),
         )?;
 
         let (e1_f_prime, z14_e1_f_prime) = rho_canonicity(
@@ -1952,7 +1964,9 @@ pub(in crate::circuit) mod gadgets {
 
         let h_1 = cfg
             .h
-            .assign(&mut layouter, h_zec, h_zsa, h_0.clone(), h_1, h_2)?;
+            .assign(&mut layouter, h_zec, h_zsa, h_0.clone(), h_1, h_2.clone())?;
+
+        let j_0 = cfg.j.assign(&mut layouter, j, j_0, j_1)?;
 
         cfg.g_d
             .assign(&mut layouter, g_d, a, b_0, b_1, a_prime, z13_a, z13_a_prime)?;
@@ -1966,6 +1980,21 @@ pub(in crate::circuit) mod gadgets {
             b3_c_prime,
             z13_c,
             z14_b3_c_prime,
+        )?;
+
+        // `asset` and `pk_d` have exactly the same decomposition.
+        // We will reuse the pk_d functions (`pkd_x_canonicity` and `pkd.assign`) to check that
+        // asset is a Pallas base field element and its decomposition is correct.
+        // We have just to replace b3, c, d_0 by h2, i, j_0
+        cfg.pk_d.assign(
+            &mut layouter,
+            asset,
+            h_2,
+            i,
+            j_0,
+            h2_i_prime,
+            z13_i,
+            z14_h2_i_prime,
         )?;
 
         cfg.value.assign(&mut layouter, value, d_2, z1_d, e_0)?;
