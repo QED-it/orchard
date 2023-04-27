@@ -1871,12 +1871,26 @@ pub(in crate::circuit) mod gadgets {
             let zsa_domain =
                 CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteZsaCommit);
 
+            // We evaluate `hash_point_zec=hash(Q_ZEC, message_zec)` and `hash_point_zsa(Q_ZSA, message_zsa)
+            // and then perform a MUX to select the desired hash_point
+            // TODO: We can optimize the evaluation of hash_point by mutualizing a portion of the
+            // hash evaluation process between hash_point_zec and hash_point_zsa.
+            // 1. common_bits = a || b || c || d || e || f || g
+            // 2. suffix_zec = h_zec
+            // 3. suffix_zsa = h_zsa || i || j
+            // 4. Q = if (is_native_asset == 0) {Q_ZSA} else {Q_ZEC}
+            // 5. hash_prefix = hash(Q, common_bits) // this part is mutualized
+            // 6. hash_zec = hash(hash_prefix, suffix_zec)
+            // 7. hash_zsa = hash(hash_prefix, suffix_zsa)
+            // 8. hash_point = if (is_native_asset == 0) {hash_zsa} else {hash_zec}
             let (hash_point_zec, _zs_zec) =
                 zec_domain.hash(layouter.namespace(|| "hash ZEC note"), message_zec)?;
             let (hash_point_zsa, zs_zsa) =
                 zsa_domain.hash(layouter.namespace(|| "hash ZSA note"), message_zsa)?;
 
-            // MUX(is_native_asset, hash_point_zsa, hash_point_zec) to select the desired hash point
+            // Perform a MUX to select the desired hash point
+            // hash_point = hash_zec if is_native_asset is true
+            // hash_point = hash_zsa if is_native_asset is false
             let hash_point = Point::from_inner(
                 ecc_chip,
                 mux_chip.mux(
