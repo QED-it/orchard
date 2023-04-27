@@ -223,7 +223,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
         // Constrain split_flag = 1 or nf_old = nf_old_pub
         // Constrain is_native_asset to be boolean
-        // Constraint is_native_asset * asset = native_asset
+        // Constraint is_native_asset * (asset - native_asset) = 0
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -288,12 +288,12 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                         bool_check(is_native_asset.clone()),
                     ),
                     (
-                        "is_native_asset * asset_x = native_asset_x",
-                        is_native_asset.clone() * asset_x - native_asset_x,
+                        "is_native_asset * (asset_x - native_asset_x) = 0",
+                        is_native_asset.clone() * (asset_x - native_asset_x),
                     ),
                     (
-                        "is_native_asset * asset_y = native_asset_y",
-                        is_native_asset * asset_y - native_asset_y,
+                        "is_native_asset * (asset_y - native_asset_y) = 0",
+                        is_native_asset * (asset_y - native_asset_y),
                     ),
                 ],
             )
@@ -514,6 +514,9 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             )
         };
 
+        // Witness is_native_asset which is equal to
+        // 1 if asset is equal to native asset, and
+        // 0 if asset is not equal to native asset.
         let is_native_asset = assign_free_advice(
             layouter.namespace(|| "witness is_native_asset"),
             config.advices[0],
