@@ -583,7 +583,7 @@ impl DecomposeG {
 /// | A_6     | A_7 | A_8 | q_notecommit_h |
 /// ------------------------------------
 /// |  h_zec  | h_0 | h_1 |       1        |
-/// |  h_zsa  | h_2 |     |                |
+/// |  h_zsa  | h_2 |     |       0        |
 ///
 /// <https://p.z.cash/orchard-0.1:note-commit-decomposition-h?partial>
 #[derive(Clone, Debug)]
@@ -1833,7 +1833,7 @@ pub(in crate::circuit) mod gadgets {
         // https://p.z.cash/ZKS:action-cm-old-integrity?partial
         // https://p.z.cash/ZKS:action-cmx-new-integrity?partial
         let (cm, zs) = {
-            let message = Message::from_pieces(
+            let message_zec = Message::from_pieces(
                 chip.clone(),
                 vec![
                     a.clone(),
@@ -1871,14 +1871,16 @@ pub(in crate::circuit) mod gadgets {
             let zsa_domain =
                 CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteZsaCommit);
 
-            let (hash_point_zec, _zs_zec) = zec_domain.hash(layouter.namespace(|| "M"), message)?;
+            let (hash_point_zec, _zs_zec) =
+                zec_domain.hash(layouter.namespace(|| "hash ZEC note"), message_zec)?;
             let (hash_point_zsa, zs_zsa) =
-                zsa_domain.hash(layouter.namespace(|| "M"), message_zsa)?;
+                zsa_domain.hash(layouter.namespace(|| "hash ZSA note"), message_zsa)?;
 
+            // MUX(is_native_asset, hash_point_zsa, hash_point_zec) to select the desired hash point
             let hash_point = Point::from_inner(
                 ecc_chip,
                 mux_chip.mux(
-                    layouter.namespace(|| "hash mux"),
+                    layouter.namespace(|| "mux on hash point"),
                     &is_native_asset,
                     &(hash_point_zsa.inner().clone().into()),
                     &(hash_point_zec.inner().clone().into()),
@@ -1892,12 +1894,10 @@ pub(in crate::circuit) mod gadgets {
             let commitment =
                 hash_point.add(layouter.namespace(|| "M + [r] R"), &blinding_factor)?;
 
-            // We only need zs_zsa to check the constraints
-            // TODO explain why
             (commitment, zs_zsa)
         };
 
-        // `CommitDomain::commit` returns the running sum for each `MessagePiece`. Grab
+        // `CommitDomain::hash` returns the running sum for each `MessagePiece`. Grab
         // the outputs that we will need for canonicity checks.
         let z13_a = zs[0][13].clone();
         let z13_c = zs[2][13].clone();
@@ -1923,9 +1923,9 @@ pub(in crate::circuit) mod gadgets {
         )?;
 
         // `asset` and `pk_d` have exactly the same decomposition.
-        // We will reuse the pk_d functions (`pkd_x_canonicity` and `pkd.assign`) to check that
-        // asset is a Pallas base field element and its decomposition is correct.
-        // We have just to replace b3, c by h2, i
+        // We will reuse the `pk_d` functions (`pkd_x_canonicity` and `pkd.assign`) to check that
+        // `asset` is a Pallas base field element and its decomposition is correct.
+        // We have just to replace `b_3`, `c`, `d_0` by `h_2`, `i`, `j_0`
         let (h2_i_prime, z14_h2_i_prime) = pkd_x_canonicity(
             &lookup_config,
             layouter.namespace(|| "x(asset) canonicity"),
@@ -1985,9 +1985,9 @@ pub(in crate::circuit) mod gadgets {
         )?;
 
         // `asset` and `pk_d` have exactly the same decomposition.
-        // We will reuse the pk_d functions (`pkd_x_canonicity` and `pkd.assign`) to check that
-        // asset is a Pallas base field element and its decomposition is correct.
-        // We have just to replace b3, c, d_0 by h2, i, j_0
+        // We will reuse the `pk_d` functions (`pkd_x_canonicity` and `pkd.assign`) to check that
+        // `asset` is a Pallas base field element and its decomposition is correct.
+        // We have just to replace `b_3`, `c`, `d_0` by `h_2`, `i`, `j_0`
         cfg.pk_d.assign(
             &mut layouter,
             asset,

@@ -86,6 +86,7 @@ pub(crate) trait MuxInstructions {
         right: &EccPoint,
     ) -> Result<EccPoint, plonk::Error>;
 }
+
 impl MuxInstructions for MuxChip {
     fn mux(
         &self,
@@ -95,7 +96,7 @@ impl MuxInstructions for MuxChip {
         right: &EccPoint,
     ) -> Result<EccPoint, plonk::Error> {
         let x_cell = layouter.assign_region(
-            || "mux",
+            || "mux x",
             |mut region| {
                 self.config.q_mux.enable(&mut region, 0)?;
 
@@ -106,15 +107,15 @@ impl MuxInstructions for MuxChip {
                     .x()
                     .copy_advice(|| "copy right_x", &mut region, self.config.right, 0)?;
 
-                let one = Value::known(pallas::Base::one());
-                let out_val =
-                    (one - choice.value()) * left.x().value() + choice.value() * right.x().value();
+                let out_val = (Value::known(pallas::Base::one()) - choice.value())
+                    * left.x().value()
+                    + choice.value() * right.x().value();
 
-                region.assign_advice(|| "out", self.config.out, 0, || out_val)
+                region.assign_advice(|| "out x", self.config.out, 0, || out_val)
             },
         )?;
         let y_cell = layouter.assign_region(
-            || "mux",
+            || "mux y",
             |mut region| {
                 self.config.q_mux.enable(&mut region, 0)?;
 
@@ -125,11 +126,11 @@ impl MuxInstructions for MuxChip {
                     .y()
                     .copy_advice(|| "copy right_y", &mut region, self.config.right, 0)?;
 
-                let one = Value::known(pallas::Base::one());
-                let out_val =
-                    (one - choice.value()) * left.y().value() + choice.value() * right.y().value();
+                let out_val = (Value::known(pallas::Base::one()) - choice.value())
+                    * left.y().value()
+                    + choice.value() * right.y().value();
 
-                region.assign_advice(|| "out", self.config.out, 0, || out_val)
+                region.assign_advice(|| "out y", self.config.out, 0, || out_val)
             },
         )?;
 
@@ -252,7 +253,7 @@ mod tests {
                 // Construct a MUX chip
                 let mux_chip = MuxChip::construct(config.mux_config);
 
-                // Construct an ecc chip
+                // Construct an ECC chip
                 let ecc_chip = EccChip::construct(config.ecc_config);
 
                 // Assign left point
