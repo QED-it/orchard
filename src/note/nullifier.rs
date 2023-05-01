@@ -79,7 +79,7 @@ pub mod testing {
         pub fn arb_nullifier()(
             bytes in vec(any::<u8>(), 64)
         ) -> Nullifier {
-            let point = pallas::Point::generator() * pallas::Scalar::from_bytes_wide(&<[u8; 64]>::try_from(bytes).unwrap());
+            let point = pallas::Point::generator() * pallas::Scalar::from_u128(127); //from_bytes_wide(&<[u8; 64]>::try_from(bytes).unwrap());
             Nullifier(extract_p(&point))
         }
     }
