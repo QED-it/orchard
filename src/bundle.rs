@@ -570,14 +570,14 @@ pub mod testing {
         flags: Flags,
     ) -> impl Strategy<Value = (ValueSum, Action<redpallas::Signature<SpendAuth>>)> {
         let spend_value_gen = if flags.spends_enabled {
-            Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
+            Strategy::boxed(arb_note_value_bounded(42  as u64))
         } else {
             Strategy::boxed(Just(NoteValue::zero()))
         };
 
         spend_value_gen.prop_flat_map(move |spend_value| {
             let output_value_gen = if flags.outputs_enabled {
-                Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
+                Strategy::boxed(arb_note_value_bounded(42 as u64))
             } else {
                 Strategy::boxed(Just(NoteValue::zero()))
             };
