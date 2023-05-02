@@ -100,7 +100,7 @@ impl MuxInstructions for MuxChip {
             |mut region| {
                 self.config.q_mux.enable(&mut region, 0)?;
 
-                choice.copy_advice(|| "copy switch", &mut region, self.config.choice, 0)?;
+                choice.copy_advice(|| "copy choice", &mut region, self.config.choice, 0)?;
                 left.x()
                     .copy_advice(|| "copy left_x", &mut region, self.config.left, 0)?;
                 right
@@ -119,7 +119,7 @@ impl MuxInstructions for MuxChip {
             |mut region| {
                 self.config.q_mux.enable(&mut region, 0)?;
 
-                choice.copy_advice(|| "copy switch", &mut region, self.config.choice, 0)?;
+                choice.copy_advice(|| "copy choice", &mut region, self.config.choice, 0)?;
                 left.y()
                     .copy_advice(|| "copy left_y", &mut region, self.config.left, 0)?;
                 right
