@@ -33,7 +33,6 @@ pub struct SupplyInfo {
 
 impl SupplyInfo {
     /// Creates a new, empty `SupplyInfo` instance.
-    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             assets: HashMap::new(),
@@ -61,8 +60,8 @@ impl SupplyInfo {
 
     /// Updates the set of finalized assets based on the supply information stored in
     /// the `SupplyInfo` instance.
-    pub fn update_finalized_assets(&self, finalized_assets: &mut HashSet<AssetBase>) {
-        finalized_assets.extend(
+    pub fn update_finalization_set(&self, finalization_set: &mut HashSet<AssetBase>) {
+        finalization_set.extend(
             self.assets
                 .iter()
                 .filter_map(|(asset, supply)| supply.is_finalized.then(|| asset)),
@@ -80,22 +79,30 @@ impl Default for SupplyInfo {
 mod tests {
     use super::*;
 
-    fn create_random_asset(seed: u64) -> AssetBase {
-        use {
-            group::{Group, GroupEncoding},
-            pasta_curves::pallas::Point,
-            rand::{rngs::StdRng, SeedableRng},
-        };
+    fn create_random_asset(asset_desc: &str) -> AssetBase {
+        use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey, SpendingKey};
 
-        AssetBase::from_bytes(&Point::random(StdRng::seed_from_u64(seed)).to_bytes()).unwrap()
+        let sk = SpendingKey::from_bytes([0u8; 32]).unwrap();
+        let isk: IssuanceAuthorizingKey = (&sk).into();
+
+        AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc)
+    }
+
+    fn sum_amounts<'a, Supplies: IntoIterator<Item = &'a AssetSupply>>(
+        supplies: Supplies,
+    ) -> Option<ValueSum> {
+        supplies
+            .into_iter()
+            .map(|supply| supply.amount)
+            .try_fold(ValueSum::from_raw(0), |sum, value| sum + value)
     }
 
     #[test]
     fn test_add_supply_valid() {
         let mut supply_info = SupplyInfo::new();
 
-        let asset1 = create_random_asset(1);
-        let asset2 = create_random_asset(2);
+        let asset1 = create_random_asset("Asset 1");
+        let asset2 = create_random_asset("Asset 2");
 
         let supply1 = AssetSupply::new(ValueSum::from_raw(20), false);
         let supply2 = AssetSupply::new(ValueSum::from_raw(30), true);
@@ -106,80 +113,87 @@ mod tests {
         assert_eq!(supply_info.assets.len(), 0);
 
         // Add supply1
-        assert!(supply_info.add_supply(asset1, supply1).is_ok());
+        assert!(supply_info.add_supply(asset1, supply1.clone()).is_ok());
         assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset1),
-            Some(&AssetSupply::new(ValueSum::from_raw(20), false))
+            Some(&AssetSupply::new(sum_amounts([&supply1]).unwrap(), false))
         );
 
         // Add supply2
-        assert!(supply_info.add_supply(asset1, supply2).is_ok());
+        assert!(supply_info.add_supply(asset1, supply2.clone()).is_ok());
         assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset1),
-            Some(&AssetSupply::new(ValueSum::from_raw(50), true))
+            Some(&AssetSupply::new(
+                sum_amounts([&supply1, &supply2]).unwrap(),
+                true
+            ))
         );
 
         // Add supply3
-        assert!(supply_info.add_supply(asset1, supply3).is_ok());
+        assert!(supply_info.add_supply(asset1, supply3.clone()).is_ok());
         assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset1),
-            Some(&AssetSupply::new(ValueSum::from_raw(60), true))
+            Some(&AssetSupply::new(
+                sum_amounts([&supply1, &supply2, &supply3]).unwrap(),
+                true
+            ))
         );
 
         // Add supply4
-        assert!(supply_info.add_supply(asset1, supply4).is_ok());
+        assert!(supply_info.add_supply(asset1, supply4.clone()).is_ok());
         assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset1),
-            Some(&AssetSupply::new(ValueSum::from_raw(70), true))
+            Some(&AssetSupply::new(
+                sum_amounts([&supply1, &supply2, &supply3, &supply4]).unwrap(),
+                true
+            ))
         );
 
-        // Add supply4
-        assert!(supply_info.add_supply(asset2, supply5).is_ok());
+        // Add supply5
+        assert!(supply_info.add_supply(asset2, supply5.clone()).is_ok());
         assert_eq!(supply_info.assets.len(), 2);
         assert_eq!(
             supply_info.assets.get(&asset1),
-            Some(&AssetSupply::new(ValueSum::from_raw(70), true))
+            Some(&AssetSupply::new(
+                sum_amounts([&supply1, &supply2, &supply3, &supply4]).unwrap(),
+                true
+            ))
         );
         assert_eq!(
             supply_info.assets.get(&asset2),
-            Some(&AssetSupply::new(ValueSum::from_raw(50), false))
+            Some(&AssetSupply::new(sum_amounts([&supply5]).unwrap(), false))
         );
     }
 
     #[test]
-    fn test_update_finalized_assets() {
+    fn test_update_finalization_set() {
         let mut supply_info = SupplyInfo::new();
 
-        let asset1 = create_random_asset(1);
-        let asset2 = create_random_asset(2);
-        let asset3 = create_random_asset(3);
+        let asset1 = create_random_asset("Asset 1");
+        let asset2 = create_random_asset("Asset 2");
+        let asset3 = create_random_asset("Asset 3");
 
-        assert!(supply_info
-            .add_supply(asset1, AssetSupply::new(ValueSum::from_raw(10), false))
-            .is_ok());
-        assert!(supply_info
-            .add_supply(asset1, AssetSupply::new(ValueSum::from_raw(20), true))
-            .is_ok());
+        let supply1 = AssetSupply::new(ValueSum::from_raw(10), false);
+        let supply2 = AssetSupply::new(ValueSum::from_raw(20), true);
+        let supply3 = AssetSupply::new(ValueSum::from_raw(40), false);
+        let supply4 = AssetSupply::new(ValueSum::from_raw(50), true);
 
-        assert!(supply_info
-            .add_supply(asset2, AssetSupply::new(ValueSum::from_raw(40), false))
-            .is_ok());
+        assert!(supply_info.add_supply(asset1, supply1).is_ok());
+        assert!(supply_info.add_supply(asset1, supply2).is_ok());
+        assert!(supply_info.add_supply(asset2, supply3).is_ok());
+        assert!(supply_info.add_supply(asset3, supply4).is_ok());
 
-        assert!(supply_info
-            .add_supply(asset3, AssetSupply::new(ValueSum::from_raw(50), true))
-            .is_ok());
+        let mut finalization_set = HashSet::new();
 
-        let mut finalized_assets = HashSet::new();
+        supply_info.update_finalization_set(&mut finalization_set);
 
-        supply_info.update_finalized_assets(&mut finalized_assets);
+        assert_eq!(finalization_set.len(), 2);
 
-        assert_eq!(finalized_assets.len(), 2);
-
-        assert!(finalized_assets.contains(&asset1));
-        assert!(finalized_assets.contains(&asset3));
+        assert!(finalization_set.contains(&asset1));
+        assert!(finalization_set.contains(&asset3));
     }
 }

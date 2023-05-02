@@ -110,14 +110,14 @@ impl IssueAction {
     /// * `ValueSumOverflow`: If the total amount value of all notes in the `IssueAction` overflows.
     ///
     /// * `IssueBundleIkMismatchAssetBase`: If the provided `ik` is not used to derive the
-    ///   asset base for **all** internal notes.
+    ///   `AssetBase` for **all** internal notes.
     fn verify_supply(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
         // Calculate the value of the asset as a sum of values of all its notes
         // and ensure all note types are equal
         let (asset, value_sum) = self.notes.iter().try_fold(
             (self.notes().head.asset(), ValueSum::zero()),
             |(asset, value_sum), &note| {
-                // All assets should have the same asset base
+                // All assets should have the same `AssetBase`
                 note.asset()
                     .eq(&asset)
                     .then(|| ())
@@ -337,9 +337,10 @@ impl IssueBundle<Prepared> {
         let expected_ik: IssuanceValidatingKey = (isk).into();
 
         // Make sure the `expected_ik` matches the `asset` for all notes.
-        self.actions
-            .iter()
-            .try_for_each(|action| action.verify_supply(&expected_ik).map(|_| ()))?;
+        self.actions.iter().try_for_each(|action| {
+            action.verify_supply(&expected_ik)?;
+            Ok(())
+        })?;
 
         Ok(IssueBundle {
             ik: self.ik,
@@ -535,37 +536,16 @@ mod tests {
     use std::borrow::BorrowMut;
     use std::collections::HashSet;
 
-    fn setup_params() -> (
-        OsRng,
-        IssuanceAuthorizingKey,
-        IssuanceValidatingKey,
-        Address,
-        [u8; 32],
-    ) {
-        let mut rng = OsRng;
-        let sk = SpendingKey::random(&mut rng);
-        let isk: IssuanceAuthorizingKey = (&sk).into();
-        let ik: IssuanceValidatingKey = (&isk).into();
-
-        let fvk = FullViewingKey::from(&sk);
-        let recipient = fvk.address_at(0u32, Scope::External);
-
-        let mut sighash = [0u8; 32];
-        rng.fill_bytes(&mut sighash);
-
-        (rng, isk, ik, recipient, sighash)
-    }
-
     fn setup_verify_supply_test_params(
-        asset_desc: &str,
         note1_value: u64,
         note2_value: u64,
+        note1_asset_desc: &str,
         note2_asset_desc: Option<&str>, // if None, both notes use the same asset
         finalize: bool,
     ) -> (IssuanceValidatingKey, AssetBase, IssueAction) {
         let (mut rng, _, ik, recipient, _) = setup_params();
 
-        let asset = AssetBase::derive(&ik, asset_desc);
+        let asset = AssetBase::derive(&ik, note1_asset_desc);
         let note2_asset = note2_asset_desc.map_or(asset, |desc| AssetBase::derive(&ik, desc));
 
         let note1 = Note::new(
@@ -588,7 +568,7 @@ mod tests {
             ik,
             asset,
             IssueAction::from_parts(
-                asset_desc.into(),
+                note1_asset_desc.into(),
                 NonEmpty {
                     head: note1,
                     tail: vec![note2],
@@ -601,7 +581,7 @@ mod tests {
     #[test]
     fn test_verify_supply_valid() {
         let (ik, test_asset, action) =
-            setup_verify_supply_test_params("Asset 1", 10, 20, None, false);
+            setup_verify_supply_test_params(10, 20, "Asset 1", None, false);
 
         let result = action.verify_supply(&ik);
 
@@ -617,7 +597,7 @@ mod tests {
     #[test]
     fn test_verify_supply_finalized() {
         let (ik, test_asset, action) =
-            setup_verify_supply_test_params("Asset 1", 10, 20, None, true);
+            setup_verify_supply_test_params(10, 20, "Asset 1", None, true);
 
         let result = action.verify_supply(&ik);
 
@@ -633,7 +613,7 @@ mod tests {
     #[test]
     fn test_verify_supply_incorrect_asset_base() {
         let (ik, _, action) =
-            setup_verify_supply_test_params("Asset 1", 10, 20, Some("Asset 2"), false);
+            setup_verify_supply_test_params(10, 20, "Asset 1", Some("Asset 2"), false);
 
         assert_eq!(
             action.verify_supply(&ik),
@@ -643,13 +623,34 @@ mod tests {
 
     #[test]
     fn test_verify_supply_ik_mismatch_asset_base() {
-        let (_, _, action) = setup_verify_supply_test_params("Asset 1", 10, 20, None, false);
+        let (_, _, action) = setup_verify_supply_test_params(10, 20, "Asset 1", None, false);
         let (_, _, ik, _, _) = setup_params();
 
         assert_eq!(
             action.verify_supply(&ik),
             Err(IssueBundleIkMismatchAssetBase)
         );
+    }
+
+    fn setup_params() -> (
+        OsRng,
+        IssuanceAuthorizingKey,
+        IssuanceValidatingKey,
+        Address,
+        [u8; 32],
+    ) {
+        let mut rng = OsRng;
+        let sk = SpendingKey::random(&mut rng);
+        let isk: IssuanceAuthorizingKey = (&sk).into();
+        let ik: IssuanceValidatingKey = (&isk).into();
+
+        let fvk = FullViewingKey::from(&sk);
+        let recipient = fvk.address_at(0u32, Scope::External);
+
+        let mut sighash = [0u8; 32];
+        rng.fill_bytes(&mut sighash);
+
+        (rng, isk, ik, recipient, sighash)
     }
 
     #[test]
@@ -926,7 +927,7 @@ mod tests {
 
         let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
 
-        supply_info.update_finalized_assets(prev_finalized);
+        supply_info.update_finalization_set(prev_finalized);
 
         assert!(prev_finalized.is_empty());
     }
@@ -952,7 +953,7 @@ mod tests {
 
         let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
 
-        supply_info.update_finalized_assets(prev_finalized);
+        supply_info.update_finalization_set(prev_finalized);
 
         assert_eq!(prev_finalized.len(), 1);
         assert!(prev_finalized.contains(&AssetBase::derive(&ik, "Verify with finalize")));
@@ -1017,7 +1018,7 @@ mod tests {
 
         let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
 
-        supply_info.update_finalized_assets(prev_finalized);
+        supply_info.update_finalization_set(prev_finalized);
 
         assert_eq!(prev_finalized.len(), 2);
 
