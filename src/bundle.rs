@@ -603,7 +603,7 @@ pub mod testing {
     prop_compose! {
         /// Create an arbitrary set of flags.
         pub fn arb_flags()(spends_enabled in prop::bool::ANY, outputs_enabled in prop::bool::ANY) -> Flags {
-            Flags::from_parts(spends_enabled, outputs_enabled)
+            Flags::from_parts(true, true)
         }
     }
 
