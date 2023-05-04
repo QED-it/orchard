@@ -2,6 +2,7 @@
 
 use core::fmt;
 
+use ff::Field;
 use group::{Curve, GroupEncoding};
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
@@ -223,7 +224,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
         // Constrain split_flag = 1 or nf_old = nf_old_pub
         // Constrain is_native_asset to be boolean
-        // Constraint is_native_asset * (asset - native_asset) = 0
+        // Constraint if is_native_asset = 1 then asset = native_asset
+        // Constraint if is_native_asset = 0 then asset != native_asset
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -246,6 +248,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let is_native_asset = meta.query_advice(advices[1], Rotation::next());
             let asset_x = meta.query_advice(advices[2], Rotation::next());
             let asset_y = meta.query_advice(advices[3], Rotation::next());
+            let diff_asset_x_inv = meta.query_advice(advices[4], Rotation::next());
+            let diff_asset_y_inv = meta.query_advice(advices[5], Rotation::next());
 
             let one = Expression::Constant(pallas::Base::one());
 
@@ -254,8 +258,9 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 .to_affine()
                 .coordinates()
                 .unwrap();
-            let native_asset_x = Expression::Constant(*native_asset.x());
-            let native_asset_y = Expression::Constant(*native_asset.y());
+
+            let diff_asset_x = asset_x - Expression::Constant(*native_asset.x());
+            let diff_asset_y = asset_y - Expression::Constant(*native_asset.y());
 
             Constraints::with_selector(
                 q_orchard,
@@ -281,19 +286,29 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     ),
                     (
                         "split_flag = 1 or nf_old = nf_old_pub",
-                        (one - split_flag) * (nf_old - nf_old_pub),
+                        (one.clone() - split_flag) * (nf_old - nf_old_pub),
                     ),
                     (
                         "bool_check is_native_asset",
                         bool_check(is_native_asset.clone()),
                     ),
                     (
-                        "is_native_asset * (asset_x - native_asset_x) = 0",
-                        is_native_asset.clone() * (asset_x - native_asset_x),
+                        "(is_native_asset = 1) =>  (asset_x = native_asset_x)",
+                        is_native_asset.clone() * diff_asset_x.clone(),
                     ),
                     (
-                        "is_native_asset * (asset_y - native_asset_y) = 0",
-                        is_native_asset * (asset_y - native_asset_y),
+                        "(is_native_asset = 1) => (asset_y = native_asset_y)",
+                        is_native_asset.clone() * diff_asset_y.clone(),
+                    ),
+                    // To prove that asset is not equal to native_asset, we will prove that either
+                    // `x(asset - native_asset)` or `y(asset - native_asset)` is not equal to zero.
+                    // To prove that `x(asset - native_asset)` (resp `y(asset - native_asset)`) is
+                    // not equal to zero, we will prove that it is invertible.
+                    (
+                        "(is_native_asset = 0) => (asset != native_asset)",
+                        (one.clone() - is_native_asset)
+                            * (diff_asset_x * diff_asset_x_inv - one.clone())
+                            * (diff_asset_y * diff_asset_y_inv - one),
                     ),
                 ],
             )
@@ -864,6 +879,63 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     .inner()
                     .y()
                     .copy_advice(|| "asset_y", &mut region, config.advices[3], 1)?;
+
+                // `diff_asset_x_inv` and `diff_asset_y_inv` will be used to prove that the
+                // coordinates of `asset - native_asset` are not equal to zero.
+                // If `x(asset - native_asset) * diff_asset_x_inv = 1`, then  `x(asset - native_asset)`
+                // is invertible. Thus, `x(asset - native_asset)` is not equal to zero.
+                // If at least `x(asset - native_asset)` or `y(asset - native_asset)` is not equal
+                // to zero, then asset is not equal to native_asset.
+                region.assign_advice(
+                    || "diff_asset_x_inv",
+                    config.advices[4],
+                    1,
+                    || {
+                        self.asset.map(|asset| {
+                            if asset.is_native().into() {
+                                pallas::Base::one()
+                            } else {
+                                let diff_asset_x = *(asset.cv_base()
+                                    - AssetBase::native().cv_base())
+                                .to_affine()
+                                .coordinates()
+                                .unwrap()
+                                .x();
+
+                                if diff_asset_x == pallas::Base::zero() {
+                                    pallas::Base::one()
+                                } else {
+                                    diff_asset_x.invert().unwrap()
+                                }
+                            }
+                        })
+                    },
+                )?;
+                region.assign_advice(
+                    || "diff_asset_y_inv",
+                    config.advices[5],
+                    1,
+                    || {
+                        self.asset.map(|asset| {
+                            if asset.is_native().into() {
+                                pallas::Base::one()
+                            } else {
+                                let diff_asset_y = *(asset.cv_base()
+                                    - AssetBase::native().cv_base())
+                                .to_affine()
+                                .coordinates()
+                                .unwrap()
+                                .y();
+
+                                if diff_asset_y == pallas::Base::zero() {
+                                    pallas::Base::one()
+                                } else {
+                                    diff_asset_y.invert().unwrap()
+                                }
+                            }
+                        })
+                    },
+                )?;
 
                 config.q_orchard.enable(&mut region, 0)
             },
