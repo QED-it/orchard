@@ -963,23 +963,29 @@ impl GdCanonicity {
         )
     }
 }
-
-/// |   A_6   | A_7 |    A_8     |      A_9       | q_notecommit_pk_d |
+/// For pk_d
+/// |   A_6   | A_7 |    A_8     |      A_9       | q_notecommit_pk_d_asset |
 /// -------------------------------------------------------------------
 /// | x(pk_d) | b_3 |    c       | z13_c          |         1         |
 /// |         | d_0 | b3_c_prime | z14_b3_c_prime |         0         |
 ///
+/// For asset
+/// |   A_6   | A_7 |    A_8     |      A_9       | q_notecommit_pk_d_asset |
+/// -------------------------------------------------------------------
+/// | x(asset) | h_2 |    i       | z13_i         |         1         |
+/// |         | j_0 | h2_i_prime | z14_h2_i_prime |         0         |
+///
 /// <https://p.z.cash/orchard-0.1:note-commit-canonicity-pk_d?partial>
 #[derive(Clone, Debug)]
-struct PkdCanonicity {
-    q_notecommit_pk_d: Selector,
+struct PkdAssetCanonicity {
+    q_notecommit_pk_d_asset: Selector,
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
     col_z: Column<Advice>,
 }
 
-impl PkdCanonicity {
+impl PkdAssetCanonicity {
     #[allow(clippy::too_many_arguments)]
     fn configure(
         meta: &mut ConstraintSystem<pallas::Base>,
@@ -992,10 +998,13 @@ impl PkdCanonicity {
         two_pow_254: pallas::Base,
         t_p: Expression<pallas::Base>,
     ) -> Self {
-        let q_notecommit_pk_d = meta.selector();
+        let q_notecommit_pk_d_asset = meta.selector();
 
-        meta.create_gate("NoteCommit input pk_d", |meta| {
-            let q_notecommit_pk_d = meta.query_selector(q_notecommit_pk_d);
+        meta.create_gate("NoteCommit input pk_d or asset", |meta| {
+            // The comments and variable names are for `pk_d`
+            // This gate is also used with `asset`.
+            // We have just to replace `pk_d`, `b_3`, `c`, `d_0` by `asset`, `h_2`, `i`, `j_0`
+            let q_notecommit_pk_d_asset = meta.query_selector(q_notecommit_pk_d_asset);
 
             let pkd_x = meta.query_advice(col_l, Rotation::cur());
 
@@ -1028,7 +1037,7 @@ impl PkdCanonicity {
                 .map(move |(name, poly)| (name, d_0.clone() * poly));
 
             Constraints::with_selector(
-                q_notecommit_pk_d,
+                q_notecommit_pk_d_asset,
                 iter::empty()
                     .chain(Some(("decomposition", decomposition_check)))
                     .chain(Some(("b3_c_prime_check", b3_c_prime_check)))
@@ -1037,7 +1046,7 @@ impl PkdCanonicity {
         });
 
         Self {
-            q_notecommit_pk_d,
+            q_notecommit_pk_d_asset,
             col_l,
             col_m,
             col_r,
@@ -1047,6 +1056,9 @@ impl PkdCanonicity {
 
     #[allow(clippy::too_many_arguments)]
     fn assign(
+        // The variable names are for `pk_d`
+        // This function is also used with `asset`.
+        // We have just to replace `pk_d`, `b_3`, `c`, `d_0` by `asset`, `h_2`, `i`, `j_0`
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
         pk_d: &NonIdentityEccPoint,
@@ -1058,7 +1070,7 @@ impl PkdCanonicity {
         z14_b3_c_prime: AssignedCell<pallas::Base, pallas::Base>,
     ) -> Result<(), Error> {
         layouter.assign_region(
-            || "NoteCommit input pk_d",
+            || "NoteCommit input pk_d or asset",
             |mut region| {
                 pk_d.x()
                     .copy_advice(|| "pkd_x", &mut region, self.col_l, 0)?;
@@ -1075,7 +1087,7 @@ impl PkdCanonicity {
                 z13_c.copy_advice(|| "z13_c", &mut region, self.col_z, 0)?;
                 z14_b3_c_prime.copy_advice(|| "z14_b3_c_prime", &mut region, self.col_z, 1)?;
 
-                self.q_notecommit_pk_d.enable(&mut region, 0)
+                self.q_notecommit_pk_d_asset.enable(&mut region, 0)
             },
         )
     }
@@ -1572,7 +1584,7 @@ pub struct NoteCommitConfig {
     h: DecomposeH,
     j: DecomposeJ,
     g_d: GdCanonicity,
-    pk_d: PkdCanonicity,
+    pk_d_asset: PkdAssetCanonicity,
     value: ValueCanonicity,
     rho: RhoCanonicity,
     psi: PsiCanonicity,
@@ -1642,7 +1654,7 @@ impl NoteCommitChip {
             t_p.clone(),
         );
 
-        let pk_d = PkdCanonicity::configure(
+        let pk_d_asset = PkdAssetCanonicity::configure(
             meta,
             col_l,
             col_m,
@@ -1701,7 +1713,7 @@ impl NoteCommitChip {
             h,
             j,
             g_d,
-            pk_d,
+            pk_d_asset,
             value,
             rho,
             psi,
@@ -1929,18 +1941,14 @@ pub(in crate::circuit) mod gadgets {
             a.inner().cell_value(),
         )?;
 
-        let (b3_c_prime, z14_b3_c_prime) = pkd_x_canonicity(
+        let (b3_c_prime, z14_b3_c_prime) = pkd_asset_x_canonicity(
             &lookup_config,
             layouter.namespace(|| "x(pk_d) canonicity"),
             b_3.clone(),
             c.inner().cell_value(),
         )?;
 
-        // `asset` and `pk_d` have exactly the same decomposition.
-        // We will reuse the `pk_d` functions (`pkd_x_canonicity` and `pkd.assign`) to check that
-        // `asset` is a Pallas base field element and its decomposition is correct.
-        // We have just to replace `b_3`, `c`, `d_0` by `h_2`, `i`, `j_0`
-        let (h2_i_prime, z14_h2_i_prime) = pkd_x_canonicity(
+        let (h2_i_prime, z14_h2_i_prime) = pkd_asset_x_canonicity(
             &lookup_config,
             layouter.namespace(|| "x(asset) canonicity"),
             h_2.clone(),
@@ -1987,7 +1995,7 @@ pub(in crate::circuit) mod gadgets {
         cfg.g_d
             .assign(&mut layouter, g_d, a, b_0, b_1, a_prime, z13_a, z13_a_prime)?;
 
-        cfg.pk_d.assign(
+        cfg.pk_d_asset.assign(
             &mut layouter,
             pk_d,
             b_3,
@@ -1998,11 +2006,7 @@ pub(in crate::circuit) mod gadgets {
             z14_b3_c_prime,
         )?;
 
-        // `asset` and `pk_d` have exactly the same decomposition.
-        // We will reuse the `pk_d` functions (`pkd_x_canonicity` and `pkd.assign`) to check that
-        // `asset` is a Pallas base field element and its decomposition is correct.
-        // We have just to replace `b_3`, `c`, `d_0` by `h_2`, `i`, `j_0`
-        cfg.pk_d.assign(
+        cfg.pk_d_asset.assign(
             &mut layouter,
             asset,
             h_2,
@@ -2077,15 +2081,16 @@ pub(in crate::circuit) mod gadgets {
         Ok((a_prime, zs[13].clone()))
     }
 
-    /// Check canonicity of `x(pk_d)` encoding.
+    /// Check canonicity of `x(pk_d)` and `x(asset)` encoding.
     ///
     /// [Specification](https://p.z.cash/orchard-0.1:note-commit-canonicity-pk_d?partial).
-    fn pkd_x_canonicity(
+    fn pkd_asset_x_canonicity(
         lookup_config: &LookupRangeCheckConfig<pallas::Base, 10>,
         mut layouter: impl Layouter<pallas::Base>,
         b_3: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         c: AssignedCell<pallas::Base, pallas::Base>,
     ) -> Result<CanonicityBounds, Error> {
+        // Example for `x(pk_d)`:
         // `x(pk_d)` = `b_3 (4 bits) || c (250 bits) || d_0 (1 bit)`
         // - d_0 = 1 => b_3 + 2^4 c < t_P
         //     - 0 ≤ b_3 + 2^4 c < 2^134
@@ -2095,6 +2100,7 @@ pub(in crate::circuit) mod gadgets {
         //         - z_13 of SinsemillaHash(c) == 0 constrains bits 4..=253 of pkd_x
         //           to 130 bits. z13_c is directly checked in the gate.
         //     - 0 ≤ b_3 + 2^4 c + 2^140 - t_P < 2^140 (14 ten-bit lookups)
+        // For `x(asset)`, we have to replace `pk_d`, `b_3`, `c`, `d_0` by `asset`, `h_2`, `i`, `j_0`
 
         // Decompose the low 140 bits of b3_c_prime = b_3 + 2^4 c + 2^140 - t_P,
         // and output the running sum at the end of it.
