@@ -5,7 +5,7 @@ use std::collections::{hash_map, HashMap, HashSet};
 use crate::{issuance::Error, note::AssetBase, value::ValueSum};
 
 /// Represents the amount of an asset and its finalization status.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct AssetSupply {
     /// The amount of the asset.
@@ -88,9 +88,7 @@ mod tests {
         AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc)
     }
 
-    fn sum_amounts<'a, Supplies: IntoIterator<Item = &'a AssetSupply>>(
-        supplies: Supplies,
-    ) -> Option<ValueSum> {
+    fn sum<'a, T: IntoIterator<Item = &'a AssetSupply>>(supplies: T) -> Option<ValueSum> {
         supplies
             .into_iter()
             .map(|supply| supply.amount)
@@ -113,59 +111,56 @@ mod tests {
         assert_eq!(supply_info.assets.len(), 0);
 
         // Add supply1
-        assert!(supply_info.add_supply(asset1, supply1.clone()).is_ok());
+        assert!(supply_info.add_supply(asset1, supply1).is_ok());
         assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset1),
-            Some(&AssetSupply::new(sum_amounts([&supply1]).unwrap(), false))
+            Some(&AssetSupply::new(sum([&supply1]).unwrap(), false))
         );
 
         // Add supply2
-        assert!(supply_info.add_supply(asset1, supply2.clone()).is_ok());
+        assert!(supply_info.add_supply(asset1, supply2).is_ok());
         assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset1),
-            Some(&AssetSupply::new(
-                sum_amounts([&supply1, &supply2]).unwrap(),
-                true
-            ))
+            Some(&AssetSupply::new(sum([&supply1, &supply2]).unwrap(), true))
         );
 
         // Add supply3
-        assert!(supply_info.add_supply(asset1, supply3.clone()).is_ok());
+        assert!(supply_info.add_supply(asset1, supply3).is_ok());
         assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset1),
             Some(&AssetSupply::new(
-                sum_amounts([&supply1, &supply2, &supply3]).unwrap(),
+                sum([&supply1, &supply2, &supply3]).unwrap(),
                 true
             ))
         );
 
         // Add supply4
-        assert!(supply_info.add_supply(asset1, supply4.clone()).is_ok());
+        assert!(supply_info.add_supply(asset1, supply4).is_ok());
         assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset1),
             Some(&AssetSupply::new(
-                sum_amounts([&supply1, &supply2, &supply3, &supply4]).unwrap(),
+                sum([&supply1, &supply2, &supply3, &supply4]).unwrap(),
                 true
             ))
         );
 
         // Add supply5
-        assert!(supply_info.add_supply(asset2, supply5.clone()).is_ok());
+        assert!(supply_info.add_supply(asset2, supply5).is_ok());
         assert_eq!(supply_info.assets.len(), 2);
         assert_eq!(
             supply_info.assets.get(&asset1),
             Some(&AssetSupply::new(
-                sum_amounts([&supply1, &supply2, &supply3, &supply4]).unwrap(),
+                sum([&supply1, &supply2, &supply3, &supply4]).unwrap(),
                 true
             ))
         );
         assert_eq!(
             supply_info.assets.get(&asset2),
-            Some(&AssetSupply::new(sum_amounts([&supply5]).unwrap(), false))
+            Some(&AssetSupply::new(sum([&supply5]).unwrap(), false))
         );
     }
 

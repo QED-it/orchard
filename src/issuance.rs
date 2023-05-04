@@ -536,6 +536,28 @@ mod tests {
     use std::borrow::BorrowMut;
     use std::collections::HashSet;
 
+    fn setup_params() -> (
+        OsRng,
+        IssuanceAuthorizingKey,
+        IssuanceValidatingKey,
+        Address,
+        [u8; 32],
+    ) {
+        let mut rng = OsRng;
+
+        let sk = SpendingKey::random(&mut rng);
+        let isk: IssuanceAuthorizingKey = (&sk).into();
+        let ik: IssuanceValidatingKey = (&isk).into();
+
+        let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
+        let recipient = fvk.address_at(0u32, Scope::External);
+
+        let mut sighash = [0u8; 32];
+        rng.fill_bytes(&mut sighash);
+
+        (rng, isk, ik, recipient, sighash)
+    }
+
     fn setup_verify_supply_test_params(
         note1_value: u64,
         note2_value: u64,
@@ -630,27 +652,6 @@ mod tests {
             action.verify_supply(&ik),
             Err(IssueBundleIkMismatchAssetBase)
         );
-    }
-
-    fn setup_params() -> (
-        OsRng,
-        IssuanceAuthorizingKey,
-        IssuanceValidatingKey,
-        Address,
-        [u8; 32],
-    ) {
-        let mut rng = OsRng;
-        let sk = SpendingKey::random(&mut rng);
-        let isk: IssuanceAuthorizingKey = (&sk).into();
-        let ik: IssuanceValidatingKey = (&isk).into();
-
-        let fvk = FullViewingKey::from(&sk);
-        let recipient = fvk.address_at(0u32, Scope::External);
-
-        let mut sighash = [0u8; 32];
-        rng.fill_bytes(&mut sighash);
-
-        (rng, isk, ik, recipient, sighash)
     }
 
     #[test]
