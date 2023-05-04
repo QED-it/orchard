@@ -3,7 +3,7 @@
 use core::fmt;
 
 use ff::Field;
-use group::{Curve, GroupEncoding};
+use group::{Curve, Group, GroupEncoding};
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
     plonk::{
@@ -300,10 +300,10 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                         "(is_native_asset = 1) => (asset_y = native_asset_y)",
                         is_native_asset.clone() * diff_asset_y.clone(),
                     ),
-                    // To prove that asset is not equal to native_asset, we will prove that either
-                    // `x(asset - native_asset)` or `y(asset - native_asset)` is not equal to zero.
-                    // To prove that `x(asset - native_asset)` (resp `y(asset - native_asset)`) is
-                    // not equal to zero, we will prove that it is invertible.
+                    // To prove that `asset` is not equal to `native_asset`, we will prove that either
+                    // `x(asset) - x(native_asset)` or `y(asset) - y(native_asset)` is not equal to zero.
+                    // To prove that `x(asset) - x(native_asset)` (resp `y(asset) - y(native_asset)`)
+                    // is not equal to zero, we will prove that it is invertible.
                     (
                         "(is_native_asset = 0) => (asset != native_asset)",
                         (one.clone() - is_native_asset)
@@ -880,27 +880,31 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     .y()
                     .copy_advice(|| "asset_y", &mut region, config.advices[3], 1)?;
 
-                // `diff_asset_x_inv` and `diff_asset_y_inv` will be used to prove that the
-                // coordinates of `asset - native_asset` are not equal to zero.
-                // If `x(asset - native_asset) * diff_asset_x_inv = 1`, then  `x(asset - native_asset)`
-                // is invertible. Thus, `x(asset - native_asset)` is not equal to zero.
-                // If at least `x(asset - native_asset)` or `y(asset - native_asset)` is not equal
-                // to zero, then asset is not equal to native_asset.
+                // `diff_asset_x_inv` and `diff_asset_y_inv` will be used to prove that either
+                // `x(asset) - x(native_asset)` or `y(asset) - y(native_asset)` is not equal to zero.
+                // If `(x(asset) - x(native_asset)) * diff_asset_x_inv = 1`, then  `x(asset) - x(native_asset)`
+                // is invertible. Thus, `x(asset) - x(native_asset)` is not equal to zero.
+                // If either `x(asset) - x(native_asset)` or `y(asset) - y(native_asset)` is not
+                // equal to zero, then asset is not equal to native_asset.
                 region.assign_advice(
                     || "diff_asset_x_inv",
                     config.advices[4],
                     1,
                     || {
                         self.asset.map(|asset| {
-                            if asset.is_native().into() {
+                            if asset.cv_base().is_identity().into() {
                                 pallas::Base::one()
                             } else {
-                                let diff_asset_x = *(asset.cv_base()
-                                    - AssetBase::native().cv_base())
-                                .to_affine()
-                                .coordinates()
-                                .unwrap()
-                                .x();
+                                let asset_x =
+                                    *asset.cv_base().to_affine().coordinates().unwrap().x();
+                                let native_asset_x = *AssetBase::native()
+                                    .cv_base()
+                                    .to_affine()
+                                    .coordinates()
+                                    .unwrap()
+                                    .x();
+
+                                let diff_asset_x = asset_x - native_asset_x;
 
                                 if diff_asset_x == pallas::Base::zero() {
                                     pallas::Base::one()
@@ -917,15 +921,19 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     1,
                     || {
                         self.asset.map(|asset| {
-                            if asset.is_native().into() {
+                            if asset.cv_base().is_identity().into() {
                                 pallas::Base::one()
                             } else {
-                                let diff_asset_y = *(asset.cv_base()
-                                    - AssetBase::native().cv_base())
-                                .to_affine()
-                                .coordinates()
-                                .unwrap()
-                                .y();
+                                let asset_y =
+                                    *asset.cv_base().to_affine().coordinates().unwrap().y();
+                                let native_asset_y = *AssetBase::native()
+                                    .cv_base()
+                                    .to_affine()
+                                    .coordinates()
+                                    .unwrap()
+                                    .y();
+
+                                let diff_asset_y = asset_y - native_asset_y;
 
                                 if diff_asset_y == pallas::Base::zero() {
                                     pallas::Base::one()
