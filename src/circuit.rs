@@ -892,25 +892,20 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     1,
                     || {
                         self.asset.map(|asset| {
-                            if asset.cv_base().is_identity().into() {
-                                pallas::Base::one()
+                            let asset_x = *asset.cv_base().to_affine().coordinates().unwrap().x();
+                            let native_asset_x = *AssetBase::native()
+                                .cv_base()
+                                .to_affine()
+                                .coordinates()
+                                .unwrap()
+                                .x();
+
+                            let diff_asset_x = asset_x - native_asset_x;
+
+                            if diff_asset_x == pallas::Base::zero() {
+                                pallas::Base::zero()
                             } else {
-                                let asset_x =
-                                    *asset.cv_base().to_affine().coordinates().unwrap().x();
-                                let native_asset_x = *AssetBase::native()
-                                    .cv_base()
-                                    .to_affine()
-                                    .coordinates()
-                                    .unwrap()
-                                    .x();
-
-                                let diff_asset_x = asset_x - native_asset_x;
-
-                                if diff_asset_x == pallas::Base::zero() {
-                                    pallas::Base::one()
-                                } else {
-                                    diff_asset_x.invert().unwrap()
-                                }
+                                diff_asset_x.invert().unwrap()
                             }
                         })
                     },
@@ -921,25 +916,20 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     1,
                     || {
                         self.asset.map(|asset| {
-                            if asset.cv_base().is_identity().into() {
-                                pallas::Base::one()
+                            let asset_y = *asset.cv_base().to_affine().coordinates().unwrap().y();
+                            let native_asset_y = *AssetBase::native()
+                                .cv_base()
+                                .to_affine()
+                                .coordinates()
+                                .unwrap()
+                                .y();
+
+                            let diff_asset_y = asset_y - native_asset_y;
+
+                            if diff_asset_y == pallas::Base::zero() {
+                                pallas::Base::zero()
                             } else {
-                                let asset_y =
-                                    *asset.cv_base().to_affine().coordinates().unwrap().y();
-                                let native_asset_y = *AssetBase::native()
-                                    .cv_base()
-                                    .to_affine()
-                                    .coordinates()
-                                    .unwrap()
-                                    .y();
-
-                                let diff_asset_y = asset_y - native_asset_y;
-
-                                if diff_asset_y == pallas::Base::zero() {
-                                    pallas::Base::one()
-                                } else {
-                                    diff_asset_y.invert().unwrap()
-                                }
+                                diff_asset_y.invert().unwrap()
                             }
                         })
                     },
