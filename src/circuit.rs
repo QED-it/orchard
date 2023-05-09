@@ -3,7 +3,7 @@
 use core::fmt;
 
 use ff::Field;
-use group::{Curve, Group, GroupEncoding};
+use group::{Curve, GroupEncoding};
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
     plonk::{
