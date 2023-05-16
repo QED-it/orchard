@@ -1056,9 +1056,9 @@ impl PkdAssetCanonicity {
 
     #[allow(clippy::too_many_arguments)]
     fn assign(
-        // The variable names are for `pk_d`
-        // This function is also used with `asset`.
-        // We have just to replace `pk_d`, `b_3`, `c`, `d_0` by `asset`, `h_2`, `i`, `j_0`
+        // This function is used for `pk_d` and `asset`.
+        // For `pk_d`, inputs are `pk_d`, `b_3`, `c`, `d_0`, `b3_c_prime`, `z13_c`, `z14_b3_c_prime`
+        // For `asset`, inputs are `asset`, `h_2`, `i`, `j_0`, `h2_i_prime`, `z13_i`, `z14_h2_i_prime`
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
         pk_d: &NonIdentityEccPoint,
@@ -1807,8 +1807,7 @@ pub(in crate::circuit) mod gadgets {
             [RangeConstrained::bitrange_of(asset.x().value(), 4..254)],
         )?;
 
-        // j = j_0 || j_1
-        //   = (bit 254 of x(asset)) || (ỹ bit of asset)
+        // j = j_0 || j_1 = (bit 254 of x(asset)) || (ỹ bit of asset)
         let (j, j_0, j_1) = DecomposeJ::decompose(chip.clone(), &mut layouter, asset)?;
 
         // Check decomposition of `y(g_d)`.
@@ -2316,10 +2315,7 @@ mod tests {
         dev::MockProver,
         plonk::{Circuit, ConstraintSystem, Error},
     };
-    use pasta_curves::{
-        arithmetic::CurveAffine,
-        pallas, EpAffine,
-    };
+    use pasta_curves::{arithmetic::CurveAffine, pallas, EpAffine};
 
     use rand::{rngs::OsRng, RngCore};
 

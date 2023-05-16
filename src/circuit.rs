@@ -224,8 +224,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
         // Constrain split_flag = 1 or nf_old = nf_old_pub
         // Constrain is_native_asset to be boolean
-        // Constraint if is_native_asset = 1 then asset = native_asset
-        // Constraint if is_native_asset = 0 then asset != native_asset
+        // Constraint if is_native_asset = 1 then asset = native_asset else asset != native_asset
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -300,8 +299,9 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                         "(is_native_asset = 1) => (asset_y = native_asset_y)",
                         is_native_asset.clone() * diff_asset_y.clone(),
                     ),
-                    // To prove that `asset` is not equal to `native_asset`, we will prove that either
-                    // `x(asset) - x(native_asset)` or `y(asset) - y(native_asset)` is not equal to zero.
+                    // To prove that `asset` is not equal to `native_asset`, we will prove that at
+                    // least one of `x(asset) - x(native_asset)` or `y(asset) - y(native_asset)` is
+                    // not equal to zero.
                     // To prove that `x(asset) - x(native_asset)` (resp `y(asset) - y(native_asset)`)
                     // is not equal to zero, we will prove that it is invertible.
                     (
@@ -880,12 +880,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     .y()
                     .copy_advice(|| "asset_y", &mut region, config.advices[3], 1)?;
 
-                // `diff_asset_x_inv` and `diff_asset_y_inv` will be used to prove that either
-                // `x(asset) - x(native_asset)` or `y(asset) - y(native_asset)` is not equal to zero.
-                // If `(x(asset) - x(native_asset)) * diff_asset_x_inv = 1`, then  `x(asset) - x(native_asset)`
-                // is invertible. Thus, `x(asset) - x(native_asset)` is not equal to zero.
-                // If either `x(asset) - x(native_asset)` or `y(asset) - y(native_asset)` is not
-                // equal to zero, then asset is not equal to native_asset.
+                // `diff_asset_x_inv` and `diff_asset_y_inv` will be used to prove that
+                // if is_native_asset = 0, then asset != native_asset.
                 region.assign_advice(
                     || "diff_asset_x_inv",
                     config.advices[4],
