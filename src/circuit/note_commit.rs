@@ -2295,7 +2295,6 @@ mod tests {
             note_commit::{gadgets, NoteCommitChip},
         },
         constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_Q},
-        keys::{IssuanceAuthorizingKey, IssuanceValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, NoteCommitment},
         value::NoteValue,
     };
@@ -2554,13 +2553,8 @@ mod tests {
 
         let two_pow_254 = pallas::Base::from_u128(1 << 127).square();
         let mut rng = OsRng;
-        let random_asset = {
-            let sk = SpendingKey::random(&mut rng);
-            let isk = IssuanceAuthorizingKey::from(&sk);
-            let ik = IssuanceValidatingKey::from(&isk);
-            let asset_descr = "zsa_asset";
-            AssetBase::derive(&ik, asset_descr)
-        };
+        let random_asset = AssetBase::random(&mut rng);
+
         // Test different values of `ak`, `nk`
         let mut circuits = vec![];
         for asset in [random_asset, AssetBase::native()] {
