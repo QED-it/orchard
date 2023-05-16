@@ -21,7 +21,7 @@ use self::{
     commit_ivk::{CommitIvkChip, CommitIvkConfig},
     gadget::{
         add_chip::{AddChip, AddConfig},
-        assign_free_advice,
+        assign_free_advice, assign_is_native_asset,
     },
     note_commit::{NoteCommitChip, NoteCommitConfig},
 };
@@ -532,16 +532,10 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Witness is_native_asset which is equal to
         // 1 if asset is equal to native asset, and
         // 0 if asset is not equal to native asset.
-        let is_native_asset = assign_free_advice(
+        let is_native_asset = assign_is_native_asset(
             layouter.namespace(|| "witness is_native_asset"),
             config.advices[0],
-            self.asset.map(|asset| {
-                if bool::from(asset.is_native()) {
-                    pallas::Base::one()
-                } else {
-                    pallas::Base::zero()
-                }
-            }),
+            self.asset,
         )?;
 
         // Merkle path validity check (https://p.z.cash/ZKS:action-merkle-path-validity?partial).

@@ -2289,7 +2289,7 @@ mod tests {
     use crate::{
         circuit::{
             gadget::{
-                assign_free_advice,
+                assign_free_advice, assign_is_native_asset,
                 mux_chip::{MuxChip, MuxConfig},
             },
             note_commit::{gadgets, NoteCommitChip},
@@ -2487,16 +2487,10 @@ mod tests {
                     self.asset.map(|asset| asset.cv_base().to_affine()),
                 )?;
 
-                let is_native_asset = assign_free_advice(
+                let is_native_asset = assign_is_native_asset(
                     layouter.namespace(|| "witness is_native_asset"),
                     note_commit_config.advices[0],
-                    self.asset.map(|asset| {
-                        if bool::from(asset.is_native()) {
-                            pallas::Base::one()
-                        } else {
-                            pallas::Base::zero()
-                        }
-                    }),
+                    self.asset,
                 )?;
                 let cm = gadgets::note_commit(
                     layouter.namespace(|| "Hash NoteCommit pieces"),

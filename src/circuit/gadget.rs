@@ -5,6 +5,7 @@ use pasta_curves::pallas;
 
 use super::{commit_ivk::CommitIvkChip, note_commit::NoteCommitChip};
 use crate::constants::{NullifierK, OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains};
+use crate::note::AssetBase;
 use halo2_gadgets::{
     ecc::{chip::EccChip, EccInstructions, FixedPointBaseField, Point, X},
     poseidon::{
@@ -102,6 +103,28 @@ where
     layouter.assign_region(
         || "load private",
         |mut region| region.assign_advice(|| "load private", column, 0, || value),
+    )
+}
+
+/// Witnesses is_native_asset.
+pub(in crate::circuit) fn assign_is_native_asset<F: Field>(
+    layouter: impl Layouter<F>,
+    column: Column<Advice>,
+    asset: Value<AssetBase>,
+) -> Result<AssignedCell<pasta_curves::Fp, F>, plonk::Error>
+where
+    Assigned<F>: for<'v> From<&'v pasta_curves::Fp>,
+{
+    assign_free_advice(
+        layouter,
+        column,
+        asset.map(|asset| {
+            if bool::from(asset.is_native()) {
+                pallas::Base::one()
+            } else {
+                pallas::Base::zero()
+            }
+        }),
     )
 }
 
