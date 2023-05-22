@@ -576,9 +576,11 @@ impl DecomposeG {
         )
     }
 }
-
-/// h = h_0 || h_1 || h_2
-///   = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
+/// h_zec = h_0 || h_1 || 0000
+///       = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
+///
+/// h_zsa = h_0 || h_1 || h_2
+///       = (bits 249..=253 of psi) || (bit 254 of psi) || (bits 0..=3 of x(asset))
 ///
 /// | A_6     | A_7 | A_8 | q_notecommit_h |
 /// ------------------------------------
