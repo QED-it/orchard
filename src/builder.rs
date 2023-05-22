@@ -9,6 +9,7 @@ use ff::Field;
 use nonempty::NonEmpty;
 use pasta_curves::pallas;
 use rand::{prelude::SliceRandom, CryptoRng, RngCore};
+use rand::rngs::OsRng;
 
 use crate::note::AssetBase;
 use crate::{
@@ -148,6 +149,25 @@ impl SpendInfo {
         })
     }
 
+    fn new_with_scope(
+        note: Note,
+        merkle_path: MerklePath,
+        scope: Scope,
+        split_flag: bool,
+        rng: &mut impl RngCore
+    ) -> Option<Self> {
+        let sk = SpendingKey::random(rng);
+        let fvk: FullViewingKey = (&sk).into();
+        Some(SpendInfo {
+            dummy_sk: Some(sk),
+            fvk,
+            scope,
+            note,
+            merkle_path,
+            split_flag,
+        })
+    }
+
     /// Defined in [Zcash Protocol Spec § 4.8.3: Dummy Notes (Orchard)][orcharddummynotes].
     ///
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
@@ -168,8 +188,8 @@ impl SpendInfo {
     }
 
     /// Return a copy of this note with the split flag set to `true`.
-    fn create_split_spend(&self) -> Self {
-        SpendInfo::new(self.fvk.clone(), self.note, self.merkle_path.clone(), true).unwrap()
+    fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
+        SpendInfo::new_with_scope(self.note, self.merkle_path.clone(), Scope::Internal, true, rng).unwrap()
     }
 }
 
@@ -465,7 +485,7 @@ impl Builder {
             // use the first spend to create split spend(s) or create a dummy if empty.
             let dummy_spend = spends.first().map_or_else(
                 || SpendInfo::dummy(asset, &mut rng),
-                |s| s.create_split_spend(),
+                |s| s.create_split_spend(&mut OsRng),
             );
             spends.extend(iter::repeat_with(|| dummy_spend.clone()).take(num_actions - num_spends));
 
@@ -562,8 +582,8 @@ fn partition_by_asset(
     }
 
     if hm.is_empty() {
-        let dummy_spend = SpendInfo::dummy(AssetBase::native(), rng);
-        hm.insert(dummy_spend.note.asset(), (vec![dummy_spend], vec![]));
+        SpendInfo::dummy(AssetBase::native(), rng);
+        hm.insert(AssetBase::native(), (vec![SpendInfo::dummy(AssetBase::native(), rng), SpendInfo::dummy(AssetBase::native(), rng)], vec![]));
     }
 
     hm
