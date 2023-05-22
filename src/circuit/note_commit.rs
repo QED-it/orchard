@@ -576,16 +576,16 @@ impl DecomposeG {
         )
     }
 }
-/// h_zec = h_0 || h_1 || 0000
+/// h_zec = h_0 || h_1 || h_2_zec
 ///       = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
 ///
-/// h_zsa = h_0 || h_1 || h_2
+/// h_zsa = h_0 || h_1 || h_2_zsa
 ///       = (bits 249..=253 of psi) || (bit 254 of psi) || (bits 0..=3 of x(asset))
 ///
-/// | A_6     | A_7 | A_8 | q_notecommit_h |
-/// ------------------------------------
-/// |  h_zec  | h_0 | h_1 |       1        |
-/// |  h_zsa  | h_2 |     |       0        |
+/// | A_6     | A_7     | A_8 | q_notecommit_h |
+/// --------------------------------------------
+/// |  h_zec  | h_0     | h_1 |       1        |
+/// |  h_zsa  | h_2_zsa |     |       0        |
 ///
 /// <https://p.z.cash/orchard-0.1:note-commit-decomposition-h?partial>
 #[derive(Clone, Debug)]
@@ -619,14 +619,15 @@ impl DecomposeH {
 
             // h_zsa has been constrained to 10 bits by the Sinsemilla hash.
             let h_zsa = meta.query_advice(col_l, Rotation::next());
-            // h_2 has been constrained to be 4 bits outside this gate.
-            let h_2 = meta.query_advice(col_m, Rotation::next());
+            // h_2_zsa has been constrained to be 4 bits outside this gate.
+            let h_2_zsa = meta.query_advice(col_m, Rotation::next());
 
             // h_zec = h_0 + (2^5) h_1
             let zec_decomposition_check = h_zec - (h_0.clone() + h_1.clone() * two_pow_5);
 
-            // h_zsa = h_0 + (2^5) h_1 + (2^6) h_2
-            let zsa_decomposition_check = h_zsa - (h_0 + h_1.clone() * two_pow_5 + h_2 * two_pow_6);
+            // h_zsa = h_0 + (2^5) h_1 + (2^6) h_2_zsa
+            let zsa_decomposition_check =
+                h_zsa - (h_0 + h_1.clone() * two_pow_5 + h_2_zsa * two_pow_6);
 
             Constraints::with_selector(
                 q_notecommit_h,
@@ -674,10 +675,10 @@ impl DecomposeH {
         // h_1 will be boolean-constrained in the gate.
         let h_1 = RangeConstrained::bitrange_of(psi.value(), 254..255);
 
-        // Constrain h_2 to be 4 bits.
-        let h_2 = RangeConstrained::witness_short(
+        // Constrain h_2_zsa to be 4 bits.
+        let h_2_zsa = RangeConstrained::witness_short(
             lookup_config,
-            layouter.namespace(|| "h_2"),
+            layouter.namespace(|| "h_2_zsa"),
             asset.x().value(),
             0..4,
         )?;
@@ -695,10 +696,10 @@ impl DecomposeH {
         let h_zsa = MessagePiece::from_subpieces(
             chip,
             layouter.namespace(|| "h_zsa"),
-            [h_0.value(), h_1, h_2.value()],
+            [h_0.value(), h_1, h_2_zsa.value()],
         )?;
 
-        Ok((h_zec, h_zsa, h_0, h_1, h_2))
+        Ok((h_zec, h_zsa, h_0, h_1, h_2_zsa))
     }
 
     fn assign(
@@ -708,7 +709,7 @@ impl DecomposeH {
         h_zsa: NoteCommitPiece,
         h_0: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         h_1: RangeConstrained<pallas::Base, Value<pallas::Base>>,
-        h_2: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
+        h_2_zsa: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
     ) -> Result<AssignedCell<pallas::Base, pallas::Base>, Error> {
         layouter.assign_region(
             || "NoteCommit MessagePiece h",
@@ -728,8 +729,9 @@ impl DecomposeH {
                     .cell_value()
                     .copy_advice(|| "h_zsa", &mut region, self.col_l, 1)?;
 
-                h_2.inner()
-                    .copy_advice(|| "h_2", &mut region, self.col_m, 1)?;
+                h_2_zsa
+                    .inner()
+                    .copy_advice(|| "h_2_zsa", &mut region, self.col_m, 1)?;
 
                 Ok(h_1)
             },
@@ -967,15 +969,15 @@ impl GdCanonicity {
 }
 /// For pk_d
 /// |   A_6   | A_7 |    A_8     |      A_9       | q_notecommit_pk_d_asset |
-/// -------------------------------------------------------------------
-/// | x(pk_d) | b_3 |    c       | z13_c          |         1         |
-/// |         | d_0 | b3_c_prime | z14_b3_c_prime |         0         |
+/// -------------------------------------------------------------------------
+/// | x(pk_d) | b_3 |    c       | z13_c          |         1               |
+/// |         | d_0 | b3_c_prime | z14_b3_c_prime |         0               |
 ///
 /// For asset
-/// |   A_6   | A_7 |    A_8     |      A_9       | q_notecommit_pk_d_asset |
-/// -------------------------------------------------------------------
-/// | x(asset) | h_2 |    i       | z13_i         |         1         |
-/// |         | j_0 | h2_i_prime | z14_h2_i_prime |         0         |
+/// |   A_6   | A_7      |    A_8     |      A_9       | q_notecommit_pk_d_asset |
+/// ------------------------------------------------------------------------------
+/// | x(asset) | h_2_zsa |    i       | z13_i          |         1               |
+/// |         | j_0      | h2_i_prime | z14_h2_i_prime |         0               |
 ///
 /// <https://p.z.cash/orchard-0.1:note-commit-canonicity-pk_d?partial>
 #[derive(Clone, Debug)]
@@ -1005,7 +1007,7 @@ impl PkdAssetCanonicity {
         meta.create_gate("NoteCommit input pk_d or asset", |meta| {
             // The comments and variable names are for `pk_d`
             // This gate is also used with `asset`.
-            // We have just to replace `pk_d`, `b_3`, `c`, `d_0` by `asset`, `h_2`, `i`, `j_0`
+            // We have just to replace `pk_d`, `b_3`, `c`, `d_0` by `asset`, `h_2_zsa`, `i`, `j_0`
             let q_notecommit_pk_d_asset = meta.query_selector(q_notecommit_pk_d_asset);
 
             let pkd_x = meta.query_advice(col_l, Rotation::cur());
@@ -1060,7 +1062,7 @@ impl PkdAssetCanonicity {
     fn assign(
         // This function is used for `pk_d` and `asset`.
         // For `pk_d`, inputs are `pk_d`, `b_3`, `c`, `d_0`, `b3_c_prime`, `z13_c`, `z14_b3_c_prime`
-        // For `asset`, inputs are `asset`, `h_2`, `i`, `j_0`, `h2_i_prime`, `z13_i`, `z14_h2_i_prime`
+        // For `asset`, inputs are `asset`, `h_2_zsa`, `i`, `j_0`, `h2_i_prime`, `z13_i`, `z14_h2_i_prime`
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
         pk_d: &NonIdentityEccPoint,
@@ -1795,11 +1797,11 @@ pub(in crate::circuit) mod gadgets {
         let (g, g_0, g_1) =
             DecomposeG::decompose(&lookup_config, chip.clone(), &mut layouter, &rho, &psi)?;
 
-        // h_zec = h_0 || h_1 || 0000
+        // h_zec = h_0 || h_1 || h_2_zec
         //   = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
-        // h_zsa = h_0 || h_1 || h_2
+        // h_zsa = h_0 || h_1 || h_2_zsa
         //   = (bits 249..=253 of psi) || (bit 254 of psi) || (bits 0..=3 of x(asset))
-        let (h_zec, h_zsa, h_0, h_1, h_2) =
+        let (h_zec, h_zsa, h_0, h_1, h_2_zsa) =
             DecomposeH::decompose(&lookup_config, chip.clone(), &mut layouter, &psi, asset)?;
 
         // i = bits 4..=253 of asset
@@ -1809,7 +1811,7 @@ pub(in crate::circuit) mod gadgets {
             [RangeConstrained::bitrange_of(asset.x().value(), 4..254)],
         )?;
 
-        // j = j_0 || j_1 = (bit 254 of x(asset)) || (ỹ bit of asset)
+        // j = j_0 || j_1 || j_2 = (bit 254 of x(asset)) || (ỹ bit of asset) || 8 zero bits
         let (j, j_0, j_1) = DecomposeJ::decompose(chip.clone(), &mut layouter, asset)?;
 
         // Check decomposition of `y(g_d)`.
@@ -1952,7 +1954,7 @@ pub(in crate::circuit) mod gadgets {
         let (h2_i_prime, z14_h2_i_prime) = pkd_asset_x_canonicity(
             &lookup_config,
             layouter.namespace(|| "x(asset) canonicity"),
-            h_2.clone(),
+            h_2_zsa.clone(),
             i.inner().cell_value(),
         )?;
 
@@ -1987,9 +1989,14 @@ pub(in crate::circuit) mod gadgets {
             .g
             .assign(&mut layouter, g, g_0, g_1.clone(), z1_g.clone())?;
 
-        let h_1 = cfg
-            .h
-            .assign(&mut layouter, h_zec, h_zsa, h_0.clone(), h_1, h_2.clone())?;
+        let h_1 = cfg.h.assign(
+            &mut layouter,
+            h_zec,
+            h_zsa,
+            h_0.clone(),
+            h_1,
+            h_2_zsa.clone(),
+        )?;
 
         let j_0 = cfg.j.assign(&mut layouter, j, j_0, j_1)?;
 
@@ -2010,7 +2017,7 @@ pub(in crate::circuit) mod gadgets {
         cfg.pk_d_asset.assign(
             &mut layouter,
             asset,
-            h_2,
+            h_2_zsa,
             i,
             j_0,
             h2_i_prime,
@@ -2101,7 +2108,7 @@ pub(in crate::circuit) mod gadgets {
         //         - z_13 of SinsemillaHash(c) == 0 constrains bits 4..=253 of pkd_x
         //           to 130 bits. z13_c is directly checked in the gate.
         //     - 0 ≤ b_3 + 2^4 c + 2^140 - t_P < 2^140 (14 ten-bit lookups)
-        // For `x(asset)`, we have to replace `pk_d`, `b_3`, `c`, `d_0` by `asset`, `h_2`, `i`, `j_0`
+        // For `x(asset)`, we have to replace `pk_d`, `b_3`, `c`, `d_0` by `asset`, `h_2_zsa`, `i`, `j_0`
 
         // Decompose the low 140 bits of b3_c_prime = b_3 + 2^4 c + 2^140 - t_P,
         // and output the running sum at the end of it.
