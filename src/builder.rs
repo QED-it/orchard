@@ -9,7 +9,6 @@ use ff::Field;
 use nonempty::NonEmpty;
 use pasta_curves::pallas;
 use rand::{prelude::SliceRandom, CryptoRng, RngCore};
-use rand::rngs::OsRng;
 
 use crate::note::AssetBase;
 use crate::{
@@ -154,7 +153,7 @@ impl SpendInfo {
         merkle_path: MerklePath,
         scope: Scope,
         split_flag: bool,
-        rng: &mut impl RngCore
+        rng: &mut impl RngCore,
     ) -> Option<Self> {
         let sk = SpendingKey::random(rng);
         let fvk: FullViewingKey = (&sk).into();
@@ -189,7 +188,14 @@ impl SpendInfo {
 
     /// Return a copy of this note with the split flag set to `true`.
     fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
-        SpendInfo::new_with_scope(self.note, self.merkle_path.clone(), Scope::Internal, true, rng).unwrap()
+        SpendInfo::new_with_scope(
+            self.note,
+            self.merkle_path.clone(),
+            Scope::Internal,
+            true,
+            rng,
+        )
+        .unwrap()
     }
 }
 
@@ -482,12 +488,12 @@ impl Builder {
                 .cloned()
                 .unwrap();
 
+            let dummy = SpendInfo::dummy(asset, &mut rng);
             // use the first spend to create split spend(s) or create a dummy if empty.
-            let dummy_spend = spends.first().map_or_else(
-                || SpendInfo::dummy(asset, &mut rng),
-                |s| s.create_split_spend(&mut OsRng),
-            );
-            spends.extend(iter::repeat_with(|| dummy_spend.clone()).take(num_actions - num_spends));
+            let padding = spends
+                .first()
+                .map_or_else(|| dummy, |s| s.create_split_spend(&mut rng));
+            spends.extend(iter::repeat_with(|| padding.clone()).take(num_actions - num_spends));
 
             // Extend the recipients with dummy values.
             recipients.extend(
@@ -582,8 +588,12 @@ fn partition_by_asset(
     }
 
     if hm.is_empty() {
-        SpendInfo::dummy(AssetBase::native(), rng);
-        hm.insert(AssetBase::native(), (vec![SpendInfo::dummy(AssetBase::native(), rng), SpendInfo::dummy(AssetBase::native(), rng)], vec![]));
+        let dummy_spend_1 = SpendInfo::dummy(AssetBase::native(), rng);
+        let dummy_spend_2 = SpendInfo::dummy(AssetBase::native(), rng);
+        hm.insert(
+            AssetBase::native(),
+            (vec![dummy_spend_1, dummy_spend_2], vec![]),
+        );
     }
 
     hm
