@@ -467,11 +467,20 @@ impl Builder {
                 .cloned()
                 .unwrap();
 
-            // use the first spend to create split spend(s) or create a dummy if empty.
-            let dummy_spend = spends.first().map_or_else(
-                || SpendInfo::dummy(asset, &mut rng),
-                |s| s.create_split_spend(),
-            );
+            // Extend the spends with dummy or split notes.
+            let dummy_spend = if asset.is_native().into() {
+                // For native asset, extends with dummy notes
+                SpendInfo::dummy(asset, &mut rng)
+            } else {
+                // For ZSA asset, extends with
+                // - dummy notes if first spend is empty
+                // - split notes otherwise.
+                spends.first().map_or_else(
+                    || SpendInfo::dummy(asset, &mut rng),
+                    |s| s.create_split_spend(),
+                )
+            };
+
             spends.extend(iter::repeat_with(|| dummy_spend.clone()).take(num_actions - num_spends));
 
             // Extend the recipients with dummy values.
