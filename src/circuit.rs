@@ -1151,20 +1151,23 @@ mod tests {
     use core::iter;
 
     use ff::Field;
+    use group::{Curve, Group, GroupEncoding};
     use halo2_proofs::{circuit::Value, dev::MockProver};
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, RngCore};
 
     use super::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K};
-    use crate::note::AssetBase;
+    use crate::note::commitment::NoteCommitTrapdoor;
+    use crate::note::{AssetBase, Nullifier};
+    use crate::primitives::redpallas::VerificationKey;
     use crate::{
-        keys::SpendValidatingKey,
-        note::Note,
+        keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
+        note::{Note, NoteCommitment},
         tree::MerklePath,
-        value::{ValueCommitTrapdoor, ValueCommitment},
+        value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
-    fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit, Instance) {
+    fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
 
         let sender_address = spent_note.recipient();
@@ -1227,7 +1230,7 @@ mod tests {
         let mut rng = OsRng;
 
         let (circuits, instances): (Vec<_>, Vec<_>) = iter::once(())
-            .map(|()| generate_circuit_instance(&mut rng))
+            .map(|()| generate_dummy_circuit_instance(&mut rng))
             .unzip();
 
         let vk = VerifyingKey::build();
@@ -1341,7 +1344,7 @@ mod tests {
             let create_proof = || -> std::io::Result<()> {
                 let mut rng = OsRng;
 
-                let (circuit, instance) = generate_circuit_instance(OsRng);
+                let (circuit, instance) = generate_dummy_circuit_instance(OsRng);
                 let instances = &[instance.clone()];
 
                 let pk = ProvingKey::build();
@@ -1403,5 +1406,236 @@ mod tests {
             .view_height(0..(1 << 11))
             .render(K, &circuit, &root)
             .unwrap();
+    }
+
+    fn generate_circuit_instance<R: RngCore>(
+        is_native_asset: bool,
+        split_flag: bool,
+        mut rng: R,
+    ) -> (Circuit, Instance) {
+        // Create asset
+        let asset_base = if is_native_asset {
+            AssetBase::native()
+        } else {
+            AssetBase::random(&mut rng)
+        };
+
+        // Create spent_note
+        let (sender_address, fvk, spent_note) = {
+            let sk = SpendingKey::random(&mut rng);
+            let fvk: FullViewingKey = (&sk).into();
+            let sender_address = fvk.address_at(0u32, Scope::External);
+
+            let rho_old = Nullifier::dummy(&mut rng);
+
+            let spent_note = Note::new(
+                sender_address,
+                NoteValue::from_raw(40),
+                asset_base,
+                rho_old,
+                &mut rng,
+            );
+            (sender_address, fvk, spent_note)
+        };
+
+        let nk = *fvk.nk();
+        let rivk = fvk.rivk(fvk.scope_for_address(&spent_note.recipient()).unwrap());
+        let nf_old = if split_flag {
+            Nullifier::dummy(&mut rng)
+        } else {
+            spent_note.nullifier(&fvk)
+        };
+        let ak: SpendValidatingKey = fvk.into();
+        let alpha = pallas::Scalar::random(&mut rng);
+        let rk = ak.randomize(&alpha);
+
+        let output_note = {
+            let sk = SpendingKey::random(&mut rng);
+            let fvk: FullViewingKey = (&sk).into();
+            let sender_address = fvk.address_at(0u32, Scope::External);
+
+            Note::new(
+                sender_address,
+                NoteValue::from_raw(10),
+                asset_base,
+                nf_old,
+                &mut rng,
+            )
+        };
+
+        let cmx = output_note.commitment().into();
+
+        let value = if split_flag {
+            NoteValue::zero() - output_note.value()
+        } else {
+            spent_note.value() - output_note.value()
+        };
+        let rcv = ValueCommitTrapdoor::random(&mut rng);
+        let cv_net = ValueCommitment::derive(value, rcv, asset_base);
+
+        let path = MerklePath::dummy(&mut rng);
+        let anchor = path.root(spent_note.commitment().into());
+
+        (
+            Circuit {
+                path: Value::known(path.auth_path()),
+                pos: Value::known(path.position()),
+                g_d_old: Value::known(sender_address.g_d()),
+                pk_d_old: Value::known(*sender_address.pk_d()),
+                v_old: Value::known(spent_note.value()),
+                rho_old: Value::known(spent_note.rho()),
+                psi_old: Value::known(spent_note.rseed().psi(&spent_note.rho())),
+                rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
+                cm_old: Value::known(spent_note.commitment()),
+                alpha: Value::known(alpha),
+                ak: Value::known(ak),
+                nk: Value::known(nk),
+                rivk: Value::known(rivk),
+                g_d_new: Value::known(output_note.recipient().g_d()),
+                pk_d_new: Value::known(*output_note.recipient().pk_d()),
+                v_new: Value::known(output_note.value()),
+                psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
+                rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
+                rcv: Value::known(rcv),
+                asset: Value::known(spent_note.asset()),
+                split_flag: Value::known(split_flag),
+            },
+            Instance {
+                anchor,
+                cv_net,
+                nf_old,
+                rk,
+                cmx,
+                enable_spend: true,
+                enable_output: true,
+            },
+        )
+    }
+
+    fn check_proof_of_orchard_circuit(circuit: &Circuit, instance: &Instance, should_pass: bool) {
+        let proof_verify = MockProver::run(
+            K,
+            circuit,
+            instance
+                .to_halo2_instance()
+                .iter()
+                .map(|p| p.to_vec())
+                .collect(),
+        )
+        .unwrap()
+        .verify();
+        if should_pass {
+            assert!(proof_verify.is_ok());
+        } else {
+            assert!(proof_verify.is_err());
+        }
+    }
+
+    fn random_note_commitment(mut rng: impl RngCore) -> NoteCommitment {
+        NoteCommitment::derive(
+            pallas::Point::random(&mut rng).to_affine().to_bytes(),
+            pallas::Point::random(&mut rng).to_affine().to_bytes(),
+            NoteValue::from_raw(rng.next_u64()),
+            AssetBase::random(&mut rng),
+            pallas::Base::random(&mut rng),
+            pallas::Base::random(&mut rng),
+            NoteCommitTrapdoor(pallas::Scalar::random(&mut rng)),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_orchard_circuit() {
+        let mut rng = OsRng;
+
+        for is_native_asset in [true, false] {
+            for split_flag in [true, false] {
+                let (circuit, instance) =
+                    generate_circuit_instance(is_native_asset, split_flag, &mut rng);
+
+                check_proof_of_orchard_circuit(&circuit, &instance, true);
+
+                // Set cv_net to zero
+                // The proof should fail
+                let instance_wrong_cv_net = Instance {
+                    anchor: instance.anchor,
+                    cv_net: ValueCommitment::from_bytes(&[0u8; 32]).unwrap(),
+                    nf_old: instance.nf_old,
+                    rk: instance.rk.clone(),
+                    cmx: instance.cmx,
+                    enable_spend: instance.enable_spend,
+                    enable_output: instance.enable_output,
+                };
+                check_proof_of_orchard_circuit(&circuit, &instance_wrong_cv_net, false);
+
+                // Set rk_pub to dummy VerificationKey
+                // The proof should fail
+                let instance_wrong_rk = Instance {
+                    anchor: instance.anchor,
+                    cv_net: instance.cv_net.clone(),
+                    nf_old: instance.nf_old,
+                    rk: VerificationKey::dummy(),
+                    cmx: instance.cmx,
+                    enable_spend: instance.enable_spend,
+                    enable_output: instance.enable_output,
+                };
+                check_proof_of_orchard_circuit(&circuit, &instance_wrong_rk, false);
+
+                // Set cm_old to random NoteCommitment
+                // The proof should fail
+                let circuit_wrong_cm_old = Circuit {
+                    path: circuit.path,
+                    pos: circuit.pos,
+                    g_d_old: circuit.g_d_old,
+                    pk_d_old: circuit.pk_d_old,
+                    v_old: circuit.v_old,
+                    rho_old: circuit.rho_old,
+                    psi_old: circuit.psi_old,
+                    rcm_old: circuit.rcm_old.clone(),
+                    cm_old: Value::known(random_note_commitment(&mut rng)),
+                    alpha: circuit.alpha,
+                    ak: circuit.ak.clone(),
+                    nk: circuit.nk,
+                    rivk: circuit.rivk,
+                    g_d_new: circuit.g_d_new,
+                    pk_d_new: circuit.pk_d_new,
+                    v_new: circuit.v_new,
+                    psi_new: circuit.psi_new,
+                    rcm_new: circuit.rcm_new.clone(),
+                    rcv: circuit.rcv,
+                    asset: circuit.asset,
+                    split_flag: circuit.split_flag,
+                };
+                check_proof_of_orchard_circuit(&circuit_wrong_cm_old, &instance, false);
+
+                // Set cmx_pub to random NoteCommitment
+                // The proof should fail
+                let instance_wrong_cmx_pub = Instance {
+                    anchor: instance.anchor,
+                    cv_net: instance.cv_net.clone(),
+                    nf_old: instance.nf_old,
+                    rk: instance.rk.clone(),
+                    cmx: random_note_commitment(&mut rng).into(),
+                    enable_spend: instance.enable_spend,
+                    enable_output: instance.enable_output,
+                };
+                check_proof_of_orchard_circuit(&circuit, &instance_wrong_cmx_pub, false);
+
+                // If split_flag=0, set nf_old_pub to random Nullifier
+                // The proof should fail
+                if !split_flag {
+                    let instance_wrong_nf_old_pub = Instance {
+                        anchor: instance.anchor,
+                        cv_net: instance.cv_net,
+                        nf_old: Nullifier::dummy(&mut rng),
+                        rk: instance.rk,
+                        cmx: instance.cmx,
+                        enable_spend: instance.enable_spend,
+                        enable_output: instance.enable_output,
+                    };
+                    check_proof_of_orchard_circuit(&circuit, &instance_wrong_nf_old_pub, false);
+                }
+            }
+        }
     }
 }
