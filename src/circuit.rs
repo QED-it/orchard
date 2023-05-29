@@ -2,6 +2,7 @@
 
 use core::fmt;
 
+use ff::Field;
 use group::{Curve, GroupEncoding};
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
@@ -20,12 +21,13 @@ use self::{
     commit_ivk::{CommitIvkChip, CommitIvkConfig},
     gadget::{
         add_chip::{AddChip, AddConfig},
-        assign_free_advice,
+        assign_free_advice, assign_is_native_asset,
     },
     note_commit::{NoteCommitChip, NoteCommitConfig},
 };
 use crate::{
     builder::SpendInfo,
+    circuit::gadget::mux_chip::{MuxChip, MuxConfig},
     constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
         MERKLE_DEPTH_ORCHARD,
@@ -65,7 +67,7 @@ mod note_commit;
 mod value_commit_orchard;
 
 /// Size of the Orchard circuit.
-const K: u32 = 11;
+const K: u32 = 12;
 
 // Absolute offsets for public inputs.
 const ANCHOR: usize = 0;
@@ -96,6 +98,7 @@ pub struct Config {
     commit_ivk_config: CommitIvkConfig,
     old_note_commit_config: NoteCommitConfig,
     new_note_commit_config: NoteCommitConfig,
+    mux_config: MuxConfig,
 }
 
 /// The Orchard Action circuit.
@@ -220,6 +223,9 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constrain v_old = 0 or enable_spends = 1      (https://p.z.cash/ZKS:action-enable-spend).
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
         // Constrain split_flag = 1 or nf_old = nf_old_pub
+        // Constrain is_native_asset to be boolean
+        // Constraint if is_native_asset = 1 then asset = native_asset else asset != native_asset
+        // Constraint split_flag = 1 or derived_pk_d_old = pk_d_old
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -239,7 +245,27 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let nf_old = meta.query_advice(advices[9], Rotation::cur());
             let nf_old_pub = meta.query_advice(advices[0], Rotation::next());
 
+            let is_native_asset = meta.query_advice(advices[1], Rotation::next());
+            let asset_x = meta.query_advice(advices[2], Rotation::next());
+            let asset_y = meta.query_advice(advices[3], Rotation::next());
+            let diff_asset_x_inv = meta.query_advice(advices[4], Rotation::next());
+            let diff_asset_y_inv = meta.query_advice(advices[5], Rotation::next());
+
             let one = Expression::Constant(pallas::Base::one());
+
+            let native_asset = AssetBase::native()
+                .cv_base()
+                .to_affine()
+                .coordinates()
+                .unwrap();
+
+            let diff_asset_x = asset_x - Expression::Constant(*native_asset.x());
+            let diff_asset_y = asset_y - Expression::Constant(*native_asset.y());
+
+            let pk_d_old_x = meta.query_advice(advices[6], Rotation::next());
+            let pk_d_old_y = meta.query_advice(advices[7], Rotation::next());
+            let derived_pk_d_old_x = meta.query_advice(advices[8], Rotation::next());
+            let derived_pk_d_old_y = meta.query_advice(advices[9], Rotation::next());
 
             Constraints::with_selector(
                 q_orchard,
@@ -265,7 +291,45 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     ),
                     (
                         "split_flag = 1 or nf_old = nf_old_pub",
-                        (one - split_flag) * (nf_old - nf_old_pub),
+                        (one.clone() - split_flag.clone()) * (nf_old - nf_old_pub),
+                    ),
+                    (
+                        "bool_check is_native_asset",
+                        bool_check(is_native_asset.clone()),
+                    ),
+                    (
+                        "(is_native_asset = 1) =>  (asset_x = native_asset_x)",
+                        is_native_asset.clone() * diff_asset_x.clone(),
+                    ),
+                    (
+                        "(is_native_asset = 1) => (asset_y = native_asset_y)",
+                        is_native_asset.clone() * diff_asset_y.clone(),
+                    ),
+                    // To prove that `asset` is not equal to `native_asset`, we will prove that at
+                    // least one of `x(asset) - x(native_asset)` or `y(asset) - y(native_asset)` is
+                    // not equal to zero.
+                    // To prove that `x(asset) - x(native_asset)` (resp `y(asset) - y(native_asset)`)
+                    // is not equal to zero, we will prove that it is invertible.
+                    (
+                        "(is_native_asset = 0) => (asset != native_asset)",
+                        (one.clone() - is_native_asset)
+                            * (diff_asset_x * diff_asset_x_inv - one.clone())
+                            * (diff_asset_y * diff_asset_y_inv - one.clone()),
+                    ),
+                    // Constrain derived pk_d_old to equal witnessed pk_d_old
+                    //
+                    // This equality constraint is technically superfluous, because the assigned
+                    // value of `derived_pk_d_old` is an equivalent witness. But it's nice to see
+                    // an explicit connection between circuit-synthesized values, and explicit
+                    // prover witnesses. We could get the best of both worlds with a write-on-copy
+                    // abstraction (https://github.com/zcash/halo2/issues/334).
+                    (
+                        "split_flag = 1 or pk_d_old_x = derived_pk_d_old_x",
+                        (one.clone() - split_flag.clone()) * (pk_d_old_x - derived_pk_d_old_x),
+                    ),
+                    (
+                        "split_flag = 1 or pk_d_old_y = derived_pk_d_old_y",
+                        (one - split_flag) * (pk_d_old_y - derived_pk_d_old_y),
                     ),
                 ],
             )
@@ -383,6 +447,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         let new_note_commit_config =
             NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone());
 
+        let mux_config = MuxChip::configure(meta, advices[0], advices[1], advices[2], advices[3]);
+
         Config {
             primary,
             q_orchard,
@@ -397,6 +463,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             commit_ivk_config,
             old_note_commit_config,
             new_note_commit_config,
+            mux_config,
         }
     }
 
@@ -413,7 +480,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         let ecc_chip = config.ecc_chip();
 
         // Witness private inputs that are used across multiple checks.
-        let (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new) = {
+        let (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset, nf_old_pub) = {
             // Witness psi_old
             let psi_old = assign_free_advice(
                 layouter.namespace(|| "witness psi_old"),
@@ -471,8 +538,40 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 self.v_new,
             )?;
 
-            (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new)
+            // Witness asset
+            let asset = NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "witness asset"),
+                self.asset.map(|asset| asset.cv_base().to_affine()),
+            )?;
+
+            // Witness nf_old_pub
+            let nf_old_pub = layouter.assign_region(
+                || "load nf_old pub",
+                |mut region| {
+                    region.assign_advice_from_instance(
+                        || "load nf_old pub",
+                        config.primary,
+                        NF_OLD,
+                        config.advices[0],
+                        1,
+                    )
+                },
+            )?;
+
+            (
+                psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset, nf_old_pub,
+            )
         };
+
+        // Witness is_native_asset which is equal to
+        // 1 if asset is equal to native asset, and
+        // 0 if asset is not equal to native asset.
+        let is_native_asset = assign_is_native_asset(
+            layouter.namespace(|| "witness is_native_asset"),
+            config.advices[0],
+            self.asset,
+        )?;
 
         // Merkle path validity check (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
         let root = {
@@ -537,19 +636,13 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 self.rcv.as_ref().map(|rcv| rcv.inner()),
             )?;
 
-            let asset = NonIdentityPoint::new(
-                ecc_chip.clone(),
-                layouter.namespace(|| "witness asset"),
-                self.asset.map(|asset| asset.cv_base().to_affine()),
-            )?;
-
             let cv_net = gadget::value_commit_orchard(
                 layouter.namespace(|| "cv_net = ValueCommit^Orchard_rcv(v_net_magnitude_sign)"),
                 config.sinsemilla_chip_1(),
                 ecc_chip.clone(),
                 v_net_magnitude_sign.clone(),
                 rcv,
-                asset,
+                asset.clone(),
             )?;
 
             // Constrain cv_net to equal public input
@@ -597,7 +690,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         }
 
         // Diversified address integrity (https://p.z.cash/ZKS:action-addr-integrity?partial).
-        let pk_d_old = {
+        let (derived_pk_d_old, pk_d_old) = {
             let ivk = {
                 let ak = ak_P.extract_p().inner().clone();
                 let rivk = ScalarFixed::new(
@@ -624,22 +717,13 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let (derived_pk_d_old, _ivk) =
                 g_d_old.mul(layouter.namespace(|| "[ivk] g_d_old"), ivk)?;
 
-            // Constrain derived pk_d_old to equal witnessed pk_d_old
-            //
-            // This equality constraint is technically superfluous, because the assigned
-            // value of `derived_pk_d_old` is an equivalent witness. But it's nice to see
-            // an explicit connection between circuit-synthesized values, and explicit
-            // prover witnesses. We could get the best of both worlds with a write-on-copy
-            // abstraction (https://github.com/zcash/halo2/issues/334).
             let pk_d_old = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness pk_d_old"),
                 self.pk_d_old.map(|pk_d_old| pk_d_old.inner().to_affine()),
             )?;
-            derived_pk_d_old
-                .constrain_equal(layouter.namespace(|| "pk_d_old equality"), &pk_d_old)?;
 
-            pk_d_old
+            (derived_pk_d_old, pk_d_old)
         };
 
         // Old note commitment integrity (https://p.z.cash/ZKS:action-cm-old-integrity?partial).
@@ -658,12 +742,15 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 config.sinsemilla_chip_1(),
                 config.ecc_chip(),
                 config.note_commit_chip_old(),
+                config.mux_chip(),
                 g_d_old.inner(),
                 pk_d_old.inner(),
                 v_old.clone(),
                 rho_old,
                 psi_old,
+                asset.inner(),
                 rcm_old,
+                is_native_asset.clone(),
             )?;
 
             // Constrain derived cm_old to equal witnessed cm_old
@@ -693,7 +780,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             };
 
             // ρ^new = nf^old
-            let rho_new = nf_old.inner().clone();
+            let rho_new = nf_old_pub.clone();
 
             // Witness psi_new
             let psi_new = assign_free_advice(
@@ -716,12 +803,15 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 config.sinsemilla_chip_2(),
                 config.ecc_chip(),
                 config.note_commit_chip_new(),
+                config.mux_chip(),
                 g_d_new.inner(),
                 pk_d_new.inner(),
                 v_new.clone(),
                 rho_new,
                 psi_new,
+                asset.inner(),
                 rcm_new,
+                is_native_asset.clone(),
             )?;
 
             let cmx = cm_new.extract_p();
@@ -787,11 +877,96 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 nf_old
                     .inner()
                     .copy_advice(|| "nf_old", &mut region, config.advices[9], 0)?;
-                region.assign_advice_from_instance(
-                    || "nf_old pub",
-                    config.primary,
-                    NF_OLD,
-                    config.advices[0],
+                nf_old_pub.copy_advice(|| "nf_old", &mut region, config.advices[0], 1)?;
+
+                is_native_asset.copy_advice(
+                    || "is_native_asset",
+                    &mut region,
+                    config.advices[1],
+                    1,
+                )?;
+                asset
+                    .inner()
+                    .x()
+                    .copy_advice(|| "asset_x", &mut region, config.advices[2], 1)?;
+                asset
+                    .inner()
+                    .y()
+                    .copy_advice(|| "asset_y", &mut region, config.advices[3], 1)?;
+
+                // `diff_asset_x_inv` and `diff_asset_y_inv` will be used to prove that
+                // if is_native_asset = 0, then asset != native_asset.
+                region.assign_advice(
+                    || "diff_asset_x_inv",
+                    config.advices[4],
+                    1,
+                    || {
+                        self.asset.map(|asset| {
+                            let asset_x = *asset.cv_base().to_affine().coordinates().unwrap().x();
+                            let native_asset_x = *AssetBase::native()
+                                .cv_base()
+                                .to_affine()
+                                .coordinates()
+                                .unwrap()
+                                .x();
+
+                            let diff_asset_x = asset_x - native_asset_x;
+
+                            if diff_asset_x == pallas::Base::zero() {
+                                pallas::Base::zero()
+                            } else {
+                                diff_asset_x.invert().unwrap()
+                            }
+                        })
+                    },
+                )?;
+                region.assign_advice(
+                    || "diff_asset_y_inv",
+                    config.advices[5],
+                    1,
+                    || {
+                        self.asset.map(|asset| {
+                            let asset_y = *asset.cv_base().to_affine().coordinates().unwrap().y();
+                            let native_asset_y = *AssetBase::native()
+                                .cv_base()
+                                .to_affine()
+                                .coordinates()
+                                .unwrap()
+                                .y();
+
+                            let diff_asset_y = asset_y - native_asset_y;
+
+                            if diff_asset_y == pallas::Base::zero() {
+                                pallas::Base::zero()
+                            } else {
+                                diff_asset_y.invert().unwrap()
+                            }
+                        })
+                    },
+                )?;
+
+                pk_d_old.inner().x().copy_advice(
+                    || "pk_d_old_x",
+                    &mut region,
+                    config.advices[6],
+                    1,
+                )?;
+                pk_d_old.inner().y().copy_advice(
+                    || "pk_d_old_y",
+                    &mut region,
+                    config.advices[7],
+                    1,
+                )?;
+                derived_pk_d_old.inner().x().copy_advice(
+                    || "derived_pk_d_old_x",
+                    &mut region,
+                    config.advices[8],
+                    1,
+                )?;
+                derived_pk_d_old.inner().y().copy_advice(
+                    || "derived_pk_d_old_y",
+                    &mut region,
+                    config.advices[9],
                     1,
                 )?;
 
@@ -1111,8 +1286,8 @@ mod tests {
                     K,
                     &circuits[0],
                 );
-            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5024);
-            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7296);
+            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5088);
+            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7360);
             usize::from(circuit_cost.proof_size(instances.len()))
         };
 
@@ -1141,6 +1316,7 @@ mod tests {
 
     #[test]
     fn serialized_proof_test_case() {
+        use std::fs;
         use std::io::{Read, Write};
 
         let vk = VerifyingKey::build();
@@ -1209,7 +1385,7 @@ mod tests {
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
-                let file = std::fs::File::create("circuit_proof_test_case.bin")?;
+                let file = std::fs::File::create("src/circuit_proof_test_case.bin")?;
                 write_test_case(file, &instance, &proof)
             };
             create_proof().expect("should be able to write new proof");
@@ -1217,10 +1393,10 @@ mod tests {
 
         // Parse the hardcoded proof test case.
         let (instance, proof) = {
-            let test_case_bytes = include_bytes!("circuit_proof_test_case.bin");
+            let test_case_bytes = fs::read("src/circuit_proof_test_case.bin").unwrap();
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
-        assert_eq!(proof.0.len(), 5024);
+        assert_eq!(proof.0.len(), 5088);
 
         assert!(proof.verify(&vk, &[instance]).is_ok());
     }
