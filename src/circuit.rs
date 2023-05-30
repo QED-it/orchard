@@ -1582,7 +1582,7 @@ mod tests {
     }
 
     #[test]
-    fn test_orchard_circuit() {
+    fn orchard_circuit_negative_test() {
         let mut rng = OsRng;
 
         for is_native_asset in [true, false] {
