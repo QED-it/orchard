@@ -1194,6 +1194,7 @@ mod tests {
     use rand::{rngs::OsRng, RngCore};
 
     use super::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K};
+    use crate::builder::SpendInfo;
     use crate::note::commitment::NoteCommitTrapdoor;
     use crate::note::{AssetBase, Nullifier};
     use crate::primitives::redpallas::VerificationKey;
@@ -1458,13 +1459,11 @@ mod tests {
         };
 
         // Create spent_note
-        let (sender_address, fvk, spent_note) = {
+        let (spent_note_fvk, spent_note) = {
             let sk = SpendingKey::random(&mut rng);
             let fvk: FullViewingKey = (&sk).into();
             let sender_address = fvk.address_at(0u32, Scope::External);
-
             let rho_old = Nullifier::dummy(&mut rng);
-
             let spent_note = Note::new(
                 sender_address,
                 NoteValue::from_raw(40),
@@ -1472,17 +1471,29 @@ mod tests {
                 rho_old,
                 &mut rng,
             );
-            (sender_address, fvk, spent_note)
+            (fvk, spent_note)
         };
 
-        let nk = *fvk.nk();
-        let rivk = fvk.rivk(fvk.scope_for_address(&spent_note.recipient()).unwrap());
-        let nf_old = if split_flag {
-            Nullifier::dummy(&mut rng)
+        let (dummy_sk, fvk, scope, nf_old) = if split_flag {
+            let sk = SpendingKey::random(&mut rng);
+            let fvk: FullViewingKey = (&sk).into();
+            (
+                Some(sk),
+                fvk.clone(),
+                Scope::External,
+                spent_note.nullifier(&fvk),
+            )
         } else {
-            spent_note.nullifier(&fvk)
+            (
+                None,
+                spent_note_fvk.clone(),
+                spent_note_fvk
+                    .scope_for_address(&spent_note.recipient())
+                    .unwrap(),
+                spent_note.nullifier(&spent_note_fvk),
+            )
         };
-        let ak: SpendValidatingKey = fvk.into();
+        let ak: SpendValidatingKey = fvk.clone().into();
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
 
@@ -1513,30 +1524,17 @@ mod tests {
         let path = MerklePath::dummy(&mut rng);
         let anchor = path.root(spent_note.commitment().into());
 
+        let spend_info = SpendInfo {
+            dummy_sk,
+            fvk,
+            scope,
+            note: spent_note,
+            merkle_path: path,
+            split_flag,
+        };
+
         (
-            Circuit {
-                path: Value::known(path.auth_path()),
-                pos: Value::known(path.position()),
-                g_d_old: Value::known(sender_address.g_d()),
-                pk_d_old: Value::known(*sender_address.pk_d()),
-                v_old: Value::known(spent_note.value()),
-                rho_old: Value::known(spent_note.rho()),
-                psi_old: Value::known(spent_note.rseed().psi(&spent_note.rho())),
-                rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
-                cm_old: Value::known(spent_note.commitment()),
-                alpha: Value::known(alpha),
-                ak: Value::known(ak),
-                nk: Value::known(nk),
-                rivk: Value::known(rivk),
-                g_d_new: Value::known(output_note.recipient().g_d()),
-                pk_d_new: Value::known(*output_note.recipient().pk_d()),
-                v_new: Value::known(output_note.value()),
-                psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
-                rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
-                rcv: Value::known(rcv),
-                asset: Value::known(spent_note.asset()),
-                split_flag: Value::known(split_flag),
-            },
+            Circuit::from_action_context_unchecked(spend_info, output_note, alpha, rcv),
             Instance {
                 anchor,
                 cv_net,
