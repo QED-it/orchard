@@ -148,25 +148,6 @@ impl SpendInfo {
         })
     }
 
-    fn new_with_scope(
-        note: Note,
-        merkle_path: MerklePath,
-        scope: Scope,
-        split_flag: bool,
-        rng: &mut impl RngCore,
-    ) -> Option<Self> {
-        let sk = SpendingKey::random(rng);
-        let fvk: FullViewingKey = (&sk).into();
-        Some(SpendInfo {
-            dummy_sk: Some(sk),
-            fvk,
-            scope,
-            note,
-            merkle_path,
-            split_flag,
-        })
-    }
-
     /// Defined in [Zcash Protocol Spec § 4.8.3: Dummy Notes (Orchard)][orcharddummynotes].
     ///
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
@@ -186,16 +167,28 @@ impl SpendInfo {
         }
     }
 
-    /// Return a copy of this note with the split flag set to `true`.
+    /// Creates a split spend, which is identical to origin normal spend except that we use a random
+    /// fvk to generate a different nullifier. In addition, the split_flag is raised.
+    ///
+    /// Defined in [Transfer and Burn of Zcash Shielded Assets ZIP-0226 § Split Notes (DRAFT PR)][TransferZSA].
+    /// [TransferZSA]: https://qed-it.github.io/zips/zip-0226.html#split-notes
     fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
-        SpendInfo::new_with_scope(
-            self.note,
-            self.merkle_path.clone(),
-            Scope::Internal,
-            true,
-            rng,
-        )
-        .unwrap()
+        let note = self.note.clone();
+        let merkle_path = self.merkle_path.clone();
+
+        let sk = SpendingKey::random(rng);
+        let fvk: FullViewingKey = (&sk).into();
+
+        SpendInfo {
+            dummy_sk: Some(sk),
+            fvk,
+            // We use external scope to avoid unnecessary derivations, because the dummy
+            // note's spending key is random and thus scoping is irrelevant.
+            scope: Scope::External,
+            note,
+            merkle_path,
+            split_flag: true,
+        }
     }
 }
 
