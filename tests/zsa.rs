@@ -332,23 +332,28 @@ fn zsa_issue_and_transfer() {
     )
     .unwrap();
 
-    // 2. Split single ZSA note into 2 notes
-    let delta = 2; // arbitrary number for value manipulation
+    // 2. Split single ZSA note into 3 notes
+    let delta1 = 2; // arbitrary number for value manipulation
+    let delta2 = 5; // arbitrary number for value manipulation
     build_and_verify_bundle(
         vec![&zsa_spend_1],
         vec![
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta),
+                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta1 - delta2),
                 asset: zsa_spend_1.note.asset(),
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(delta),
+                value: NoteValue::from_raw(delta1),
+                asset: zsa_spend_1.note.asset(),
+            },
+            TestOutputInfo {
+                value: NoteValue::from_raw(delta2),
                 asset: zsa_spend_1.note.asset(),
             },
         ],
         vec![],
         anchor,
-        2,
+        3,
         &keys,
     )
     .unwrap();
@@ -374,11 +379,11 @@ fn zsa_issue_and_transfer() {
         vec![&zsa_spend_1, &zsa_spend_2],
         vec![
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta),
+                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta1),
                 asset: zsa_spend_1.note.asset(),
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + delta),
+                value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + delta1),
                 asset: zsa_spend_2.note.asset(),
             },
         ],
@@ -418,13 +423,21 @@ fn zsa_issue_and_transfer() {
                 asset: zsa_spend_1.note.asset(),
             },
             TestOutputInfo {
-                value: native_spend.note.value(),
+                value: NoteValue::from_raw(native_spend.note.value().inner() - delta1 - delta2),
+                asset: AssetBase::native(),
+            },
+            TestOutputInfo {
+                value: NoteValue::from_raw(delta1),
+                asset: AssetBase::native(),
+            },
+            TestOutputInfo {
+                value: NoteValue::from_raw(delta2),
                 asset: AssetBase::native(),
             },
         ],
         vec![],
         native_anchor,
-        4,
+        5,
         &keys,
     )
     .unwrap();
@@ -467,11 +480,11 @@ fn zsa_issue_and_transfer() {
             vec![&zsa_spend_t7_1, &zsa_spend_t7_2],
             vec![
                 TestOutputInfo {
-                    value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + delta),
+                    value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + delta1),
                     asset: zsa_spend_t7_1.note.asset(),
                 },
                 TestOutputInfo {
-                    value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - delta),
+                    value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - delta1),
                     asset: zsa_spend_t7_2.note.asset(),
                 },
             ],
