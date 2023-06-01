@@ -1446,6 +1446,25 @@ mod tests {
             .unwrap();
     }
 
+    fn check_proof_of_orchard_circuit(circuit: &Circuit, instance: &Instance, should_pass: bool) {
+        let proof_verify = MockProver::run(
+            K,
+            circuit,
+            instance
+                .to_halo2_instance()
+                .iter()
+                .map(|p| p.to_vec())
+                .collect(),
+        )
+        .unwrap()
+        .verify();
+        if should_pass {
+            assert!(proof_verify.is_ok());
+        } else {
+            assert!(proof_verify.is_err());
+        }
+    }
+
     fn generate_circuit_instance<R: RngCore>(
         is_native_asset: bool,
         split_flag: bool,
@@ -1474,7 +1493,9 @@ mod tests {
             (fvk, spent_note)
         };
 
-        let (dummy_sk, fvk, scope, nf_old) = if split_flag {
+        let output_value = NoteValue::from_raw(10);
+
+        let (dummy_sk, fvk, scope, nf_old, v_net) = if split_flag {
             let sk = SpendingKey::random(&mut rng);
             let fvk: FullViewingKey = (&sk).into();
             (
@@ -1482,6 +1503,9 @@ mod tests {
                 fvk.clone(),
                 Scope::External,
                 spent_note.nullifier(&fvk),
+                // Split notes do not contribute to v_net.
+                // Therefore, if split_flag is true, v_net = - output_value
+                NoteValue::zero() - output_value,
             )
         } else {
             (
@@ -1491,6 +1515,7 @@ mod tests {
                     .scope_for_address(&spent_note.recipient())
                     .unwrap(),
                 spent_note.nullifier(&spent_note_fvk),
+                spent_note.value() - output_value,
             )
         };
         let ak: SpendValidatingKey = fvk.clone().into();
@@ -1502,24 +1527,13 @@ mod tests {
             let fvk: FullViewingKey = (&sk).into();
             let sender_address = fvk.address_at(0u32, Scope::External);
 
-            Note::new(
-                sender_address,
-                NoteValue::from_raw(10),
-                asset_base,
-                nf_old,
-                &mut rng,
-            )
+            Note::new(sender_address, output_value, asset_base, nf_old, &mut rng)
         };
 
         let cmx = output_note.commitment().into();
 
-        let value = if split_flag {
-            NoteValue::zero() - output_note.value()
-        } else {
-            spent_note.value() - output_note.value()
-        };
         let rcv = ValueCommitTrapdoor::random(&mut rng);
-        let cv_net = ValueCommitment::derive(value, rcv, asset_base);
+        let cv_net = ValueCommitment::derive(v_net, rcv, asset_base);
 
         let path = MerklePath::dummy(&mut rng);
         let anchor = path.root(spent_note.commitment().into());
@@ -1545,25 +1559,6 @@ mod tests {
                 enable_output: true,
             },
         )
-    }
-
-    fn check_proof_of_orchard_circuit(circuit: &Circuit, instance: &Instance, should_pass: bool) {
-        let proof_verify = MockProver::run(
-            K,
-            circuit,
-            instance
-                .to_halo2_instance()
-                .iter()
-                .map(|p| p.to_vec())
-                .collect(),
-        )
-        .unwrap()
-        .verify();
-        if should_pass {
-            assert!(proof_verify.is_ok());
-        } else {
-            assert!(proof_verify.is_err());
-        }
     }
 
     fn random_note_commitment(mut rng: impl RngCore) -> NoteCommitment {
