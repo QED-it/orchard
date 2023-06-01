@@ -167,9 +167,27 @@ impl SpendInfo {
         }
     }
 
-    /// Return a copy of this note with the split flag set to `true`.
-    fn create_split_spend(&self) -> Self {
-        SpendInfo::new(self.fvk.clone(), self.note, self.merkle_path.clone(), true).unwrap()
+    /// Creates a split spend, which is identical to origin normal spend except that we use a random
+    /// fvk to generate a different nullifier. In addition, the split_flag is raised.
+    ///
+    /// Defined in [Transfer and Burn of Zcash Shielded Assets ZIP-0226 § Split Notes (DRAFT PR)][TransferZSA].
+    /// [TransferZSA]: https://qed-it.github.io/zips/zip-0226.html#split-notes
+    fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
+        let note = self.note;
+        let merkle_path = self.merkle_path.clone();
+
+        let sk = SpendingKey::random(rng);
+        let fvk: FullViewingKey = (&sk).into();
+
+        SpendInfo {
+            dummy_sk: Some(sk),
+            fvk,
+            // We use external scope to avoid unnecessary derivations
+            scope: Scope::External,
+            note,
+            merkle_path,
+            split_flag: true,
+        }
     }
 }
 
@@ -467,10 +485,8 @@ impl Builder {
                 // For ZSA asset, extends with
                 // - dummy notes if first spend is empty
                 // - split notes otherwise.
-                first_spend.map_or_else(
-                    || SpendInfo::dummy(asset, &mut rng),
-                    |s| s.create_split_spend(),
-                )
+                let dummy = SpendInfo::dummy(asset, &mut rng);
+                first_spend.map_or_else(|| dummy, |s| s.create_split_spend(&mut rng))
             }
         }
 
