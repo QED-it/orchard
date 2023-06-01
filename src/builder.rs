@@ -445,25 +445,6 @@ impl Builder {
         i64::try_from(value_balance).and_then(|i| V::try_from(i).map_err(|_| value::OverflowError))
     }
 
-    fn spend_info_extension(
-        first_spend: Option<SpendInfo>,
-        asset: AssetBase,
-        mut rng: impl RngCore,
-    ) -> SpendInfo {
-        if asset.is_native().into() {
-            // For native asset, extends with dummy notes
-            SpendInfo::dummy(asset, &mut rng)
-        } else {
-            // For ZSA asset, extends with
-            // - dummy notes if first spend is empty
-            // - split notes otherwise.
-            first_spend.map_or_else(
-                || SpendInfo::dummy(asset, &mut rng),
-                |s| s.create_split_spend(),
-            )
-        }
-    }
-
     /// Builds a bundle containing the given spent notes and recipients.
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
@@ -473,6 +454,25 @@ impl Builder {
         mut rng: impl RngCore,
     ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V>, BuildError> {
         let mut pre_actions: Vec<_> = Vec::new();
+
+        fn spend_info_extension(
+            first_spend: Option<&SpendInfo>,
+            asset: AssetBase,
+            mut rng: impl RngCore,
+        ) -> SpendInfo {
+            if asset.is_native().into() {
+                // For native asset, extends with dummy notes
+                SpendInfo::dummy(asset, &mut rng)
+            } else {
+                // For ZSA asset, extends with
+                // - dummy notes if first spend is empty
+                // - split notes otherwise.
+                first_spend.map_or_else(
+                    || SpendInfo::dummy(asset, &mut rng),
+                    |s| s.create_split_spend(),
+                )
+            }
+        }
 
         // Pair up the spends and recipients, extending with dummy values as necessary.
         for (asset, (mut spends, mut recipients)) in
@@ -486,21 +486,12 @@ impl Builder {
                 .cloned()
                 .unwrap();
 
-            // Extend the spends with dummy or split notes.
-            let dummy_spend = if asset.is_native().into() {
-                // For native asset, extends with dummy notes
-                SpendInfo::dummy(asset, &mut rng)
-            } else {
-                // For ZSA asset, extends with
-                // - dummy notes if first spend is empty
-                // - split notes otherwise.
-                spends.first().map_or_else(
-                    || SpendInfo::dummy(asset, &mut rng),
-                    |s| s.create_split_spend(),
-                )
-            };
+            let first_spend = spends.first().cloned();
 
-            spends.extend(iter::repeat_with(|| dummy_spend.clone()).take(num_actions - num_spends));
+            spends.extend(
+                iter::repeat_with(|| spend_info_extension(first_spend.as_ref(), asset, &mut rng))
+                    .take(num_actions - num_spends),
+            );
 
             // Extend the recipients with dummy values.
             recipients.extend(
