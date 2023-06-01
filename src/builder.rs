@@ -445,6 +445,25 @@ impl Builder {
         i64::try_from(value_balance).and_then(|i| V::try_from(i).map_err(|_| value::OverflowError))
     }
 
+    fn spend_info_extension(
+        first_spend: Option<SpendInfo>,
+        asset: AssetBase,
+        mut rng: impl RngCore,
+    ) -> SpendInfo {
+        if asset.is_native().into() {
+            // For native asset, extends with dummy notes
+            SpendInfo::dummy(asset, &mut rng)
+        } else {
+            // For ZSA asset, extends with
+            // - dummy notes if first spend is empty
+            // - split notes otherwise.
+            first_spend.map_or_else(
+                || SpendInfo::dummy(asset, &mut rng),
+                |s| s.create_split_spend(),
+            )
+        }
+    }
+
     /// Builds a bundle containing the given spent notes and recipients.
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
