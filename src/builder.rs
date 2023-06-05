@@ -171,6 +171,7 @@ impl SpendInfo {
     /// fvk to generate a different nullifier. In addition, the split_flag is raised.
     ///
     /// Defined in [Transfer and Burn of Zcash Shielded Assets ZIP-0226 § Split Notes (DRAFT PR)][TransferZSA].
+    ///
     /// [TransferZSA]: https://qed-it.github.io/zips/zip-0226.html#split-notes
     fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
         let note = self.note;
