@@ -474,27 +474,27 @@ impl Builder {
     ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V>, BuildError> {
         let mut pre_actions: Vec<_> = Vec::new();
 
-        fn spend_info_extension(
-            first_spend: Option<&SpendInfo>,
-            asset: AssetBase,
-            mut rng: impl RngCore,
-        ) -> SpendInfo {
-            if asset.is_native().into() {
-                // For native asset, extends with dummy notes
-                SpendInfo::dummy(asset, &mut rng)
-            } else {
-                // For ZSA asset, extends with
-                // - dummy notes if first spend is empty
-                // - split notes otherwise.
-                let dummy = SpendInfo::dummy(asset, &mut rng);
-                first_spend.map_or_else(|| dummy, |s| s.create_split_spend(&mut rng))
-            }
-        }
-
         // Pair up the spends and recipients, extending with dummy values as necessary.
         for (asset, (mut spends, mut recipients)) in
             partition_by_asset(&self.spends, &self.recipients, &mut rng)
         {
+            fn pad_spend(
+                spend: Option<&SpendInfo>,
+                asset: AssetBase,
+                mut rng: impl RngCore,
+            ) -> SpendInfo {
+                if asset.is_native().into() {
+                    // For native asset, extends with dummy notes
+                    SpendInfo::dummy(asset, &mut rng)
+                } else {
+                    // For ZSA asset, extends with
+                    // - dummy notes if first spend is empty
+                    // - split notes otherwise.
+                    let dummy = SpendInfo::dummy(asset, &mut rng);
+                    spend.map_or_else(|| dummy, |s| s.create_split_spend(&mut rng))
+                }
+            }
+
             let num_spends = spends.len();
             let num_recipients = recipients.len();
             let num_actions = [num_spends, num_recipients, MIN_ACTIONS]
@@ -506,7 +506,7 @@ impl Builder {
             let first_spend = spends.first().cloned();
 
             spends.extend(
-                iter::repeat_with(|| spend_info_extension(first_spend.as_ref(), asset, &mut rng))
+                iter::repeat_with(|| pad_spend(first_spend.as_ref(), asset, &mut rng))
                     .take(num_actions - num_spends),
             );
 
