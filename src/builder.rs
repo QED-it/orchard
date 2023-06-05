@@ -478,23 +478,6 @@ impl Builder {
         for (asset, (mut spends, mut recipients)) in
             partition_by_asset(&self.spends, &self.recipients, &mut rng)
         {
-            fn pad_spend(
-                spend: Option<&SpendInfo>,
-                asset: AssetBase,
-                mut rng: impl RngCore,
-            ) -> SpendInfo {
-                if asset.is_native().into() {
-                    // For native asset, extends with dummy notes
-                    SpendInfo::dummy(asset, &mut rng)
-                } else {
-                    // For ZSA asset, extends with
-                    // - dummy notes if first spend is empty
-                    // - split notes otherwise.
-                    let dummy = SpendInfo::dummy(asset, &mut rng);
-                    spend.map_or_else(|| dummy, |s| s.create_split_spend(&mut rng))
-                }
-            }
-
             let num_spends = spends.len();
             let num_recipients = recipients.len();
             let num_actions = [num_spends, num_recipients, MIN_ACTIONS]
@@ -608,6 +591,20 @@ fn partition_by_asset(
     }
 
     hm
+}
+
+/// Returns a dummy/split notes to extend the spends.
+fn pad_spend(spend: Option<&SpendInfo>, asset: AssetBase, mut rng: impl RngCore) -> SpendInfo {
+    if asset.is_native().into() {
+        // For native asset, extends with dummy notes
+        SpendInfo::dummy(asset, &mut rng)
+    } else {
+        // For ZSA asset, extends with
+        // - dummy notes if first spend is empty
+        // - split notes otherwise.
+        let dummy = SpendInfo::dummy(asset, &mut rng);
+        spend.map_or_else(|| dummy, |s| s.create_split_spend(&mut rng))
+    }
 }
 
 /// Marker trait representing bundle signatures in the process of being created.
