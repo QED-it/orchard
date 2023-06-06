@@ -61,6 +61,23 @@ impl IssueAction {
         }
     }
 
+    /// Constructs a new `IssueAction`.
+    pub fn new_with_finalize(asset_desc: String, note: &Note, flags: u8) -> Option<Self> {
+        let finalize = match flags {
+            0b0000_0000 => false,
+            0b0000_0001 => true,
+            _ => return None,
+        };
+        Some(IssueAction {
+            asset_desc,
+            notes: NonEmpty {
+                head: *note,
+                tail: vec![],
+            },
+            finalize,
+        })
+    }
+
     /// Constructs an `IssueAction` from its constituent parts.
     pub fn from_parts(asset_desc: String, notes: NonEmpty<Note>, finalize: bool) -> Self {
         IssueAction {
@@ -1282,10 +1299,17 @@ mod tests {
     fn test_finalize_flag_serialization() {
         let mut rng = OsRng;
         let (_, _, note) = Note::dummy(&mut rng, None, AssetBase::native());
-        let mut action = IssueAction::new(String::from("Asset description"), &note);
+
+        let action =
+            IssueAction::new_with_finalize(String::from("Asset description"), &note, 0u8).unwrap();
         assert_eq!(action.flags(), 0b0000_0000);
-        action.finalize = true;
+
+        let action =
+            IssueAction::new_with_finalize(String::from("Asset description"), &note, 1u8).unwrap();
         assert_eq!(action.flags(), 0b0000_0001);
+
+        let action = IssueAction::new_with_finalize(String::from("Asset description"), &note, 2u8);
+        assert!(action.is_none());
     }
 }
 
