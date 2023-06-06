@@ -135,7 +135,7 @@ impl IssueAction {
             .ok_or(IssueBundleIkMismatchAssetBase)?
     }
 
-    /// Serialize finalize flag to a byte
+    /// Serialize `finalize` flag to a byte
     pub fn flags(&self) -> u8 {
         if self.finalize {
             0b0000_0001
@@ -1280,6 +1280,16 @@ mod tests {
             verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
             WrongAssetDescSize
         );
+    }
+
+    #[test]
+    fn test_finalize_flag_serialization() {
+        let mut rng = OsRng;
+        let (_, _, note) = Note::dummy(&mut rng, None, AssetBase::native());
+        let mut action = IssueAction::new(String::from("Asset description"), &note);
+        assert_eq!(action.flags(), 0u8);
+        action.finalize = true;
+        assert_eq!(action.flags(), 0b0000_0001);
     }
 }
 
