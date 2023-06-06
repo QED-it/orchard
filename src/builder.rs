@@ -464,6 +464,20 @@ impl Builder {
         i64::try_from(value_balance).and_then(|i| V::try_from(i).map_err(|_| value::OverflowError))
     }
 
+    /// Returns the number of actions to add to this bundle in order to contain at least MIN_ACTION actions.
+    fn num_missing_actions(&self) -> usize {
+        let num_actions = [self.spends.len(), self.recipients.len()]
+            .iter()
+            .max()
+            .cloned()
+            .unwrap();
+        if num_actions < MIN_ACTIONS {
+            MIN_ACTIONS - num_actions
+        } else {
+            0
+        }
+    }
+
     /// Builds a bundle containing the given spent notes and recipients.
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
@@ -480,11 +494,11 @@ impl Builder {
         {
             let num_spends = spends.len();
             let num_recipients = recipients.len();
-            let num_actions = [num_spends, num_recipients, MIN_ACTIONS]
-                .iter()
-                .max()
-                .cloned()
-                .unwrap();
+            let mut num_actions = [num_spends, num_recipients].iter().max().cloned().unwrap();
+            // For the first asset, we might have to add dummy/split actions to reach the minimum number of actions.
+            if pre_actions.is_empty() {
+                num_actions += self.num_missing_actions();
+            }
 
             let first_spend = spends.first().cloned();
 
