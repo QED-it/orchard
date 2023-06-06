@@ -464,7 +464,7 @@ impl Builder {
         i64::try_from(value_balance).and_then(|i| V::try_from(i).map_err(|_| value::OverflowError))
     }
 
-    /// Returns the additional number of actions needed to this bundle in order to obtain at least MIN_ACTION actions.
+    /// Returns the number of actions to add to this bundle in order to contain at least MIN_ACTION actions.
     fn num_missing_actions(&self) -> usize {
         let num_actions = [self.spends.len(), self.recipients.len()]
             .iter()
