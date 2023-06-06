@@ -471,11 +471,9 @@ impl Builder {
             .max()
             .cloned()
             .unwrap();
-        if num_actions < MIN_ACTIONS {
-            MIN_ACTIONS - num_actions
-        } else {
-            0
-        }
+        (num_actions < MIN_ACTIONS)
+            .then(|| MIN_ACTIONS - num_actions)
+            .unwrap_or(0)
     }
 
     /// Builds a bundle containing the given spent notes and recipients.
@@ -495,10 +493,10 @@ impl Builder {
             let num_spends = spends.len();
             let num_recipients = recipients.len();
             let mut num_actions = [num_spends, num_recipients].iter().max().cloned().unwrap();
-            // For the first asset, we might have to add dummy/split actions to reach the minimum number of actions.
-            if pre_actions.is_empty() {
-                num_actions += self.num_missing_actions();
-            }
+            // We might have to add dummy/split actions only for the first asset to reach MIN_ACTIONS.
+            pre_actions
+                .is_empty()
+                .then(|| num_actions += self.num_missing_actions());
 
             let first_spend = spends.first().cloned();
 
