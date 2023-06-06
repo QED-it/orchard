@@ -134,6 +134,15 @@ impl IssueAction {
             .then(|| Ok((asset, AssetSupply::new(value_sum, self.is_finalized()))))
             .ok_or(IssueBundleIkMismatchAssetBase)?
     }
+
+    /// Serialize finalize flag to a byte
+    pub fn flags(&self) -> u8 {
+        if self.finalize {
+            0b0000_0001
+        } else {
+            0u8
+        }
+    }
 }
 
 /// Defines the authorization type of an Issue bundle.
