@@ -42,7 +42,7 @@ reddsa = "0.5"
 nonempty = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 subtle = "2.3"
-zcash_note_encryption = "0.2"
+zcash_note_encryption = "0.3"
 incrementalmerkletree = "0.3.1"
 
 # Logging
@@ -58,7 +58,7 @@ criterion = "0.3"
 halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "zsa1", features = ["test-dependencies"] }
 hex = "0.4"
 proptest = "1.0.0"
-zcash_note_encryption = { version = "0.2", features = ["pre-zip-212"] }
+zcash_note_encryption = { version = "0.3", features = ["pre-zip-212"] }
 incrementalmerkletree = { version = "0.3", features = ["test-dependencies"] }
 
 [target.'cfg(unix)'.dev-dependencies]
@@ -93,6 +93,6 @@ debug = true
 debug = true
 
 [patch.crates-io]
-zcash_note_encryption = { git = "https://github.com/QED-it/librustzcash.git", rev = "07c377ddedf71ab7c7a266d284b054a2dafc2ed4" }
+zcash_note_encryption = { git="https://github.com/QED-it/librustzcash.git", rev="980736806fe5417e36cbbdf00cdcf51b755e3b28" }
 bridgetree = { git = "https://github.com/zcash/incrementalmerkletree.git", rev = "ea1686e8f8f6c1e41aa97251a7eb4fadfd33df47" }
 incrementalmerkletree = { git = "https://github.com/zcash/incrementalmerkletree.git", rev = "ea1686e8f8f6c1e41aa97251a7eb4fadfd33df47" }

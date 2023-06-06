@@ -253,11 +253,7 @@ impl Domain for OrchardDomainV3 {
         secret.kdf_orchard(ephemeral_key)
     }
 
-    fn note_plaintext_bytes(
-        note: &Self::Note,
-        _: &Self::Recipient,
-        memo: &Self::Memo,
-    ) -> NotePlaintextBytes {
+    fn note_plaintext_bytes(note: &Self::Note, memo: &Self::Memo) -> NotePlaintextBytes {
         let mut np = [0u8; NOTE_PLAINTEXT_SIZE_V3];
         np[0] = 0x03;
         np[1..12].copy_from_slice(note.recipient().diversifier().as_array());
@@ -499,7 +495,7 @@ mod tests {
             let memo = &crate::test_vectors::note_encryption::test_vectors()[0].memo;
 
             // Encode.
-            let mut plaintext = OrchardDomainV3::note_plaintext_bytes(&note, &note.recipient(), memo);
+            let mut plaintext = OrchardDomainV3::note_plaintext_bytes(&note, memo);
 
             // Decode.
             let domain = OrchardDomainV3 { rho: note.rho() };
@@ -622,7 +618,7 @@ mod tests {
             // Test encryption
             //
 
-            let ne = OrchardNoteEncryption::new_with_esk(esk, Some(ovk), note, recipient, tv.memo);
+            let ne = OrchardNoteEncryption::new_with_esk(esk, Some(ovk), note, tv.memo);
 
             assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
             assert_eq!(
