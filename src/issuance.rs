@@ -7,9 +7,10 @@ use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::issuance::Error::{
-    IssueActionAlreadyFinalized, IssueActionEmpty, IssueActionIncorrectAssetBase,
-    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
-    IssueBundleInvalidSignature, ValueSumOverflow, WrongAssetDescSize,
+    IssueActionAlreadyFinalized, IssueActionIncorrectAssetBase, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, ValueSumOverflow,
+    WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
@@ -48,18 +49,18 @@ pub struct IssueAction {
     finalize: bool,
 }
 
+/// The parameters required to add a Note into an IssueAction.
+#[derive(Debug)]
+pub struct NoteParams {
+    /// The recipient of the funds.
+    pub recipient: Address,
+    /// The value of this note.
+    pub value: NoteValue,
+}
+
 impl IssueAction {
     /// Constructs a new `IssueAction`.
-    pub fn new(asset_desc: String, note: &Note) -> Self {
-        IssueAction {
-            asset_desc,
-            notes: vec![*note],
-            finalize: false,
-        }
-    }
-
-    /// Constructs a new `IssueAction`.
-    pub fn new_with_finalize(asset_desc: String, note: &Note, flags: u8) -> Option<Self> {
+    pub fn new_with_flags(asset_desc: String, notes: Vec<Note>, flags: u8) -> Option<Self> {
         let finalize = match flags {
             0b0000_0000 => false,
             0b0000_0001 => true,
@@ -67,7 +68,7 @@ impl IssueAction {
         };
         Some(IssueAction {
             asset_desc,
-            notes: vec![*note],
+            notes,
             finalize,
         })
     }
@@ -123,15 +124,24 @@ impl IssueAction {
     /// * `IssueBundleIkMismatchAssetBase`: If the provided `ik` is not used to derive the
     ///   `AssetBase` for **all** internal notes.
     ///
-    /// * `IssueActionEmpty`: If the `IssueAction` contains no notes.
+    /// * `IssueActionWithoutNoteNotFinalized`:If the `IssueAction` contains no note and is not finalized.
     fn verify_supply(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
+        let issue_action_asset = AssetBase::derive(ik, &self.asset_desc);
+        if self.notes.is_empty() {
+            if self.is_finalized() {
+                return Ok((
+                    issue_action_asset,
+                    AssetSupply::new(ValueSum::zero(), self.is_finalized()),
+                ));
+            } else {
+                return Err(IssueActionWithoutNoteNotFinalized);
+            }
+        }
+
         // Calculate the value of the asset as a sum of values of all its notes
         // and ensure all note types are equal
         let (asset, value_sum) = self.notes.iter().try_fold(
-            (
-                self.notes().first().ok_or(IssueActionEmpty)?.asset(),
-                ValueSum::zero(),
-            ),
+            (self.notes().first().unwrap().asset(), ValueSum::zero()),
             |(asset, value_sum), &note| {
                 // All assets should have the same `AssetBase`
                 note.asset()
@@ -146,7 +156,7 @@ impl IssueAction {
 
         // Return the asset and its supply (or an error if the asset was not properly derived)
         asset
-            .eq(&AssetBase::derive(ik, &self.asset_desc))
+            .eq(&issue_action_asset)
             .then(|| Ok((asset, AssetSupply::new(value_sum, self.is_finalized()))))
             .ok_or(IssueBundleIkMismatchAssetBase)?
     }
@@ -249,10 +259,13 @@ impl<T: IssueAuth> IssueBundle<T> {
 }
 
 impl IssueBundle<Unauthorized> {
-    /// Constructs a new `IssueBundle` containing one `IssueAction`.
+    /// Constructs a new `IssueBundle`.
     ///
-    /// This `IssueAction` will contain one `Note` described by `asset_dec`, `recipient`, `value` and `finalize`.
-    /// Rho will be randomly sampled, similar to dummy note generation.
+    /// If note_params is None, the new `IssueBundle` will contain one `IssueAction` without notes
+    /// and with `finalize` set to true.
+    /// Otherwise, the new `IssueBundle` will contain one `IssueAction with one note created from
+    /// note_params values and with `finalize` set to false. In this created note, rho will be
+    /// randomly sampled, similar to dummy note generation.
     ///
     /// # Panics
     ///
@@ -260,9 +273,7 @@ impl IssueBundle<Unauthorized> {
     pub fn new(
         ik: IssuanceValidatingKey,
         asset_desc: String,
-        recipient: Address,
-        value: NoteValue,
-        finalize: bool,
+        note_params: Option<NoteParams>,
         mut rng: impl RngCore,
     ) -> Result<(IssueBundle<Unauthorized>, AssetBase), Error> {
         if !is_asset_desc_of_valid_size(&asset_desc) {
@@ -271,16 +282,28 @@ impl IssueBundle<Unauthorized> {
 
         let asset = AssetBase::derive(&ik, &asset_desc);
 
-        let note = Note::new(
-            recipient,
-            value,
-            asset,
-            Nullifier::dummy(&mut rng),
-            &mut rng,
-        );
+        let action = match note_params {
+            None => IssueAction {
+                asset_desc,
+                notes: vec![],
+                finalize: true,
+            },
+            Some(note_params) => {
+                let note = Note::new(
+                    note_params.recipient,
+                    note_params.value,
+                    asset,
+                    Nullifier::dummy(&mut rng),
+                    &mut rng,
+                );
 
-        let mut action = IssueAction::new(asset_desc, &note);
-        finalize.then(|| action.finalize = true);
+                IssueAction {
+                    asset_desc,
+                    notes: vec![note],
+                    finalize: false,
+                }
+            }
+        };
 
         Ok((
             IssueBundle {
@@ -304,7 +327,6 @@ impl IssueBundle<Unauthorized> {
         asset_desc: String,
         recipient: Address,
         value: NoteValue,
-        finalize: bool,
         mut rng: impl RngCore,
     ) -> Result<AssetBase, Error> {
         if !is_asset_desc_of_valid_size(&asset_desc) {
@@ -328,11 +350,7 @@ impl IssueBundle<Unauthorized> {
         {
             // Append to an existing IssueAction.
             Some(action) => {
-                if action.finalize {
-                    return Err(IssueActionAlreadyFinalized);
-                };
                 action.notes.push(note);
-                finalize.then(|| action.finalize = true);
                 true
             }
             None => false,
@@ -340,8 +358,11 @@ impl IssueBundle<Unauthorized> {
 
         // Insert a new IssueAction.
         if !found {
-            let mut action = IssueAction::new(asset_desc, &note);
-            finalize.then(|| action.finalize = true);
+            let action = IssueAction {
+                asset_desc,
+                notes: vec![note],
+                finalize: false,
+            };
             self.actions.push(action);
         }
 
@@ -515,12 +536,12 @@ pub enum Error {
     IssueActionNotFound,
     /// Not all `AssetBase`s are the same inside the action.
     IssueActionIncorrectAssetBase,
-    /// The `IssueAction` contains no notes.
-    IssueActionEmpty,
     /// The provided `isk` and the driven `ik` does not match at least one note type.
     IssueBundleIkMismatchAssetBase,
     /// `asset_desc` should be between 1 and 512 bytes.
     WrongAssetDescSize,
+    /// The `IssueAction` is not finalized but contains no notes.
+    IssueActionWithoutNoteNotFinalized,
 
     /// Verification errors:
     /// Invalid signature.
@@ -549,12 +570,6 @@ impl fmt::Display for Error {
             IssueActionIncorrectAssetBase => {
                 write!(f, "not all `AssetBase`s are the same inside the action")
             }
-            IssueActionEmpty => {
-                write!(
-                    f,
-                    "unable to verify supply of an `IssueAction` without note"
-                )
-            }
             IssueBundleIkMismatchAssetBase => {
                 write!(
                     f,
@@ -563,6 +578,12 @@ impl fmt::Display for Error {
             }
             WrongAssetDescSize => {
                 write!(f, "`asset_desc` should be between 1 and 512 bytes")
+            }
+            IssueActionWithoutNoteNotFinalized => {
+                write!(
+                    f,
+                    "this `IssueAction` contains no notes but is not finalized"
+                )
             }
             IssueBundleInvalidSignature(_) => {
                 write!(f, "invalid signature")
@@ -582,9 +603,9 @@ impl fmt::Display for Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{AssetSupply, IssueBundle};
+    use super::{AssetSupply, IssueBundle, NoteParams};
     use crate::issuance::Error::{
-        IssueActionAlreadyFinalized, IssueActionIncorrectAssetBase, IssueActionNotFound,
+        IssueActionIncorrectAssetBase, IssueActionNotFound,
         IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         IssueBundleInvalidSignature, WrongAssetDescSize,
     };
@@ -722,9 +743,10 @@ mod tests {
             IssueBundle::new(
                 ik.clone(),
                 String::from_utf8(vec![b'X'; 513]).unwrap(),
-                recipient,
-                NoteValue::unsplittable(),
-                true,
+                Some(NoteParams {
+                    recipient,
+                    value: NoteValue::unsplittable()
+                }),
                 rng,
             )
             .unwrap_err(),
@@ -735,9 +757,10 @@ mod tests {
             IssueBundle::new(
                 ik.clone(),
                 "".to_string(),
-                recipient,
-                NoteValue::unsplittable(),
-                true,
+                Some(NoteParams {
+                    recipient,
+                    value: NoteValue::unsplittable()
+                }),
                 rng,
             )
             .unwrap_err(),
@@ -747,20 +770,21 @@ mod tests {
         let (mut bundle, asset) = IssueBundle::new(
             ik,
             str.clone(),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
 
         let another_asset = bundle
-            .add_recipient(str, recipient, NoteValue::from_raw(10), false, rng)
+            .add_recipient(str, recipient, NoteValue::from_raw(10), rng)
             .unwrap();
         assert_eq!(asset, another_asset);
 
         let third_asset = bundle
-            .add_recipient(str2.clone(), recipient, NoteValue::from_raw(15), false, rng)
+            .add_recipient(str2.clone(), recipient, NoteValue::from_raw(15), rng)
             .unwrap();
         assert_ne!(asset, third_asset);
 
@@ -790,9 +814,10 @@ mod tests {
         let (mut bundle, _) = IssueBundle::new(
             ik,
             String::from("NFT"),
-            recipient,
-            NoteValue::from_raw(u64::MIN),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(u64::MIN),
+            }),
             rng,
         )
         .expect("Should properly add recipient");
@@ -800,19 +825,6 @@ mod tests {
         bundle
             .finalize_action(String::from("NFT"))
             .expect("Should finalize properly");
-
-        assert_eq!(
-            bundle
-                .add_recipient(
-                    String::from("NFT"),
-                    recipient,
-                    NoteValue::unsplittable(),
-                    false,
-                    rng,
-                )
-                .unwrap_err(),
-            IssueActionAlreadyFinalized
-        );
 
         assert_eq!(
             bundle
@@ -832,29 +844,6 @@ mod tests {
             bundle.finalize_action("".to_string()).unwrap_err(),
             WrongAssetDescSize
         );
-
-        bundle
-            .add_recipient(
-                String::from("Another NFT"),
-                recipient,
-                NoteValue::unsplittable(),
-                true,
-                rng,
-            )
-            .expect("should add and finalize");
-
-        assert_eq!(
-            bundle
-                .add_recipient(
-                    String::from("Another NFT"),
-                    recipient,
-                    NoteValue::unsplittable(),
-                    true,
-                    rng,
-                )
-                .unwrap_err(),
-            IssueActionAlreadyFinalized
-        );
     }
 
     #[test]
@@ -864,9 +853,10 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Frost"),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -882,9 +872,10 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
             String::from("Sign"),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -902,9 +893,10 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("IssueBundle"),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -927,9 +919,10 @@ mod tests {
         let (mut bundle, _) = IssueBundle::new(
             ik,
             String::from("IssueBundle"),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -959,9 +952,10 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Verify"),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -980,15 +974,20 @@ mod tests {
     fn issue_bundle_verify_with_finalize() {
         let (rng, isk, ik, recipient, sighash) = setup_params();
 
-        let (bundle, _) = IssueBundle::new(
+        let (mut bundle, _) = IssueBundle::new(
             ik.clone(),
             String::from("Verify with finalize"),
-            recipient,
-            NoteValue::from_raw(7),
-            true,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(7),
+            }),
             rng,
         )
         .unwrap();
+
+        bundle
+            .finalize_action(String::from("Verify with finalize"))
+            .unwrap();
 
         let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
         let prev_finalized = &mut HashSet::new();
@@ -1016,9 +1015,10 @@ mod tests {
         let (mut bundle, _) = IssueBundle::new(
             ik,
             String::from(asset1_desc),
-            recipient,
-            NoteValue::from_raw(7),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(7),
+            }),
             rng,
         )
         .unwrap();
@@ -1028,27 +1028,28 @@ mod tests {
                 String::from(asset1_desc),
                 recipient,
                 NoteValue::from_raw(8),
-                true,
                 rng,
             )
             .unwrap();
+
+        bundle.finalize_action(String::from(asset1_desc)).unwrap();
 
         bundle
             .add_recipient(
                 String::from(asset2_desc),
                 recipient,
                 NoteValue::from_raw(10),
-                true,
                 rng,
             )
             .unwrap();
+
+        bundle.finalize_action(String::from(asset2_desc)).unwrap();
 
         bundle
             .add_recipient(
                 String::from(asset3_desc),
                 recipient,
                 NoteValue::from_raw(5),
-                false,
                 rng,
             )
             .unwrap();
@@ -1089,9 +1090,10 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
             String::from("already final"),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -1123,9 +1125,10 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("bad sig"),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -1152,9 +1155,10 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Asset description"),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -1176,9 +1180,10 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Asset description"),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -1213,9 +1218,10 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from(asset_description),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -1259,9 +1265,10 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Asset description"),
-            recipient,
-            NoteValue::from_raw(5),
-            false,
+            Some(NoteParams {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
             rng,
         )
         .unwrap();
@@ -1295,14 +1302,17 @@ mod tests {
         let (_, _, note) = Note::dummy(&mut rng, None, AssetBase::native());
 
         let action =
-            IssueAction::new_with_finalize(String::from("Asset description"), &note, 0u8).unwrap();
+            IssueAction::new_with_flags(String::from("Asset description"), vec![note], 0u8)
+                .unwrap();
         assert_eq!(action.flags(), 0b0000_0000);
 
         let action =
-            IssueAction::new_with_finalize(String::from("Asset description"), &note, 1u8).unwrap();
+            IssueAction::new_with_flags(String::from("Asset description"), vec![note], 1u8)
+                .unwrap();
         assert_eq!(action.flags(), 0b0000_0001);
 
-        let action = IssueAction::new_with_finalize(String::from("Asset description"), &note, 2u8);
+        let action =
+            IssueAction::new_with_flags(String::from("Asset description"), vec![note], 2u8);
         assert!(action.is_none());
     }
 }
@@ -1330,7 +1340,11 @@ pub mod testing {
         (
             note in arb_zsa_note(asset),
         )-> IssueAction {
-            IssueAction::new(asset_desc.clone(), &note)
+            IssueAction{
+                asset_desc: asset_desc.clone(),
+                notes: vec![note],
+                finalize: false,
+            }
         }
     }
 
