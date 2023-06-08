@@ -7,8 +7,8 @@ use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::issuance::Error::{
-    IssueActionAlreadyFinalized, IssueActionIncorrectAssetBase, IssueActionNotFound,
-    IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
+    IssueActionAlreadyFinalized, IssueActionEmpty, IssueActionIncorrectAssetBase,
+    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
     IssueBundleInvalidSignature, ValueSumOverflow, WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
@@ -122,11 +122,16 @@ impl IssueAction {
     ///
     /// * `IssueBundleIkMismatchAssetBase`: If the provided `ik` is not used to derive the
     ///   `AssetBase` for **all** internal notes.
+    ///
+    /// * `IssueActionEmpty`: If the `IssueAction` contains no notes.
     fn verify_supply(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
         // Calculate the value of the asset as a sum of values of all its notes
         // and ensure all note types are equal
         let (asset, value_sum) = self.notes.iter().try_fold(
-            (self.notes().first().unwrap().asset(), ValueSum::zero()),
+            (
+                self.notes().first().ok_or(IssueActionEmpty)?.asset(),
+                ValueSum::zero(),
+            ),
             |(asset, value_sum), &note| {
                 // All assets should have the same `AssetBase`
                 note.asset()
@@ -510,6 +515,8 @@ pub enum Error {
     IssueActionNotFound,
     /// Not all `AssetBase`s are the same inside the action.
     IssueActionIncorrectAssetBase,
+    /// The `IssueAction` contains no notes.
+    IssueActionEmpty,
     /// The provided `isk` and the driven `ik` does not match at least one note type.
     IssueBundleIkMismatchAssetBase,
     /// `asset_desc` should be between 1 and 512 bytes.
@@ -541,6 +548,12 @@ impl fmt::Display for Error {
             }
             IssueActionIncorrectAssetBase => {
                 write!(f, "not all `AssetBase`s are the same inside the action")
+            }
+            IssueActionEmpty => {
+                write!(
+                    f,
+                    "unable to verify supply of an `IssueAction` without note"
+                )
             }
             IssueBundleIkMismatchAssetBase => {
                 write!(
