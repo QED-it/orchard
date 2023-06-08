@@ -43,7 +43,7 @@ pub struct IssueAction {
     /// Asset description for verification.
     asset_desc: String,
     /// The newly issued notes.
-    notes: NonEmpty<Note>,
+    notes: Vec<Note>,
     /// `finalize` will prevent further issuance of the same asset type.
     finalize: bool,
 }
@@ -53,10 +53,7 @@ impl IssueAction {
     pub fn new(asset_desc: String, note: &Note) -> Self {
         IssueAction {
             asset_desc,
-            notes: NonEmpty {
-                head: *note,
-                tail: vec![],
-            },
+            notes: vec![*note],
             finalize: false,
         }
     }
@@ -70,16 +67,13 @@ impl IssueAction {
         };
         Some(IssueAction {
             asset_desc,
-            notes: NonEmpty {
-                head: *note,
-                tail: vec![],
-            },
+            notes: vec![*note],
             finalize,
         })
     }
 
     /// Constructs an `IssueAction` from its constituent parts.
-    pub fn from_parts(asset_desc: String, notes: NonEmpty<Note>, finalize: bool) -> Self {
+    pub fn from_parts(asset_desc: String, notes: Vec<Note>, finalize: bool) -> Self {
         IssueAction {
             asset_desc,
             notes,
@@ -93,7 +87,7 @@ impl IssueAction {
     }
 
     /// Returns the issued notes.
-    pub fn notes(&self) -> &NonEmpty<Note> {
+    pub fn notes(&self) -> &Vec<Note> {
         &self.notes
     }
 
@@ -132,7 +126,7 @@ impl IssueAction {
         // Calculate the value of the asset as a sum of values of all its notes
         // and ensure all note types are equal
         let (asset, value_sum) = self.notes.iter().try_fold(
-            (self.notes().head.asset(), ValueSum::zero()),
+            (self.notes().first().unwrap().asset(), ValueSum::zero()),
             |(asset, value_sum), &note| {
                 // All assets should have the same `AssetBase`
                 note.asset()
@@ -588,11 +582,9 @@ mod tests {
     use crate::note::{AssetBase, Nullifier};
     use crate::value::{NoteValue, ValueSum};
     use crate::{Address, Note};
-    use nonempty::NonEmpty;
     use rand::rngs::OsRng;
     use rand::RngCore;
     use reddsa::Error::InvalidSignature;
-    use std::borrow::BorrowMut;
     use std::collections::HashSet;
 
     fn setup_params() -> (
@@ -648,14 +640,7 @@ mod tests {
         (
             ik,
             asset,
-            IssueAction::from_parts(
-                note1_asset_desc.into(),
-                NonEmpty {
-                    head: note1,
-                    tail: vec![note2],
-                },
-                finalize,
-            ),
+            IssueAction::from_parts(note1_asset_desc.into(), vec![note1, note2], finalize),
         )
     }
 
@@ -771,18 +756,18 @@ mod tests {
 
         let action = bundle.get_action_by_type(asset).unwrap();
         assert_eq!(action.notes.len(), 2);
-        assert_eq!(action.notes.first().value().inner(), 5);
-        assert_eq!(action.notes.first().asset(), asset);
-        assert_eq!(action.notes.first().recipient(), recipient);
+        assert_eq!(action.notes.first().unwrap().value().inner(), 5);
+        assert_eq!(action.notes.first().unwrap().asset(), asset);
+        assert_eq!(action.notes.first().unwrap().recipient(), recipient);
 
-        assert_eq!(action.notes.tail().first().unwrap().value().inner(), 10);
-        assert_eq!(action.notes.tail().first().unwrap().asset(), asset);
-        assert_eq!(action.notes.tail().first().unwrap().recipient(), recipient);
+        assert_eq!(action.notes.get(1).unwrap().value().inner(), 10);
+        assert_eq!(action.notes.get(1).unwrap().asset(), asset);
+        assert_eq!(action.notes.get(1).unwrap().recipient(), recipient);
 
         let action2 = bundle.get_action(str2).unwrap();
         assert_eq!(action2.notes.len(), 1);
-        assert_eq!(action2.notes().first().value().inner(), 15);
-        assert_eq!(action2.notes().first().asset(), third_asset);
+        assert_eq!(action2.notes().first().unwrap().value().inner(), 15);
+        assert_eq!(action2.notes().first().unwrap().asset(), third_asset);
     }
 
     #[test]
@@ -944,7 +929,7 @@ mod tests {
             Nullifier::dummy(&mut rng),
             &mut rng,
         );
-        bundle.actions.first_mut().notes.borrow_mut().push(note);
+        bundle.actions.first_mut().notes.push(note);
 
         let err = bundle
             .prepare([0; 32])
@@ -1016,7 +1001,7 @@ mod tests {
         let asset3_base = AssetBase::derive(&ik, &String::from(asset3_desc));
 
         let (mut bundle, _) = IssueBundle::new(
-            ik.clone(),
+            ik,
             String::from(asset1_desc),
             recipient,
             NoteValue::from_raw(7),
@@ -1196,7 +1181,7 @@ mod tests {
             &mut rng,
         );
 
-        signed.actions.first_mut().notes.borrow_mut().push(note);
+        signed.actions.first_mut().notes.push(note);
 
         let prev_finalized = &HashSet::new();
 
@@ -1237,7 +1222,7 @@ mod tests {
             &mut rng,
         );
 
-        signed.actions.first_mut().notes = NonEmpty::new(note);
+        signed.actions.first_mut().notes = vec![note];
 
         let prev_finalized = &HashSet::new();
 
