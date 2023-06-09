@@ -65,9 +65,10 @@ impl AssetBase {
 
         let asset_digest = asset_digest(encode_asset_id);
 
+        let asset_base_point = pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(asset_digest.as_bytes());
         // AssetBase = ZSAValueBase(AssetDigest)
         AssetBase(
-            pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(asset_digest.as_bytes()),
+            asset_base_point,
         )
     }
 
