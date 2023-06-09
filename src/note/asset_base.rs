@@ -57,7 +57,7 @@ impl AssetBase {
     /// Panics if `asset_desc` is empty or greater than `MAX_ASSET_DESCRIPTION_SIZE`.
     #[allow(non_snake_case)]
     pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &str) -> Self {
-        assert!(is_asset_desc_of_valid_size(asset_desc));
+        assert!(is_asset_desc_of_valid_size(asset_desc), "The asset_desc string is not of valid size");
 
         // EncodeAssetId(ik, asset_desc) = version_byte || ik || asset_desc
         let version_byte = [0x00];
