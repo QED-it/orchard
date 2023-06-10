@@ -527,6 +527,8 @@ pub enum Error {
     WrongAssetDescSize,
     /// The `IssueAction` is not finalized but contains no notes.
     IssueActionWithoutNoteNotFinalized,
+    /// The `AssetBase` is the Pallas identity point.
+    AssetBaseIdentityPoint,
 
     /// Verification errors:
     /// Invalid signature.
@@ -561,6 +563,13 @@ impl fmt::Display for Error {
                     "this `IssueAction` contains no notes but is not finalized"
                 )
             }
+            AssetBaseIdentityPoint => {
+                write!(
+                    f,
+                    "the AssetBase is the identity point of the Pallas curve, which is invalid."
+                )
+            }
+
             IssueBundleInvalidSignature(_) => {
                 write!(f, "invalid signature")
             }
