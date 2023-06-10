@@ -4,11 +4,12 @@ use nonempty::NonEmpty;
 use rand::{CryptoRng, RngCore};
 use std::collections::HashSet;
 use std::fmt;
+use group::Group;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::issuance::Error::{
     IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
+    IssueActionWithoutNoteNotFinalized, AssetBaseIdentityPoint, IssueBundleIkMismatchAssetBase,
     IssueBundleInvalidSignature, ValueSumOverflow, WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
@@ -139,6 +140,8 @@ impl IssueAction {
                     .eq(&issue_asset)
                     .then(|| ())
                     .ok_or(IssueBundleIkMismatchAssetBase)?;
+
+                if bool::from(note.asset().cv_base().is_identity()) { return Err(AssetBaseIdentityPoint) }
 
                 // The total amount should not overflow
                 (value_sum + note.value()).ok_or(ValueSumOverflow)
@@ -569,7 +572,6 @@ impl fmt::Display for Error {
                     "the AssetBase is the identity point of the Pallas curve, which is invalid."
                 )
             }
-
             IssueBundleInvalidSignature(_) => {
                 write!(f, "invalid signature")
             }
