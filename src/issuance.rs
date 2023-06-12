@@ -7,10 +7,9 @@ use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::issuance::Error::{
-    IssueActionAlreadyFinalized, IssueActionIncorrectAssetBase, IssueActionNotFound,
-    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, ValueSumOverflow,
-    WrongAssetDescSize,
+    IssueActionIncorrectAssetBase, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
+    IssueBundleInvalidSignature, ValueSumOverflow, WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
@@ -267,9 +266,11 @@ impl IssueBundle<Unauthorized> {
     /// note_params values and with `finalize` set to false. In this created note, rho will be
     /// randomly sampled, similar to dummy note generation.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `asset_desc` is empty or longer than 512 bytes.
+    /// This function may return an error in any of the following cases:
+    ///
+    /// * `WrongAssetDescSize`: If `asset_desc` is empty or longer than 512 bytes.
     pub fn new(
         ik: IssuanceValidatingKey,
         asset_desc: String,
@@ -319,9 +320,11 @@ impl IssueBundle<Unauthorized> {
     ///
     /// Rho will be randomly sampled, similar to dummy note generation.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `asset_desc` is empty or longer than 512 bytes.
+    /// This function may return an error in any of the following cases:
+    ///
+    /// * `WrongAssetDescSize`: If `asset_desc` is empty or longer than 512 bytes.
     pub fn add_recipient(
         &mut self,
         asset_desc: String,
@@ -530,8 +533,6 @@ pub fn verify_issue_bundle(
 /// Errors produced during the issuance process
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
-    /// Unable to add note to the IssueAction since it has already been finalized.
-    IssueActionAlreadyFinalized,
     /// The requested IssueAction not exists in the bundle.
     IssueActionNotFound,
     /// Not all `AssetBase`s are the same inside the action.
@@ -558,12 +559,6 @@ impl std::error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            IssueActionAlreadyFinalized => {
-                write!(
-                    f,
-                    "unable to add note to the IssueAction since it has already been finalized"
-                )
-            }
             IssueActionNotFound => {
                 write!(f, "the requested IssueAction not exists in the bundle.")
             }
