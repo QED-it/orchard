@@ -1403,6 +1403,7 @@ pub mod testing {
     use proptest::prelude::*;
     use proptest::prop_compose;
     use reddsa::orchard::SpendAuth;
+    use nonempty::NonEmpty;
 
     prop_compose! {
         /// Generate a uniformly distributed signature
@@ -1476,6 +1477,7 @@ pub mod testing {
             ik in arb_issuance_validating_key(),
             fake_sig in arb_signature(),
         ) -> IssueBundle<Signed> {
+            let actions = NonEmpty::from_vec(actions).unwrap();
             IssueBundle {
                 ik,
                 actions,
