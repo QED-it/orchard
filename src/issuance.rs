@@ -122,7 +122,11 @@ impl IssueAction {
     ///
     /// * `IssueActionWithoutNoteNotFinalized`:If the `IssueAction` contains no note and is not finalized.
     fn verify_supply(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
-        let issue_action_asset = AssetBase::derive(ik, &self.asset_desc);
+        if self.notes.is_empty() && !self.is_finalized() {
+            return Err(IssueActionWithoutNoteNotFinalized);
+        }
+
+        let issue_asset = AssetBase::derive(ik, &self.asset_desc);
 
         // Calculate the value of the asset as a sum of values of all its notes
         // and ensure all note types are equal the asset derived from asset_desc and ik.
@@ -130,9 +134,9 @@ impl IssueAction {
             .notes
             .iter()
             .try_fold(ValueSum::zero(), |value_sum, &note| {
-                // All assets should have the same `AssetBase`
+                // All assets should be derived correctly
                 note.asset()
-                    .eq(&issue_action_asset)
+                    .eq(&issue_asset)
                     .then(|| ())
                     .ok_or(IssueBundleIkMismatchAssetBase)?;
 
@@ -140,14 +144,10 @@ impl IssueAction {
                 (value_sum + note.value()).ok_or(ValueSumOverflow)
             })?;
 
-        if self.notes.is_empty() && !self.is_finalized() {
-            Err(IssueActionWithoutNoteNotFinalized)
-        } else {
-            Ok((
-                issue_action_asset,
-                AssetSupply::new(value_sum, self.is_finalized()),
-            ))
-        }
+        Ok((
+            issue_asset,
+            AssetSupply::new(value_sum, self.is_finalized()),
+        ))
     }
 
     /// Serialize `finalize` flag to a byte
