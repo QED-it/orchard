@@ -7,7 +7,7 @@ use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::issuance::Error::{
-    IssueActionIncorrectAssetBase, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
     IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
     IssueBundleInvalidSignature, ValueSumOverflow, WrongAssetDescSize,
 };
@@ -115,9 +115,6 @@ impl IssueAction {
     ///
     /// This function may return an error in any of the following cases:
     ///
-    /// * `IssueActionIncorrectAssetBase`: If the asset type of any note in the `IssueAction` is
-    ///   not equal to the asset type of the first note.
-    ///
     /// * `ValueSumOverflow`: If the total amount value of all notes in the `IssueAction` overflows.
     ///
     /// * `IssueBundleIkMismatchAssetBase`: If the provided `ik` is not used to derive the
@@ -126,38 +123,31 @@ impl IssueAction {
     /// * `IssueActionWithoutNoteNotFinalized`:If the `IssueAction` contains no note and is not finalized.
     fn verify_supply(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
         let issue_action_asset = AssetBase::derive(ik, &self.asset_desc);
-        if self.notes.is_empty() {
-            if self.is_finalized() {
-                return Ok((
-                    issue_action_asset,
-                    AssetSupply::new(ValueSum::zero(), self.is_finalized()),
-                ));
-            } else {
-                return Err(IssueActionWithoutNoteNotFinalized);
-            }
-        }
 
         // Calculate the value of the asset as a sum of values of all its notes
-        // and ensure all note types are equal
-        let (asset, value_sum) = self.notes.iter().try_fold(
-            (self.notes().first().unwrap().asset(), ValueSum::zero()),
-            |(asset, value_sum), &note| {
+        // and ensure all note types are equal the asset derived from asset_desc and ik.
+        let value_sum = self
+            .notes
+            .iter()
+            .try_fold(ValueSum::zero(), |value_sum, &note| {
                 // All assets should have the same `AssetBase`
                 note.asset()
-                    .eq(&asset)
+                    .eq(&issue_action_asset)
                     .then(|| ())
-                    .ok_or(IssueActionIncorrectAssetBase)?;
+                    .ok_or(IssueBundleIkMismatchAssetBase)?;
 
                 // The total amount should not overflow
-                Ok((asset, (value_sum + note.value()).ok_or(ValueSumOverflow)?))
-            },
-        )?;
+                (value_sum + note.value()).ok_or(ValueSumOverflow)
+            })?;
 
-        // Return the asset and its supply (or an error if the asset was not properly derived)
-        asset
-            .eq(&issue_action_asset)
-            .then(|| Ok((asset, AssetSupply::new(value_sum, self.is_finalized()))))
-            .ok_or(IssueBundleIkMismatchAssetBase)?
+        if self.notes.is_empty() && !self.is_finalized() {
+            Err(IssueActionWithoutNoteNotFinalized)
+        } else {
+            Ok((
+                issue_action_asset,
+                AssetSupply::new(value_sum, self.is_finalized()),
+            ))
+        }
     }
 
     /// Serialize `finalize` flag to a byte
@@ -490,7 +480,6 @@ impl IssueBundle<Signed> {
 ///    asset in the bundle is incorrect.
 /// * `IssueActionPreviouslyFinalizedAssetBase`:  This error occurs if the asset has already been
 ///    finalized (inserted into the `finalized` collection).
-/// * `IssueActionIncorrectAssetBase`: This error occurs if any note has an incorrect note type.
 /// * `ValueSumOverflow`: This error occurs if an overflow happens during the calculation of
 ///     the value sum for the notes in the asset.
 /// * `IssueBundleIkMismatchAssetBase`: This error is raised if the `AssetBase` derived from
@@ -535,8 +524,6 @@ pub fn verify_issue_bundle(
 pub enum Error {
     /// The requested IssueAction not exists in the bundle.
     IssueActionNotFound,
-    /// Not all `AssetBase`s are the same inside the action.
-    IssueActionIncorrectAssetBase,
     /// The provided `isk` and the driven `ik` does not match at least one note type.
     IssueBundleIkMismatchAssetBase,
     /// `asset_desc` should be between 1 and 512 bytes.
@@ -561,9 +548,6 @@ impl fmt::Display for Error {
         match self {
             IssueActionNotFound => {
                 write!(f, "the requested IssueAction not exists in the bundle.")
-            }
-            IssueActionIncorrectAssetBase => {
-                write!(f, "not all `AssetBase`s are the same inside the action")
             }
             IssueBundleIkMismatchAssetBase => {
                 write!(
@@ -600,9 +584,8 @@ impl fmt::Display for Error {
 mod tests {
     use super::{AssetSupply, IssueBundle, NoteParams};
     use crate::issuance::Error::{
-        IssueActionIncorrectAssetBase, IssueActionNotFound,
-        IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
-        IssueBundleInvalidSignature, WrongAssetDescSize,
+        IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+        IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, WrongAssetDescSize,
     };
     use crate::issuance::{verify_issue_bundle, IssueAction, Signed};
     use crate::keys::{
@@ -712,7 +695,7 @@ mod tests {
 
         assert_eq!(
             action.verify_supply(&ik),
-            Err(IssueActionIncorrectAssetBase)
+            Err(IssueBundleIkMismatchAssetBase)
         );
     }
 
@@ -937,7 +920,7 @@ mod tests {
             .sign(rng, &isk)
             .expect_err("should not be able to sign");
 
-        assert_eq!(err, IssueActionIncorrectAssetBase);
+        assert_eq!(err, IssueBundleIkMismatchAssetBase);
     }
 
     #[test]
@@ -1200,7 +1183,7 @@ mod tests {
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
-            IssueActionIncorrectAssetBase
+            IssueBundleIkMismatchAssetBase
         );
     }
 
