@@ -4,7 +4,7 @@ use crate::builder::verify_bundle;
 use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
 use orchard::bundle::Authorized;
-use orchard::issuance::{verify_issue_bundle, IssueBundle, NoteParams, Signed, Unauthorized};
+use orchard::issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized};
 use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use orchard::note::{AssetBase, ExtractedNoteCommitment};
 use orchard::note_encryption_v3::OrchardDomainV3;
@@ -141,7 +141,7 @@ fn issue_zsa_notes(asset_descr: &str, keys: &Keychain) -> (Note, Note) {
     let unauthorized_asset = IssueBundle::new(
         keys.ik().clone(),
         asset_descr.to_string(),
-        Some(NoteParams {
+        Some(IssueInfo {
             recipient: keys.recipient,
             value: NoteValue::from_raw(40),
         }),

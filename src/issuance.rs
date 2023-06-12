@@ -50,7 +50,7 @@ pub struct IssueAction {
 
 /// The parameters required to add a Note into an IssueAction.
 #[derive(Debug)]
-pub struct NoteParams {
+pub struct IssueInfo {
     /// The recipient of the funds.
     pub recipient: Address,
     /// The value of this note.
@@ -250,10 +250,10 @@ impl<T: IssueAuth> IssueBundle<T> {
 impl IssueBundle<Unauthorized> {
     /// Constructs a new `IssueBundle`.
     ///
-    /// If note_params is None, the new `IssueBundle` will contain one `IssueAction` without notes
+    /// If issue_info is None, the new `IssueBundle` will contain one `IssueAction` without notes
     /// and with `finalize` set to true.
     /// Otherwise, the new `IssueBundle` will contain one `IssueAction with one note created from
-    /// note_params values and with `finalize` set to false. In this created note, rho will be
+    /// issue_info values and with `finalize` set to false. In this created note, rho will be
     /// randomly sampled, similar to dummy note generation.
     ///
     /// # Errors
@@ -264,7 +264,7 @@ impl IssueBundle<Unauthorized> {
     pub fn new(
         ik: IssuanceValidatingKey,
         asset_desc: String,
-        note_params: Option<NoteParams>,
+        issue_info: Option<IssueInfo>,
         mut rng: impl RngCore,
     ) -> Result<(IssueBundle<Unauthorized>, AssetBase), Error> {
         if !is_asset_desc_of_valid_size(&asset_desc) {
@@ -273,16 +273,16 @@ impl IssueBundle<Unauthorized> {
 
         let asset = AssetBase::derive(&ik, &asset_desc);
 
-        let action = match note_params {
+        let action = match issue_info {
             None => IssueAction {
                 asset_desc,
                 notes: vec![],
                 finalize: true,
             },
-            Some(note_params) => {
+            Some(issue_info) => {
                 let note = Note::new(
-                    note_params.recipient,
-                    note_params.value,
+                    issue_info.recipient,
+                    issue_info.value,
                     asset,
                     Nullifier::dummy(&mut rng),
                     &mut rng,
@@ -582,7 +582,7 @@ impl fmt::Display for Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{AssetSupply, IssueBundle, NoteParams};
+    use super::{AssetSupply, IssueBundle, IssueInfo};
     use crate::issuance::Error::{
         IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
         IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, WrongAssetDescSize,
@@ -721,7 +721,7 @@ mod tests {
             IssueBundle::new(
                 ik.clone(),
                 String::from_utf8(vec![b'X'; 513]).unwrap(),
-                Some(NoteParams {
+                Some(IssueInfo {
                     recipient,
                     value: NoteValue::unsplittable()
                 }),
@@ -735,7 +735,7 @@ mod tests {
             IssueBundle::new(
                 ik.clone(),
                 "".to_string(),
-                Some(NoteParams {
+                Some(IssueInfo {
                     recipient,
                     value: NoteValue::unsplittable()
                 }),
@@ -748,7 +748,7 @@ mod tests {
         let (mut bundle, asset) = IssueBundle::new(
             ik,
             str.clone(),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -792,7 +792,7 @@ mod tests {
         let (mut bundle, _) = IssueBundle::new(
             ik,
             String::from("NFT"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(u64::MIN),
             }),
@@ -831,7 +831,7 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Frost"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -850,7 +850,7 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
             String::from("Sign"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -871,7 +871,7 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("IssueBundle"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -897,7 +897,7 @@ mod tests {
         let (mut bundle, _) = IssueBundle::new(
             ik,
             String::from("IssueBundle"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -930,7 +930,7 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Verify"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -955,7 +955,7 @@ mod tests {
         let (mut bundle, _) = IssueBundle::new(
             ik.clone(),
             String::from("Verify with finalize"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(7),
             }),
@@ -993,7 +993,7 @@ mod tests {
         let (mut bundle, _) = IssueBundle::new(
             ik,
             String::from(asset1_desc),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(7),
             }),
@@ -1068,7 +1068,7 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
             String::from("already final"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -1103,7 +1103,7 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("bad sig"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -1133,7 +1133,7 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Asset description"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -1158,7 +1158,7 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Asset description"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -1196,7 +1196,7 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from(asset_description),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
@@ -1243,7 +1243,7 @@ mod tests {
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Asset description"),
-            Some(NoteParams {
+            Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
