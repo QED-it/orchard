@@ -336,28 +336,25 @@ impl IssueBundle<Unauthorized> {
             &mut rng,
         );
 
-        let found = match self
+        let action = self
             .actions
             .iter_mut()
-            .find(|issue_action| issue_action.asset_desc.eq(&asset_desc))
-        {
-            // Append to an existing IssueAction.
-            Some(action) => {
-                action.notes.push(note);
-                true
-            }
-            None => false,
-        };
+            .find(|issue_action| issue_action.asset_desc.eq(&asset_desc));
 
-        // Insert a new IssueAction.
-        if !found {
-            let action = IssueAction {
-                asset_desc,
-                notes: vec![note],
-                finalize: false,
-            };
-            self.actions.push(action);
-        }
+        match action {
+            Some(action) => {
+                // Append to an existing IssueAction.
+                action.notes.push(note);
+            }
+            None => {
+                // Insert a new IssueAction.
+                self.actions.push(IssueAction {
+                    asset_desc,
+                    notes: vec![note],
+                    finalize: false,
+                });
+            }
+        };
 
         Ok(asset)
     }
