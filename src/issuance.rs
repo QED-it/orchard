@@ -135,15 +135,16 @@ impl IssueAction {
             .notes
             .iter()
             .try_fold(ValueSum::zero(), |value_sum, &note| {
+                //The asset base should not be the identity point of the Pallas curve.
+                if bool::from(note.asset().cv_base().is_identity()) {
+                    return Err(AssetBaseCannotBeIdentityPoint);
+                }
+
                 // All assets should be derived correctly
                 note.asset()
                     .eq(&issue_asset)
                     .then(|| ())
                     .ok_or(IssueBundleIkMismatchAssetBase)?;
-
-                if bool::from(note.asset().cv_base().is_identity()) {
-                    return Err(AssetBaseCannotBeIdentityPoint);
-                }
 
                 // The total amount should not overflow
                 (value_sum + note.value()).ok_or(ValueSumOverflow)
@@ -604,6 +605,8 @@ mod tests {
     use crate::note::{AssetBase, Nullifier};
     use crate::value::{NoteValue, ValueSum};
     use crate::{Address, Note};
+    use group::{Group, GroupEncoding};
+    use pasta_curves::pallas;
     use rand::rngs::OsRng;
     use rand::RngCore;
     use reddsa::Error::InvalidSignature;
