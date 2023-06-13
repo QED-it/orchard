@@ -595,8 +595,9 @@ impl fmt::Display for Error {
 mod tests {
     use super::{AssetSupply, IssueBundle, IssueInfo};
     use crate::issuance::Error::{
-        IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-        IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, WrongAssetDescSize,
+        AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
+        IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
+        IssueBundleInvalidSignature, WrongAssetDescSize,
     };
     use crate::issuance::{verify_issue_bundle, IssueAction, Signed};
     use crate::keys::{
@@ -683,6 +684,38 @@ mod tests {
         assert_eq!(asset, test_asset);
         assert_eq!(supply.amount, ValueSum::from_raw(30));
         assert!(!supply.is_finalized);
+    }
+
+    #[test]
+    fn test_verify_supply_invalid_for_asset_base_as_identity() {
+        let (mut rng, _, ik, recipient, _) = setup_params();
+        let identity_point =
+            (pallas::Point::generator() * -pallas::Scalar::one()) + pallas::Point::generator();
+        let asset = AssetBase::from_bytes(&identity_point.to_bytes()).unwrap();
+
+        let note1 = Note::new(
+            recipient,
+            NoteValue::from_raw(10),
+            asset,
+            Nullifier::dummy(&mut rng),
+            &mut rng,
+        );
+
+        let note2 = Note::new(
+            recipient,
+            NoteValue::from_raw(20),
+            asset,
+            Nullifier::dummy(&mut rng),
+            &mut rng,
+        );
+
+        let action =
+            IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], false);
+
+        assert_eq!(
+            action.verify_supply(&ik),
+            Err(AssetBaseCannotBeIdentityPoint)
+        );
     }
 
     #[test]
