@@ -1,15 +1,15 @@
 //! Structs related to issuance bundles and the associated logic.
 use blake2b_simd::Hash as Blake2bHash;
+use group::Group;
 use nonempty::NonEmpty;
 use rand::{CryptoRng, RngCore};
 use std::collections::HashSet;
 use std::fmt;
-use group::Group;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::issuance::Error::{
-    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-    IssueActionWithoutNoteNotFinalized, AssetBaseIdentityPoint, IssueBundleIkMismatchAssetBase,
+    AssetBaseCannotBeIdentityPoint, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
     IssueBundleInvalidSignature, ValueSumOverflow, WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
@@ -141,7 +141,9 @@ impl IssueAction {
                     .then(|| ())
                     .ok_or(IssueBundleIkMismatchAssetBase)?;
 
-                if bool::from(note.asset().cv_base().is_identity()) { return Err(AssetBaseIdentityPoint) }
+                if bool::from(note.asset().cv_base().is_identity()) {
+                    return Err(AssetBaseCannotBeIdentityPoint);
+                }
 
                 // The total amount should not overflow
                 (value_sum + note.value()).ok_or(ValueSumOverflow)
@@ -530,8 +532,8 @@ pub enum Error {
     WrongAssetDescSize,
     /// The `IssueAction` is not finalized but contains no notes.
     IssueActionWithoutNoteNotFinalized,
-    /// The `AssetBase` is the Pallas identity point.
-    AssetBaseIdentityPoint,
+    /// The `AssetBase` is the Pallas identity point, which is invalid.
+    AssetBaseCannotBeIdentityPoint,
 
     /// Verification errors:
     /// Invalid signature.
@@ -566,7 +568,7 @@ impl fmt::Display for Error {
                     "this `IssueAction` contains no notes but is not finalized"
                 )
             }
-            AssetBaseIdentityPoint => {
+            AssetBaseCannotBeIdentityPoint => {
                 write!(
                     f,
                     "the AssetBase is the identity point of the Pallas curve, which is invalid."

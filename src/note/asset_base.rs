@@ -70,6 +70,7 @@ impl AssetBase {
 
         let asset_base_point: pallas::Point =
             pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(asset_digest.as_bytes());
+
         assert!(
             bool::from(!asset_base_point.is_identity()),
             "The Asset Base is the identity point, which is invalid."
