@@ -16,7 +16,6 @@ use crate::{
         OutgoingViewingKey, PreparedEphemeralPublicKey, PreparedIncomingViewingKey, SharedSecret,
     },
     note::{ExtractedNoteCommitment, Nullifier, RandomSeed},
-    spec::diversify_hash,
     value::{NoteValue, ValueCommitment},
     Address, Note,
 };
@@ -308,10 +307,11 @@ impl Domain for OrchardDomainV3 {
     fn parse_note_plaintext_without_memo_ovk(
         &self,
         pk_d: &Self::DiversifiedTransmissionKey,
-        esk: &Self::EphemeralSecretKey,
-        ephemeral_key: &EphemeralKeyBytes,
         plaintext: &CompactNotePlaintextBytes,
     ) -> Option<(Self::Note, Self::Recipient)> {
+        orchard_parse_note_plaintext_without_memo(self, plaintext, |_| Some(*pk_d))
+        // FIXME: Is that correct to replace this code with one-line code above?
+        /*
         orchard_parse_note_plaintext_without_memo(self, plaintext, |diversifier| {
             if esk
                 .derive_public(diversify_hash(diversifier.as_array()))
@@ -324,6 +324,7 @@ impl Domain for OrchardDomainV3 {
                 None
             }
         })
+        */
     }
 
     fn extract_memo(
