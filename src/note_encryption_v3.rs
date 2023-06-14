@@ -310,21 +310,6 @@ impl Domain for OrchardDomainV3 {
         plaintext: &CompactNotePlaintextBytes,
     ) -> Option<(Self::Note, Self::Recipient)> {
         orchard_parse_note_plaintext_without_memo(self, plaintext, |_| Some(*pk_d))
-        // FIXME: Is that correct to replace this code with one-line code above?
-        /*
-        orchard_parse_note_plaintext_without_memo(self, plaintext, |diversifier| {
-            if esk
-                .derive_public(diversify_hash(diversifier.as_array()))
-                .to_bytes()
-                .0
-                == ephemeral_key.0
-            {
-                Some(*pk_d)
-            } else {
-                None
-            }
-        })
-        */
     }
 
     fn extract_memo(
