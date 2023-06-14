@@ -92,5 +92,4 @@ debug = true
 debug = true
 
 [patch.crates-io]
-#zcash_note_encryption = { git = "https://github.com/QED-it/librustzcash.git", branch = "upgrade_for_orchard_v05" }
-zcash_note_encryption = { path = "../librustzcash/components/zcash_note_encryption" }
+zcash_note_encryption = { git = "https://github.com/QED-it/librustzcash.git", branch = "upgrade_for_orchard_v05" }
