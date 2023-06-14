@@ -4,7 +4,7 @@ use crate::builder::verify_bundle;
 use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
 use orchard::bundle::Authorized;
-use orchard::issuance::{verify_issue_bundle, IssueBundle, Signed, Unauthorized};
+use orchard::issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized};
 use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use orchard::note::{AssetBase, ExtractedNoteCommitment};
 use orchard::note_encryption_v3::OrchardDomainV3;
@@ -99,7 +99,7 @@ pub fn build_merkle_path_with_two_leaves(
     note1: &Note,
     note2: &Note,
 ) -> (MerklePath, MerklePath, Anchor) {
-    let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100, 0);
+    let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
 
     // Add first leaf
     let cmx1: ExtractedNoteCommitment = note1.commitment().into();
@@ -138,23 +138,25 @@ pub fn build_merkle_path_with_two_leaves(
 fn issue_zsa_notes(asset_descr: &str, keys: &Keychain) -> (Note, Note) {
     let mut rng = OsRng;
     // Create a issuance bundle
-    let mut unauthorized = IssueBundle::new(keys.ik().clone());
+    let unauthorized_asset = IssueBundle::new(
+        keys.ik().clone(),
+        asset_descr.to_string(),
+        Some(IssueInfo {
+            recipient: keys.recipient,
+            value: NoteValue::from_raw(40),
+        }),
+        &mut rng,
+    );
+
+    assert!(unauthorized_asset.is_ok());
+
+    let (mut unauthorized, _) = unauthorized_asset.unwrap();
 
     assert!(unauthorized
         .add_recipient(
             asset_descr.to_string(),
             keys.recipient,
-            NoteValue::from_raw(40),
-            false,
-            &mut rng,
-        )
-        .is_ok());
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr.to_string(),
-            keys.recipient,
             NoteValue::from_raw(2),
-            false,
             &mut rng,
         )
         .is_ok());
@@ -261,7 +263,23 @@ fn build_and_verify_bundle(
     // Verify the shielded bundle, currently without the proof.
     verify_bundle(&shielded_bundle, &keys.vk, true);
     assert_eq!(shielded_bundle.actions().len(), expected_num_actions);
+    assert!(verify_unique_spent_nullifiers(&shielded_bundle));
     Ok(())
+}
+
+fn verify_unique_spent_nullifiers(bundle: &Bundle<Authorized, i64>) -> bool {
+    let mut unique_nulifiers = Vec::new();
+    let spent_nullifiers = bundle
+        .actions()
+        .iter()
+        .map(|action| *action.nullifier())
+        .collect::<Vec<_>>();
+    spent_nullifiers.iter().enumerate().all(|(i, item)| {
+        unique_nulifiers.push(*item);
+        // Check if the item is already in the unique_nullifiers vector by checking that the first
+        // position of the item is equal to the current index i.
+        unique_nulifiers.iter().position(|x| x == item) == Some(i)
+    })
 }
 
 /// Issue several ZSA and native notes and spend them in different combinations, e.g. split and join
@@ -315,23 +333,28 @@ fn zsa_issue_and_transfer() {
     )
     .unwrap();
 
-    // 2. Split single ZSA note into 2 notes
-    let delta = 2; // arbitrary number for value manipulation
+    // 2. Split single ZSA note into 3 notes
+    let delta_1 = 2; // arbitrary number for value manipulation
+    let delta_2 = 5; // arbitrary number for value manipulation
     build_and_verify_bundle(
         vec![&zsa_spend_1],
         vec![
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta),
+                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta_1 - delta_2),
                 asset: zsa_spend_1.note.asset(),
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(delta),
+                value: NoteValue::from_raw(delta_1),
+                asset: zsa_spend_1.note.asset(),
+            },
+            TestOutputInfo {
+                value: NoteValue::from_raw(delta_2),
                 asset: zsa_spend_1.note.asset(),
             },
         ],
         vec![],
         anchor,
-        2,
+        3,
         &keys,
     )
     .unwrap();
@@ -357,11 +380,11 @@ fn zsa_issue_and_transfer() {
         vec![&zsa_spend_1, &zsa_spend_2],
         vec![
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta),
+                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta_1),
                 asset: zsa_spend_1.note.asset(),
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + delta),
+                value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + delta_1),
                 asset: zsa_spend_2.note.asset(),
             },
         ],
@@ -387,7 +410,7 @@ fn zsa_issue_and_transfer() {
         ],
         vec![],
         anchor,
-        4,
+        2,
         &keys,
     )
     .unwrap();
@@ -401,7 +424,15 @@ fn zsa_issue_and_transfer() {
                 asset: zsa_spend_1.note.asset(),
             },
             TestOutputInfo {
-                value: native_spend.note.value(),
+                value: NoteValue::from_raw(native_spend.note.value().inner() - delta_1 - delta_2),
+                asset: AssetBase::native(),
+            },
+            TestOutputInfo {
+                value: NoteValue::from_raw(delta_1),
+                asset: AssetBase::native(),
+            },
+            TestOutputInfo {
+                value: NoteValue::from_raw(delta_2),
                 asset: AssetBase::native(),
             },
         ],
@@ -439,7 +470,7 @@ fn zsa_issue_and_transfer() {
         ],
         vec![],
         anchor_t7,
-        4,
+        2,
         &keys,
     )
     .unwrap();
@@ -450,17 +481,17 @@ fn zsa_issue_and_transfer() {
             vec![&zsa_spend_t7_1, &zsa_spend_t7_2],
             vec![
                 TestOutputInfo {
-                    value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + delta),
+                    value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + delta_1),
                     asset: zsa_spend_t7_1.note.asset(),
                 },
                 TestOutputInfo {
-                    value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - delta),
+                    value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - delta_1),
                     asset: zsa_spend_t7_2.note.asset(),
                 },
             ],
             vec![],
             anchor_t7,
-            4,
+            2,
             &keys,
         )
         .unwrap();

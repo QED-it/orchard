@@ -167,9 +167,28 @@ impl SpendInfo {
         }
     }
 
-    /// Return a copy of this note with the split flag set to `true`.
-    fn create_split_spend(&self) -> Self {
-        SpendInfo::new(self.fvk.clone(), self.note, self.merkle_path.clone(), true).unwrap()
+    /// Creates a split spend, which is identical to origin normal spend except that we use a random
+    /// fvk to generate a different nullifier. In addition, the split_flag is raised.
+    ///
+    /// Defined in [Transfer and Burn of Zcash Shielded Assets ZIP-0226 § Split Notes (DRAFT PR)][TransferZSA].
+    ///
+    /// [TransferZSA]: https://qed-it.github.io/zips/zip-0226.html#split-notes
+    fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
+        let note = self.note;
+        let merkle_path = self.merkle_path.clone();
+
+        let sk = SpendingKey::random(rng);
+        let fvk: FullViewingKey = (&sk).into();
+
+        SpendInfo {
+            dummy_sk: Some(sk),
+            fvk,
+            // We use external scope to avoid unnecessary derivations
+            scope: Scope::External,
+            note,
+            merkle_path,
+            split_flag: true,
+        }
     }
 }
 
@@ -444,6 +463,18 @@ impl Builder {
         i64::try_from(value_balance).and_then(|i| V::try_from(i).map_err(|_| value::OverflowError))
     }
 
+    /// Returns the number of actions to add to this bundle in order to contain at least MIN_ACTION actions.
+    fn num_missing_actions(&self) -> usize {
+        let num_actions = [self.spends.len(), self.recipients.len()]
+            .iter()
+            .max()
+            .cloned()
+            .unwrap();
+        (num_actions < MIN_ACTIONS)
+            .then(|| MIN_ACTIONS - num_actions)
+            .unwrap_or(0)
+    }
+
     /// Builds a bundle containing the given spent notes and recipients.
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
@@ -460,18 +491,18 @@ impl Builder {
         {
             let num_spends = spends.len();
             let num_recipients = recipients.len();
-            let num_actions = [num_spends, num_recipients, MIN_ACTIONS]
-                .iter()
-                .max()
-                .cloned()
-                .unwrap();
+            let mut num_actions = [num_spends, num_recipients].iter().max().cloned().unwrap();
+            // We might have to add dummy/split actions only for the first asset to reach MIN_ACTIONS.
+            pre_actions
+                .is_empty()
+                .then(|| num_actions += self.num_missing_actions());
 
-            // use the first spend to create split spend(s) or create a dummy if empty.
-            let dummy_spend = spends.first().map_or_else(
-                || SpendInfo::dummy(asset, &mut rng),
-                |s| s.create_split_spend(),
+            let first_spend = spends.first().cloned();
+
+            spends.extend(
+                iter::repeat_with(|| pad_spend(first_spend.as_ref(), asset, &mut rng))
+                    .take(num_actions - num_spends),
             );
-            spends.extend(iter::repeat_with(|| dummy_spend.clone()).take(num_actions - num_spends));
 
             // Extend the recipients with dummy values.
             recipients.extend(
@@ -571,6 +602,20 @@ fn partition_by_asset(
     }
 
     hm
+}
+
+/// Returns a dummy/split notes to extend the spends.
+fn pad_spend(spend: Option<&SpendInfo>, asset: AssetBase, mut rng: impl RngCore) -> SpendInfo {
+    if asset.is_native().into() {
+        // For native asset, extends with dummy notes
+        SpendInfo::dummy(asset, &mut rng)
+    } else {
+        // For ZSA asset, extends with
+        // - dummy notes if first spend is empty
+        // - split notes otherwise.
+        let dummy = SpendInfo::dummy(asset, &mut rng);
+        spend.map_or_else(|| dummy, |s| s.create_split_spend(&mut rng))
+    }
 }
 
 /// Marker trait representing bundle signatures in the process of being created.
@@ -866,8 +911,8 @@ impl OutputView for RecipientInfo {
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
-    use bridgetree::BridgeTree;
     use core::fmt::Debug;
+    use incrementalmerkletree::{frontier::Frontier, Hashable};
     use rand::{rngs::StdRng, CryptoRng, SeedableRng};
 
     use proptest::collection::vec;
@@ -962,23 +1007,26 @@ pub mod testing {
             ),
             rng_seed in prop::array::uniform32(prop::num::u8::ANY)
         ) -> ArbitraryBundleInputs<StdRng> {
-            const MERKLE_DEPTH_ORCHARD: u8 = crate::constants::MERKLE_DEPTH_ORCHARD as u8;
-            let mut tree = BridgeTree::<MerkleHashOrchard, u32, MERKLE_DEPTH_ORCHARD>::new(100, 0);
+            use crate::constants::MERKLE_DEPTH_ORCHARD;
+            let mut frontier = Frontier::<MerkleHashOrchard, { MERKLE_DEPTH_ORCHARD as u8 }>::empty();
             let mut notes_and_auth_paths: Vec<(Note, MerklePath)> = Vec::new();
 
             for note in notes.iter() {
                 let leaf = MerkleHashOrchard::from_cmx(&note.commitment().into());
-                tree.append(leaf);
-                let position = tree.mark().expect("tree is not empty");
+                frontier.append(leaf);
 
-                let path = MerklePath::from((position, tree.witness(position, 0).expect("we just witnessed the path")));
-                notes_and_auth_paths.push((*note, path));
+                let path = frontier
+                    .witness(|addr| Some(<MerkleHashOrchard as Hashable>::empty_root(addr.level())))
+                    .ok()
+                    .flatten()
+                    .expect("we can always construct a correct Merkle path");
+                notes_and_auth_paths.push((*note, path.into()));
             }
 
             ArbitraryBundleInputs {
                 rng: StdRng::from_seed(rng_seed),
                 sk,
-                anchor: tree.root(0).unwrap().into(),
+                anchor: frontier.root().into(),
                 notes: notes_and_auth_paths,
                 recipient_amounts
             }
