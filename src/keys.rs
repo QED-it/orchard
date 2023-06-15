@@ -24,7 +24,10 @@ use crate::{
         to_scalar, NonIdentityPallasPoint, NonZeroPallasBase, NonZeroPallasScalar,
         PreparedNonIdentityBase, PreparedNonZeroScalar, PrfExpand,
     },
-    zip32::{self, ChildIndex, ExtendedSpendingKey},
+    zip32::{
+        self, ChildIndex, ExtendedSpendingKey, ZIP32_ORCHARD_PERSONALIZATION,
+        ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE,
+    },
 };
 
 const KDF_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_OrchardKDF";
@@ -100,7 +103,8 @@ impl SpendingKey {
             ChildIndex::try_from(coin_type)?,
             ChildIndex::try_from(account)?,
         ];
-        ExtendedSpendingKey::from_path(seed, path).map(|esk| esk.sk())
+        ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION)
+            .map(|esk| esk.sk())
     }
 }
 
@@ -256,7 +260,8 @@ impl IssuanceKey {
             ChildIndex::try_from(coin_type)?,
             ChildIndex::try_from(account)?,
         ];
-        ExtendedSpendingKey::from_path(seed, path).map(|esk| esk.sk().into())
+        ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE)
+            .map(|esk| esk.sk().into())
     }
 }
 
