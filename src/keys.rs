@@ -206,6 +206,12 @@ type IssuanceAuth = SpendAuth;
 #[derive(Debug, Copy, Clone)]
 pub struct IssuanceKey([u8; 32]);
 
+impl From<SpendingKey> for IssuanceKey {
+    fn from(sk: SpendingKey) -> Self {
+        IssuanceKey(*sk.to_bytes())
+    }
+}
+
 impl ConstantTimeEq for IssuanceKey {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.to_bytes().ct_eq(other.to_bytes())
@@ -220,34 +226,14 @@ impl IssuanceKey {
     ///
     /// [ZIP 32]: https://zips.z.cash/zip-0032
     pub(crate) fn random(rng: &mut impl RngCore) -> Self {
-        loop {
-            let mut bytes = [0; 32];
-            rng.fill_bytes(&mut bytes);
-            let sk = IssuanceKey::from_bytes(bytes);
-            if sk.is_some().into() {
-                break sk.unwrap();
-            }
-        }
+        SpendingKey::random(rng).into()
     }
 
     /// Constructs an Orchard issuance key from uniformly-random bytes.
     ///
     /// Returns `None` if the bytes do not correspond to a valid Orchard issuance key.
     pub fn from_bytes(ik: [u8; 32]) -> CtOption<Self> {
-        let sk = SpendingKey(ik);
-        // If ask = 0, discard this key. We call `derive_inner` rather than
-        // `SpendAuthorizingKey::from` here because we only need to know
-        // whether ask = 0; the adjustment to potentially negate ask is not
-        // needed. Also, `from` would panic on ask = 0.
-        let ask = SpendAuthorizingKey::derive_inner(&sk);
-        // If ivk is 0 or ⊥, discard this key.
-        let fvk = (&sk).into();
-        let external_ivk = KeyAgreementPrivateKey::derive_inner(&fvk);
-        let internal_ivk = KeyAgreementPrivateKey::derive_inner(&fvk.derive_internal());
-        CtOption::new(
-            IssuanceKey(ik),
-            !(ask.is_zero() | external_ivk.is_none() | internal_ivk.is_none()),
-        )
+        CtOption::new(IssuanceKey(ik), SpendingKey::from_bytes(ik).is_some())
     }
 
     /// Returns the raw bytes of the issuance key.
@@ -267,9 +253,7 @@ impl IssuanceKey {
             ChildIndex::try_from(coin_type)?,
             ChildIndex::try_from(account)?,
         ];
-        ExtendedSpendingKey::from_path(seed, path)
-            .map(|esk| esk.sk())
-            .map(|spending_key| IssuanceKey::from_bytes(*spending_key.to_bytes()).unwrap())
+        ExtendedSpendingKey::from_path(seed, path).map(|esk| esk.sk().into())
     }
 }
 
