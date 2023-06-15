@@ -61,16 +61,16 @@ fn prepare_keys() -> Keychain {
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
-    let ik = IssuanceKey::from_bytes([0; 32]).unwrap();
-    let isk = IssuanceAuthorizingKey::from(&ik);
-    let ivk = IssuanceValidatingKey::from(&isk);
+    let sk_iss = IssuanceKey::from_bytes([0; 32]).unwrap();
+    let isk = IssuanceAuthorizingKey::from(&sk_iss);
+    let ik = IssuanceValidatingKey::from(&isk);
     Keychain {
         pk,
         vk,
         sk,
         fvk,
         isk,
-        ik: ivk,
+        ik,
         recipient,
     }
 }
