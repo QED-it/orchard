@@ -29,6 +29,7 @@ use crate::{
 
 const KDF_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_OrchardKDF";
 const ZIP32_PURPOSE: u32 = 32;
+const ZIP32_PURPOSE_FOR_ISSUANCE: u32 = 227;
 
 /// A spending key, from which all key material is derived.
 ///
@@ -197,6 +198,81 @@ impl SpendValidatingKey {
 /// We currently use `SpendAuth` as the `IssuanceAuth`.
 type IssuanceAuth = SpendAuth;
 
+/// An issuance key, from which all key material is derived.
+///
+/// $\mathsf{sk}$ as defined in [Zcash Protocol Spec § 4.2.3: Orchard Key Components][orchardkeycomponents].
+///
+/// [orchardkeycomponents]: https://zips.z.cash/protocol/nu5.pdf#orchardkeycomponents
+#[derive(Debug, Copy, Clone)]
+pub struct IssuanceKey([u8; 32]);
+
+impl ConstantTimeEq for IssuanceKey {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.to_bytes().ct_eq(other.to_bytes())
+    }
+}
+
+impl IssuanceKey {
+    /// Generates a random issuance key.
+    ///
+    /// This is only used when generating a random AssetBase.
+    /// Real issuance keys should be derived according to [ZIP 32].
+    ///
+    /// [ZIP 32]: https://zips.z.cash/zip-0032
+    pub(crate) fn random(rng: &mut impl RngCore) -> Self {
+        loop {
+            let mut bytes = [0; 32];
+            rng.fill_bytes(&mut bytes);
+            let sk = IssuanceKey::from_bytes(bytes);
+            if sk.is_some().into() {
+                break sk.unwrap();
+            }
+        }
+    }
+
+    /// Constructs an Orchard issuance key from uniformly-random bytes.
+    ///
+    /// Returns `None` if the bytes do not correspond to a valid Orchard issuance key.
+    pub fn from_bytes(ik: [u8; 32]) -> CtOption<Self> {
+        let sk = SpendingKey(ik);
+        // If ask = 0, discard this key. We call `derive_inner` rather than
+        // `SpendAuthorizingKey::from` here because we only need to know
+        // whether ask = 0; the adjustment to potentially negate ask is not
+        // needed. Also, `from` would panic on ask = 0.
+        let ask = SpendAuthorizingKey::derive_inner(&sk);
+        // If ivk is 0 or ⊥, discard this key.
+        let fvk = (&sk).into();
+        let external_ivk = KeyAgreementPrivateKey::derive_inner(&fvk);
+        let internal_ivk = KeyAgreementPrivateKey::derive_inner(&fvk.derive_internal());
+        CtOption::new(
+            IssuanceKey(ik),
+            !(ask.is_zero() | external_ivk.is_none() | internal_ivk.is_none()),
+        )
+    }
+
+    /// Returns the raw bytes of the issuance key.
+    pub fn to_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Derives the Orchard issuance key for the given seed, coin type, and account.
+    pub fn from_zip32_seed(
+        seed: &[u8],
+        coin_type: u32,
+        account: u32,
+    ) -> Result<Self, zip32::Error> {
+        // Call zip32 logic
+        let path = &[
+            ChildIndex::try_from(ZIP32_PURPOSE_FOR_ISSUANCE)?,
+            ChildIndex::try_from(coin_type)?,
+            ChildIndex::try_from(account)?,
+        ];
+        ExtendedSpendingKey::from_path(seed, path)
+            .map(|esk| esk.sk())
+            .map(|spending_key| IssuanceKey::from_bytes(*spending_key.to_bytes()).unwrap())
+    }
+}
+
 /// An issuance authorizing key, used to create issuance authorization signatures.
 /// This type enforces that the corresponding public point (ik^ℙ) has ỹ = 0.
 ///
@@ -209,8 +285,8 @@ pub struct IssuanceAuthorizingKey(redpallas::SigningKey<IssuanceAuth>);
 
 impl IssuanceAuthorizingKey {
     /// Derives isk from sk. Internal use only, does not enforce all constraints.
-    fn derive_inner(sk: &SpendingKey) -> pallas::Scalar {
-        to_scalar(PrfExpand::ZsaIsk.expand(&sk.0))
+    fn derive_inner(ik: &IssuanceKey) -> pallas::Scalar {
+        to_scalar(PrfExpand::ZsaIsk.expand(&ik.0))
     }
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
@@ -223,9 +299,9 @@ impl IssuanceAuthorizingKey {
     }
 }
 
-impl From<&SpendingKey> for IssuanceAuthorizingKey {
-    fn from(sk: &SpendingKey) -> Self {
-        let isk = Self::derive_inner(sk);
+impl From<&IssuanceKey> for IssuanceAuthorizingKey {
+    fn from(ik: &IssuanceKey) -> Self {
+        let isk = Self::derive_inner(ik);
         // IssuanceAuthorizingKey cannot be constructed such that this assertion would fail.
         assert!(!bool::from(isk.is_zero()));
         let ret = IssuanceAuthorizingKey(isk.to_repr().try_into().unwrap());
@@ -1050,7 +1126,7 @@ impl SharedSecret {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use super::{
-        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuanceAuthorizingKey,
+        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuanceAuthorizingKey, IssuanceKey,
         IssuanceValidatingKey, SpendingKey,
     };
     use proptest::prelude::*;
@@ -1066,6 +1142,20 @@ pub mod testing {
                     |opt| bool::from(opt.is_some())
                 )
         ) -> SpendingKey {
+            key.unwrap()
+        }
+    }
+
+    prop_compose! {
+        /// Generate a uniformly distributed Orchard issuance key.
+        pub fn arb_issuance_key()(
+            key in prop::array::uniform32(prop::num::u8::ANY)
+                .prop_map(IssuanceKey::from_bytes)
+                .prop_filter(
+                    "Values must correspond to valid Orchard issuance keys.",
+                    |opt| bool::from(opt.is_some())
+                )
+        ) -> IssuanceKey {
             key.unwrap()
         }
     }
@@ -1106,7 +1196,7 @@ pub mod testing {
         /// Generate a uniformly distributed RedDSA issuance authorizing key.
         pub fn arb_issuance_authorizing_key()(rng_seed in prop::array::uniform32(prop::num::u8::ANY)) -> IssuanceAuthorizingKey {
             let mut rng = StdRng::from_seed(rng_seed);
-            IssuanceAuthorizingKey::from(&SpendingKey::random(&mut rng))
+            IssuanceAuthorizingKey::from(&IssuanceKey::random(&mut rng))
         }
     }
 
@@ -1187,7 +1277,9 @@ mod tests {
             let ask: SpendAuthorizingKey = (&sk).into();
             assert_eq!(<[u8; 32]>::from(&ask.0), tv.ask);
 
-            let isk: IssuanceAuthorizingKey = (&sk).into();
+            let ik = IssuanceKey::from_bytes(tv.sk).unwrap();
+
+            let isk: IssuanceAuthorizingKey = (&ik).into();
             assert_eq!(<[u8; 32]>::from(&isk.0), tv.isk);
 
             let ak: SpendValidatingKey = (&ask).into();
