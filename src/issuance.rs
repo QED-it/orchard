@@ -670,6 +670,12 @@ mod tests {
         )
     }
 
+    fn generate_identity_point_asset_base() -> AssetBase {
+        let identity_point =
+            (pallas::Point::generator() * -pallas::Scalar::one()) + pallas::Point::generator();
+        AssetBase::from_bytes(&identity_point.to_bytes()).unwrap()
+    }
+
     #[test]
     fn test_verify_supply_valid() {
         let (ik, test_asset, action) =
@@ -689,9 +695,8 @@ mod tests {
     #[test]
     fn test_verify_supply_invalid_for_asset_base_as_identity() {
         let (mut rng, _, ik, recipient, _) = setup_params();
-        let identity_point =
-            (pallas::Point::generator() * -pallas::Scalar::one()) + pallas::Point::generator();
-        let asset = AssetBase::from_bytes(&identity_point.to_bytes()).unwrap();
+
+        let asset = generate_identity_point_asset_base();
 
         let note1 = Note::new(
             recipient,
@@ -1317,6 +1322,18 @@ mod tests {
         assert_eq!(
             verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
             WrongAssetDescSize
+        );
+    }
+
+    #[test]
+    fn issue_bundle_verify_fail_asset_base_identity_point() {
+
+        let (rng, isk, ik, recipient, sighash) = setup_params();
+
+
+        assert_eq!(
+            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            AssetBaseCannotBeIdentityPoint
         );
     }
 
