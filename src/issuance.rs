@@ -599,14 +599,15 @@ mod tests {
         IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         IssueBundleInvalidSignature, WrongAssetDescSize,
     };
-    use crate::issuance::{verify_issue_bundle, IssueAction, Signed};
+    use crate::issuance::{verify_issue_bundle, IssueAction, IssueAuth, Signed, Unauthorized};
     use crate::keys::{
         FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
     use crate::note::{AssetBase, Nullifier};
     use crate::value::{NoteValue, ValueSum};
-    use crate::{Address, Note};
+    use crate::{Address, bundle, Note};
     use group::{Group, GroupEncoding};
+    use nonempty::NonEmpty;
     use pasta_curves::pallas;
     use rand::rngs::OsRng;
     use rand::RngCore;
@@ -676,6 +677,41 @@ mod tests {
         AssetBase::from_bytes(&identity_point.to_bytes()).unwrap()
     }
 
+    fn identity_point_asset_base_test_params(
+        note1_value: u64,
+        note2_value: u64,
+        finalize: bool,
+    ) -> (OsRng, IssuanceAuthorizingKey, IssuanceValidatingKey, IssueAction, IssueBundle<Unauthorized>, [u8; 32]) {
+
+        let (mut rng, isk, ik, recipient, sighash) = setup_params();
+
+        let asset = generate_identity_point_asset_base();
+
+        let note1 = Note::new(
+            recipient,
+            NoteValue::from_raw(note1_value),
+            asset,
+            Nullifier::dummy(&mut rng),
+            &mut rng,
+        );
+
+        let note2 = Note::new(
+            recipient,
+            NoteValue::from_raw(note2_value),
+            asset,
+            Nullifier::dummy(&mut rng),
+            &mut rng,
+        );
+
+        let action = IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], finalize);
+
+        let ik2 = ik.clone();
+        let action2 = action.clone();
+        let bundle = IssueBundle::from_parts(ik2, NonEmpty::new(action2), Unauthorized);
+
+        (rng, isk, ik, action, bundle, sighash)
+    }
+
     #[test]
     fn test_verify_supply_valid() {
         let (ik, test_asset, action) =
@@ -694,28 +730,7 @@ mod tests {
 
     #[test]
     fn test_verify_supply_invalid_for_asset_base_as_identity() {
-        let (mut rng, _, ik, recipient, _) = setup_params();
-
-        let asset = generate_identity_point_asset_base();
-
-        let note1 = Note::new(
-            recipient,
-            NoteValue::from_raw(10),
-            asset,
-            Nullifier::dummy(&mut rng),
-            &mut rng,
-        );
-
-        let note2 = Note::new(
-            recipient,
-            NoteValue::from_raw(20),
-            asset,
-            Nullifier::dummy(&mut rng),
-            &mut rng,
-        );
-
-        let action =
-            IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], false);
+        let (_, _, ik, action, _, _) = identity_point_asset_base_test_params(10, 20, false);
 
         assert_eq!(
             action.verify_supply(&ik),
@@ -1326,13 +1341,12 @@ mod tests {
     }
 
     #[test]
-    fn issue_bundle_verify_fail_asset_base_identity_point() {
+    fn issue_bundle_cannot_be_signed_with_asset_base_identity_point() {
 
-        let (rng, isk, ik, recipient, sighash) = setup_params();
-
+        let (rng, isk, _, _, bundle, sighash) = identity_point_asset_base_test_params(10,20,false);
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            bundle.prepare(sighash).sign(rng, &isk).unwrap_err(),
             AssetBaseCannotBeIdentityPoint
         );
     }
