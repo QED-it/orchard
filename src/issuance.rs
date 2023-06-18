@@ -605,7 +605,7 @@ mod tests {
     };
     use crate::note::{AssetBase, Nullifier};
     use crate::value::{NoteValue, ValueSum};
-    use crate::{Address, bundle, Note};
+    use crate::{bundle, Address, Note};
     use group::{Group, GroupEncoding};
     use nonempty::NonEmpty;
     use pasta_curves::pallas;
@@ -681,8 +681,14 @@ mod tests {
         note1_value: u64,
         note2_value: u64,
         finalize: bool,
-    ) -> (OsRng, IssuanceAuthorizingKey, IssuanceValidatingKey, IssueAction, IssueBundle<Unauthorized>, [u8; 32]) {
-
+    ) -> (
+        OsRng,
+        IssuanceAuthorizingKey,
+        IssuanceValidatingKey,
+        IssueAction,
+        IssueBundle<Unauthorized>,
+        [u8; 32],
+    ) {
         let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
         let asset = generate_identity_point_asset_base();
@@ -703,7 +709,8 @@ mod tests {
             &mut rng,
         );
 
-        let action = IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], finalize);
+        let action =
+            IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], finalize);
 
         let ik2 = ik.clone();
         let action2 = action.clone();
@@ -1342,8 +1349,8 @@ mod tests {
 
     #[test]
     fn issue_bundle_cannot_be_signed_with_asset_base_identity_point() {
-
-        let (rng, isk, _, _, bundle, sighash) = identity_point_asset_base_test_params(10,20,false);
+        let (rng, isk, _, _, bundle, sighash) =
+            identity_point_asset_base_test_params(10, 20, false);
 
         assert_eq!(
             bundle.prepare(sighash).sign(rng, &isk).unwrap_err(),
