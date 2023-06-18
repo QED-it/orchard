@@ -599,13 +599,13 @@ mod tests {
         IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         IssueBundleInvalidSignature, WrongAssetDescSize,
     };
-    use crate::issuance::{verify_issue_bundle, IssueAction, IssueAuth, Signed, Unauthorized};
+    use crate::issuance::{verify_issue_bundle, IssueAction, Signed, Unauthorized};
     use crate::keys::{
         FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
     use crate::note::{AssetBase, Nullifier};
     use crate::value::{NoteValue, ValueSum};
-    use crate::{bundle, Address, Note};
+    use crate::{Address, Note};
     use group::{Group, GroupEncoding};
     use nonempty::NonEmpty;
     use pasta_curves::pallas;
