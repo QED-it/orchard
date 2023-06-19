@@ -1359,6 +1359,27 @@ mod tests {
     }
 
     #[test]
+    fn issue_bundle_verify_fail_asset_base_identity_point() {
+        let (mut rng, isk, ik, _, bundle, sighash) =
+            identity_point_asset_base_test_params(10, 20, false);
+
+        let signed = IssueBundle {
+            ik,
+            actions: bundle.actions,
+            authorization: Signed {
+                signature: isk.sign(&mut rng, &sighash),
+            },
+        };
+
+        let prev_finalized = HashSet::new();
+
+        assert_eq!(
+            verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
+            AssetBaseCannotBeIdentityPoint
+        );
+    }
+
+    #[test]
     fn test_finalize_flag_serialization() {
         let mut rng = OsRng;
         let (_, _, note) = Note::dummy(&mut rng, None, AssetBase::native());
