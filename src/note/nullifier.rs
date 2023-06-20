@@ -3,7 +3,7 @@ use halo2_proofs::arithmetic::CurveExt;
 use memuse::DynamicUsage;
 use pasta_curves::pallas;
 use rand::RngCore;
-use subtle::CtOption;
+use subtle::{Choice, ConditionallySelectable, CtOption};
 
 use super::NoteCommitment;
 use crate::{
@@ -55,10 +55,21 @@ impl Nullifier {
         rho: pallas::Base,
         psi: pallas::Base,
         cm: NoteCommitment,
+        is_split_note: Choice,
     ) -> Self {
         let k = pallas::Point::hash_to_curve("z.cash:Orchard")(b"K");
+        let l = pallas::Point::hash_to_curve("z.cash:Orchard")(b"L");
 
-        Nullifier(extract_p(&(k * mod_r_p(nk.prf_nf(rho) + psi) + cm.0)))
+        let nullifier_point = k * mod_r_p(nk.prf_nf(rho) + psi) + cm.0;
+        let nullifier_point_for_split_note = nullifier_point + l;
+
+        let selected_nullifier_point = pallas::Point::conditional_select(
+            &nullifier_point,
+            &nullifier_point_for_split_note,
+            is_split_note,
+        );
+
+        Nullifier(extract_p(&(selected_nullifier_point)))
     }
 }
 
