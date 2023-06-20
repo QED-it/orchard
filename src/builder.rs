@@ -167,8 +167,8 @@ impl SpendInfo {
         }
     }
 
-    /// Creates a split spend, which is identical to origin normal spend except that we use a random
-    /// fvk to generate a different nullifier. In addition, the split_flag is raised.
+    /// Creates a split spend, which is identical to origin normal spend except that
+    /// `rseed_split_note` contains a random seed. In addition, the split_flag is raised.
     ///
     /// Defined in [Transfer and Burn of Zcash Shielded Assets ZIP-0226 § Split Notes (DRAFT PR)][TransferZSA].
     ///
@@ -176,18 +176,14 @@ impl SpendInfo {
     fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
         let mut note = self.note;
         note.is_split_note(rng);
-        let merkle_path = self.merkle_path.clone();
-
-        let sk = SpendingKey::random(rng);
-        let fvk: FullViewingKey = (&sk).into();
 
         SpendInfo {
-            dummy_sk: Some(sk),
-            fvk,
+            dummy_sk: None,
+            fvk: self.fvk.clone(),
             // We use external scope to avoid unnecessary derivations
             scope: Scope::External,
             note,
-            merkle_path,
+            merkle_path: self.merkle_path.clone(),
             split_flag: true,
         }
     }
