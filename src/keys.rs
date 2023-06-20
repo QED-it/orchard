@@ -257,10 +257,7 @@ impl IssuanceKey {
     /// Returns `None` if the bytes do not correspond to a valid Orchard issuance key.
     pub fn from_bytes(sk_iss: [u8; 32]) -> CtOption<Self> {
         let sk_iss = IssuanceKey(sk_iss);
-        // If isk = 0, discard this key. We call `derive_inner` rather than
-        // `IssuanceAuthorizingKey::from` here because we only need to know
-        // whether isk = 0; the adjustment to potentially negate isk is not
-        // needed. Also, `from` would panic on isk = 0.
+        // If isk = 0 (A scalar value), discard this key.
         let isk = IssuanceAuthorizingKey::derive_inner(&sk_iss);
         CtOption::new(sk_iss, !isk.is_zero())
     }
