@@ -608,7 +608,7 @@ mod tests {
     use crate::{Address, Note};
     use group::{Group, GroupEncoding};
     use nonempty::NonEmpty;
-    use pasta_curves::pallas;
+    use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
     use reddsa::Error::InvalidSignature;
@@ -673,8 +673,7 @@ mod tests {
 
     // This function computes the identity point on the Pallas curve and returns an Asset Base with that value.
     fn identity_point() -> AssetBase {
-        let identity_point =
-            (pallas::Point::generator() * -pallas::Scalar::one()) + pallas::Point::generator();
+        let identity_point = (Point::generator() * -Scalar::one()) + Point::generator();
         AssetBase::from_bytes(&identity_point.to_bytes()).unwrap()
     }
 
