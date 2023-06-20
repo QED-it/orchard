@@ -187,7 +187,7 @@ impl SpendValidatingKey {
         self.0.randomize(randomizer)
     }
 
-    /// Converts this issuance validating key to its serialized form,
+    /// Converts this spend key to its serialized form,
     /// I2LEOSP_256(ak).
     pub(crate) fn to_bytes(&self) -> [u8; 32] {
         // This is correct because the wrapped point must have ỹ = 0, and
@@ -256,10 +256,13 @@ impl IssuanceKey {
     ///
     /// Returns `None` if the bytes do not correspond to a valid Orchard issuance key.
     pub fn from_bytes(sk_iss: [u8; 32]) -> CtOption<Self> {
-        CtOption::new(
-            IssuanceKey(sk_iss),
-            SpendingKey::from_bytes(sk_iss).is_some(),
-        )
+        let sk_iss = IssuanceKey(sk_iss);
+        // If isk = 0, discard this key. We call `derive_inner` rather than
+        // `IssuanceAuthorizingKey::from` here because we only need to know
+        // whether isk = 0; the adjustment to potentially negate isk is not
+        // needed. Also, `from` would panic on isk = 0.
+        let isk = to_scalar(PrfExpand::ZsaIsk.expand(&sk_iss.0));
+        CtOption::new(sk_iss, !isk.is_zero())
     }
 
     /// Returns the raw bytes of the issuance key.
