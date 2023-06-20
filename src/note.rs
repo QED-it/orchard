@@ -104,6 +104,10 @@ pub struct Note {
     rho: Nullifier,
     /// The seed randomness for various note components.
     rseed: RandomSeed,
+    /// The seed randomness for split notes.
+    ///
+    /// If it is not a split note, this field is `None`.
+    rseed_split_note: Option<RandomSeed>,
 }
 
 impl PartialEq for Note {
@@ -144,6 +148,7 @@ impl Note {
             asset,
             rho,
             rseed,
+            rseed_split_note: None,
         };
         CtOption::new(note, note.commitment_inner().is_some())
     }
@@ -271,6 +276,11 @@ impl Note {
             self.commitment(),
         )
     }
+
+    /// Create a random seed for split note and store it in `rseed_split_note`.
+    pub fn is_split_note(&mut self, mut rng: impl RngCore) {
+        self.rseed_split_note = Some(RandomSeed::random(&mut rng, &self.rho));
+    }
 }
 
 /// An encrypted note.
@@ -331,6 +341,7 @@ pub mod testing {
                 asset,
                 rho,
                 rseed,
+                rseed_split_note: None
             }
         }
     }
@@ -349,6 +360,7 @@ pub mod testing {
                 asset: AssetBase::native(),
                 rho,
                 rseed,
+                rseed_split_note: None
             }
         }
     }
@@ -367,6 +379,7 @@ pub mod testing {
                 asset,
                 rho,
                 rseed,
+                rseed_split_note: None,
             }
         }
     }
