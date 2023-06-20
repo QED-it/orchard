@@ -261,7 +261,7 @@ impl IssuanceKey {
         // `IssuanceAuthorizingKey::from` here because we only need to know
         // whether isk = 0; the adjustment to potentially negate isk is not
         // needed. Also, `from` would panic on isk = 0.
-        let isk = to_scalar(PrfExpand::ZsaIsk.expand(&sk_iss.0));
+        let isk = IssuanceAuthorizingKey::derive_inner(&sk_iss);
         CtOption::new(sk_iss, !isk.is_zero())
     }
 
