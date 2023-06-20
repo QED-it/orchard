@@ -1343,8 +1343,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_cannot_be_signed_with_asset_base_identity_point() {
-        let (rng, isk, bundle, sighash) =
-            identity_point_test_params(10, 20);
+        let (rng, isk, bundle, sighash) = identity_point_test_params(10, 20);
 
         assert_eq!(
             bundle.prepare(sighash).sign(rng, &isk).unwrap_err(),
@@ -1354,8 +1353,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_asset_base_identity_point() {
-        let (mut rng, isk, bundle, sighash) =
-            identity_point_test_params(10, 20);
+        let (mut rng, isk, bundle, sighash) = identity_point_test_params(10, 20);
 
         let signed = IssueBundle {
             ik: bundle.ik,
