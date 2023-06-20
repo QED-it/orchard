@@ -298,6 +298,11 @@ impl IssuanceKey {
 pub struct IssuanceAuthorizingKey(redpallas::SigningKey<IssuanceAuth>);
 
 impl IssuanceAuthorizingKey {
+    /// Derives isk from sk_iss. Internal use only, does not enforce all constraints.
+    fn derive_inner(sk_iss: &IssuanceKey) -> pallas::Scalar {
+        to_scalar(PrfExpand::ZsaIsk.expand(&sk_iss.0))
+    }
+
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
     pub fn sign(
         &self,
@@ -310,7 +315,7 @@ impl IssuanceAuthorizingKey {
 
 impl From<&IssuanceKey> for IssuanceAuthorizingKey {
     fn from(sk_iss: &IssuanceKey) -> Self {
-        let isk = to_scalar(PrfExpand::ZsaIsk.expand(&sk_iss.0));
+        let isk = IssuanceAuthorizingKey::derive_inner(sk_iss);
         // IssuanceAuthorizingKey cannot be constructed such that this assertion would fail.
         assert!(!bool::from(isk.is_zero()));
         IssuanceAuthorizingKey(conditionally_negate(isk))
