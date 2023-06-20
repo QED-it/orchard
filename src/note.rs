@@ -278,8 +278,8 @@ impl Note {
     }
 
     /// Create a random seed for split note and store it in `rseed_split_note`.
-    pub fn is_split_note(&mut self, mut rng: impl RngCore) {
-        self.rseed_split_note = Some(RandomSeed::random(&mut rng, &self.rho));
+    pub fn is_split_note(&mut self, rng: &mut impl RngCore) {
+        self.rseed_split_note = Some(RandomSeed::random(rng, &self.rho));
     }
 }
 

@@ -174,7 +174,8 @@ impl SpendInfo {
     ///
     /// [TransferZSA]: https://qed-it.github.io/zips/zip-0226.html#split-notes
     fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
-        let note = self.note;
+        let mut note = self.note;
+        note.is_split_note(rng);
         let merkle_path = self.merkle_path.clone();
 
         let sk = SpendingKey::random(rng);
