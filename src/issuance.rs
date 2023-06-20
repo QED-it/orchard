@@ -671,32 +671,28 @@ mod tests {
         )
     }
 
-    fn generate_identity_point_asset_base() -> AssetBase {
+    // This function computes the identity point on the Pallas curve and returns an Asset Base with that value.
+    fn identity_point() -> AssetBase {
         let identity_point =
             (pallas::Point::generator() * -pallas::Scalar::one()) + pallas::Point::generator();
         AssetBase::from_bytes(&identity_point.to_bytes()).unwrap()
     }
 
-    fn identity_point_asset_base_test_params(
+    fn identity_point_test_params(
         note1_value: u64,
         note2_value: u64,
-        finalize: bool,
     ) -> (
         OsRng,
         IssuanceAuthorizingKey,
-        IssuanceValidatingKey,
-        IssueAction,
         IssueBundle<Unauthorized>,
         [u8; 32],
     ) {
         let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
-        let asset = generate_identity_point_asset_base();
-
         let note1 = Note::new(
             recipient,
             NoteValue::from_raw(note1_value),
-            asset,
+            identity_point(),
             Nullifier::dummy(&mut rng),
             &mut rng,
         );
@@ -704,19 +700,17 @@ mod tests {
         let note2 = Note::new(
             recipient,
             NoteValue::from_raw(note2_value),
-            asset,
+            identity_point(),
             Nullifier::dummy(&mut rng),
             &mut rng,
         );
 
         let action =
-            IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], finalize);
+            IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], false);
 
-        let ik2 = ik.clone();
-        let action2 = action.clone();
-        let bundle = IssueBundle::from_parts(ik2, NonEmpty::new(action2), Unauthorized);
+        let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), Unauthorized);
 
-        (rng, isk, ik, action, bundle, sighash)
+        (rng, isk, bundle, sighash)
     }
 
     #[test]
@@ -737,10 +731,10 @@ mod tests {
 
     #[test]
     fn test_verify_supply_invalid_for_asset_base_as_identity() {
-        let (_, _, ik, action, _, _) = identity_point_asset_base_test_params(10, 20, false);
+        let (_, _, bundle, _) = identity_point_test_params(10, 20);
 
         assert_eq!(
-            action.verify_supply(&ik),
+            bundle.actions.head.verify_supply(&bundle.ik),
             Err(AssetBaseCannotBeIdentityPoint)
         );
     }
@@ -1349,8 +1343,8 @@ mod tests {
 
     #[test]
     fn issue_bundle_cannot_be_signed_with_asset_base_identity_point() {
-        let (rng, isk, _, _, bundle, sighash) =
-            identity_point_asset_base_test_params(10, 20, false);
+        let (rng, isk, bundle, sighash) =
+            identity_point_test_params(10, 20);
 
         assert_eq!(
             bundle.prepare(sighash).sign(rng, &isk).unwrap_err(),
@@ -1360,21 +1354,19 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_asset_base_identity_point() {
-        let (mut rng, isk, ik, _, bundle, sighash) =
-            identity_point_asset_base_test_params(10, 20, false);
+        let (mut rng, isk, bundle, sighash) =
+            identity_point_test_params(10, 20);
 
         let signed = IssueBundle {
-            ik,
+            ik: bundle.ik,
             actions: bundle.actions,
             authorization: Signed {
                 signature: isk.sign(&mut rng, &sighash),
             },
         };
 
-        let prev_finalized = HashSet::new();
-
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, &HashSet::new()).unwrap_err(),
             AssetBaseCannotBeIdentityPoint
         );
     }

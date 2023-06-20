@@ -54,7 +54,7 @@ impl AssetBase {
     ///
     /// # Panics
     ///
-    /// Panics if `asset_desc` is empty or greater than `MAX_ASSET_DESCRIPTION_SIZE` or if the derived Asset Base is the identity point (this will happen with negligible probability).
+    /// Panics if `asset_desc` is empty or greater than `MAX_ASSET_DESCRIPTION_SIZE` or if the derived Asset Base is the identity point.
     #[allow(non_snake_case)]
     pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &str) -> Self {
         assert!(
@@ -68,16 +68,17 @@ impl AssetBase {
 
         let asset_digest = asset_digest(encode_asset_id);
 
-        let asset_base_point: pallas::Point =
+        let asset_base =
             pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(asset_digest.as_bytes());
 
+        // this will happen with negligible probability.
         assert!(
-            bool::from(!asset_base_point.is_identity()),
+            bool::from(!asset_base.is_identity()),
             "The Asset Base is the identity point, which is invalid."
         );
 
         // AssetBase = ZSAValueBase(AssetDigest)
-        AssetBase(asset_base_point)
+        AssetBase(asset_base)
     }
 
     /// Note type for the "native" currency (zec), maintains backward compatibility with Orchard untyped notes.
