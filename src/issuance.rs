@@ -714,7 +714,7 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_supply_valid() {
+    fn verify_supply_valid() {
         let (ik, test_asset, action) =
             setup_verify_supply_test_params(10, 20, "Asset 1", None, false);
 
@@ -730,7 +730,7 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_supply_invalid_for_asset_base_as_identity() {
+    fn verify_supply_invalid_for_asset_base_as_identity() {
         let (_, _, bundle, _) = identity_point_test_params(10, 20);
 
         assert_eq!(
@@ -740,7 +740,7 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_supply_finalized() {
+    fn verify_supply_finalized() {
         let (ik, test_asset, action) =
             setup_verify_supply_test_params(10, 20, "Asset 1", None, true);
 
@@ -756,7 +756,7 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_supply_incorrect_asset_base() {
+    fn verify_supply_incorrect_asset_base() {
         let (ik, _, action) =
             setup_verify_supply_test_params(10, 20, "Asset 1", Some("Asset 2"), false);
 
@@ -767,7 +767,7 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_supply_ik_mismatch_asset_base() {
+    fn verify_supply_ik_mismatch_asset_base() {
         let (_, _, action) = setup_verify_supply_test_params(10, 20, "Asset 1", None, false);
         let (_, _, ik, _, _) = setup_params();
 
@@ -1372,7 +1372,7 @@ mod tests {
     }
 
     #[test]
-    fn test_finalize_flag_serialization() {
+    fn finalize_flag_serialization() {
         let mut rng = OsRng;
         let (_, _, note) = Note::dummy(&mut rng, None, AssetBase::native());
 
