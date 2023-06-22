@@ -176,7 +176,7 @@ pub(in crate::circuit) fn derive_nullifier<
     psi: &AssignedCell<pallas::Base, pallas::Base>,
     cm: &Point<pallas::Affine, EccChip>,
     nk: AssignedCell<pallas::Base, pallas::Base>,
-    is_split_note: AssignedCell<pallas::Base, pallas::Base>,
+    split_flag: AssignedCell<pallas::Base, pallas::Base>,
 ) -> Result<X<pallas::Affine, EccChip>, plonk::Error> {
     // hash = poseidon_hash(nk, rho)
     let hash = {
@@ -221,11 +221,12 @@ pub(in crate::circuit) fn derive_nullifier<
     )?;
     let split_note_nf = nullifier_l.add(layouter.namespace(|| "split_note_nf"), &nf)?;
 
+    // Select the desired nullifier according to split_flag
     Ok(Point::from_inner(
         ecc_chip,
         mux_chip.mux(
             layouter.namespace(|| "mux on nf"),
-            &is_split_note,
+            &split_flag,
             nf.inner(),
             split_note_nf.inner(),
         )?,
