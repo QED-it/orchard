@@ -55,18 +55,19 @@ impl Nullifier {
         rho: pallas::Base,
         psi: pallas::Base,
         cm: NoteCommitment,
-        is_split_note: Choice,
+        _is_split_note: Choice,
     ) -> Self {
         let k = pallas::Point::hash_to_curve("z.cash:Orchard")(b"K");
-        let l = pallas::Point::hash_to_curve("z.cash:Orchard")(b"L");
+        // let l = pallas::Point::hash_to_curve("z.cash:Orchard")(b"L");
 
         let nullifier = k * mod_r_p(nk.prf_nf(rho) + psi) + cm.0;
-        let nullifier_for_split_note = nullifier + l;
+        // let nullifier_for_split_note = nullifier + l;
 
-        let selected_nullifier =
-            pallas::Point::conditional_select(&nullifier, &nullifier_for_split_note, is_split_note);
+        // let selected_nullifier =
+        //     pallas::Point::conditional_select(&nullifier, &nullifier_for_split_note, is_split_note);
 
-        Nullifier(extract_p(&(selected_nullifier)))
+        // Nullifier(extract_p(&(selected_nullifier)))
+        Nullifier(extract_p(&(nullifier)))
     }
 }
 
