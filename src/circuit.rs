@@ -229,6 +229,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
         // Constrain is_native_asset to be boolean
         // Constraint if is_native_asset = 1 then asset = native_asset else asset != native_asset
+        // Constraint if split_flag = 0 then psi_old = psi_nf
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -262,13 +263,16 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let diff_asset_x = asset_x - Expression::Constant(*native_asset.x());
             let diff_asset_y = asset_y - Expression::Constant(*native_asset.y());
 
+            let psi_old = meta.query_advice(advices[4], Rotation::next());
+            let psi_nf = meta.query_advice(advices[5], Rotation::next());
+
             Constraints::with_selector(
                 q_orchard,
                 [
                     ("bool_check split_flag", bool_check(split_flag.clone())),
                     (
                         "v_old * (1 - split_flag) - v_new = magnitude * sign",
-                        v_old.clone() * (one.clone() - split_flag)
+                        v_old.clone() * (one.clone() - split_flag.clone())
                             - v_new.clone()
                             - magnitude * sign,
                     ),
@@ -305,7 +309,11 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                         "(is_native_asset = 0) => (asset != native_asset)",
                         (one.clone() - is_native_asset)
                             * (diff_asset_x * diff_asset_x_inv - one.clone())
-                            * (diff_asset_y * diff_asset_y_inv - one),
+                            * (diff_asset_y * diff_asset_y_inv - one.clone()),
+                    ),
+                    (
+                        "(split_flag = 0) => (psi_old = psi_nf)",
+                        (one - split_flag) * (psi_old - psi_nf),
                     ),
                 ],
             )
@@ -737,7 +745,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 pk_d_old.inner(),
                 v_old.clone(),
                 rho_old,
-                psi_old,
+                psi_old.clone(),
                 asset.inner(),
                 rcm_old,
                 is_native_asset.clone(),
@@ -921,6 +929,9 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                         })
                     },
                 )?;
+
+                psi_old.copy_advice(|| "psi_old", &mut region, config.advices[4], 1)?;
+                psi_nf.copy_advice(|| "psi_nf", &mut region, config.advices[5], 1)?;
 
                 config.q_orchard.enable(&mut region, 0)
             },
