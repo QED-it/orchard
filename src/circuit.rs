@@ -113,6 +113,7 @@ pub struct Circuit {
     pub(crate) psi_old: Value<pallas::Base>,
     pub(crate) rcm_old: Value<NoteCommitTrapdoor>,
     pub(crate) cm_old: Value<NoteCommitment>,
+    pub(crate) psi_nf: Value<pallas::Base>,
     pub(crate) alpha: Value<pallas::Scalar>,
     pub(crate) ak: Value<SpendValidatingKey>,
     pub(crate) nk: Value<NullifierDerivingKey>,
@@ -164,6 +165,9 @@ impl Circuit {
         let psi_old = spend.note.rseed().psi(&rho_old);
         let rcm_old = spend.note.rseed().rcm(&rho_old);
 
+        let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
+        let psi_nf = nf_rseed.psi(&rho_old);
+
         let rho_new = output_note.rho();
         let psi_new = output_note.rseed().psi(&rho_new);
         let rcm_new = output_note.rseed().rcm(&rho_new);
@@ -178,6 +182,7 @@ impl Circuit {
             psi_old: Value::known(psi_old),
             rcm_old: Value::known(rcm_old),
             cm_old: Value::known(spend.note.commitment()),
+            psi_nf: Value::known(psi_nf),
             alpha: Value::known(alpha),
             ak: Value::known(spend.fvk.clone().into()),
             nk: Value::known(*spend.fvk.nk()),
@@ -1226,6 +1231,8 @@ mod tests {
         let path = MerklePath::dummy(&mut rng);
         let anchor = path.root(spent_note.commitment().into());
 
+        let psi_old = spent_note.rseed().psi(&spent_note.rho());
+
         (
             Circuit {
                 path: Value::known(path.auth_path()),
@@ -1234,9 +1241,11 @@ mod tests {
                 pk_d_old: Value::known(*sender_address.pk_d()),
                 v_old: Value::known(spent_note.value()),
                 rho_old: Value::known(spent_note.rho()),
-                psi_old: Value::known(spent_note.rseed().psi(&spent_note.rho())),
+                psi_old: Value::known(psi_old),
                 rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
                 cm_old: Value::known(spent_note.commitment()),
+                // For non split note, psi_nf is equal to psi_old
+                psi_nf: Value::known(psi_old),
                 alpha: Value::known(alpha),
                 ak: Value::known(ak),
                 nk: Value::known(nk),
@@ -1426,6 +1435,7 @@ mod tests {
             psi_old: Value::unknown(),
             rcm_old: Value::unknown(),
             cm_old: Value::unknown(),
+            psi_nf: Value::unknown(),
             alpha: Value::unknown(),
             ak: Value::unknown(),
             nk: Value::unknown(),
@@ -1483,13 +1493,16 @@ mod tests {
             let fvk: FullViewingKey = (&sk).into();
             let sender_address = fvk.address_at(0u32, Scope::External);
             let rho_old = Nullifier::dummy(&mut rng);
-            let spent_note = Note::new(
+            let mut spent_note = Note::new(
                 sender_address,
                 NoteValue::from_raw(40),
                 asset_base,
                 rho_old,
                 &mut rng,
             );
+            if split_flag {
+                spent_note.is_split_note(&mut rng);
+            }
             (fvk, spent_note)
         };
 
@@ -1623,6 +1636,7 @@ mod tests {
                     psi_old: circuit.psi_old,
                     rcm_old: circuit.rcm_old.clone(),
                     cm_old: Value::known(random_note_commitment(&mut rng)),
+                    psi_nf: circuit.psi_nf,
                     alpha: circuit.alpha,
                     ak: circuit.ak.clone(),
                     nk: circuit.nk,

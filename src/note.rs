@@ -235,6 +235,11 @@ impl Note {
         &self.rseed
     }
 
+    /// Returns the rseed_split_note value of this note.
+    pub fn rseed_split_note(&self) -> CtOption<RandomSeed> {
+        self.rseed_split_note
+    }
+
     /// Derives the ephemeral secret key for this note.
     pub(crate) fn esk(&self) -> EphemeralSecretKey {
         EphemeralSecretKey(self.rseed.esk(&self.rho))
