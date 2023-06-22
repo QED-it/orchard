@@ -1454,30 +1454,24 @@ mod tests {
 
         let output_value = NoteValue::from_raw(10);
 
-        let (dummy_sk, fvk, scope, nf_old, v_net) = if split_flag {
-            let sk = SpendingKey::random(&mut rng);
-            let fvk: FullViewingKey = (&sk).into();
+        let (scope, v_net) = if split_flag {
             (
-                Some(sk),
-                fvk.clone(),
                 Scope::External,
-                spent_note.nullifier(&fvk),
                 // Split notes do not contribute to v_net.
                 // Therefore, if split_flag is true, v_net = - output_value
                 NoteValue::zero() - output_value,
             )
         } else {
             (
-                None,
-                spent_note_fvk.clone(),
                 spent_note_fvk
                     .scope_for_address(&spent_note.recipient())
                     .unwrap(),
-                spent_note.nullifier(&spent_note_fvk),
                 spent_note.value() - output_value,
             )
         };
-        let ak: SpendValidatingKey = fvk.clone().into();
+
+        let nf_old = spent_note.nullifier(&spent_note_fvk);
+        let ak: SpendValidatingKey = spent_note_fvk.clone().into();
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
 
@@ -1498,8 +1492,8 @@ mod tests {
         let anchor = path.root(spent_note.commitment().into());
 
         let spend_info = SpendInfo {
-            dummy_sk,
-            fvk,
+            dummy_sk: None,
+            fvk: spent_note_fvk,
             scope,
             note: spent_note,
             merkle_path: path,
