@@ -21,7 +21,7 @@ use self::{
     commit_ivk::{CommitIvkChip, CommitIvkConfig},
     gadget::{
         add_chip::{AddChip, AddConfig},
-        assign_free_advice, assign_is_native_asset,
+        assign_free_advice, assign_is_native_asset, assign_split_flag,
     },
     note_commit::{NoteCommitChip, NoteCommitConfig},
 };
@@ -533,6 +533,13 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             )
         };
 
+        // Witness split_flag
+        let split_flag = assign_split_flag(
+            layouter.namespace(|| "witness split_flag"),
+            config.advices[0],
+            self.split_flag,
+        )?;
+
         // Witness is_native_asset which is equal to
         // 1 if asset is equal to native asset, and
         // 0 if asset is not equal to native asset.
@@ -629,10 +636,12 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 config.poseidon_chip(),
                 config.add_chip(),
                 ecc_chip.clone(),
+                config.mux_chip(),
                 rho_old.clone(),
                 &psi_nf,
                 &cm_old,
                 nk.clone(),
+                split_flag.clone(),
             )?;
 
             // Constrain nf_old to equal public input
@@ -845,15 +854,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     0,
                 )?;
 
-                region.assign_advice(
-                    || "split_flag",
-                    config.advices[8],
-                    0,
-                    || {
-                        self.split_flag
-                            .map(|split_flag| pallas::Base::from(split_flag as u64))
-                    },
-                )?;
+                split_flag.copy_advice(|| "split_flag", &mut region, config.advices[8], 0)?;
 
                 is_native_asset.copy_advice(
                     || "is_native_asset",
