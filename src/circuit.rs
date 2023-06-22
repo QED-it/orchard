@@ -485,7 +485,14 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         let ecc_chip = config.ecc_chip();
 
         // Witness private inputs that are used across multiple checks.
-        let (psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset, nf_old_pub) = {
+        let (psi_nf, psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset, nf_old_pub) = {
+            // Witness psi_nf
+            let psi_nf = assign_free_advice(
+                layouter.namespace(|| "witness psi_nf"),
+                config.advices[0],
+                self.psi_nf,
+            )?;
+
             // Witness psi_old
             let psi_old = assign_free_advice(
                 layouter.namespace(|| "witness psi_old"),
@@ -565,7 +572,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             )?;
 
             (
-                psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset, nf_old_pub,
+                psi_nf, psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset,
+                nf_old_pub,
             )
         };
 
@@ -661,12 +669,12 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Nullifier integrity (https://p.z.cash/ZKS:action-nullifier-integrity).
         let nf_old = {
             let nf_old = gadget::derive_nullifier(
-                layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_old, cm_old)"),
+                layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_nf, cm_old)"),
                 config.poseidon_chip(),
                 config.add_chip(),
                 ecc_chip.clone(),
                 rho_old.clone(),
-                &psi_old,
+                &psi_nf,
                 &cm_old,
                 nk.clone(),
             )?;
