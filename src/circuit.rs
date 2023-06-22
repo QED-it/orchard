@@ -229,7 +229,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
         // Constrain is_native_asset to be boolean
         // Constraint if is_native_asset = 1 then asset = native_asset else asset != native_asset
-        // Constraint split_flag = 1 or derived_pk_d_old = pk_d_old
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -263,18 +262,13 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let diff_asset_x = asset_x - Expression::Constant(*native_asset.x());
             let diff_asset_y = asset_y - Expression::Constant(*native_asset.y());
 
-            let pk_d_old_x = meta.query_advice(advices[4], Rotation::next());
-            let pk_d_old_y = meta.query_advice(advices[5], Rotation::next());
-            let derived_pk_d_old_x = meta.query_advice(advices[6], Rotation::next());
-            let derived_pk_d_old_y = meta.query_advice(advices[7], Rotation::next());
-
             Constraints::with_selector(
                 q_orchard,
                 [
                     ("bool_check split_flag", bool_check(split_flag.clone())),
                     (
                         "v_old * (1 - split_flag) - v_new = magnitude * sign",
-                        v_old.clone() * (one.clone() - split_flag.clone())
+                        v_old.clone() * (one.clone() - split_flag)
                             - v_new.clone()
                             - magnitude * sign,
                     ),
@@ -311,22 +305,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                         "(is_native_asset = 0) => (asset != native_asset)",
                         (one.clone() - is_native_asset)
                             * (diff_asset_x * diff_asset_x_inv - one.clone())
-                            * (diff_asset_y * diff_asset_y_inv - one.clone()),
-                    ),
-                    // Constrain derived pk_d_old to equal witnessed pk_d_old
-                    //
-                    // This equality constraint is technically superfluous, because the assigned
-                    // value of `derived_pk_d_old` is an equivalent witness. But it's nice to see
-                    // an explicit connection between circuit-synthesized values, and explicit
-                    // prover witnesses. We could get the best of both worlds with a write-on-copy
-                    // abstraction (https://github.com/zcash/halo2/issues/334).
-                    (
-                        "split_flag = 1 or pk_d_old_x = derived_pk_d_old_x",
-                        (one.clone() - split_flag.clone()) * (pk_d_old_x - derived_pk_d_old_x),
-                    ),
-                    (
-                        "split_flag = 1 or pk_d_old_y = derived_pk_d_old_y",
-                        (one - split_flag) * (pk_d_old_y - derived_pk_d_old_y),
+                            * (diff_asset_y * diff_asset_y_inv - one),
                     ),
                 ],
             )
@@ -683,7 +662,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         }
 
         // Diversified address integrity (https://p.z.cash/ZKS:action-addr-integrity?partial).
-        let (derived_pk_d_old, pk_d_old) = {
+        let pk_d_old = {
             let ivk = {
                 let ak = ak_P.extract_p().inner().clone();
                 let rivk = ScalarFixed::new(
@@ -710,13 +689,22 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let (derived_pk_d_old, _ivk) =
                 g_d_old.mul(layouter.namespace(|| "[ivk] g_d_old"), ivk)?;
 
+            // Constrain derived pk_d_old to equal witnessed pk_d_old
+            //
+            // This equality constraint is technically superfluous, because the assigned
+            // value of `derived_pk_d_old` is an equivalent witness. But it's nice to see
+            // an explicit connection between circuit-synthesized values, and explicit
+            // prover witnesses. We could get the best of both worlds with a write-on-copy
+            // abstraction (https://github.com/zcash/halo2/issues/334).
             let pk_d_old = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness pk_d_old"),
                 self.pk_d_old.map(|pk_d_old| pk_d_old.inner().to_affine()),
             )?;
+            derived_pk_d_old
+                .constrain_equal(layouter.namespace(|| "pk_d_old equality"), &pk_d_old)?;
 
-            (derived_pk_d_old, pk_d_old)
+            pk_d_old
         };
 
         // Old note commitment integrity (https://p.z.cash/ZKS:action-cm-old-integrity?partial).
@@ -931,31 +919,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                             }
                         })
                     },
-                )?;
-
-                pk_d_old.inner().x().copy_advice(
-                    || "pk_d_old_x",
-                    &mut region,
-                    config.advices[4],
-                    1,
-                )?;
-                pk_d_old.inner().y().copy_advice(
-                    || "pk_d_old_y",
-                    &mut region,
-                    config.advices[5],
-                    1,
-                )?;
-                derived_pk_d_old.inner().x().copy_advice(
-                    || "derived_pk_d_old_x",
-                    &mut region,
-                    config.advices[6],
-                    1,
-                )?;
-                derived_pk_d_old.inner().y().copy_advice(
-                    || "derived_pk_d_old_y",
-                    &mut region,
-                    config.advices[7],
-                    1,
                 )?;
 
                 config.q_orchard.enable(&mut region, 0)
