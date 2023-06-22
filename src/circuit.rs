@@ -227,7 +227,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constrain v_old = 0 or calculated root = anchor (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
         // Constrain v_old = 0 or enable_spends = 1      (https://p.z.cash/ZKS:action-enable-spend).
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
-        // Constrain split_flag = 1 or nf_old = nf_old_pub
         // Constrain is_native_asset to be boolean
         // Constraint if is_native_asset = 1 then asset = native_asset else asset != native_asset
         // Constraint split_flag = 1 or derived_pk_d_old = pk_d_old
@@ -247,14 +246,11 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
             let split_flag = meta.query_advice(advices[8], Rotation::cur());
 
-            let nf_old = meta.query_advice(advices[9], Rotation::cur());
-            let nf_old_pub = meta.query_advice(advices[0], Rotation::next());
-
-            let is_native_asset = meta.query_advice(advices[1], Rotation::next());
-            let asset_x = meta.query_advice(advices[2], Rotation::next());
-            let asset_y = meta.query_advice(advices[3], Rotation::next());
-            let diff_asset_x_inv = meta.query_advice(advices[4], Rotation::next());
-            let diff_asset_y_inv = meta.query_advice(advices[5], Rotation::next());
+            let is_native_asset = meta.query_advice(advices[9], Rotation::cur());
+            let asset_x = meta.query_advice(advices[0], Rotation::next());
+            let asset_y = meta.query_advice(advices[1], Rotation::next());
+            let diff_asset_x_inv = meta.query_advice(advices[2], Rotation::next());
+            let diff_asset_y_inv = meta.query_advice(advices[3], Rotation::next());
 
             let one = Expression::Constant(pallas::Base::one());
 
@@ -267,10 +263,10 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let diff_asset_x = asset_x - Expression::Constant(*native_asset.x());
             let diff_asset_y = asset_y - Expression::Constant(*native_asset.y());
 
-            let pk_d_old_x = meta.query_advice(advices[6], Rotation::next());
-            let pk_d_old_y = meta.query_advice(advices[7], Rotation::next());
-            let derived_pk_d_old_x = meta.query_advice(advices[8], Rotation::next());
-            let derived_pk_d_old_y = meta.query_advice(advices[9], Rotation::next());
+            let pk_d_old_x = meta.query_advice(advices[4], Rotation::next());
+            let pk_d_old_y = meta.query_advice(advices[5], Rotation::next());
+            let derived_pk_d_old_x = meta.query_advice(advices[6], Rotation::next());
+            let derived_pk_d_old_y = meta.query_advice(advices[7], Rotation::next());
 
             Constraints::with_selector(
                 q_orchard,
@@ -293,10 +289,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     (
                         "v_new = 0 or enable_outputs = 1",
                         v_new * (one.clone() - enable_outputs),
-                    ),
-                    (
-                        "split_flag = 1 or nf_old = nf_old_pub",
-                        (one.clone() - split_flag.clone()) * (nf_old - nf_old_pub),
                     ),
                     (
                         "bool_check is_native_asset",
@@ -485,7 +477,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         let ecc_chip = config.ecc_chip();
 
         // Witness private inputs that are used across multiple checks.
-        let (psi_nf, psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset, nf_old_pub) = {
+        let (psi_nf, psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset) = {
             // Witness psi_nf
             let psi_nf = assign_free_advice(
                 layouter.namespace(|| "witness psi_nf"),
@@ -557,23 +549,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 self.asset.map(|asset| asset.cv_base().to_affine()),
             )?;
 
-            // Witness nf_old_pub
-            let nf_old_pub = layouter.assign_region(
-                || "load nf_old pub",
-                |mut region| {
-                    region.assign_advice_from_instance(
-                        || "load nf_old pub",
-                        config.primary,
-                        NF_OLD,
-                        config.advices[0],
-                        1,
-                    )
-                },
-            )?;
-
             (
                 psi_nf, psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset,
-                nf_old_pub,
             )
         };
 
@@ -678,6 +655,9 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 &cm_old,
                 nk.clone(),
             )?;
+
+            // Constrain nf_old to equal public input
+            layouter.constrain_instance(nf_old.inner().cell(), config.primary, NF_OLD)?;
 
             nf_old
         };
@@ -793,7 +773,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             };
 
             // ρ^new = nf^old
-            let rho_new = nf_old_pub.clone();
+            let rho_new = nf_old.inner().clone();
 
             // Witness psi_new
             let psi_new = assign_free_advice(
@@ -887,31 +867,26 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     },
                 )?;
 
-                nf_old
-                    .inner()
-                    .copy_advice(|| "nf_old", &mut region, config.advices[9], 0)?;
-                nf_old_pub.copy_advice(|| "nf_old", &mut region, config.advices[0], 1)?;
-
                 is_native_asset.copy_advice(
                     || "is_native_asset",
                     &mut region,
-                    config.advices[1],
-                    1,
+                    config.advices[9],
+                    0,
                 )?;
                 asset
                     .inner()
                     .x()
-                    .copy_advice(|| "asset_x", &mut region, config.advices[2], 1)?;
+                    .copy_advice(|| "asset_x", &mut region, config.advices[0], 1)?;
                 asset
                     .inner()
                     .y()
-                    .copy_advice(|| "asset_y", &mut region, config.advices[3], 1)?;
+                    .copy_advice(|| "asset_y", &mut region, config.advices[1], 1)?;
 
                 // `diff_asset_x_inv` and `diff_asset_y_inv` will be used to prove that
                 // if is_native_asset = 0, then asset != native_asset.
                 region.assign_advice(
                     || "diff_asset_x_inv",
-                    config.advices[4],
+                    config.advices[2],
                     1,
                     || {
                         self.asset.map(|asset| {
@@ -935,7 +910,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 )?;
                 region.assign_advice(
                     || "diff_asset_y_inv",
-                    config.advices[5],
+                    config.advices[3],
                     1,
                     || {
                         self.asset.map(|asset| {
@@ -961,25 +936,25 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 pk_d_old.inner().x().copy_advice(
                     || "pk_d_old_x",
                     &mut region,
-                    config.advices[6],
+                    config.advices[4],
                     1,
                 )?;
                 pk_d_old.inner().y().copy_advice(
                     || "pk_d_old_y",
                     &mut region,
-                    config.advices[7],
+                    config.advices[5],
                     1,
                 )?;
                 derived_pk_d_old.inner().x().copy_advice(
                     || "derived_pk_d_old_x",
                     &mut region,
-                    config.advices[8],
+                    config.advices[6],
                     1,
                 )?;
                 derived_pk_d_old.inner().y().copy_advice(
                     || "derived_pk_d_old_y",
                     &mut region,
-                    config.advices[9],
+                    config.advices[7],
                     1,
                 )?;
 
