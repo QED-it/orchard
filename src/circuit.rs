@@ -1451,16 +1451,18 @@ mod tests {
             let fvk: FullViewingKey = (&sk).into();
             let sender_address = fvk.address_at(0u32, Scope::External);
             let rho_old = Nullifier::dummy(&mut rng);
-            let mut spent_note = Note::new(
+            let note = Note::new(
                 sender_address,
                 NoteValue::from_raw(40),
                 asset_base,
                 rho_old,
                 &mut rng,
             );
-            if split_flag {
-                spent_note.is_split_note(&mut rng);
-            }
+            let spent_note = if split_flag {
+                note.create_split_note(&mut rng)
+            } else {
+                note
+            };
             (fvk, spent_note)
         };
 

@@ -174,15 +174,12 @@ impl SpendInfo {
     ///
     /// [TransferZSA]: https://qed-it.github.io/zips/zip-0226.html#split-notes
     fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
-        let mut note = self.note;
-        note.is_split_note(rng);
-
         SpendInfo {
             dummy_sk: None,
             fvk: self.fvk.clone(),
             // We use external scope to avoid unnecessary derivations
             scope: Scope::External,
-            note,
+            note: self.note.create_split_note(rng),
             merkle_path: self.merkle_path.clone(),
             split_flag: true,
         }
