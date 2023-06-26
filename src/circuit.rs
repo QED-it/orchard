@@ -230,6 +230,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constrain is_native_asset to be boolean
         // Constraint if is_native_asset = 1 then asset = native_asset else asset != native_asset
         // Constraint if split_flag = 0 then psi_old = psi_nf
+        // Constraint if split_flag = 1, then is_native_asset = 0
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -307,13 +308,17 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     // is not equal to zero, we will prove that it is invertible.
                     (
                         "(is_native_asset = 0) => (asset != native_asset)",
-                        (one.clone() - is_native_asset)
+                        (one.clone() - is_native_asset.clone())
                             * (diff_asset_x * diff_asset_x_inv - one.clone())
                             * (diff_asset_y * diff_asset_y_inv - one.clone()),
                     ),
                     (
                         "(split_flag = 0) => (psi_old = psi_nf)",
-                        (one - split_flag) * (psi_old - psi_nf),
+                        (one - split_flag.clone()) * (psi_old - psi_nf),
+                    ),
+                    (
+                        "(split_flag = 1) => (is_native_asset = 0)",
+                        split_flag * is_native_asset,
                     ),
                 ],
             )
