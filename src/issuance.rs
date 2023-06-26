@@ -1395,7 +1395,7 @@ mod tests {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use crate::issuance::{IssueAction, IssueBundle, Prepared, Signed, Unauthorized};
-    use crate::keys::testing::{arb_issuance_authorizing_key, arb_issuance_validating_key};
+    use crate::keys::testing::arb_issuance_validating_key;
     use crate::note::asset_base::testing::zsa_asset_id;
     use crate::note::testing::arb_zsa_note;
     use crate::primitives::redpallas::Signature;
