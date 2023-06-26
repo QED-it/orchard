@@ -231,6 +231,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Constraint if is_native_asset = 1 then asset = native_asset else asset != native_asset
         // Constraint if split_flag = 0 then psi_old = psi_nf
         // Constraint if split_flag = 1, then is_native_asset = 0
+        // Constraint if split_flag = 1, then v_old != 0
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -267,6 +268,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let psi_old = meta.query_advice(advices[4], Rotation::next());
             let psi_nf = meta.query_advice(advices[5], Rotation::next());
 
+            let v_old_inv = meta.query_advice(advices[6], Rotation::next());
+
             Constraints::with_selector(
                 q_orchard,
                 [
@@ -283,7 +286,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     ),
                     (
                         "v_old = 0 or enable_spends = 1",
-                        v_old * (one.clone() - enable_spends),
+                        v_old.clone() * (one.clone() - enable_spends),
                     ),
                     (
                         "v_new = 0 or enable_outputs = 1",
@@ -314,11 +317,15 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     ),
                     (
                         "(split_flag = 0) => (psi_old = psi_nf)",
-                        (one - split_flag.clone()) * (psi_old - psi_nf),
+                        (one.clone() - split_flag.clone()) * (psi_old - psi_nf),
                     ),
                     (
                         "(split_flag = 1) => (is_native_asset = 0)",
-                        split_flag * is_native_asset,
+                        split_flag.clone() * is_native_asset,
+                    ),
+                    (
+                        "(split_flag = 1) => (v_old != 0)",
+                        split_flag * (v_old * v_old_inv - one),
                     ),
                 ],
             )
@@ -937,6 +944,23 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
                 psi_old.copy_advice(|| "psi_old", &mut region, config.advices[4], 1)?;
                 psi_nf.copy_advice(|| "psi_nf", &mut region, config.advices[5], 1)?;
+
+                // `v_old_inv` will be used to prove that
+                // if split_flag = 1, then v_old != 0.
+                region.assign_advice(
+                    || "v_old_inv",
+                    config.advices[6],
+                    1,
+                    || {
+                        self.v_old.map(|v_old| {
+                            if v_old.inner() == 0u64 {
+                                NoteValue::zero()
+                            } else {
+                                NoteValue::from_raw(1u64 / v_old.inner())
+                            }
+                        })
+                    },
+                )?;
 
                 config.q_orchard.enable(&mut region, 0)
             },
