@@ -1579,10 +1579,7 @@ mod tests {
                 let (circuit, instance) =
                     generate_circuit_instance(is_native_asset, split_flag, &mut rng);
 
-                let should_pass = match (is_native_asset, split_flag) {
-                    (true, true) => false,
-                    _ => true,
-                };
+                let should_pass = !matches!((is_native_asset, split_flag), (true, true));
 
                 check_proof_of_orchard_circuit(&circuit, &instance, should_pass);
 
