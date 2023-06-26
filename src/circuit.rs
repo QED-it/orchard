@@ -954,9 +954,9 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     || {
                         self.v_old.map(|v_old| {
                             if v_old.inner() == 0u64 {
-                                NoteValue::zero()
+                                pallas::Base::zero()
                             } else {
-                                NoteValue::from_raw(1u64 / v_old.inner())
+                                pallas::Base::from(v_old.inner()).invert().unwrap()
                             }
                         })
                     },
