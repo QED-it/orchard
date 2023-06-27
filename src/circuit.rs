@@ -224,14 +224,13 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
         // Constrain split_flag to be boolean
         // Constrain v_old * (1 - split_flag) - v_new = magnitude * sign    (https://p.z.cash/ZKS:action-cv-net-integrity?partial).
-        // Constrain v_old = 0 or calculated root = anchor (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
+        // Constrain (v_old = 0 and split_flag = 0) or (calculated root = anchor) (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
         // Constrain v_old = 0 or enable_spends = 1      (https://p.z.cash/ZKS:action-enable-spend).
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
         // Constrain is_native_asset to be boolean
         // Constraint if is_native_asset = 1 then asset = native_asset else asset != native_asset
         // Constraint if split_flag = 0 then psi_old = psi_nf
         // Constraint if split_flag = 1, then is_native_asset = 0
-        // Constraint if split_flag = 1, then v_old != 0
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -268,8 +267,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let psi_old = meta.query_advice(advices[4], Rotation::next());
             let psi_nf = meta.query_advice(advices[5], Rotation::next());
 
-            let v_old_inv = meta.query_advice(advices[6], Rotation::next());
-
             Constraints::with_selector(
                 q_orchard,
                 [
@@ -280,13 +277,18 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                             - v_new.clone()
                             - magnitude * sign,
                     ),
+                    // We already checked that
+                    // * split_flag is boolean (just above), and
+                    // * v_old is a 64 bit integer (in note commitment evaluation).
+                    // So, split_flag + v_old = 0 only when both split_flag and v_old are equal to
+                    // zero (no overflow can occur).
                     (
-                        "v_old = 0 or root = anchor",
-                        v_old.clone() * (root - anchor),
+                        "(v_old = 0 and split_flag = 0) or (root = anchor)",
+                        (v_old.clone() + split_flag.clone()) * (root - anchor),
                     ),
                     (
                         "v_old = 0 or enable_spends = 1",
-                        v_old.clone() * (one.clone() - enable_spends),
+                        v_old * (one.clone() - enable_spends),
                     ),
                     (
                         "v_new = 0 or enable_outputs = 1",
@@ -317,15 +319,11 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     ),
                     (
                         "(split_flag = 0) => (psi_old = psi_nf)",
-                        (one.clone() - split_flag.clone()) * (psi_old - psi_nf),
+                        (one - split_flag.clone()) * (psi_old - psi_nf),
                     ),
                     (
                         "(split_flag = 1) => (is_native_asset = 0)",
-                        split_flag.clone() * is_native_asset,
-                    ),
-                    (
-                        "(split_flag = 1) => (v_old != 0)",
-                        split_flag * (v_old * v_old_inv - one),
+                        split_flag * is_native_asset,
                     ),
                 ],
             )
@@ -944,23 +942,6 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
                 psi_old.copy_advice(|| "psi_old", &mut region, config.advices[4], 1)?;
                 psi_nf.copy_advice(|| "psi_nf", &mut region, config.advices[5], 1)?;
-
-                // `v_old_inv` will be used to prove that
-                // if split_flag = 1, then v_old != 0.
-                region.assign_advice(
-                    || "v_old_inv",
-                    config.advices[6],
-                    1,
-                    || {
-                        self.v_old.map(|v_old| {
-                            if v_old.inner() == 0u64 {
-                                pallas::Base::zero()
-                            } else {
-                                pallas::Base::from(v_old.inner()).invert().unwrap()
-                            }
-                        })
-                    },
-                )?;
 
                 config.q_orchard.enable(&mut region, 0)
             },
@@ -1691,36 +1672,6 @@ mod tests {
                         split_flag: circuit.split_flag,
                     };
                     check_proof_of_orchard_circuit(&circuit_wrong_psi_nf, &instance, false);
-                }
-
-                // If split_flag = 1 , set v_old to zero
-                // The proof should fail
-                if split_flag {
-                    let circuit_wrong_v_old = Circuit {
-                        path: circuit.path,
-                        pos: circuit.pos,
-                        g_d_old: circuit.g_d_old,
-                        pk_d_old: circuit.pk_d_old,
-                        v_old: Value::known(NoteValue::zero()),
-                        rho_old: circuit.rho_old,
-                        psi_old: circuit.psi_old,
-                        rcm_old: circuit.rcm_old.clone(),
-                        cm_old: circuit.cm_old.clone(),
-                        psi_nf: circuit.psi_nf,
-                        alpha: circuit.alpha,
-                        ak: circuit.ak.clone(),
-                        nk: circuit.nk,
-                        rivk: circuit.rivk,
-                        g_d_new: circuit.g_d_new,
-                        pk_d_new: circuit.pk_d_new,
-                        v_new: circuit.v_new,
-                        psi_new: circuit.psi_new,
-                        rcm_new: circuit.rcm_new.clone(),
-                        rcv: circuit.rcv,
-                        asset: circuit.asset,
-                        split_flag: circuit.split_flag,
-                    };
-                    check_proof_of_orchard_circuit(&circuit_wrong_v_old, &instance, false);
                 }
             }
         }
