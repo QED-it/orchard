@@ -279,9 +279,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     ),
                     // We already checked that
                     // * split_flag is boolean (just above), and
-                    // * v_old is a 64 bit integer (in note commitment evaluation).
-                    // So, split_flag + v_old = 0 only when both split_flag and v_old are equal to
-                    // zero (no overflow can occur).
+                    // * v_old is a 64 bit integer (in the note commitment evaluation).
+                    // So, split_flag + v_old = 0 only when (split_flag = 0 and v_old = 0), no overflow can occur.
                     (
                         "(v_old = 0 and split_flag = 0) or (root = anchor)",
                         (v_old.clone() + split_flag.clone()) * (root - anchor),
@@ -1560,11 +1559,11 @@ mod tests {
                 let (circuit, instance) =
                     generate_circuit_instance(is_native_asset, split_flag, &mut rng);
 
-                let should_pass = !matches!((is_native_asset, split_flag), (true, true));
+                let should_pass = !(matches!((is_native_asset, split_flag), (true, true)));
 
                 check_proof_of_orchard_circuit(&circuit, &instance, should_pass);
 
-                // Set cv_net to zero
+                // Set cv_net to be zero
                 // The proof should fail
                 let instance_wrong_cv_net = Instance {
                     anchor: instance.anchor,
@@ -1577,7 +1576,7 @@ mod tests {
                 };
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_cv_net, false);
 
-                // Set rk_pub to dummy VerificationKey
+                // Set rk_pub to be a dummy VerificationKey
                 // The proof should fail
                 let instance_wrong_rk = Instance {
                     anchor: instance.anchor,
@@ -1590,7 +1589,7 @@ mod tests {
                 };
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_rk, false);
 
-                // Set cm_old to random NoteCommitment
+                // Set cm_old to be a random NoteCommitment
                 // The proof should fail
                 let circuit_wrong_cm_old = Circuit {
                     path: circuit.path,
@@ -1618,7 +1617,7 @@ mod tests {
                 };
                 check_proof_of_orchard_circuit(&circuit_wrong_cm_old, &instance, false);
 
-                // Set cmx_pub to random NoteCommitment
+                // Set cmx_pub to be a random NoteCommitment
                 // The proof should fail
                 let instance_wrong_cmx_pub = Instance {
                     anchor: instance.anchor,
@@ -1631,7 +1630,7 @@ mod tests {
                 };
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_cmx_pub, false);
 
-                // Set nf_old_pub to random Nullifier
+                // Set nf_old_pub to be a random Nullifier
                 // The proof should fail
                 let instance_wrong_nf_old_pub = Instance {
                     anchor: instance.anchor,
@@ -1644,7 +1643,7 @@ mod tests {
                 };
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_nf_old_pub, false);
 
-                // If split_flag = 0 , set psi_nf to random pallas Base element
+                // If split_flag = 0 , set psi_nf to be a random Pallas base element
                 // The proof should fail
                 if !split_flag {
                     let circuit_wrong_psi_nf = Circuit {
