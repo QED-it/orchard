@@ -278,7 +278,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                             - magnitude * sign,
                     ),
                     // We already checked that
-                    // * is_native_asset is boolean (just above), and
+                    // * is_native_asset is boolean (just below), and
                     // * v_old is a 64 bit integer (in the note commitment evaluation).
                     // So, 1 - is_native_asset + v_old = 0 only when (is_native_asset = 1 and v_old = 0), no overflow can occur.
                     (
