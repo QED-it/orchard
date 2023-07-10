@@ -1,11 +1,11 @@
 //! Structs related to issuance bundles and the associated logic.
 use blake2b_simd::Hash as Blake2bHash;
 use group::Group;
+use memuse::DynamicUsage;
 use nonempty::NonEmpty;
 use rand::{CryptoRng, RngCore};
 use std::collections::HashSet;
 use std::fmt;
-use memuse::DynamicUsage;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::issuance::Error::{
@@ -64,11 +64,7 @@ impl DynamicUsage for IssueAction {
         );
         (
             bounds.0 .0 + bounds.1 .0,
-            bounds
-                .0
-                .1
-                .zip(bounds.1 .1)
-                .map(|(a, b)| a + b),
+            bounds.0 .1.zip(bounds.1 .1).map(|(a, b)| a + b),
         )
     }
 }
@@ -490,9 +486,7 @@ impl IssueBundle<Signed> {
 
 impl DynamicUsage for IssueBundle<Signed> {
     fn dynamic_usage(&self) -> usize {
-        self.actions.dynamic_usage()
-            + self.ik.dynamic_usage()
-            + self.authorization.dynamic_usage()
+        self.actions.dynamic_usage() + self.ik.dynamic_usage() + self.authorization.dynamic_usage()
     }
 
     fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
@@ -505,7 +499,7 @@ impl DynamicUsage for IssueBundle<Signed> {
             bounds.0 .0 + bounds.1 .0 + bounds.2 .0,
             bounds
                 .0
-                .1
+                 .1
                 .zip(bounds.1 .1)
                 .zip(bounds.2 .1)
                 .map(|((a, b), c)| a + b + c),
@@ -1457,11 +1451,11 @@ pub mod testing {
     use crate::note::asset_base::testing::zsa_asset_id;
     use crate::note::testing::arb_zsa_note;
     use crate::primitives::redpallas::Signature;
+    use nonempty::NonEmpty;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
     use reddsa::orchard::SpendAuth;
-    use nonempty::NonEmpty;
 
     prop_compose! {
         /// Generate a uniformly distributed signature
