@@ -3,9 +3,10 @@ use pasta_curves::vesta;
 use rand::{CryptoRng, RngCore};
 use tracing::debug;
 
-use super::{Authorized, Bundle};
+use super::{burn_validation::validate_bundle_burn, Authorized, Bundle};
 use crate::{
     circuit::VerifyingKey,
+    note::AssetBase,
     primitives::redpallas::{self, Binding, SpendAuth},
 };
 
@@ -23,6 +24,7 @@ struct BundleSignature {
 pub struct BatchValidator {
     proofs: plonk::BatchVerifier<vesta::Affine>,
     signatures: Vec<BundleSignature>,
+    burns: Vec<(AssetBase, i64)>,
 }
 
 impl BatchValidator {
@@ -31,10 +33,11 @@ impl BatchValidator {
         BatchValidator {
             proofs: plonk::BatchVerifier::new(),
             signatures: vec![],
+            burns: vec![],
         }
     }
 
-    /// Adds the proof and RedPallas signatures from the given bundle to the validator.
+    /// Adds the proof, RedPallas signatures and burn from the given bundle to the validator.
     pub fn add_bundle<V: Copy + Into<i64>>(
         &mut self,
         bundle: &Bundle<Authorized, V>,
@@ -58,6 +61,13 @@ impl BatchValidator {
             .authorization()
             .proof()
             .add_to_batch(&mut self.proofs, bundle.to_instances());
+
+        self.burns.extend(
+            bundle
+                .burn
+                .iter()
+                .map(|(asset, amount)| (*asset, (*amount).into())),
+        );
     }
 
     /// Batch-validates the accumulated bundles.
@@ -79,13 +89,19 @@ impl BatchValidator {
             validator.queue(sig.signature.clone());
         }
 
-        match validator.verify(rng) {
+        let are_signatures_and_proofs_valid = match validator.verify(rng) {
             // If signatures are valid, check the proofs.
             Ok(()) => self.proofs.finalize(&vk.params, &vk.vk),
             Err(e) => {
                 debug!("RedPallas batch validation failed: {}", e);
                 false
             }
+        };
+
+        if !are_signatures_and_proofs_valid {
+            return false;
         }
+
+        validate_bundle_burn(&self.burns).is_ok()
     }
 }
