@@ -26,6 +26,10 @@ use crate::{
 
 use crate::supply_info::{AssetSupply, SupplyInfo};
 
+mod batch;
+
+pub use batch::BatchValidator;
+
 /// A bundle of actions to be applied to the ledger.
 #[derive(Debug, Clone)]
 pub struct IssueBundle<T: IssueAuth> {
