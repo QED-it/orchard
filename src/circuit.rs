@@ -1706,6 +1706,22 @@ mod tests {
                     };
                     check_proof_of_orchard_circuit(&circuit_wrong_psi_nf, &instance, false);
                 }
+
+                // If asset is not equal to the native asset, set enable_zsa = 0
+                // The proof should fail
+                if !is_native_asset {
+                    let instance_wrong_enable_zsa = Instance {
+                        anchor: instance.anchor,
+                        cv_net: instance.cv_net.clone(),
+                        nf_old: instance.nf_old,
+                        rk: instance.rk.clone(),
+                        cmx: instance.cmx,
+                        enable_spend: instance.enable_spend,
+                        enable_output: instance.enable_output,
+                        enable_zsa: false,
+                    };
+                    check_proof_of_orchard_circuit(&circuit, &instance_wrong_enable_zsa, false);
+                }
             }
         }
     }
