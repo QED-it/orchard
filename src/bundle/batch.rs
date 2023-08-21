@@ -77,6 +77,10 @@ impl BatchValidator {
     /// figure out which of the accumulated bundles might be invalid; if that information
     /// is desired, construct separate [`BatchValidator`]s for sub-batches of the bundles.
     pub fn validate<R: RngCore + CryptoRng>(self, vk: &VerifyingKey, rng: R) -> bool {
+        if validate_bundle_burn(&self.burns).is_err() {
+            return false;
+        }
+
         if self.signatures.is_empty() {
             // An empty batch is always valid, but is not free to run; skip it.
             // Note that a transaction has at least a binding signature, so if
@@ -89,19 +93,13 @@ impl BatchValidator {
             validator.queue(sig.signature.clone());
         }
 
-        let are_signatures_and_proofs_valid = match validator.verify(rng) {
+        match validator.verify(rng) {
             // If signatures are valid, check the proofs.
             Ok(()) => self.proofs.finalize(&vk.params, &vk.vk),
             Err(e) => {
                 debug!("RedPallas batch validation failed: {}", e);
                 false
             }
-        };
-
-        if !are_signatures_and_proofs_valid {
-            return false;
         }
-
-        validate_bundle_burn(&self.burns).is_ok()
     }
 }
