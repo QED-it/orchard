@@ -93,4 +93,4 @@ debug = true
 debug = true
 
 [patch.crates-io]
-zcash_note_encryption = { version = "0.4", git = "https://github.com/QED-it/librustzcash.git", branch = "zsa-bundle-in-v5-vector-serialization" }
+zcash_note_encryption = { version = "0.4", git = "https://github.com/QED-it/librustzcash.git", branch = "zsa-bundle-in-v5-vector-serialization_with_burn_validation_new" }
