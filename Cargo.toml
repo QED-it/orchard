@@ -44,7 +44,8 @@ subtle = "2.3"
 zcash_note_encryption = "0.4"
 incrementalmerkletree = "0.4"
 dashmap = "=5.4.0"
-rustix = "=0.37.20"
+#rustix = "=0.37.20"
+tempfile = "=3.6.0"
 
 # Logging
 tracing = "0.1"
