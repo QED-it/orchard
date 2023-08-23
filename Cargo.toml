@@ -35,28 +35,27 @@ hex = "0.4"
 lazy_static = "1"
 memuse = { version = "0.2.1", features = ["nonempty"] }
 pasta_curves = "0.5"
+tempfile = "= 3.5.0" # Last version required rust 1.63
 proptest = { version = "1.0.0", optional = true }
 rand = "0.8"
-reddsa = "=0.5.0"
+reddsa = "=0.5.0" # Last version required rust 1.65
 nonempty = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 subtle = "2.3"
 zcash_note_encryption = "0.4"
 incrementalmerkletree = "0.4"
-dashmap = "=5.4.0"
-tempfile = "=3.6.0"
-backtrace = "=0.3.67"
-flate2 = "=1.0.26"
 
 # Logging
 tracing = "0.1"
 
 # Developer tooling dependencies
 image = { version = ">= 0.24, < 0.24.5", optional = true } # 0.24.5 has MSRV 1.61
+flate2 = ">= 1.0, <1.0.27" # Clippy issues in last version
 plotters = { version = "0.3.0", optional = true }
 
 [dev-dependencies]
 bridgetree = "0.3"
+half = ">= 1.8, < 2.3"
 criterion = "0.3"
 halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "zsa1", features = ["test-dependencies"] }
 hex = "0.4"
@@ -65,6 +64,8 @@ zcash_note_encryption = { version = "0.4", features = ["pre-zip-212"] }
 incrementalmerkletree = { version = "0.4", features = ["test-dependencies"] }
 
 [target.'cfg(unix)'.dev-dependencies]
+hashbrown = ">= 0.12, <0.13"
+dashmap = ">= 5.4, <5.5"
 inferno = ">= 0.11, < 0.11.15"
 pprof = { version = "0.9", features = ["criterion", "flamegraph"] } # MSRV 1.56
 
@@ -96,4 +97,4 @@ debug = true
 debug = true
 
 [patch.crates-io]
-zcash_note_encryption = { version = "0.4", git = "https://github.com/QED-it/librustzcash.git", branch = "zsa-bundle-in-v5-vector-serialization_with_burn_validation_new" }
+zcash_note_encryption = { version = "0.4", git = "https://github.com/QED-it/librustzcash.git", tag = "zsa-bundle-in-v5-vector-serialization_with_burn_validation_new" }
