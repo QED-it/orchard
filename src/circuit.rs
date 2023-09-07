@@ -27,6 +27,7 @@ use self::{
 };
 use crate::{
     builder::SpendInfo,
+    bundle::Flags,
     circuit::gadget::mux_chip::{MuxChip, MuxConfig},
     constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
@@ -79,6 +80,7 @@ const RK_Y: usize = 5;
 const CMX: usize = 6;
 const ENABLE_SPEND: usize = 7;
 const ENABLE_OUTPUT: usize = 8;
+const ENABLE_ZSA: usize = 9;
 
 /// Configuration needed to use the Orchard Action circuit.
 #[derive(Clone, Debug)]
@@ -224,12 +226,14 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
         // Constrain split_flag to be boolean
         // Constrain v_old * (1 - split_flag) - v_new = magnitude * sign    (https://p.z.cash/ZKS:action-cv-net-integrity?partial).
-        // Constrain v_old = 0 or calculated root = anchor (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
+        // Constrain (v_old = 0 and is_native_asset = 1) or (calculated root = anchor) (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
         // Constrain v_old = 0 or enable_spends = 1      (https://p.z.cash/ZKS:action-enable-spend).
         // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
         // Constrain is_native_asset to be boolean
         // Constraint if is_native_asset = 1 then asset = native_asset else asset != native_asset
         // Constraint if split_flag = 0 then psi_old = psi_nf
+        // Constraint if split_flag = 1, then is_native_asset = 0
+        // Constraint if enable_zsa = 0, then is_native_asset = 1
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -266,6 +270,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
             let psi_old = meta.query_advice(advices[4], Rotation::next());
             let psi_nf = meta.query_advice(advices[5], Rotation::next());
 
+            let enable_zsa = meta.query_advice(advices[6], Rotation::next());
+
             Constraints::with_selector(
                 q_orchard,
                 [
@@ -276,9 +282,13 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                             - v_new.clone()
                             - magnitude * sign,
                     ),
+                    // We already checked that
+                    // * is_native_asset is boolean (just below), and
+                    // * v_old is a 64 bit unsigned integer (in the note commitment evaluation).
+                    // So, 1 - is_native_asset + v_old = 0 only when (is_native_asset = 1 and v_old = 0), no overflow can occur.
                     (
-                        "v_old = 0 or root = anchor",
-                        v_old.clone() * (root - anchor),
+                        "(v_old = 0 and is_native_asset = 1) or (root = anchor)",
+                        (v_old.clone() + one.clone() - is_native_asset.clone()) * (root - anchor),
                     ),
                     (
                         "v_old = 0 or enable_spends = 1",
@@ -307,13 +317,21 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                     // is not equal to zero, we will prove that it is invertible.
                     (
                         "(is_native_asset = 0) => (asset != native_asset)",
-                        (one.clone() - is_native_asset)
+                        (one.clone() - is_native_asset.clone())
                             * (diff_asset_x * diff_asset_x_inv - one.clone())
                             * (diff_asset_y * diff_asset_y_inv - one.clone()),
                     ),
                     (
                         "(split_flag = 0) => (psi_old = psi_nf)",
-                        (one - split_flag) * (psi_old - psi_nf),
+                        (one.clone() - split_flag.clone()) * (psi_old - psi_nf),
+                    ),
+                    (
+                        "(split_flag = 1) => (is_native_asset = 0)",
+                        split_flag * is_native_asset.clone(),
+                    ),
+                    (
+                        "(enable_zsa = 0) => (is_native_asset = 1)",
+                        (one.clone() - enable_zsa) * (one - is_native_asset),
                     ),
                 ],
             )
@@ -933,6 +951,14 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 psi_old.copy_advice(|| "psi_old", &mut region, config.advices[4], 1)?;
                 psi_nf.copy_advice(|| "psi_nf", &mut region, config.advices[5], 1)?;
 
+                region.assign_advice_from_instance(
+                    || "enable zsa",
+                    config.primary,
+                    ENABLE_ZSA,
+                    config.advices[6],
+                    1,
+                )?;
+
                 config.q_orchard.enable(&mut region, 0)
             },
         )?;
@@ -990,6 +1016,7 @@ pub struct Instance {
     pub(crate) cmx: ExtractedNoteCommitment,
     pub(crate) enable_spend: bool,
     pub(crate) enable_output: bool,
+    pub(crate) enable_zsa: bool,
 }
 
 impl Instance {
@@ -1006,8 +1033,7 @@ impl Instance {
         nf_old: Nullifier,
         rk: VerificationKey<SpendAuth>,
         cmx: ExtractedNoteCommitment,
-        enable_spend: bool,
-        enable_output: bool,
+        flags: Flags,
     ) -> Self {
         Instance {
             anchor,
@@ -1015,13 +1041,14 @@ impl Instance {
             nf_old,
             rk,
             cmx,
-            enable_spend,
-            enable_output,
+            enable_spend: flags.spends_enabled(),
+            enable_output: flags.outputs_enabled(),
+            enable_zsa: flags.zsa_enabled(),
         }
     }
 
-    fn to_halo2_instance(&self) -> [[vesta::Scalar; 9]; 1] {
-        let mut instance = [vesta::Scalar::zero(); 9];
+    fn to_halo2_instance(&self) -> [[vesta::Scalar; 10]; 1] {
+        let mut instance = [vesta::Scalar::zero(); 10];
 
         instance[ANCHOR] = self.anchor.inner();
         instance[CV_NET_X] = self.cv_net.x();
@@ -1039,6 +1066,7 @@ impl Instance {
         instance[CMX] = self.cmx.inner();
         instance[ENABLE_SPEND] = vesta::Scalar::from(u64::from(self.enable_spend));
         instance[ENABLE_OUTPUT] = vesta::Scalar::from(u64::from(self.enable_output));
+        instance[ENABLE_ZSA] = vesta::Scalar::from(u64::from(self.enable_zsa));
 
         [instance]
     }
@@ -1158,6 +1186,7 @@ mod tests {
 
     use super::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K};
     use crate::builder::SpendInfo;
+    use crate::bundle::Flags;
     use crate::note::commitment::NoteCommitTrapdoor;
     use crate::note::{AssetBase, Nullifier};
     use crate::primitives::redpallas::VerificationKey;
@@ -1225,6 +1254,7 @@ mod tests {
                 cmx,
                 enable_spend: true,
                 enable_output: true,
+                enable_zsa: false,
             },
         )
     }
@@ -1305,6 +1335,7 @@ mod tests {
             w.write_all(&[
                 if instance.enable_spend { 1 } else { 0 },
                 if instance.enable_output { 1 } else { 0 },
+                if instance.enable_zsa { 1 } else { 0 },
             ])?;
 
             w.write_all(proof.as_ref())?;
@@ -1335,8 +1366,15 @@ mod tests {
                 crate::note::ExtractedNoteCommitment::from_bytes(&read_32_bytes(&mut r)).unwrap();
             let enable_spend = read_bool(&mut r);
             let enable_output = read_bool(&mut r);
-            let instance =
-                Instance::from_parts(anchor, cv_net, nf_old, rk, cmx, enable_spend, enable_output);
+            let enable_zsa = read_bool(&mut r);
+            let instance = Instance::from_parts(
+                anchor,
+                cv_net,
+                nf_old,
+                rk,
+                cmx,
+                Flags::from_parts(enable_spend, enable_output, enable_zsa),
+            );
 
             let mut proof_bytes = vec![];
             r.read_to_end(&mut proof_bytes)?;
@@ -1524,6 +1562,7 @@ mod tests {
                 cmx,
                 enable_spend: true,
                 enable_output: true,
+                enable_zsa: true,
             },
         )
     }
@@ -1550,9 +1589,11 @@ mod tests {
                 let (circuit, instance) =
                     generate_circuit_instance(is_native_asset, split_flag, &mut rng);
 
-                check_proof_of_orchard_circuit(&circuit, &instance, true);
+                let should_pass = !(matches!((is_native_asset, split_flag), (true, true)));
 
-                // Set cv_net to zero
+                check_proof_of_orchard_circuit(&circuit, &instance, should_pass);
+
+                // Set cv_net to be zero
                 // The proof should fail
                 let instance_wrong_cv_net = Instance {
                     anchor: instance.anchor,
@@ -1562,10 +1603,11 @@ mod tests {
                     cmx: instance.cmx,
                     enable_spend: instance.enable_spend,
                     enable_output: instance.enable_output,
+                    enable_zsa: instance.enable_zsa,
                 };
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_cv_net, false);
 
-                // Set rk_pub to dummy VerificationKey
+                // Set rk_pub to be a dummy VerificationKey
                 // The proof should fail
                 let instance_wrong_rk = Instance {
                     anchor: instance.anchor,
@@ -1575,10 +1617,11 @@ mod tests {
                     cmx: instance.cmx,
                     enable_spend: instance.enable_spend,
                     enable_output: instance.enable_output,
+                    enable_zsa: instance.enable_zsa,
                 };
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_rk, false);
 
-                // Set cm_old to random NoteCommitment
+                // Set cm_old to be a random NoteCommitment
                 // The proof should fail
                 let circuit_wrong_cm_old = Circuit {
                     path: circuit.path,
@@ -1606,7 +1649,7 @@ mod tests {
                 };
                 check_proof_of_orchard_circuit(&circuit_wrong_cm_old, &instance, false);
 
-                // Set cmx_pub to random NoteCommitment
+                // Set cmx_pub to be a random NoteCommitment
                 // The proof should fail
                 let instance_wrong_cmx_pub = Instance {
                     anchor: instance.anchor,
@@ -1616,22 +1659,68 @@ mod tests {
                     cmx: random_note_commitment(&mut rng).into(),
                     enable_spend: instance.enable_spend,
                     enable_output: instance.enable_output,
+                    enable_zsa: instance.enable_zsa,
                 };
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_cmx_pub, false);
 
-                // If split_flag=0, set nf_old_pub to random Nullifier
+                // Set nf_old_pub to be a random Nullifier
+                // The proof should fail
+                let instance_wrong_nf_old_pub = Instance {
+                    anchor: instance.anchor,
+                    cv_net: instance.cv_net.clone(),
+                    nf_old: Nullifier::dummy(&mut rng),
+                    rk: instance.rk.clone(),
+                    cmx: instance.cmx,
+                    enable_spend: instance.enable_spend,
+                    enable_output: instance.enable_output,
+                    enable_zsa: instance.enable_zsa,
+                };
+                check_proof_of_orchard_circuit(&circuit, &instance_wrong_nf_old_pub, false);
+
+                // If split_flag = 0 , set psi_nf to be a random Pallas base element
                 // The proof should fail
                 if !split_flag {
-                    let instance_wrong_nf_old_pub = Instance {
+                    let circuit_wrong_psi_nf = Circuit {
+                        path: circuit.path,
+                        pos: circuit.pos,
+                        g_d_old: circuit.g_d_old,
+                        pk_d_old: circuit.pk_d_old,
+                        v_old: circuit.v_old,
+                        rho_old: circuit.rho_old,
+                        psi_old: circuit.psi_old,
+                        rcm_old: circuit.rcm_old.clone(),
+                        cm_old: circuit.cm_old.clone(),
+                        psi_nf: Value::known(pallas::Base::random(&mut rng)),
+                        alpha: circuit.alpha,
+                        ak: circuit.ak.clone(),
+                        nk: circuit.nk,
+                        rivk: circuit.rivk,
+                        g_d_new: circuit.g_d_new,
+                        pk_d_new: circuit.pk_d_new,
+                        v_new: circuit.v_new,
+                        psi_new: circuit.psi_new,
+                        rcm_new: circuit.rcm_new.clone(),
+                        rcv: circuit.rcv,
+                        asset: circuit.asset,
+                        split_flag: circuit.split_flag,
+                    };
+                    check_proof_of_orchard_circuit(&circuit_wrong_psi_nf, &instance, false);
+                }
+
+                // If asset is not equal to the native asset, set enable_zsa = 0
+                // The proof should fail
+                if !is_native_asset {
+                    let instance_wrong_enable_zsa = Instance {
                         anchor: instance.anchor,
-                        cv_net: instance.cv_net,
-                        nf_old: Nullifier::dummy(&mut rng),
-                        rk: instance.rk,
+                        cv_net: instance.cv_net.clone(),
+                        nf_old: instance.nf_old,
+                        rk: instance.rk.clone(),
                         cmx: instance.cmx,
                         enable_spend: instance.enable_spend,
                         enable_output: instance.enable_output,
+                        enable_zsa: false,
                     };
-                    check_proof_of_orchard_circuit(&circuit, &instance_wrong_nf_old_pub, false);
+                    check_proof_of_orchard_circuit(&circuit, &instance_wrong_enable_zsa, false);
                 }
             }
         }

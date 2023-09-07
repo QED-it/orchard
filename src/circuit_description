@@ -260,13 +260,29 @@ PinnedVerificationKey {
                     ),
                 ),
                 Product(
-                    Advice {
-                        query_index: 0,
-                        column_index: 0,
-                        rotation: Rotation(
-                            0,
+                    Sum(
+                        Sum(
+                            Advice {
+                                query_index: 0,
+                                column_index: 0,
+                                rotation: Rotation(
+                                    0,
+                                ),
+                            },
+                            Constant(
+                                0x0000000000000000000000000000000000000000000000000000000000000001,
+                            ),
                         ),
-                    },
+                        Negated(
+                            Advice {
+                                query_index: 9,
+                                column_index: 9,
+                                rotation: Rotation(
+                                    0,
+                                ),
+                            },
+                        ),
+                    ),
                     Sum(
                         Advice {
                             query_index: 4,
@@ -926,6 +942,166 @@ PinnedVerificationKey {
                             },
                             Sum(
                                 Constant(
+                                    0x0000000000000000000000000000000000000000000000000000000000000002,
+                                ),
+                                Negated(
+                                    Fixed {
+                                        query_index: 18,
+                                        column_index: 18,
+                                        rotation: Rotation(
+                                            0,
+                                        ),
+                                    },
+                                ),
+                            ),
+                        ),
+                        Sum(
+                            Constant(
+                                0x0000000000000000000000000000000000000000000000000000000000000003,
+                            ),
+                            Negated(
+                                Fixed {
+                                    query_index: 18,
+                                    column_index: 18,
+                                    rotation: Rotation(
+                                        0,
+                                    ),
+                                },
+                            ),
+                        ),
+                    ),
+                    Sum(
+                        Constant(
+                            0x0000000000000000000000000000000000000000000000000000000000000004,
+                        ),
+                        Negated(
+                            Fixed {
+                                query_index: 18,
+                                column_index: 18,
+                                rotation: Rotation(
+                                    0,
+                                ),
+                            },
+                        ),
+                    ),
+                ),
+                Product(
+                    Advice {
+                        query_index: 8,
+                        column_index: 8,
+                        rotation: Rotation(
+                            0,
+                        ),
+                    },
+                    Advice {
+                        query_index: 9,
+                        column_index: 9,
+                        rotation: Rotation(
+                            0,
+                        ),
+                    },
+                ),
+            ),
+            Product(
+                Product(
+                    Product(
+                        Product(
+                            Fixed {
+                                query_index: 18,
+                                column_index: 18,
+                                rotation: Rotation(
+                                    0,
+                                ),
+                            },
+                            Sum(
+                                Constant(
+                                    0x0000000000000000000000000000000000000000000000000000000000000002,
+                                ),
+                                Negated(
+                                    Fixed {
+                                        query_index: 18,
+                                        column_index: 18,
+                                        rotation: Rotation(
+                                            0,
+                                        ),
+                                    },
+                                ),
+                            ),
+                        ),
+                        Sum(
+                            Constant(
+                                0x0000000000000000000000000000000000000000000000000000000000000003,
+                            ),
+                            Negated(
+                                Fixed {
+                                    query_index: 18,
+                                    column_index: 18,
+                                    rotation: Rotation(
+                                        0,
+                                    ),
+                                },
+                            ),
+                        ),
+                    ),
+                    Sum(
+                        Constant(
+                            0x0000000000000000000000000000000000000000000000000000000000000004,
+                        ),
+                        Negated(
+                            Fixed {
+                                query_index: 18,
+                                column_index: 18,
+                                rotation: Rotation(
+                                    0,
+                                ),
+                            },
+                        ),
+                    ),
+                ),
+                Product(
+                    Sum(
+                        Constant(
+                            0x0000000000000000000000000000000000000000000000000000000000000001,
+                        ),
+                        Negated(
+                            Advice {
+                                query_index: 16,
+                                column_index: 6,
+                                rotation: Rotation(
+                                    1,
+                                ),
+                            },
+                        ),
+                    ),
+                    Sum(
+                        Constant(
+                            0x0000000000000000000000000000000000000000000000000000000000000001,
+                        ),
+                        Negated(
+                            Advice {
+                                query_index: 9,
+                                column_index: 9,
+                                rotation: Rotation(
+                                    0,
+                                ),
+                            },
+                        ),
+                    ),
+                ),
+            ),
+            Product(
+                Product(
+                    Product(
+                        Product(
+                            Fixed {
+                                query_index: 18,
+                                column_index: 18,
+                                rotation: Rotation(
+                                    0,
+                                ),
+                            },
+                            Sum(
+                                Constant(
                                     0x0000000000000000000000000000000000000000000000000000000000000001,
                                 ),
                                 Negated(
@@ -1057,7 +1233,7 @@ PinnedVerificationKey {
                     Product(
                         Scaled(
                             Advice {
-                                query_index: 17,
+                                query_index: 18,
                                 column_index: 9,
                                 rotation: Rotation(
                                     -1,
@@ -1066,7 +1242,7 @@ PinnedVerificationKey {
                             0x0000000000000000000000000000000000000000000000000000000000000400,
                         ),
                         Advice {
-                            query_index: 16,
+                            query_index: 17,
                             column_index: 9,
                             rotation: Rotation(
                                 1,
@@ -3675,7 +3851,7 @@ PinnedVerificationKey {
                         Negated(
                             Scaled(
                                 Advice {
-                                    query_index: 17,
+                                    query_index: 18,
                                     column_index: 9,
                                     rotation: Rotation(
                                         -1,
@@ -3701,7 +3877,7 @@ PinnedVerificationKey {
                                 Negated(
                                     Scaled(
                                         Advice {
-                                            query_index: 17,
+                                            query_index: 18,
                                             column_index: 9,
                                             rotation: Rotation(
                                                 -1,
@@ -3919,7 +4095,7 @@ PinnedVerificationKey {
                                     Negated(
                                         Scaled(
                                             Advice {
-                                                query_index: 17,
+                                                query_index: 18,
                                                 column_index: 9,
                                                 rotation: Rotation(
                                                     -1,
@@ -4480,7 +4656,7 @@ PinnedVerificationKey {
                         Negated(
                             Scaled(
                                 Advice {
-                                    query_index: 17,
+                                    query_index: 18,
                                     column_index: 9,
                                     rotation: Rotation(
                                         -1,
@@ -4506,7 +4682,7 @@ PinnedVerificationKey {
                                 Negated(
                                     Scaled(
                                         Advice {
-                                            query_index: 17,
+                                            query_index: 18,
                                             column_index: 9,
                                             rotation: Rotation(
                                                 -1,
@@ -4724,7 +4900,7 @@ PinnedVerificationKey {
                                     Negated(
                                         Scaled(
                                             Advice {
-                                                query_index: 17,
+                                                query_index: 18,
                                                 column_index: 9,
                                                 rotation: Rotation(
                                                     -1,
@@ -5223,7 +5399,7 @@ PinnedVerificationKey {
                             Product(
                                 Sum(
                                     Advice {
-                                        query_index: 19,
+                                        query_index: 20,
                                         column_index: 8,
                                         rotation: Rotation(
                                             1,
@@ -5239,7 +5415,7 @@ PinnedVerificationKey {
                                 ),
                                 Sum(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -5250,14 +5426,14 @@ PinnedVerificationKey {
                                             Sum(
                                                 Product(
                                                     Advice {
-                                                        query_index: 19,
+                                                        query_index: 20,
                                                         column_index: 8,
                                                         rotation: Rotation(
                                                             1,
                                                         ),
                                                     },
                                                     Advice {
-                                                        query_index: 19,
+                                                        query_index: 20,
                                                         column_index: 8,
                                                         rotation: Rotation(
                                                             1,
@@ -5266,7 +5442,7 @@ PinnedVerificationKey {
                                                 ),
                                                 Negated(
                                                     Advice {
-                                                        query_index: 18,
+                                                        query_index: 19,
                                                         column_index: 7,
                                                         rotation: Rotation(
                                                             1,
@@ -5558,7 +5734,7 @@ PinnedVerificationKey {
                         Negated(
                             Scaled(
                                 Advice {
-                                    query_index: 20,
+                                    query_index: 21,
                                     column_index: 6,
                                     rotation: Rotation(
                                         -1,
@@ -5584,7 +5760,7 @@ PinnedVerificationKey {
                                 Negated(
                                     Scaled(
                                         Advice {
-                                            query_index: 20,
+                                            query_index: 21,
                                             column_index: 6,
                                             rotation: Rotation(
                                                 -1,
@@ -5786,7 +5962,7 @@ PinnedVerificationKey {
                                     Negated(
                                         Scaled(
                                             Advice {
-                                                query_index: 20,
+                                                query_index: 21,
                                                 column_index: 6,
                                                 rotation: Rotation(
                                                     -1,
@@ -5907,7 +6083,7 @@ PinnedVerificationKey {
                             ),
                             Negated(
                                 Advice {
-                                    query_index: 18,
+                                    query_index: 19,
                                     column_index: 7,
                                     rotation: Rotation(
                                         1,
@@ -6059,7 +6235,7 @@ PinnedVerificationKey {
                                 },
                                 Negated(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -6146,7 +6322,7 @@ PinnedVerificationKey {
                             Product(
                                 Sum(
                                     Advice {
-                                        query_index: 19,
+                                        query_index: 20,
                                         column_index: 8,
                                         rotation: Rotation(
                                             1,
@@ -6162,7 +6338,7 @@ PinnedVerificationKey {
                                 ),
                                 Sum(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -6173,14 +6349,14 @@ PinnedVerificationKey {
                                             Sum(
                                                 Product(
                                                     Advice {
-                                                        query_index: 19,
+                                                        query_index: 20,
                                                         column_index: 8,
                                                         rotation: Rotation(
                                                             1,
                                                         ),
                                                     },
                                                     Advice {
-                                                        query_index: 19,
+                                                        query_index: 20,
                                                         column_index: 8,
                                                         rotation: Rotation(
                                                             1,
@@ -6189,7 +6365,7 @@ PinnedVerificationKey {
                                                 ),
                                                 Negated(
                                                     Advice {
-                                                        query_index: 18,
+                                                        query_index: 19,
                                                         column_index: 7,
                                                         rotation: Rotation(
                                                             1,
@@ -6315,7 +6491,7 @@ PinnedVerificationKey {
                         Negated(
                             Scaled(
                                 Advice {
-                                    query_index: 20,
+                                    query_index: 21,
                                     column_index: 6,
                                     rotation: Rotation(
                                         -1,
@@ -6341,7 +6517,7 @@ PinnedVerificationKey {
                                 Negated(
                                     Scaled(
                                         Advice {
-                                            query_index: 20,
+                                            query_index: 21,
                                             column_index: 6,
                                             rotation: Rotation(
                                                 -1,
@@ -6559,7 +6735,7 @@ PinnedVerificationKey {
                                     Negated(
                                         Scaled(
                                             Advice {
-                                                query_index: 20,
+                                                query_index: 21,
                                                 column_index: 6,
                                                 rotation: Rotation(
                                                     -1,
@@ -6696,7 +6872,7 @@ PinnedVerificationKey {
                             ),
                             Negated(
                                 Advice {
-                                    query_index: 18,
+                                    query_index: 19,
                                     column_index: 7,
                                     rotation: Rotation(
                                         1,
@@ -6864,7 +7040,7 @@ PinnedVerificationKey {
                                 },
                                 Negated(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -6948,7 +7124,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -7048,7 +7224,7 @@ PinnedVerificationKey {
                 Product(
                     Sum(
                         Advice {
-                            query_index: 16,
+                            query_index: 17,
                             column_index: 9,
                             rotation: Rotation(
                                 1,
@@ -7060,7 +7236,7 @@ PinnedVerificationKey {
                                     0x0000000000000000000000000000000000000000000000000000000000000002,
                                 ),
                                 Advice {
-                                    query_index: 17,
+                                    query_index: 18,
                                     column_index: 9,
                                     rotation: Rotation(
                                         -1,
@@ -7076,7 +7252,7 @@ PinnedVerificationKey {
                         Negated(
                             Sum(
                                 Advice {
-                                    query_index: 16,
+                                    query_index: 17,
                                     column_index: 9,
                                     rotation: Rotation(
                                         1,
@@ -7088,7 +7264,7 @@ PinnedVerificationKey {
                                             0x0000000000000000000000000000000000000000000000000000000000000002,
                                         ),
                                         Advice {
-                                            query_index: 17,
+                                            query_index: 18,
                                             column_index: 9,
                                             rotation: Rotation(
                                                 -1,
@@ -7193,7 +7369,7 @@ PinnedVerificationKey {
                     Product(
                         Sum(
                             Advice {
-                                query_index: 16,
+                                query_index: 17,
                                 column_index: 9,
                                 rotation: Rotation(
                                     1,
@@ -7205,7 +7381,7 @@ PinnedVerificationKey {
                                         0x0000000000000000000000000000000000000000000000000000000000000002,
                                     ),
                                     Advice {
-                                        query_index: 17,
+                                        query_index: 18,
                                         column_index: 9,
                                         rotation: Rotation(
                                             -1,
@@ -7224,7 +7400,7 @@ PinnedVerificationKey {
                             },
                             Negated(
                                 Advice {
-                                    query_index: 21,
+                                    query_index: 22,
                                     column_index: 1,
                                     rotation: Rotation(
                                         -1,
@@ -7241,7 +7417,7 @@ PinnedVerificationKey {
                             Negated(
                                 Sum(
                                     Advice {
-                                        query_index: 16,
+                                        query_index: 17,
                                         column_index: 9,
                                         rotation: Rotation(
                                             1,
@@ -7253,7 +7429,7 @@ PinnedVerificationKey {
                                                 0x0000000000000000000000000000000000000000000000000000000000000002,
                                             ),
                                             Advice {
-                                                query_index: 17,
+                                                query_index: 18,
                                                 column_index: 9,
                                                 rotation: Rotation(
                                                     -1,
@@ -7273,7 +7449,7 @@ PinnedVerificationKey {
                                 ),
                             },
                             Advice {
-                                query_index: 21,
+                                query_index: 22,
                                 column_index: 1,
                                 rotation: Rotation(
                                     -1,
@@ -7468,7 +7644,7 @@ PinnedVerificationKey {
                 Sum(
                     Sum(
                         Advice {
-                            query_index: 20,
+                            query_index: 21,
                             column_index: 6,
                             rotation: Rotation(
                                 -1,
@@ -7668,7 +7844,7 @@ PinnedVerificationKey {
                         ),
                     },
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -7778,7 +7954,7 @@ PinnedVerificationKey {
                                         ),
                                     },
                                     Advice {
-                                        query_index: 22,
+                                        query_index: 16,
                                         column_index: 6,
                                         rotation: Rotation(
                                             1,
@@ -7789,7 +7965,7 @@ PinnedVerificationKey {
                         ),
                     ),
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -7888,7 +8064,7 @@ PinnedVerificationKey {
                 Product(
                     Sum(
                         Advice {
-                            query_index: 16,
+                            query_index: 17,
                             column_index: 9,
                             rotation: Rotation(
                                 1,
@@ -7914,7 +8090,7 @@ PinnedVerificationKey {
                         Negated(
                             Sum(
                                 Advice {
-                                    query_index: 16,
+                                    query_index: 17,
                                     column_index: 9,
                                     rotation: Rotation(
                                         1,
@@ -8029,7 +8205,7 @@ PinnedVerificationKey {
                     Product(
                         Sum(
                             Advice {
-                                query_index: 16,
+                                query_index: 17,
                                 column_index: 9,
                                 rotation: Rotation(
                                     1,
@@ -8064,7 +8240,7 @@ PinnedVerificationKey {
                             Negated(
                                 Sum(
                                     Advice {
-                                        query_index: 16,
+                                        query_index: 17,
                                         column_index: 9,
                                         rotation: Rotation(
                                             1,
@@ -8198,7 +8374,7 @@ PinnedVerificationKey {
                     Product(
                         Sum(
                             Advice {
-                                query_index: 16,
+                                query_index: 17,
                                 column_index: 9,
                                 rotation: Rotation(
                                     1,
@@ -8233,7 +8409,7 @@ PinnedVerificationKey {
                             Negated(
                                 Sum(
                                     Advice {
-                                        query_index: 16,
+                                        query_index: 17,
                                         column_index: 9,
                                         rotation: Rotation(
                                             1,
@@ -10595,7 +10771,7 @@ PinnedVerificationKey {
                     },
                     Sum(
                         Advice {
-                            query_index: 18,
+                            query_index: 19,
                             column_index: 7,
                             rotation: Rotation(
                                 1,
@@ -10701,7 +10877,7 @@ PinnedVerificationKey {
                     Product(
                         Sum(
                             Advice {
-                                query_index: 19,
+                                query_index: 20,
                                 column_index: 8,
                                 rotation: Rotation(
                                     1,
@@ -10710,7 +10886,7 @@ PinnedVerificationKey {
                             Negated(
                                 Scaled(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -10727,7 +10903,7 @@ PinnedVerificationKey {
                             Negated(
                                 Sum(
                                     Advice {
-                                        query_index: 19,
+                                        query_index: 20,
                                         column_index: 8,
                                         rotation: Rotation(
                                             1,
@@ -10736,7 +10912,7 @@ PinnedVerificationKey {
                                     Negated(
                                         Scaled(
                                             Advice {
-                                                query_index: 18,
+                                                query_index: 19,
                                                 column_index: 7,
                                                 rotation: Rotation(
                                                     1,
@@ -10832,7 +11008,7 @@ PinnedVerificationKey {
                         ),
                     },
                     Advice {
-                        query_index: 22,
+                        query_index: 16,
                         column_index: 6,
                         rotation: Rotation(
                             1,
@@ -11252,7 +11428,7 @@ PinnedVerificationKey {
                             Sum(
                                 Sum(
                                     Advice {
-                                        query_index: 20,
+                                        query_index: 21,
                                         column_index: 6,
                                         rotation: Rotation(
                                             -1,
@@ -11620,7 +11796,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 22,
+                            query_index: 16,
                             column_index: 6,
                             rotation: Rotation(
                                 1,
@@ -11965,7 +12141,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 18,
+                            query_index: 19,
                             column_index: 7,
                             rotation: Rotation(
                                 1,
@@ -12310,7 +12486,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -12850,7 +13026,7 @@ PinnedVerificationKey {
                             Sum(
                                 Scaled(
                                     Advice {
-                                        query_index: 22,
+                                        query_index: 16,
                                         column_index: 6,
                                         rotation: Rotation(
                                             1,
@@ -12860,7 +13036,7 @@ PinnedVerificationKey {
                                 ),
                                 Scaled(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -12871,7 +13047,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 19,
+                                    query_index: 20,
                                     column_index: 8,
                                     rotation: Rotation(
                                         1,
@@ -13006,7 +13182,7 @@ PinnedVerificationKey {
                             Sum(
                                 Scaled(
                                     Advice {
-                                        query_index: 22,
+                                        query_index: 16,
                                         column_index: 6,
                                         rotation: Rotation(
                                             1,
@@ -13016,7 +13192,7 @@ PinnedVerificationKey {
                                 ),
                                 Scaled(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -13027,7 +13203,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 19,
+                                    query_index: 20,
                                     column_index: 8,
                                     rotation: Rotation(
                                         1,
@@ -13162,7 +13338,7 @@ PinnedVerificationKey {
                             Sum(
                                 Scaled(
                                     Advice {
-                                        query_index: 22,
+                                        query_index: 16,
                                         column_index: 6,
                                         rotation: Rotation(
                                             1,
@@ -13172,7 +13348,7 @@ PinnedVerificationKey {
                                 ),
                                 Scaled(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -13183,7 +13359,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 19,
+                                    query_index: 20,
                                     column_index: 8,
                                     rotation: Rotation(
                                         1,
@@ -13270,7 +13446,7 @@ PinnedVerificationKey {
                 Sum(
                     Sum(
                         Advice {
-                            query_index: 20,
+                            query_index: 21,
                             column_index: 6,
                             rotation: Rotation(
                                 -1,
@@ -13286,7 +13462,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 22,
+                            query_index: 16,
                             column_index: 6,
                             rotation: Rotation(
                                 1,
@@ -13386,7 +13562,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 18,
+                            query_index: 19,
                             column_index: 7,
                             rotation: Rotation(
                                 1,
@@ -13477,7 +13653,7 @@ PinnedVerificationKey {
                     },
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -15067,14 +15243,14 @@ PinnedVerificationKey {
                                     Product(
                                         Sum(
                                             Advice {
-                                                query_index: 19,
+                                                query_index: 20,
                                                 column_index: 8,
                                                 rotation: Rotation(
                                                     1,
                                                 ),
                                             },
                                             Advice {
-                                                query_index: 16,
+                                                query_index: 17,
                                                 column_index: 9,
                                                 rotation: Rotation(
                                                     1,
@@ -15094,14 +15270,14 @@ PinnedVerificationKey {
                                                     Sum(
                                                         Product(
                                                             Advice {
-                                                                query_index: 19,
+                                                                query_index: 20,
                                                                 column_index: 8,
                                                                 rotation: Rotation(
                                                                     1,
                                                                 ),
                                                             },
                                                             Advice {
-                                                                query_index: 19,
+                                                                query_index: 20,
                                                                 column_index: 8,
                                                                 rotation: Rotation(
                                                                     1,
@@ -15120,7 +15296,7 @@ PinnedVerificationKey {
                                                     ),
                                                     Negated(
                                                         Advice {
-                                                            query_index: 22,
+                                                            query_index: 16,
                                                             column_index: 6,
                                                             rotation: Rotation(
                                                                 1,
@@ -15161,7 +15337,7 @@ PinnedVerificationKey {
                                     0x0000000000000000000000000000000000000000000000000000000000000002,
                                 ),
                                 Advice {
-                                    query_index: 19,
+                                    query_index: 20,
                                     column_index: 8,
                                     rotation: Rotation(
                                         1,
@@ -15678,7 +15854,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 16,
+                            query_index: 17,
                             column_index: 9,
                             rotation: Rotation(
                                 1,
@@ -15797,7 +15973,7 @@ PinnedVerificationKey {
                                     Negated(
                                         Scaled(
                                             Advice {
-                                                query_index: 22,
+                                                query_index: 16,
                                                 column_index: 6,
                                                 rotation: Rotation(
                                                     1,
@@ -15809,7 +15985,7 @@ PinnedVerificationKey {
                                 ),
                                 Scaled(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -15923,7 +16099,7 @@ PinnedVerificationKey {
                 Sum(
                     Sum(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -16041,7 +16217,7 @@ PinnedVerificationKey {
                 ),
                 Sum(
                     Advice {
-                        query_index: 22,
+                        query_index: 16,
                         column_index: 6,
                         rotation: Rotation(
                             1,
@@ -16050,7 +16226,7 @@ PinnedVerificationKey {
                     Negated(
                         Sum(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -16058,7 +16234,7 @@ PinnedVerificationKey {
                             },
                             Scaled(
                                 Advice {
-                                    query_index: 19,
+                                    query_index: 20,
                                     column_index: 8,
                                     rotation: Rotation(
                                         1,
@@ -17454,7 +17630,7 @@ PinnedVerificationKey {
                         ),
                     },
                     Advice {
-                        query_index: 22,
+                        query_index: 16,
                         column_index: 6,
                         rotation: Rotation(
                             1,
@@ -17584,7 +17760,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 18,
+                            query_index: 19,
                             column_index: 7,
                             rotation: Rotation(
                                 1,
@@ -17690,217 +17866,217 @@ PinnedVerificationKey {
                         ),
                     },
                     Advice {
+                        query_index: 20,
+                        column_index: 8,
+                        rotation: Rotation(
+                            1,
+                        ),
+                    },
+                ),
+            ),
+            Product(
+                Product(
+                    Product(
+                        Product(
+                            Product(
+                                Product(
+                                    Fixed {
+                                        query_index: 25,
+                                        column_index: 25,
+                                        rotation: Rotation(
+                                            0,
+                                        ),
+                                    },
+                                    Sum(
+                                        Constant(
+                                            0x0000000000000000000000000000000000000000000000000000000000000001,
+                                        ),
+                                        Negated(
+                                            Fixed {
+                                                query_index: 25,
+                                                column_index: 25,
+                                                rotation: Rotation(
+                                                    0,
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                Sum(
+                                    Constant(
+                                        0x0000000000000000000000000000000000000000000000000000000000000002,
+                                    ),
+                                    Negated(
+                                        Fixed {
+                                            query_index: 25,
+                                            column_index: 25,
+                                            rotation: Rotation(
+                                                0,
+                                            ),
+                                        },
+                                    ),
+                                ),
+                            ),
+                            Sum(
+                                Constant(
+                                    0x0000000000000000000000000000000000000000000000000000000000000003,
+                                ),
+                                Negated(
+                                    Fixed {
+                                        query_index: 25,
+                                        column_index: 25,
+                                        rotation: Rotation(
+                                            0,
+                                        ),
+                                    },
+                                ),
+                            ),
+                        ),
+                        Sum(
+                            Constant(
+                                0x0000000000000000000000000000000000000000000000000000000000000004,
+                            ),
+                            Negated(
+                                Fixed {
+                                    query_index: 25,
+                                    column_index: 25,
+                                    rotation: Rotation(
+                                        0,
+                                    ),
+                                },
+                            ),
+                        ),
+                    ),
+                    Sum(
+                        Constant(
+                            0x0000000000000000000000000000000000000000000000000000000000000006,
+                        ),
+                        Negated(
+                            Fixed {
+                                query_index: 25,
+                                column_index: 25,
+                                rotation: Rotation(
+                                    0,
+                                ),
+                            },
+                        ),
+                    ),
+                ),
+                Product(
+                    Advice {
+                        query_index: 8,
+                        column_index: 8,
+                        rotation: Rotation(
+                            0,
+                        ),
+                    },
+                    Sum(
+                        Constant(
+                            0x0000000000000000000000000000000000000000000000000000000000000001,
+                        ),
+                        Negated(
+                            Advice {
+                                query_index: 8,
+                                column_index: 8,
+                                rotation: Rotation(
+                                    0,
+                                ),
+                            },
+                        ),
+                    ),
+                ),
+            ),
+            Product(
+                Product(
+                    Product(
+                        Product(
+                            Product(
+                                Product(
+                                    Fixed {
+                                        query_index: 25,
+                                        column_index: 25,
+                                        rotation: Rotation(
+                                            0,
+                                        ),
+                                    },
+                                    Sum(
+                                        Constant(
+                                            0x0000000000000000000000000000000000000000000000000000000000000001,
+                                        ),
+                                        Negated(
+                                            Fixed {
+                                                query_index: 25,
+                                                column_index: 25,
+                                                rotation: Rotation(
+                                                    0,
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                Sum(
+                                    Constant(
+                                        0x0000000000000000000000000000000000000000000000000000000000000002,
+                                    ),
+                                    Negated(
+                                        Fixed {
+                                            query_index: 25,
+                                            column_index: 25,
+                                            rotation: Rotation(
+                                                0,
+                                            ),
+                                        },
+                                    ),
+                                ),
+                            ),
+                            Sum(
+                                Constant(
+                                    0x0000000000000000000000000000000000000000000000000000000000000003,
+                                ),
+                                Negated(
+                                    Fixed {
+                                        query_index: 25,
+                                        column_index: 25,
+                                        rotation: Rotation(
+                                            0,
+                                        ),
+                                    },
+                                ),
+                            ),
+                        ),
+                        Sum(
+                            Constant(
+                                0x0000000000000000000000000000000000000000000000000000000000000004,
+                            ),
+                            Negated(
+                                Fixed {
+                                    query_index: 25,
+                                    column_index: 25,
+                                    rotation: Rotation(
+                                        0,
+                                    ),
+                                },
+                            ),
+                        ),
+                    ),
+                    Sum(
+                        Constant(
+                            0x0000000000000000000000000000000000000000000000000000000000000006,
+                        ),
+                        Negated(
+                            Fixed {
+                                query_index: 25,
+                                column_index: 25,
+                                rotation: Rotation(
+                                    0,
+                                ),
+                            },
+                        ),
+                    ),
+                ),
+                Product(
+                    Advice {
                         query_index: 19,
-                        column_index: 8,
-                        rotation: Rotation(
-                            1,
-                        ),
-                    },
-                ),
-            ),
-            Product(
-                Product(
-                    Product(
-                        Product(
-                            Product(
-                                Product(
-                                    Fixed {
-                                        query_index: 25,
-                                        column_index: 25,
-                                        rotation: Rotation(
-                                            0,
-                                        ),
-                                    },
-                                    Sum(
-                                        Constant(
-                                            0x0000000000000000000000000000000000000000000000000000000000000001,
-                                        ),
-                                        Negated(
-                                            Fixed {
-                                                query_index: 25,
-                                                column_index: 25,
-                                                rotation: Rotation(
-                                                    0,
-                                                ),
-                                            },
-                                        ),
-                                    ),
-                                ),
-                                Sum(
-                                    Constant(
-                                        0x0000000000000000000000000000000000000000000000000000000000000002,
-                                    ),
-                                    Negated(
-                                        Fixed {
-                                            query_index: 25,
-                                            column_index: 25,
-                                            rotation: Rotation(
-                                                0,
-                                            ),
-                                        },
-                                    ),
-                                ),
-                            ),
-                            Sum(
-                                Constant(
-                                    0x0000000000000000000000000000000000000000000000000000000000000003,
-                                ),
-                                Negated(
-                                    Fixed {
-                                        query_index: 25,
-                                        column_index: 25,
-                                        rotation: Rotation(
-                                            0,
-                                        ),
-                                    },
-                                ),
-                            ),
-                        ),
-                        Sum(
-                            Constant(
-                                0x0000000000000000000000000000000000000000000000000000000000000004,
-                            ),
-                            Negated(
-                                Fixed {
-                                    query_index: 25,
-                                    column_index: 25,
-                                    rotation: Rotation(
-                                        0,
-                                    ),
-                                },
-                            ),
-                        ),
-                    ),
-                    Sum(
-                        Constant(
-                            0x0000000000000000000000000000000000000000000000000000000000000006,
-                        ),
-                        Negated(
-                            Fixed {
-                                query_index: 25,
-                                column_index: 25,
-                                rotation: Rotation(
-                                    0,
-                                ),
-                            },
-                        ),
-                    ),
-                ),
-                Product(
-                    Advice {
-                        query_index: 8,
-                        column_index: 8,
-                        rotation: Rotation(
-                            0,
-                        ),
-                    },
-                    Sum(
-                        Constant(
-                            0x0000000000000000000000000000000000000000000000000000000000000001,
-                        ),
-                        Negated(
-                            Advice {
-                                query_index: 8,
-                                column_index: 8,
-                                rotation: Rotation(
-                                    0,
-                                ),
-                            },
-                        ),
-                    ),
-                ),
-            ),
-            Product(
-                Product(
-                    Product(
-                        Product(
-                            Product(
-                                Product(
-                                    Fixed {
-                                        query_index: 25,
-                                        column_index: 25,
-                                        rotation: Rotation(
-                                            0,
-                                        ),
-                                    },
-                                    Sum(
-                                        Constant(
-                                            0x0000000000000000000000000000000000000000000000000000000000000001,
-                                        ),
-                                        Negated(
-                                            Fixed {
-                                                query_index: 25,
-                                                column_index: 25,
-                                                rotation: Rotation(
-                                                    0,
-                                                ),
-                                            },
-                                        ),
-                                    ),
-                                ),
-                                Sum(
-                                    Constant(
-                                        0x0000000000000000000000000000000000000000000000000000000000000002,
-                                    ),
-                                    Negated(
-                                        Fixed {
-                                            query_index: 25,
-                                            column_index: 25,
-                                            rotation: Rotation(
-                                                0,
-                                            ),
-                                        },
-                                    ),
-                                ),
-                            ),
-                            Sum(
-                                Constant(
-                                    0x0000000000000000000000000000000000000000000000000000000000000003,
-                                ),
-                                Negated(
-                                    Fixed {
-                                        query_index: 25,
-                                        column_index: 25,
-                                        rotation: Rotation(
-                                            0,
-                                        ),
-                                    },
-                                ),
-                            ),
-                        ),
-                        Sum(
-                            Constant(
-                                0x0000000000000000000000000000000000000000000000000000000000000004,
-                            ),
-                            Negated(
-                                Fixed {
-                                    query_index: 25,
-                                    column_index: 25,
-                                    rotation: Rotation(
-                                        0,
-                                    ),
-                                },
-                            ),
-                        ),
-                    ),
-                    Sum(
-                        Constant(
-                            0x0000000000000000000000000000000000000000000000000000000000000006,
-                        ),
-                        Negated(
-                            Fixed {
-                                query_index: 25,
-                                column_index: 25,
-                                rotation: Rotation(
-                                    0,
-                                ),
-                            },
-                        ),
-                    ),
-                ),
-                Product(
-                    Advice {
-                        query_index: 18,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -17912,7 +18088,7 @@ PinnedVerificationKey {
                         ),
                         Negated(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -18042,7 +18218,7 @@ PinnedVerificationKey {
                                 ),
                                 Scaled(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -18053,7 +18229,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 19,
+                                    query_index: 20,
                                     column_index: 8,
                                     rotation: Rotation(
                                         1,
@@ -18409,7 +18585,7 @@ PinnedVerificationKey {
                                 ),
                                 Scaled(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -18420,7 +18596,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 19,
+                                    query_index: 20,
                                     column_index: 8,
                                     rotation: Rotation(
                                         1,
@@ -18771,7 +18947,7 @@ PinnedVerificationKey {
                                 },
                                 Scaled(
                                     Advice {
-                                        query_index: 22,
+                                        query_index: 16,
                                         column_index: 6,
                                         rotation: Rotation(
                                             1,
@@ -18782,7 +18958,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 18,
+                                    query_index: 19,
                                     column_index: 7,
                                     rotation: Rotation(
                                         1,
@@ -19115,7 +19291,7 @@ PinnedVerificationKey {
                 ),
                 Sum(
                     Advice {
-                        query_index: 22,
+                        query_index: 16,
                         column_index: 6,
                         rotation: Rotation(
                             1,
@@ -19144,7 +19320,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 18,
+                                    query_index: 19,
                                     column_index: 7,
                                     rotation: Rotation(
                                         1,
@@ -19610,7 +19786,7 @@ PinnedVerificationKey {
                         ),
                         Scaled(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -19740,7 +19916,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -19839,7 +20015,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -19944,7 +20120,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -20049,14 +20225,14 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
                         ),
                     },
                     Advice {
-                        query_index: 16,
+                        query_index: 17,
                         column_index: 9,
                         rotation: Rotation(
                             1,
@@ -20191,7 +20367,7 @@ PinnedVerificationKey {
                         ),
                         Scaled(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -20349,7 +20525,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -20464,7 +20640,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -20585,14 +20761,14 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
                         ),
                     },
                     Advice {
-                        query_index: 16,
+                        query_index: 17,
                         column_index: 9,
                         rotation: Rotation(
                             1,
@@ -20874,7 +21050,7 @@ PinnedVerificationKey {
                         ),
                         Scaled(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -21032,7 +21208,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -21147,7 +21323,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -21268,14 +21444,14 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
                         ),
                     },
                     Advice {
-                        query_index: 16,
+                        query_index: 17,
                         column_index: 9,
                         rotation: Rotation(
                             1,
@@ -21411,7 +21587,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 22,
+                                    query_index: 16,
                                     column_index: 6,
                                     rotation: Rotation(
                                         1,
@@ -21422,7 +21598,7 @@ PinnedVerificationKey {
                         ),
                         Scaled(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -21580,7 +21756,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -21695,14 +21871,14 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
                         ),
                     },
                     Advice {
-                        query_index: 22,
+                        query_index: 16,
                         column_index: 6,
                         rotation: Rotation(
                             1,
@@ -21816,7 +21992,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -21937,14 +22113,14 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
                         ),
                     },
                     Advice {
-                        query_index: 16,
+                        query_index: 17,
                         column_index: 9,
                         rotation: Rotation(
                             1,
@@ -22215,7 +22391,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 22,
+                                    query_index: 16,
                                     column_index: 6,
                                     rotation: Rotation(
                                         1,
@@ -22500,7 +22676,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -22743,7 +22919,7 @@ PinnedVerificationKey {
                         ),
                     },
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -22864,7 +23040,7 @@ PinnedVerificationKey {
                         ),
                     },
                     Advice {
-                        query_index: 16,
+                        query_index: 17,
                         column_index: 9,
                         rotation: Rotation(
                             1,
@@ -23106,7 +23282,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -23118,7 +23294,7 @@ PinnedVerificationKey {
                         ),
                         Negated(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -23264,7 +23440,7 @@ PinnedVerificationKey {
                                 ),
                                 Scaled(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -23275,7 +23451,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 19,
+                                    query_index: 20,
                                     column_index: 8,
                                     rotation: Rotation(
                                         1,
@@ -23679,7 +23855,7 @@ PinnedVerificationKey {
                                 ),
                                 Scaled(
                                     Advice {
-                                        query_index: 18,
+                                        query_index: 19,
                                         column_index: 7,
                                         rotation: Rotation(
                                             1,
@@ -23690,7 +23866,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 19,
+                                    query_index: 20,
                                     column_index: 8,
                                     rotation: Rotation(
                                         1,
@@ -24089,7 +24265,7 @@ PinnedVerificationKey {
                                 },
                                 Scaled(
                                     Advice {
-                                        query_index: 22,
+                                        query_index: 16,
                                         column_index: 6,
                                         rotation: Rotation(
                                             1,
@@ -24100,7 +24276,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 18,
+                                    query_index: 19,
                                     column_index: 7,
                                     rotation: Rotation(
                                         1,
@@ -24481,7 +24657,7 @@ PinnedVerificationKey {
                 ),
                 Sum(
                     Advice {
-                        query_index: 22,
+                        query_index: 16,
                         column_index: 6,
                         rotation: Rotation(
                             1,
@@ -24510,7 +24686,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 18,
+                                    query_index: 19,
                                     column_index: 7,
                                     rotation: Rotation(
                                         1,
@@ -25040,7 +25216,7 @@ PinnedVerificationKey {
                         ),
                         Scaled(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -25186,7 +25362,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -25301,7 +25477,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -25422,7 +25598,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -25543,14 +25719,14 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
                         ),
                     },
                     Advice {
-                        query_index: 16,
+                        query_index: 17,
                         column_index: 9,
                         rotation: Rotation(
                             1,
@@ -25685,7 +25861,7 @@ PinnedVerificationKey {
                         ),
                         Scaled(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -25843,7 +26019,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -25958,7 +26134,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -26079,14 +26255,14 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
                         ),
                     },
                     Advice {
-                        query_index: 16,
+                        query_index: 17,
                         column_index: 9,
                         rotation: Rotation(
                             1,
@@ -26320,7 +26496,7 @@ PinnedVerificationKey {
                         ),
                         Scaled(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -26430,7 +26606,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -26497,7 +26673,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -26570,14 +26746,14 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
                         ),
                     },
                     Advice {
-                        query_index: 16,
+                        query_index: 17,
                         column_index: 9,
                         rotation: Rotation(
                             1,
@@ -26665,7 +26841,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 22,
+                                    query_index: 16,
                                     column_index: 6,
                                     rotation: Rotation(
                                         1,
@@ -26676,7 +26852,7 @@ PinnedVerificationKey {
                         ),
                         Scaled(
                             Advice {
-                                query_index: 18,
+                                query_index: 19,
                                 column_index: 7,
                                 rotation: Rotation(
                                     1,
@@ -26786,7 +26962,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -26853,14 +27029,14 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
                         ),
                     },
                     Advice {
-                        query_index: 22,
+                        query_index: 16,
                         column_index: 6,
                         rotation: Rotation(
                             1,
@@ -26926,7 +27102,7 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -26999,14 +27175,14 @@ PinnedVerificationKey {
                 ),
                 Product(
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
                         ),
                     },
                     Advice {
-                        query_index: 16,
+                        query_index: 17,
                         column_index: 9,
                         rotation: Rotation(
                             1,
@@ -27181,7 +27357,7 @@ PinnedVerificationKey {
                             ),
                             Scaled(
                                 Advice {
-                                    query_index: 22,
+                                    query_index: 16,
                                     column_index: 6,
                                     rotation: Rotation(
                                         1,
@@ -27370,7 +27546,7 @@ PinnedVerificationKey {
                     ),
                     Negated(
                         Advice {
-                            query_index: 19,
+                            query_index: 20,
                             column_index: 8,
                             rotation: Rotation(
                                 1,
@@ -27517,7 +27693,7 @@ PinnedVerificationKey {
                         ),
                     },
                     Advice {
-                        query_index: 18,
+                        query_index: 19,
                         column_index: 7,
                         rotation: Rotation(
                             1,
@@ -27590,7 +27766,7 @@ PinnedVerificationKey {
                         ),
                     },
                     Advice {
-                        query_index: 16,
+                        query_index: 17,
                         column_index: 9,
                         rotation: Rotation(
                             1,
@@ -27855,6 +28031,15 @@ PinnedVerificationKey {
             ),
             (
                 Column {
+                    index: 6,
+                    column_type: Advice,
+                },
+                Rotation(
+                    1,
+                ),
+            ),
+            (
+                Column {
                     index: 9,
                     column_type: Advice,
                 },
@@ -27905,15 +28090,6 @@ PinnedVerificationKey {
                 },
                 Rotation(
                     -1,
-                ),
-            ),
-            (
-                Column {
-                    index: 6,
-                    column_type: Advice,
-                },
-                Rotation(
-                    1,
                 ),
             ),
             (
@@ -28313,7 +28489,7 @@ PinnedVerificationKey {
                                     Negated(
                                         Scaled(
                                             Advice {
-                                                query_index: 16,
+                                                query_index: 17,
                                                 column_index: 9,
                                                 rotation: Rotation(
                                                     1,
@@ -28673,7 +28849,7 @@ PinnedVerificationKey {
                                             ),
                                         ),
                                         Advice {
-                                            query_index: 18,
+                                            query_index: 19,
                                             column_index: 7,
                                             rotation: Rotation(
                                                 1,
@@ -28917,14 +29093,14 @@ PinnedVerificationKey {
     ],
     permutation: VerifyingKey {
         commitments: [
-            (0x3b61bede3f87e9208caf3626fbe7a645e1b9f9b241a96160c68b708196e86cbb, 0x0932e9c67d6bb593c9b3d6bd9697efe79bb2f81bee35abeaa8a2a0a828d8fcc6),
+            (0x26d7150d98acf5efa7739440641d97629e2d6553547920432e43d747b998d49e, 0x3223285fb44e1736e7216cd51276087bce39f7e5c0fdb1ef49ab4c6de26b256d),
             (0x07800024b352149368405f222a8dfbf373bd4603df89929a5d00f7ac9ffac504, 0x250be8a84de9a8ded91e85860f1b1751f6bd2c0aba96329ee2d6f0e377f4679f),
             (0x3384b0dbfa6553ad5adf0b218df2cbe6243c33102a97774b4e023ec1dc2d83e9, 0x2873fe49458cd70b9d72419e0d6a6ceadb8070f4b62a0bb47c58a89269e0b583),
             (0x38def0fd8f233ef8651a28ffb7ae6f1e4eaeb0acec19453a3e5a0d70b2058782, 0x0512c67736284a225f0b6617cabd76ac2e4a6805940af4480798ca884e02d277),
             (0x26b6d69fd8c13013c6ab5fb74bd3fbe85d01b0abb57e149ff53e77a535c6bf40, 0x05ae4f52e4ab72ff3cf2b64df6d371fda270f4f78ed0bccce8e3138d4e30e4a0),
             (0x3f1b6f3ea5a2b24646dbe1c6f7c7dbf797fe6602a344bed59668ba5413519631, 0x0401a6f6ed893aa112f234127f8c30ee6e09b45f75993351aea9974389b261d6),
             (0x2f34843015cfc9c9ff59c7ecab3cbb6aea69dcf6f5af79e166f25d90f70353d5, 0x2bcfde5880412d171705b41124b404a323697c4d1008b2e8b2bf9966e5809d3d),
-            (0x1241f0e0058575ff769809aa569ab0ff12d5b2d7d840eae76912c16433be00ff, 0x33339365e1edbdb387b0a0b7dc5a9212c0313bb0a131c9302bc57db36174f3b0),
+            (0x082e9af26adc31f97c38ce587ffde9af5d8238d16ad61a236bbd3c805515f144, 0x051d36eb85b6402dfb2a55ae1507b358319d016483d7ecf6be49793bbb64e79e),
             (0x240a361e73afa04a2e5cc578680e54bf28e3375dbb35a8918c3cdbc91f1bc25b, 0x161c53e65c1b6500b576d8fa982e2565dbe35954840b0bab8a3d912158b9dbe7),
             (0x32f883bbd63b0700f0150ea8d71f6f5d7cdcc4463289983d71e9bc104d4a5c28, 0x33aeb42bec794138b8db28696bd7cef4946a8a89edcbf3f8289655ff9f9129ee),
             (0x03f33d3064517ab1a8e538444013bd0d6b011f9923f8cb964763a88d6d7409e0, 0x16f534b6d12d9e011b951e374982f048f0bed808099fd3ed97cd827360f6fb65),
