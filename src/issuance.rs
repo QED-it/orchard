@@ -181,7 +181,7 @@ impl IssueAction {
 
     /// Serialize `finalize` flag to a byte
     pub fn flags(&self) -> u8 {
-        self.finalize.then_some(0b0000_0001).unwrap_or(0b0000_0000)
+        u8::from(self.finalize)
     }
 }
 
