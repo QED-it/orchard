@@ -62,13 +62,12 @@ impl DynamicUsage for IssueAction {
 
     #[inline(always)]
     fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
-        let bounds = (
-            self.asset_desc.dynamic_usage_bounds(),
-            self.notes.dynamic_usage_bounds(),
-        );
+        let asset_desc_bounds = self.asset_desc.dynamic_usage_bounds();
+        let note_bounds = self.notes.dynamic_usage_bounds();
+
         (
-            bounds.0 .0 + bounds.1 .0,
-            bounds.0 .1.zip(bounds.1 .1).map(|(a, b)| a + b),
+            asset_desc_bounds.0 + note_bounds.0,
+            asset_desc_bounds.1.zip(note_bounds.1).map(|(a, b)| a + b),
         )
     }
 }
@@ -494,18 +493,16 @@ impl DynamicUsage for IssueBundle<Signed> {
     }
 
     fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
-        let bounds = (
-            self.actions.dynamic_usage_bounds(),
-            self.ik.dynamic_usage_bounds(),
-            self.authorization.dynamic_usage_bounds(),
-        );
+        let action_bounds = self.actions.dynamic_usage_bounds();
+        let ik_bounds = self.ik.dynamic_usage_bounds();
+        let authorization_bounds = self.authorization.dynamic_usage_bounds();
+
         (
-            bounds.0 .0 + bounds.1 .0 + bounds.2 .0,
-            bounds
-                .0
-                 .1
-                .zip(bounds.1 .1)
-                .zip(bounds.2 .1)
+            action_bounds.0 + ik_bounds.0 + authorization_bounds.0,
+            action_bounds
+                .1
+                .zip(ik_bounds.1)
+                .zip(authorization_bounds.1)
                 .map(|((a, b), c)| a + b + c),
         )
     }
