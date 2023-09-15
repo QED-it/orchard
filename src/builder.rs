@@ -465,7 +465,7 @@ impl Builder {
             .cloned()
             .unwrap();
         (num_actions < MIN_ACTIONS)
-            .then(|| MIN_ACTIONS - num_actions)
+            .then_some(MIN_ACTIONS - num_actions)
             .unwrap_or(0)
     }
 

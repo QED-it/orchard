@@ -64,7 +64,7 @@ impl SupplyInfo {
         finalization_set.extend(
             self.assets
                 .iter()
-                .filter_map(|(asset, supply)| supply.is_finalized.then(|| asset)),
+                .filter_map(|(asset, supply)| supply.is_finalized.then_some(asset)),
         );
     }
 }

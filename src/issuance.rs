@@ -166,7 +166,7 @@ impl IssueAction {
                 // All assets should be derived correctly
                 note.asset()
                     .eq(&issue_asset)
-                    .then(|| ())
+                    .then_some(())
                     .ok_or(IssueBundleIkMismatchAssetBase)?;
 
                 // The total amount should not overflow
@@ -181,7 +181,7 @@ impl IssueAction {
 
     /// Serialize `finalize` flag to a byte
     pub fn flags(&self) -> u8 {
-        self.finalize.then(|| 0b0000_0001).unwrap_or(0b0000_0000)
+        self.finalize.then_some(0b0000_0001).unwrap_or(0b0000_0000)
     }
 }
 
