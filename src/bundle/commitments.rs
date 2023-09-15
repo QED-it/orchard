@@ -96,12 +96,18 @@ pub fn hash_bundle_auth_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION).finalize()
 }
 
-/// Construct the commitment for an absent issue bundle
+/// Construct the commitment for an absent issue bundle as defined in
+/// [ZIP-227: Issuance of Zcash Shielded Assets][zip227]
+///
+/// [zip227]: https://qed-it.github.io/zips/zip-0227
 pub fn hash_issue_bundle_auth_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION).finalize()
 }
 
-/// Construct the commitment for the absent issue bundle
+/// Construct the commitment for an absent issue bundle as defined in
+/// [ZIP-227: Issuance of Zcash Shielded Assets][zip227]
+///
+/// [zip227]: https://qed-it.github.io/zips/zip-0227
 pub fn hash_issue_bundle_txid_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION).finalize()
 }

@@ -37,7 +37,7 @@ impl BatchValidator {
         }
     }
 
-    /// Adds the proof, RedPallas signatures and burn from the given bundle to the validator.
+    /// Adds the proof, RedPallas signatures and burn mechanism values from the given bundle to the validator.
     pub fn add_bundle<V: Copy + Into<i64>>(
         &mut self,
         bundle: &Bundle<Authorized, V>,

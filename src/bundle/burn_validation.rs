@@ -1,6 +1,6 @@
 //! Validating burn operations on asset bundles.
 //!
-//! The module provides a function `validate_bundle_burn` that can be used to validate a burn for a bundle.
+//! The module provides a function `validate_bundle_burn` that can be used to validate the burn values for the bundle.
 //!
 use std::fmt;
 
@@ -14,20 +14,8 @@ pub enum BurnError {
     DuplicateAsset,
     /// Cannot burn a native asset.
     NativeAsset,
-    /// Cannot burn an asset with a nonpositive value.
+    /// Cannot burn an asset with a non-positive value.
     NonPositiveAmount,
-}
-
-impl fmt::Display for BurnError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            BurnError::DuplicateAsset => write!(f, "Encountered a duplicate asset to burn."),
-            BurnError::NativeAsset => write!(f, "Cannot burn a native asset."),
-            BurnError::NonPositiveAmount => {
-                write!(f, "Cannot burn an asset with a nonpositive value.")
-            }
-        }
-    }
 }
 
 /// Validates burn for a bundle by ensuring each asset is unique, non-native, and has a positive value.
@@ -43,7 +31,7 @@ impl fmt::Display for BurnError {
 /// Returns a `BurnError` if:
 /// * Any asset in the `burn` vector is not unique (`BurnError::DuplicateAsset`).
 /// * Any asset in the `burn` vector is native (`BurnError::NativeAsset`).
-/// * Any asset in the `burn` vector has a nonpositive value (`BurnError::NonPositiveAmount`).
+/// * Any asset in the `burn` vector has a non-positive value (`BurnError::NonPositiveAmount`).
 pub fn validate_bundle_burn(bundle_burn: &Vec<(AssetBase, i64)>) -> Result<(), BurnError> {
     let mut asset_set = std::collections::HashSet::<&AssetBase>::new();
 
@@ -60,6 +48,18 @@ pub fn validate_bundle_burn(bundle_burn: &Vec<(AssetBase, i64)>) -> Result<(), B
     }
 
     Ok(())
+}
+
+impl fmt::Display for BurnError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BurnError::DuplicateAsset => write!(f, "Encountered a duplicate asset to burn."),
+            BurnError::NativeAsset => write!(f, "Cannot burn a native asset."),
+            BurnError::NonPositiveAmount => {
+                write!(f, "Cannot burn an asset with a non-positive value.")
+            }
+        }
+    }
 }
 
 #[cfg(test)]
