@@ -180,8 +180,13 @@ impl IssueAction {
     }
 
     /// Serialize `finalize` flag to a byte
+    #[allow(clippy::bool_to_int_with_if)]
     pub fn flags(&self) -> u8 {
-        u8::from(self.finalize)
+        if self.finalize {
+            0b0000_0001
+        } else {
+            0b0000_0000
+        }
     }
 }
 
