@@ -3,7 +3,6 @@
 mod batch;
 
 pub mod commitments;
-
 pub use batch::BatchValidator;
 
 use core::fmt;
