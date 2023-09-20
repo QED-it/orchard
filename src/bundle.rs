@@ -1,8 +1,8 @@
 //! Structs related to bundles of Orchard actions.
 
 mod batch;
-
 pub mod commitments;
+
 pub use batch::BatchValidator;
 
 use core::fmt;
