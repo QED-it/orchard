@@ -1901,10 +1901,16 @@ pub(in crate::circuit) mod gadgets {
             // 6. hash_zec = hash(hash_prefix, suffix_zec)
             // 7. hash_zsa = hash(hash_prefix, suffix_zsa)
             // 8. hash_point = if (is_native_asset == 0) {hash_zsa} else {hash_zec}
-            let (hash_point_zec, _zs_zec) =
-                zec_domain.hash(layouter.namespace(|| "hash ZEC note"), message_zec)?;
-            let (hash_point_zsa, zs_zsa) =
-                zsa_domain.hash(layouter.namespace(|| "hash ZSA note"), message_zsa)?;
+            let (hash_point_zec, _zs_zec) = zec_domain.hash_with_private_init(
+                layouter.namespace(|| "hash ZEC note"),
+                q_init_zec,
+                message_zec,
+            )?;
+            let (hash_point_zsa, zs_zsa) = zsa_domain.hash_with_private_init(
+                layouter.namespace(|| "hash ZSA note"),
+                q_init_zsa,
+                message_zsa,
+            )?;
 
             // Perform a MUX to select the desired hash point
             // hash_point = hash_zec if is_native_asset is true
