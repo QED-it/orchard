@@ -1911,14 +1911,14 @@ pub(in crate::circuit) mod gadgets {
             // hash_point_zec = hash(common_hash, message_suffix_zec) = hash(q_init, message_zec)
             let (hash_point_zec, _zs_zec) = zec_domain.hash_with_private_init(
                 layouter.namespace(|| "hash suffix ZEC note"),
-                &common_hash.inner(),
+                common_hash.inner(),
                 message_suffix_zec,
             )?;
 
             // hash_point_zsa = hash(common_hash, message_suffix_zsa) = hash(q_init, message_zsa)
             let (hash_point_zsa, zs_zsa) = zec_domain.hash_with_private_init(
                 layouter.namespace(|| "hash suffix ZSA note"),
-                &common_hash.inner(),
+                common_hash.inner(),
                 message_suffix_zsa,
             )?;
 
