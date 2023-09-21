@@ -1,4 +1,4 @@
-use halo2_gadgets::ecc::chip::EccPoint;
+use halo2_gadgets::ecc::chip::{EccPoint, NonIdentityEccPoint};
 use halo2_proofs::{
     circuit::{AssignedCell, Chip, Layouter, Value},
     plonk::{self, Advice, Column, ConstraintSystem, Constraints, Expression, Selector},
@@ -85,6 +85,16 @@ pub(crate) trait MuxInstructions {
         left: &EccPoint,
         right: &EccPoint,
     ) -> Result<EccPoint, plonk::Error>;
+
+    /// Constraints `MUX(choice, left, right)` and returns the selected point.
+    /// `left`, `right` are non identity points.
+    fn mux_for_non_identity_point(
+        &self,
+        layouter: impl Layouter<pallas::Base>,
+        choice: &AssignedCell<pallas::Base, pallas::Base>,
+        left: &NonIdentityEccPoint,
+        right: &NonIdentityEccPoint,
+    ) -> Result<NonIdentityEccPoint, plonk::Error>;
 }
 
 impl MuxInstructions for MuxChip {
@@ -135,6 +145,58 @@ impl MuxInstructions for MuxChip {
         )?;
 
         Ok(EccPoint::from_coordinates_unchecked(
+            x_cell.into(),
+            y_cell.into(),
+        ))
+    }
+
+    fn mux_for_non_identity_point(
+        &self,
+        mut layouter: impl Layouter<pallas::Base>,
+        choice: &AssignedCell<pallas::Base, pallas::Base>,
+        left: &NonIdentityEccPoint,
+        right: &NonIdentityEccPoint,
+    ) -> Result<NonIdentityEccPoint, plonk::Error> {
+        let x_cell = layouter.assign_region(
+            || "mux x",
+            |mut region| {
+                self.config.q_mux.enable(&mut region, 0)?;
+
+                choice.copy_advice(|| "copy choice", &mut region, self.config.choice, 0)?;
+                left.x()
+                    .copy_advice(|| "copy left_x", &mut region, self.config.left, 0)?;
+                right
+                    .x()
+                    .copy_advice(|| "copy right_x", &mut region, self.config.right, 0)?;
+
+                let out_val = (Value::known(pallas::Base::one()) - choice.value())
+                    * left.x().value()
+                    + choice.value() * right.x().value();
+
+                region.assign_advice(|| "out x", self.config.out, 0, || out_val)
+            },
+        )?;
+        let y_cell = layouter.assign_region(
+            || "mux y",
+            |mut region| {
+                self.config.q_mux.enable(&mut region, 0)?;
+
+                choice.copy_advice(|| "copy choice", &mut region, self.config.choice, 0)?;
+                left.y()
+                    .copy_advice(|| "copy left_y", &mut region, self.config.left, 0)?;
+                right
+                    .y()
+                    .copy_advice(|| "copy right_y", &mut region, self.config.right, 0)?;
+
+                let out_val = (Value::known(pallas::Base::one()) - choice.value())
+                    * left.y().value()
+                    + choice.value() * right.y().value();
+
+                region.assign_advice(|| "out y", self.config.out, 0, || out_val)
+            },
+        )?;
+
+        Ok(NonIdentityEccPoint::from_coordinates_unchecked(
             x_cell.into(),
             y_cell.into(),
         ))
