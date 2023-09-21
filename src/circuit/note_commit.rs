@@ -16,7 +16,7 @@ use crate::{
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, NonIdentityEccPoint},
-        Point, ScalarFixed,
+        NonIdentityPoint, Point, ScalarFixed,
     },
     sinsemilla::{
         chip::{SinsemillaChip, SinsemillaConfig},
@@ -1886,8 +1886,24 @@ pub(in crate::circuit) mod gadgets {
             let zsa_domain =
                 CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteZsaCommit);
 
-            let q_init_zec = zec_domain.q_init();
-            let q_init_zsa = zsa_domain.q_init();
+            let q_init_zec = NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "q_init_zec"),
+                Value::known(zec_domain.q_init()),
+            )?;
+
+            let q_init_zsa = NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "q_init_zsa"),
+                Value::known(zsa_domain.q_init()),
+            )?;
+
+            let q_init = mux_chip.mux_for_non_identity_point(
+                layouter.namespace(|| "mux on hash point"),
+                &is_native_asset,
+                q_init_zsa.inner(),
+                q_init_zec.inner(),
+            )?;
 
             // We evaluate `hash_point_zec=hash(Q_ZEC, message_zec)` and `hash_point_zsa(Q_ZSA, message_zsa)
             // and then perform a MUX to select the desired hash_point
@@ -1903,12 +1919,12 @@ pub(in crate::circuit) mod gadgets {
             // 8. hash_point = if (is_native_asset == 0) {hash_zsa} else {hash_zec}
             let (hash_point_zec, _zs_zec) = zec_domain.hash_with_private_init(
                 layouter.namespace(|| "hash ZEC note"),
-                q_init_zec,
+                &q_init,
                 message_zec,
             )?;
             let (hash_point_zsa, zs_zsa) = zsa_domain.hash_with_private_init(
                 layouter.namespace(|| "hash ZSA note"),
-                q_init_zsa,
+                &q_init,
                 message_zsa,
             )?;
 
