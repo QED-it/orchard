@@ -1886,6 +1886,9 @@ pub(in crate::circuit) mod gadgets {
             let zsa_domain =
                 CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteZsaCommit);
 
+            let q_init_zec = zec_domain.q_init();
+            let q_init_zsa = zsa_domain.q_init();
+
             // We evaluate `hash_point_zec=hash(Q_ZEC, message_zec)` and `hash_point_zsa(Q_ZSA, message_zsa)
             // and then perform a MUX to select the desired hash_point
             // TODO: We can optimize the evaluation of hash_point by mutualizing a portion of the
