@@ -1725,39 +1725,4 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn orchard_cost_test() {
-        let mut rng = OsRng;
-
-        let (circuit1, instance1) = generate_circuit_instance(false, false, &mut rng);
-        let (circuit2, instance2) = generate_circuit_instance(false, false, &mut rng);
-        let circuits = &[circuit1.clone(), circuit2];
-        let instances = &[instance1, instance2];
-
-        let circuit_cost =
-            halo2_proofs::dev::cost::CircuitCost::<pasta_curves::vesta::Point, _>::measure(
-                K, &circuit1,
-            );
-        println!("Cost: {:?}", circuit_cost);
-        println!(
-            "Proof size: {} bytes",
-            usize::from(circuit_cost.proof_size(2))
-        );
-        println!("Detailed proof size: {:?}", circuit_cost.proof_size(2));
-
-        let vk = VerifyingKey::build();
-        let pk = ProvingKey::build();
-
-        use std::time::Instant;
-        let now = Instant::now();
-        let proof = Proof::create(&pk, circuits, instances, &mut rng).unwrap();
-        println!("Proof creation time: {:?}", now.elapsed());
-
-        println!("Proof size: {} bytes", proof.0.len());
-
-        let now = Instant::now();
-        proof.verify(&vk, instances);
-        println!("Proof verification time: {:?}", now.elapsed());
-    }
 }
