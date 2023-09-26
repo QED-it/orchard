@@ -102,8 +102,8 @@ impl AssetBase {
     ///
     /// This is only used in tests.
     pub(crate) fn random(rng: &mut impl RngCore) -> Self {
-        let sk_iss = IssuanceKey::random(rng);
-        let isk = IssuanceAuthorizingKey::from(&sk_iss);
+        let imk = IssuanceKey::random(rng);
+        let isk = IssuanceAuthorizingKey::from(&imk);
         let ik = IssuanceValidatingKey::from(&isk);
         let asset_descr = "zsa_asset";
         AssetBase::derive(&ik, asset_descr)
@@ -165,10 +165,10 @@ pub mod testing {
     prop_compose! {
         /// Generate an asset ID
         pub fn arb_zsa_asset_id()(
-            sk_iss in arb_issuance_key(),
+            imk in arb_issuance_key(),
             str in "[A-Za-z]{255}"
         ) -> AssetBase {
-            let isk = IssuanceAuthorizingKey::from(&sk_iss);
+            let isk = IssuanceAuthorizingKey::from(&imk);
             AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str)
         }
     }
@@ -176,10 +176,10 @@ pub mod testing {
     prop_compose! {
         /// Generate an asset ID using a specific description
         pub fn zsa_asset_id(asset_desc: String)(
-            sk_iss in arb_issuance_key(),
+            imk in arb_issuance_key(),
         ) -> AssetBase {
             assert!(super::is_asset_desc_of_valid_size(&asset_desc));
-            let isk = IssuanceAuthorizingKey::from(&sk_iss);
+            let isk = IssuanceAuthorizingKey::from(&imk);
             AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc)
         }
     }

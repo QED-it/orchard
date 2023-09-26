@@ -255,11 +255,11 @@ impl IssuanceKey {
     /// Constructs an Orchard issuance key from uniformly-random bytes.
     ///
     /// Returns `None` if the bytes do not correspond to a valid Orchard issuance key.
-    pub fn from_bytes(sk_iss: [u8; 32]) -> CtOption<Self> {
-        let sk_iss = IssuanceKey(sk_iss);
+    pub fn from_bytes(imk: [u8; 32]) -> CtOption<Self> {
+        let imk = IssuanceKey(imk);
         // If isk = 0 (A scalar value), discard this key.
-        let isk = IssuanceAuthorizingKey::derive_inner(&sk_iss);
-        CtOption::new(sk_iss, !isk.is_zero())
+        let isk = IssuanceAuthorizingKey::derive_inner(&imk);
+        CtOption::new(imk, !isk.is_zero())
     }
 
     /// Returns the raw bytes of the issuance key.
@@ -295,9 +295,9 @@ impl IssuanceKey {
 pub struct IssuanceAuthorizingKey(redpallas::SigningKey<IssuanceAuth>);
 
 impl IssuanceAuthorizingKey {
-    /// Derives isk from sk_iss. Internal use only, does not enforce all constraints.
-    fn derive_inner(sk_iss: &IssuanceKey) -> pallas::Scalar {
-        to_scalar(PrfExpand::ZsaIsk.expand(&sk_iss.0))
+    /// Derives isk from imk. Internal use only, does not enforce all constraints.
+    fn derive_inner(imk: &IssuanceKey) -> pallas::Scalar {
+        to_scalar(PrfExpand::ZsaIsk.expand(&imk.0))
     }
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
@@ -311,8 +311,8 @@ impl IssuanceAuthorizingKey {
 }
 
 impl From<&IssuanceKey> for IssuanceAuthorizingKey {
-    fn from(sk_iss: &IssuanceKey) -> Self {
-        let isk = IssuanceAuthorizingKey::derive_inner(sk_iss);
+    fn from(imk: &IssuanceKey) -> Self {
+        let isk = IssuanceAuthorizingKey::derive_inner(imk);
         // IssuanceAuthorizingKey cannot be constructed such that this assertion would fail.
         assert!(!bool::from(isk.is_zero()));
         IssuanceAuthorizingKey(conditionally_negate(isk))
@@ -1267,9 +1267,9 @@ mod tests {
             let ask: SpendAuthorizingKey = (&sk).into();
             assert_eq!(<[u8; 32]>::from(&ask.0), tv.ask);
 
-            let sk_iss = IssuanceKey::from_bytes(tv.sk).unwrap();
+            let imk = IssuanceKey::from_bytes(tv.sk).unwrap();
 
-            let isk: IssuanceAuthorizingKey = (&sk_iss).into();
+            let isk: IssuanceAuthorizingKey = (&imk).into();
             assert_eq!(<[u8; 32]>::from(&isk.0), tv.isk);
 
             let ak: SpendValidatingKey = (&ask).into();
