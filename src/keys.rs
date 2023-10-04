@@ -11,7 +11,6 @@ use group::{
     prime::PrimeCurveAffine,
     Curve, GroupEncoding,
 };
-use memuse::DynamicUsage;
 use pasta_curves::{pallas, pallas::Scalar};
 use rand::{CryptoRng, RngCore};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
@@ -349,18 +348,6 @@ impl PartialEq for IssuanceValidatingKey {
 }
 
 impl Eq for IssuanceValidatingKey {}
-
-impl DynamicUsage for IssuanceValidatingKey {
-    #[inline(always)]
-    fn dynamic_usage(&self) -> usize {
-        0
-    }
-
-    #[inline(always)]
-    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
-        (0, Some(0))
-    }
-}
 
 impl IssuanceValidatingKey {
     /// Converts this spend validating key to its serialized form,
@@ -896,16 +883,6 @@ impl IncomingViewingKey {
 /// An Orchard incoming viewing key that has been precomputed for trial decryption.
 #[derive(Clone, Debug)]
 pub struct PreparedIncomingViewingKey(PreparedNonZeroScalar);
-
-impl memuse::DynamicUsage for PreparedIncomingViewingKey {
-    fn dynamic_usage(&self) -> usize {
-        self.0.dynamic_usage()
-    }
-
-    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
-        self.0.dynamic_usage_bounds()
-    }
-}
 
 impl PreparedIncomingViewingKey {
     /// Performs the necessary precomputations to use an `IncomingViewingKey` for note
