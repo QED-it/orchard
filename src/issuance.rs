@@ -1,7 +1,6 @@
 //! Structs related to issuance bundles and the associated logic.
 use blake2b_simd::Hash as Blake2bHash;
 use group::Group;
-use memuse::DynamicUsage;
 use nonempty::NonEmpty;
 use rand::{CryptoRng, RngCore};
 use std::collections::HashSet;
@@ -48,24 +47,6 @@ pub struct IssueAction {
     notes: Vec<Note>,
     /// `finalize` will prevent further issuance of the same asset type.
     finalize: bool,
-}
-
-impl DynamicUsage for IssueAction {
-    #[inline(always)]
-    fn dynamic_usage(&self) -> usize {
-        self.asset_desc.dynamic_usage() + self.notes.dynamic_usage()
-    }
-
-    #[inline(always)]
-    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
-        let asset_desc_bounds = self.asset_desc.dynamic_usage_bounds();
-        let note_bounds = self.notes.dynamic_usage_bounds();
-
-        (
-            asset_desc_bounds.0 + note_bounds.0,
-            asset_desc_bounds.1.zip(note_bounds.1).map(|(a, b)| a + b),
-        )
-    }
 }
 
 /// The parameters required to add a Note into an IssueAction.
@@ -220,15 +201,6 @@ impl Signed {
 impl IssueAuth for Unauthorized {}
 impl IssueAuth for Prepared {}
 impl IssueAuth for Signed {}
-
-impl DynamicUsage for Signed {
-    fn dynamic_usage(&self) -> usize {
-        0
-    }
-    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
-        (0, Some(0))
-    }
-}
 
 impl<T: IssueAuth> IssueBundle<T> {
     /// Returns the issuer verification key for the bundle.
@@ -485,27 +457,6 @@ impl IssueBundle<Signed> {
     /// This together with `IssueBundle::commitment` bind the entire bundle.
     pub fn authorizing_commitment(&self) -> IssueBundleAuthorizingCommitment {
         IssueBundleAuthorizingCommitment(hash_issue_bundle_auth_data(self))
-    }
-}
-
-impl DynamicUsage for IssueBundle<Signed> {
-    fn dynamic_usage(&self) -> usize {
-        self.actions.dynamic_usage() + self.ik.dynamic_usage() + self.authorization.dynamic_usage()
-    }
-
-    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
-        let action_bounds = self.actions.dynamic_usage_bounds();
-        let ik_bounds = self.ik.dynamic_usage_bounds();
-        let authorization_bounds = self.authorization.dynamic_usage_bounds();
-
-        (
-            action_bounds.0 + ik_bounds.0 + authorization_bounds.0,
-            action_bounds
-                .1
-                .zip(ik_bounds.1)
-                .zip(authorization_bounds.1)
-                .map(|((a, b), c)| a + b + c),
-        )
     }
 }
 
