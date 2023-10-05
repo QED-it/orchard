@@ -342,10 +342,12 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
         // Fixed columns for the Sinsemilla generator lookup table
         let table_idx = meta.lookup_table_column();
+        let table_range_check_tag = meta.lookup_table_column();
         let lookup = (
             table_idx,
             meta.lookup_table_column(),
             meta.lookup_table_column(),
+            table_range_check_tag,
         );
 
         // Instance column used for public inputs
@@ -381,7 +383,8 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
         // We have a lot of free space in the right-most advice columns; use one of them
         // for all of our range checks.
-        let range_check = LookupRangeCheckConfig::configure(meta, advices[9], table_idx);
+        let range_check =
+            LookupRangeCheckConfig::configure(meta, advices[9], table_idx, table_range_check_tag);
 
         // Configuration for curve point operations.
         // This uses 10 advice columns and spans the whole circuit.
