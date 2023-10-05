@@ -68,7 +68,7 @@ mod note_commit;
 mod value_commit_orchard;
 
 /// Size of the Orchard circuit.
-const K: u32 = 12;
+const K: u32 = 11;
 
 // Absolute offsets for public inputs.
 const ANCHOR: usize = 0;
