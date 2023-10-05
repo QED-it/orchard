@@ -1290,8 +1290,8 @@ mod tests {
                     K,
                     &circuits[0],
                 );
-            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5088);
-            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7360);
+            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5120);
+            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7392);
             usize::from(circuit_cost.proof_size(instances.len()))
         };
 
@@ -1408,7 +1408,7 @@ mod tests {
             let test_case_bytes = fs::read("src/circuit_proof_test_case.bin").unwrap();
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
-        assert_eq!(proof.0.len(), 5088);
+        assert_eq!(proof.0.len(), 5120);
 
         assert!(proof.verify(&vk, &[instance]).is_ok());
     }
