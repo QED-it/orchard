@@ -3,7 +3,7 @@
 use blake2b_simd::{Hash, Params};
 use group::ff::PrimeField;
 use std::fmt;
-use zcash_note_encryption::{
+use zcash_note_encryption_zsa::{
     BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes, OutgoingCipherKey, ShieldedOutput,
     AEAD_TAG_SIZE, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
 };
