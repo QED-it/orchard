@@ -2,6 +2,7 @@
 use core::fmt;
 
 use group::GroupEncoding;
+use memuse::DynamicUsage;
 use pasta_curves::pallas;
 use rand::RngCore;
 use subtle::{Choice, ConditionallySelectable, CtOption};
@@ -303,6 +304,18 @@ impl Note {
             rseed_split_note: CtOption::new(RandomSeed::random(rng, &self.rho), 1u8.into()),
             ..self
         }
+    }
+}
+
+impl DynamicUsage for Note {
+    #[inline(always)]
+    fn dynamic_usage(&self) -> usize {
+        0
+    }
+
+    #[inline(always)]
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        (0, Some(0))
     }
 }
 
