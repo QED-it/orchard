@@ -441,7 +441,7 @@ impl BatchDomain for OrchardDomain {
 }
 
 /// Implementation of in-band secret distribution for Orchard bundles.
-pub type OrchardNoteEncryption = zcash_note_encryption::NoteEncryption<OrchardDomain>;
+pub type OrchardNoteEncryption = zcash_note_encryption_zsa::NoteEncryption<OrchardDomain>;
 
 impl<T> ShieldedOutput<OrchardDomain> for Action<T> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
@@ -547,7 +547,7 @@ impl CompactAction {
 mod tests {
     use proptest::prelude::*;
     use rand::rngs::OsRng;
-    use zcash_note_encryption::{
+    use zcash_note_encryption_zsa::{
         try_compact_note_decryption, try_note_decryption, try_output_recovery_with_ovk, Domain,
         EphemeralKeyBytes,
     };

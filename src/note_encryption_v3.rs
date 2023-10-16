@@ -449,7 +449,7 @@ impl CompactAction {
 mod tests {
     use proptest::prelude::*;
     use rand::rngs::OsRng;
-    use zcash_note_encryption::{
+    use zcash_note_encryption_zsa::{
         try_compact_note_decryption, try_note_decryption, try_output_recovery_with_ovk, Domain,
         EphemeralKeyBytes,
     };
