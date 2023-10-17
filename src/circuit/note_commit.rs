@@ -1868,6 +1868,16 @@ pub(in crate::circuit) mod gadgets {
             let message_suffix_zsa =
                 Message::from_pieces(chip.clone(), vec![h_zsa.clone(), i.clone(), j.clone()]);
 
+            // We will evaluate
+            // - `hash_point_zec = hash(Q_ZEC, message_common_prefix || message_suffix_zec)`, and
+            // - `hash_point_zsa = hash(Q_ZSA, message_common_prefix || message_suffix_zsa)`.
+            // by sharing a portion of the hash evaluation process between `hash_point_zec` and
+            // `hash_point_zsa`:
+            // 1. Q = if (is_native_asset == 0) {Q_ZSA} else {Q_ZEC}
+            // 2. common_hash = hash(Q, message_common_prefix) // this part is shared
+            // 3. hash_point_zec = hash(common_hash, message_suffix_zec)
+            // 4. hash_point_zsa = hash(common_hash, message_suffix_zsa)
+            // 5. hash_point = if (is_native_asset == 0) {hash_point_zsa} else {hash_point_zec}
             let zec_domain = CommitDomain::new(
                 chip.clone(),
                 ecc_chip.clone(),
