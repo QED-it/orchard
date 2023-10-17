@@ -10,7 +10,7 @@ use subtle::{Choice, ConstantTimeEq, CtOption};
 use crate::constants::fixed_bases::{
     NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
 };
-use crate::keys::{IssuanceAuthorizingKey, IssuanceKey, IssuanceValidatingKey};
+use crate::keys::{IssuanceAuthorizingKey, IssuanceMasterKey, IssuanceValidatingKey};
 
 /// Note type identifier.
 #[derive(Clone, Copy, Debug, Eq)]
@@ -102,7 +102,7 @@ impl AssetBase {
     ///
     /// This is only used in tests.
     pub(crate) fn random(rng: &mut impl RngCore) -> Self {
-        let imk = IssuanceKey::random(rng);
+        let imk = IssuanceMasterKey::random(rng);
         let isk = IssuanceAuthorizingKey::from(&imk);
         let ik = IssuanceValidatingKey::from(&isk);
         let asset_descr = "zsa_asset";

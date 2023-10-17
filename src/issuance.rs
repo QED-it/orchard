@@ -606,7 +606,7 @@ mod tests {
     };
     use crate::issuance::{verify_issue_bundle, IssueAction, Signed, Unauthorized};
     use crate::keys::{
-        FullViewingKey, IssuanceAuthorizingKey, IssuanceKey, IssuanceValidatingKey, Scope,
+        FullViewingKey, IssuanceAuthorizingKey, IssuanceMasterKey, IssuanceValidatingKey, Scope,
         SpendingKey,
     };
     use crate::note::{AssetBase, Nullifier};
@@ -629,7 +629,7 @@ mod tests {
     ) {
         let mut rng = OsRng;
 
-        let imk = IssuanceKey::random(&mut rng);
+        let imk = IssuanceMasterKey::random(&mut rng);
         let isk: IssuanceAuthorizingKey = (&imk).into();
         let ik: IssuanceValidatingKey = (&isk).into();
 
@@ -951,7 +951,7 @@ mod tests {
         )
         .unwrap();
 
-        let wrong_isk: IssuanceAuthorizingKey = (&IssuanceKey::random(&mut OsRng)).into();
+        let wrong_isk: IssuanceAuthorizingKey = (&IssuanceMasterKey::random(&mut OsRng)).into();
 
         let err = bundle
             .prepare([0; 32])
@@ -1183,7 +1183,7 @@ mod tests {
         )
         .unwrap();
 
-        let wrong_isk: IssuanceAuthorizingKey = (&IssuanceKey::random(&mut rng)).into();
+        let wrong_isk: IssuanceAuthorizingKey = (&IssuanceMasterKey::random(&mut rng)).into();
 
         let mut signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
 
@@ -1278,7 +1278,7 @@ mod tests {
 
         let mut signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
 
-        let incorrect_imk = IssuanceKey::random(&mut rng);
+        let incorrect_imk = IssuanceMasterKey::random(&mut rng);
         let incorrect_isk: IssuanceAuthorizingKey = (&incorrect_imk).into();
         let incorrect_ik: IssuanceValidatingKey = (&incorrect_isk).into();
 

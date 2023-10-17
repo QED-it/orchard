@@ -227,21 +227,21 @@ type IssuanceAuth = SpendAuth;
 ///
 /// [orchardkeycomponents]: https://zips.z.cash/protocol/nu5.pdf#orchardkeycomponents
 #[derive(Debug, Copy, Clone)]
-pub struct IssuanceKey([u8; 32]);
+pub struct IssuanceMasterKey([u8; 32]);
 
-impl From<SpendingKey> for IssuanceKey {
+impl From<SpendingKey> for IssuanceMasterKey {
     fn from(sk: SpendingKey) -> Self {
-        IssuanceKey(*sk.to_bytes())
+        IssuanceMasterKey(*sk.to_bytes())
     }
 }
 
-impl ConstantTimeEq for IssuanceKey {
+impl ConstantTimeEq for IssuanceMasterKey {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.to_bytes().ct_eq(other.to_bytes())
     }
 }
 
-impl IssuanceKey {
+impl IssuanceMasterKey {
     /// Generates a random issuance key.
     ///
     /// This is only used when generating a random AssetBase.
@@ -256,7 +256,7 @@ impl IssuanceKey {
     ///
     /// Returns `None` if the bytes do not correspond to a valid Orchard issuance key.
     pub fn from_bytes(imk: [u8; 32]) -> CtOption<Self> {
-        let imk = IssuanceKey(imk);
+        let imk = IssuanceMasterKey(imk);
         // If isk = 0 (A scalar value), discard this key.
         let isk = IssuanceAuthorizingKey::derive_inner(&imk);
         CtOption::new(imk, !isk.is_zero())
@@ -296,7 +296,7 @@ pub struct IssuanceAuthorizingKey(redpallas::SigningKey<IssuanceAuth>);
 
 impl IssuanceAuthorizingKey {
     /// Derives isk from imk. Internal use only, does not enforce all constraints.
-    fn derive_inner(imk: &IssuanceKey) -> pallas::Scalar {
+    fn derive_inner(imk: &IssuanceMasterKey) -> pallas::Scalar {
         to_scalar(PrfExpand::ZsaIsk.expand(&imk.0))
     }
 
@@ -310,8 +310,8 @@ impl IssuanceAuthorizingKey {
     }
 }
 
-impl From<&IssuanceKey> for IssuanceAuthorizingKey {
-    fn from(imk: &IssuanceKey) -> Self {
+impl From<&IssuanceMasterKey> for IssuanceAuthorizingKey {
+    fn from(imk: &IssuanceMasterKey) -> Self {
         let isk = IssuanceAuthorizingKey::derive_inner(imk);
         // IssuanceAuthorizingKey cannot be constructed such that this assertion would fail.
         assert!(!bool::from(isk.is_zero()));
@@ -1116,7 +1116,7 @@ impl SharedSecret {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use super::{
-        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuanceAuthorizingKey, IssuanceKey,
+        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuanceAuthorizingKey, IssuanceMasterKey,
         IssuanceValidatingKey, SpendingKey,
     };
     use proptest::prelude::*;
@@ -1140,12 +1140,12 @@ pub mod testing {
         /// Generate a uniformly distributed Orchard issuance key.
         pub fn arb_issuance_key()(
             key in prop::array::uniform32(prop::num::u8::ANY)
-                .prop_map(IssuanceKey::from_bytes)
+                .prop_map(IssuanceMasterKey::from_bytes)
                 .prop_filter(
                     "Values must correspond to valid Orchard issuance keys.",
                     |opt| bool::from(opt.is_some())
                 )
-        ) -> IssuanceKey {
+        ) -> IssuanceMasterKey {
             key.unwrap()
         }
     }
@@ -1186,7 +1186,7 @@ pub mod testing {
         /// Generate a uniformly distributed RedDSA issuance authorizing key.
         pub fn arb_issuance_authorizing_key()(rng_seed in prop::array::uniform32(prop::num::u8::ANY)) -> IssuanceAuthorizingKey {
             let mut rng = StdRng::from_seed(rng_seed);
-            IssuanceAuthorizingKey::from(&IssuanceKey::random(&mut rng))
+            IssuanceAuthorizingKey::from(&IssuanceMasterKey::random(&mut rng))
         }
     }
 
@@ -1267,7 +1267,7 @@ mod tests {
             let ask: SpendAuthorizingKey = (&sk).into();
             assert_eq!(<[u8; 32]>::from(&ask.0), tv.ask);
 
-            let imk = IssuanceKey::from_bytes(tv.sk).unwrap();
+            let imk = IssuanceMasterKey::from_bytes(tv.sk).unwrap();
 
             let isk: IssuanceAuthorizingKey = (&imk).into();
             assert_eq!(<[u8; 32]>::from(&isk.0), tv.isk);
