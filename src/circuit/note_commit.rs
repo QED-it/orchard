@@ -9,21 +9,23 @@ use halo2_proofs::{
 use pasta_curves::pallas;
 
 use crate::{
-    circuit::gadget::mux_chip::{MuxChip, MuxInstructions},
     constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P},
     value::NoteValue,
 };
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, NonIdentityEccPoint},
-        Point, ScalarFixed,
+        NonIdentityPoint, Point, ScalarFixed,
     },
     sinsemilla::{
         chip::{SinsemillaChip, SinsemillaConfig},
         CommitDomain, Message, MessagePiece,
     },
     utilities::{
-        bool_check, lookup_range_check::LookupRangeCheckConfig, FieldValue, RangeConstrained,
+        bool_check,
+        lookup_range_check::LookupRangeCheckConfig,
+        mux::{MuxChip, MuxInstructions},
+        FieldValue, RangeConstrained,
     },
 };
 
@@ -1847,8 +1849,8 @@ pub(in crate::circuit) mod gadgets {
         //
         // https://p.z.cash/ZKS:action-cm-old-integrity?partial
         // https://p.z.cash/ZKS:action-cmx-new-integrity?partial
-        let (cm, zs) = {
-            let message_zec = Message::from_pieces(
+        let (cm, zs_common, zs_zsa_suffix) = {
+            let message_common_prefix = Message::from_pieces(
                 chip.clone(),
                 vec![
                     a.clone(),
@@ -1858,26 +1860,24 @@ pub(in crate::circuit) mod gadgets {
                     e.clone(),
                     f.clone(),
                     g.clone(),
-                    h_zec.clone(),
                 ],
             );
 
-            let message_zsa = Message::from_pieces(
-                chip.clone(),
-                vec![
-                    a.clone(),
-                    b.clone(),
-                    c.clone(),
-                    d.clone(),
-                    e.clone(),
-                    f.clone(),
-                    g.clone(),
-                    h_zsa.clone(),
-                    i.clone(),
-                    j.clone(),
-                ],
-            );
+            let message_suffix_zec = Message::from_pieces(chip.clone(), vec![h_zec.clone()]);
 
+            let message_suffix_zsa =
+                Message::from_pieces(chip.clone(), vec![h_zsa.clone(), i.clone(), j.clone()]);
+
+            // We will evaluate
+            // - `hash_point_zec = hash(Q_ZEC, message_common_prefix || message_suffix_zec)`, and
+            // - `hash_point_zsa = hash(Q_ZSA, message_common_prefix || message_suffix_zsa)`.
+            // by sharing a portion of the hash evaluation process between `hash_point_zec` and
+            // `hash_point_zsa`:
+            // 1. Q = if (is_native_asset == 0) {Q_ZSA} else {Q_ZEC}
+            // 2. common_hash = hash(Q, message_common_prefix) // this part is shared
+            // 3. hash_point_zec = hash(common_hash, message_suffix_zec)
+            // 4. hash_point_zsa = hash(common_hash, message_suffix_zsa)
+            // 5. hash_point = if (is_native_asset == 0) {hash_point_zsa} else {hash_point_zec}
             let zec_domain = CommitDomain::new(
                 chip.clone(),
                 ecc_chip.clone(),
@@ -1886,29 +1886,60 @@ pub(in crate::circuit) mod gadgets {
             let zsa_domain =
                 CommitDomain::new(chip, ecc_chip.clone(), &OrchardCommitDomains::NoteZsaCommit);
 
-            // We evaluate `hash_point_zec=hash(Q_ZEC, message_zec)` and `hash_point_zsa(Q_ZSA, message_zsa)
-            // and then perform a MUX to select the desired hash_point
-            // TODO: We can optimize the evaluation of hash_point by mutualizing a portion of the
-            // hash evaluation process between hash_point_zec and hash_point_zsa.
-            // 1. common_bits = a || b || c || d || e || f || g
-            // 2. suffix_zec = h_zec
-            // 3. suffix_zsa = h_zsa || i || j
-            // 4. Q = if (is_native_asset == 0) {Q_ZSA} else {Q_ZEC}
-            // 5. hash_prefix = hash(Q, common_bits) // this part is mutualized
-            // 6. hash_zec = hash(hash_prefix, suffix_zec)
-            // 7. hash_zsa = hash(hash_prefix, suffix_zsa)
-            // 8. hash_point = if (is_native_asset == 0) {hash_zsa} else {hash_zec}
-            let (hash_point_zec, _zs_zec) =
-                zec_domain.hash(layouter.namespace(|| "hash ZEC note"), message_zec)?;
-            let (hash_point_zsa, zs_zsa) =
-                zsa_domain.hash(layouter.namespace(|| "hash ZSA note"), message_zsa)?;
+            // Perform a MUX to select the desired initial Q point
+            // q_init = q_init_zec if is_native_asset is true
+            // q_init = q_init_zsa if is_native_asset is false
+            let q_init = {
+                let q_init_zec = NonIdentityPoint::new(
+                    ecc_chip.clone(),
+                    layouter.namespace(|| "q_init_zec"),
+                    Value::known(zec_domain.q_init()),
+                )?;
+
+                let q_init_zsa = NonIdentityPoint::new(
+                    ecc_chip.clone(),
+                    layouter.namespace(|| "q_init_zsa"),
+                    Value::known(zsa_domain.q_init()),
+                )?;
+
+                mux_chip.mux_on_non_identity_points(
+                    layouter.namespace(|| "mux on hash point"),
+                    &is_native_asset,
+                    q_init_zsa.inner(),
+                    q_init_zec.inner(),
+                )?
+            };
+
+            // common_hash = hash(q_init, message_common_prefix)
+            //
+            // To evaluate the different hash, we could use either zec_domain or zsa_domain
+            // because we use a private initial point.
+            let (common_hash, zs_common) = zec_domain.hash_with_private_init(
+                layouter.namespace(|| "hash common prefix note"),
+                &q_init,
+                message_common_prefix,
+            )?;
+
+            // hash_point_zec = hash(common_hash, message_suffix_zec) = hash(q_init, message_zec)
+            let (hash_point_zec, _zs_zec) = zec_domain.hash_with_private_init(
+                layouter.namespace(|| "hash suffix ZEC note"),
+                common_hash.inner(),
+                message_suffix_zec,
+            )?;
+
+            // hash_point_zsa = hash(common_hash, message_suffix_zsa) = hash(q_init, message_zsa)
+            let (hash_point_zsa, zs_zsa) = zec_domain.hash_with_private_init(
+                layouter.namespace(|| "hash suffix ZSA note"),
+                common_hash.inner(),
+                message_suffix_zsa,
+            )?;
 
             // Perform a MUX to select the desired hash point
             // hash_point = hash_zec if is_native_asset is true
             // hash_point = hash_zsa if is_native_asset is false
             let hash_point = Point::from_inner(
                 ecc_chip,
-                mux_chip.mux(
+                mux_chip.mux_on_points(
                     layouter.namespace(|| "mux on hash point"),
                     &is_native_asset,
                     &(hash_point_zsa.inner().clone().into()),
@@ -1923,19 +1954,19 @@ pub(in crate::circuit) mod gadgets {
             let commitment =
                 hash_point.add(layouter.namespace(|| "M + [r] R"), &blinding_factor)?;
 
-            (commitment, zs_zsa)
+            (commitment, zs_common, zs_zsa)
         };
 
         // `CommitDomain::hash` returns the running sum for each `MessagePiece`. Grab
         // the outputs that we will need for canonicity checks.
-        let z13_a = zs[0][13].clone();
-        let z13_c = zs[2][13].clone();
-        let z1_d = zs[3][1].clone();
-        let z13_f = zs[5][13].clone();
-        let z1_g = zs[6][1].clone();
+        let z13_a = zs_common[0][13].clone();
+        let z13_c = zs_common[2][13].clone();
+        let z1_d = zs_common[3][1].clone();
+        let z13_f = zs_common[5][13].clone();
+        let z1_g = zs_common[6][1].clone();
         let g_2 = z1_g.clone();
-        let z13_g = zs[6][13].clone();
-        let z13_i = zs[8][13].clone();
+        let z13_g = zs_common[6][13].clone();
+        let z13_i = zs_zsa_suffix[1][13].clone();
 
         // Witness and constrain the bounds we need to ensure canonicity.
         let (a_prime, z13_a_prime) = canon_bitshift_130(
@@ -2297,10 +2328,7 @@ mod tests {
     use super::NoteCommitConfig;
     use crate::{
         circuit::{
-            gadget::{
-                assign_free_advice, assign_is_native_asset,
-                mux_chip::{MuxChip, MuxConfig},
-            },
+            gadget::{assign_free_advice, assign_is_native_asset},
             note_commit::{gadgets, NoteCommitChip},
         },
         constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_Q},
@@ -2313,7 +2341,10 @@ mod tests {
             NonIdentityPoint, ScalarFixed,
         },
         sinsemilla::chip::SinsemillaChip,
-        utilities::lookup_range_check::LookupRangeCheckConfig,
+        utilities::{
+            lookup_range_check::LookupRangeCheckConfig,
+            mux::{MuxChip, MuxConfig},
+        },
     };
 
     use ff::{Field, PrimeField};
@@ -2369,10 +2400,12 @@ mod tests {
                 }
 
                 let table_idx = meta.lookup_table_column();
+                let table_range_check_tag = meta.lookup_table_column();
                 let lookup = (
                     table_idx,
                     meta.lookup_table_column(),
                     meta.lookup_table_column(),
+                    table_range_check_tag,
                 );
                 let lagrange_coeffs = [
                     meta.fixed_column(),
@@ -2385,7 +2418,12 @@ mod tests {
                     meta.fixed_column(),
                 ];
 
-                let range_check = LookupRangeCheckConfig::configure(meta, advices[9], table_idx);
+                let range_check = LookupRangeCheckConfig::configure(
+                    meta,
+                    advices[9],
+                    table_idx,
+                    table_range_check_tag,
+                );
                 let sinsemilla_config = SinsemillaChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
