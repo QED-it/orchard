@@ -1116,8 +1116,8 @@ impl SharedSecret {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use super::{
-        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuanceAuthorizingKey, IssuanceMasterKey,
-        IssuanceValidatingKey, SpendingKey,
+        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuanceAuthorizingKey,
+        IssuanceMasterKey, IssuanceValidatingKey, SpendingKey,
     };
     use proptest::prelude::*;
     use rand::{rngs::StdRng, SeedableRng};
