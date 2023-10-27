@@ -223,9 +223,9 @@ type IssuanceAuth = SpendAuth;
 
 /// An issuance key, from which all key material is derived.
 ///
-/// $\mathsf{sk}$ as defined in [Zcash Protocol Spec § 4.2.3: Orchard Key Components][orchardkeycomponents].
+/// $\mathsf{imk}$ as defined in [ZIP 227][issuancekeycomponents].
 ///
-/// [orchardkeycomponents]: https://zips.z.cash/protocol/nu5.pdf#orchardkeycomponents
+/// [issuancekeycomponents]: https://qed-it.github.io/zips/zip-0227#issuance-key-derivation
 #[derive(Debug, Copy, Clone)]
 pub struct IssuanceMasterKey([u8; 32]);
 
