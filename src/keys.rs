@@ -270,7 +270,7 @@ impl IssuanceMasterKey {
         &self.0
     }
 
-    /// Derives the Orchard issuance key for the given seed, coin type, and account.
+    /// Derives the Orchard-ZSA issuance key for the given seed, coin type, and account.
     pub fn from_zip32_seed(
         seed: &[u8],
         coin_type: u32,
@@ -1102,7 +1102,6 @@ pub mod testing {
         IssuanceValidatingKey, SpendingKey,
     };
     use proptest::prelude::*;
-    use rand::{rngs::StdRng, SeedableRng};
 
     prop_compose! {
         /// Generate a uniformly distributed Orchard spending key.

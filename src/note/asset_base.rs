@@ -135,7 +135,7 @@ pub mod testing {
 
     use proptest::prelude::*;
 
-    use crate::keys::{testing::arb_issuance_master_key, IssuanceMasterKey, IssuanceValidatingKey};
+    use crate::keys::{testing::arb_issuance_master_key, IssuanceValidatingKey};
 
     prop_compose! {
         /// Generate a uniformly distributed note type
