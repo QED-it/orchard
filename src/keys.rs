@@ -16,7 +16,6 @@ use rand::{CryptoRng, RngCore};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zcash_note_encryption::EphemeralKeyBytes;
 
-use crate::primitives::redpallas::SigningKey;
 use crate::{
     address::Address,
     primitives::redpallas::{self, SpendAuth, VerificationKey},
@@ -1243,9 +1242,6 @@ mod tests {
             assert_eq!(<[u8; 32]>::from(&ask.0), tv.ask);
 
             let imk = IssuanceMasterKey::from_bytes(tv.sk).unwrap();
-
-            let isk: IssuanceAuthorizingKey = (&imk).into(); // TOREMOVE
-            assert_eq!(<[u8; 32]>::from(&isk.0), tv.isk); // TOREMOVE
 
             let ak: SpendValidatingKey = (&ask).into();
             assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
