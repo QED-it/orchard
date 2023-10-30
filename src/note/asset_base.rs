@@ -136,13 +136,13 @@ pub mod testing {
 
     use proptest::prelude::*;
 
-    use crate::keys::{testing::arb_issuance_key, IssuanceAuthorizingKey, IssuanceValidatingKey};
+    use crate::keys::{testing::arb_issuance_master_key, IssuanceAuthorizingKey, IssuanceValidatingKey};
 
     prop_compose! {
         /// Generate a uniformly distributed note type
         pub fn arb_asset_id()(
             is_native in prop::bool::ANY,
-            sk in arb_issuance_key(),
+            sk in arb_issuance_master_key(),
             str in "[A-Za-z]{255}",
         ) -> AssetBase {
             if is_native {
@@ -165,7 +165,7 @@ pub mod testing {
     prop_compose! {
         /// Generate an asset ID
         pub fn arb_zsa_asset_id()(
-            imk in arb_issuance_key(),
+            imk in arb_issuance_master_key(),
             str in "[A-Za-z]{255}"
         ) -> AssetBase {
             let isk = IssuanceAuthorizingKey::from(&imk);
@@ -176,7 +176,7 @@ pub mod testing {
     prop_compose! {
         /// Generate an asset ID using a specific description
         pub fn zsa_asset_id(asset_desc: String)(
-            imk in arb_issuance_key(),
+            imk in arb_issuance_master_key(),
         ) -> AssetBase {
             assert!(super::is_asset_desc_of_valid_size(&asset_desc));
             let isk = IssuanceAuthorizingKey::from(&imk);
