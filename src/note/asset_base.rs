@@ -10,7 +10,7 @@ use subtle::{Choice, ConstantTimeEq, CtOption};
 use crate::constants::fixed_bases::{
     NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
 };
-use crate::keys::{IssuanceAuthorizingKey, IssuanceMasterKey, IssuanceValidatingKey};
+use crate::keys::{IssuanceMasterKey, IssuanceValidatingKey};
 
 /// Note type identifier.
 #[derive(Clone, Copy, Debug, Eq)]
@@ -103,8 +103,7 @@ impl AssetBase {
     /// This is only used in tests.
     pub(crate) fn random(rng: &mut impl RngCore) -> Self {
         let imk = IssuanceMasterKey::random(rng);
-        let isk = IssuanceAuthorizingKey::from(&imk);
-        let ik = IssuanceValidatingKey::from(&isk);
+        let ik = IssuanceValidatingKey::from(&imk);
         let asset_descr = "zsa_asset";
         AssetBase::derive(&ik, asset_descr)
     }
@@ -136,20 +135,19 @@ pub mod testing {
 
     use proptest::prelude::*;
 
-    use crate::keys::{testing::arb_issuance_master_key, IssuanceAuthorizingKey, IssuanceValidatingKey};
+    use crate::keys::{testing::arb_issuance_master_key, IssuanceMasterKey, IssuanceValidatingKey};
 
     prop_compose! {
         /// Generate a uniformly distributed note type
         pub fn arb_asset_id()(
             is_native in prop::bool::ANY,
-            sk in arb_issuance_master_key(),
+            imk in arb_issuance_master_key(),
             str in "[A-Za-z]{255}",
         ) -> AssetBase {
             if is_native {
                 AssetBase::native()
             } else {
-                let isk = IssuanceAuthorizingKey::from(&sk);
-                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str)
+                AssetBase::derive(&IssuanceValidatingKey::from(&imk), &str)
             }
         }
     }
@@ -168,8 +166,7 @@ pub mod testing {
             imk in arb_issuance_master_key(),
             str in "[A-Za-z]{255}"
         ) -> AssetBase {
-            let isk = IssuanceAuthorizingKey::from(&imk);
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str)
+            AssetBase::derive(&IssuanceValidatingKey::from(&imk), &str)
         }
     }
 
@@ -179,8 +176,7 @@ pub mod testing {
             imk in arb_issuance_master_key(),
         ) -> AssetBase {
             assert!(super::is_asset_desc_of_valid_size(&asset_desc));
-            let isk = IssuanceAuthorizingKey::from(&imk);
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc)
+            AssetBase::derive(&IssuanceValidatingKey::from(&imk), &asset_desc)
         }
     }
 

@@ -302,41 +302,6 @@ impl IssuanceMasterKey {
     }
 }
 
-// TOREMOVE:
-/// An issuance authorizing key, used to create issuance authorization signatures.
-/// This type enforces that the corresponding public point (ik^ℙ) has ỹ = 0.
-///
-/// $\mathsf{isk}$ as defined in
-/// [Issuance of Zcash Shielded Assets ZIP-0227 § Asset Identifier Generation (DRAFT ZIP)][IssuanceZSA].
-///
-/// [IssuanceZSA]: https://qed-it.github.io/zips/draft-ZIP-0227.html#asset-identifier-generation
-#[derive(Clone, Debug)]
-pub struct IssuanceAuthorizingKey(redpallas::SigningKey<IssuanceAuth>); //TOREMOVE
-
-impl IssuanceAuthorizingKey {
-    /// Derives isk from imk. Internal use only, does not enforce all constraints.
-    fn derive_inner(imk: &IssuanceMasterKey) -> pallas::Scalar { //TOREMOVE
-        to_scalar(PrfExpand::ZsaIsk.expand(&imk.0))
-    }
-
-    /// Sign the provided message using the `IssuanceAuthorizingKey`.
-    pub fn sign( //TOREMOVE
-        &self,
-        rng: &mut (impl RngCore + CryptoRng),
-        msg: &[u8],
-    ) -> redpallas::Signature<IssuanceAuth> {
-        self.0.sign(rng, msg)
-    }
-}
-
-impl From<&IssuanceMasterKey> for IssuanceAuthorizingKey {
-    fn from(imk: &IssuanceMasterKey) -> Self { //TOREMOVE
-        let isk = IssuanceAuthorizingKey::derive_inner(imk);
-        // IssuanceAuthorizingKey cannot be constructed such that this assertion would fail.
-        assert!(!bool::from(isk.is_zero()));
-        IssuanceAuthorizingKey(conditionally_negate(isk))
-    }
-}
 
 /// A key used to validate issuance authorization signatures.
 ///
@@ -347,12 +312,6 @@ impl From<&IssuanceMasterKey> for IssuanceAuthorizingKey {
 /// [IssuanceZSA]: https://qed-it.github.io/zips/zip-0227#issuance-key-derivation
 #[derive(Debug, Clone, PartialOrd, Ord)]
 pub struct IssuanceValidatingKey(VerificationKey<IssuanceAuth>);
-
-impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey { //TOREMOVE
-    fn from(isk: &IssuanceAuthorizingKey) -> Self {
-        IssuanceValidatingKey((&isk.0).into())
-    }
-}
 
 impl From<&IssuanceMasterKey> for IssuanceValidatingKey {
     fn from(imk: &IssuanceMasterKey) -> Self {
@@ -1141,7 +1100,7 @@ impl SharedSecret {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use super::{
-        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuanceAuthorizingKey,
+        DiversifierIndex, DiversifierKey, EphemeralSecretKey,
         IssuanceMasterKey, IssuanceValidatingKey, SpendingKey,
     };
     use proptest::prelude::*;
@@ -1204,14 +1163,6 @@ pub mod testing {
             d_bytes in prop::array::uniform11(prop::num::u8::ANY)
         ) -> DiversifierIndex {
             DiversifierIndex::from(d_bytes)
-        }
-    }
-
-    prop_compose! {
-        /// Generate a uniformly distributed RedDSA issuance authorizing key.
-        pub fn arb_issuance_authorizing_key()(rng_seed in prop::array::uniform32(prop::num::u8::ANY)) -> IssuanceAuthorizingKey { //TOREMOVE
-            let mut rng = StdRng::from_seed(rng_seed);
-            IssuanceAuthorizingKey::from(&IssuanceMasterKey::random(&mut rng))
         }
     }
 

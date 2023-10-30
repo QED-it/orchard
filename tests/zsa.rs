@@ -5,7 +5,7 @@ use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
 use orchard::bundle::Authorized;
 use orchard::issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized};
-use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
+use orchard::keys::{IssuanceMasterKey, IssuanceValidatingKey};
 use orchard::note::{AssetBase, ExtractedNoteCommitment};
 use orchard::note_encryption_v3::OrchardDomainV3;
 use orchard::tree::{MerkleHashOrchard, MerklePath};
@@ -14,7 +14,7 @@ use orchard::{
     bundle::Flags,
     circuit::{ProvingKey, VerifyingKey},
     keys::{
-        FullViewingKey, IssuanceMasterKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey,
+        FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey,
         SpendingKey,
     },
     value::NoteValue,
@@ -30,7 +30,7 @@ struct Keychain {
     vk: VerifyingKey,
     sk: SpendingKey,
     fvk: FullViewingKey,
-    isk: IssuanceAuthorizingKey,
+    imk: IssuanceMasterKey,
     ik: IssuanceValidatingKey,
     recipient: Address,
 }
@@ -45,8 +45,8 @@ impl Keychain {
     fn fvk(&self) -> &FullViewingKey {
         &self.fvk
     }
-    fn isk(&self) -> &IssuanceAuthorizingKey {
-        &self.isk
+    fn imk(&self) -> &IssuanceMasterKey {
+        &self.imk
     }
     fn ik(&self) -> &IssuanceValidatingKey {
         &self.ik
@@ -62,14 +62,13 @@ fn prepare_keys() -> Keychain {
     let recipient = fvk.address_at(0u32, Scope::External);
 
     let imk = IssuanceMasterKey::from_bytes([0; 32]).unwrap();
-    let isk = IssuanceAuthorizingKey::from(&imk);
-    let ik = IssuanceValidatingKey::from(&isk);
+    let ik = IssuanceValidatingKey::from(&imk);
     Keychain {
         pk,
         vk,
         sk,
         fvk,
-        isk,
+        imk,
         ik,
         recipient,
     }
@@ -78,11 +77,11 @@ fn prepare_keys() -> Keychain {
 fn sign_issue_bundle(
     unauthorized: IssueBundle<Unauthorized>,
     rng: OsRng,
-    isk: &IssuanceAuthorizingKey,
+    imk: &IssuanceMasterKey,
 ) -> IssueBundle<Signed> {
     let sighash = unauthorized.commitment().into();
     let proven = unauthorized.prepare(sighash);
-    proven.sign(rng, isk).unwrap()
+    proven.sign(rng, imk).unwrap()
 }
 
 fn build_and_sign_bundle(
@@ -165,7 +164,7 @@ fn issue_zsa_notes(asset_descr: &str, keys: &Keychain) -> (Note, Note) {
         )
         .is_ok());
 
-    let issue_bundle = sign_issue_bundle(unauthorized, rng, keys.isk());
+    let issue_bundle = sign_issue_bundle(unauthorized, rng, keys.imk());
 
     // Take notes from first action
     let notes = issue_bundle.get_all_notes();

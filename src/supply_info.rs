@@ -80,12 +80,11 @@ mod tests {
     use super::*;
 
     fn create_test_asset(asset_desc: &str) -> AssetBase {
-        use crate::keys::{IssuanceAuthorizingKey, IssuanceMasterKey, IssuanceValidatingKey};
+        use crate::keys::{IssuanceMasterKey, IssuanceValidatingKey};
 
         let imk = IssuanceMasterKey::from_bytes([0u8; 32]).unwrap();
-        let isk: IssuanceAuthorizingKey = (&imk).into();
 
-        AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc)
+        AssetBase::derive(&IssuanceValidatingKey::from(&imk), asset_desc)
     }
 
     fn sum<'a, T: IntoIterator<Item = &'a AssetSupply>>(supplies: T) -> Option<ValueSum> {

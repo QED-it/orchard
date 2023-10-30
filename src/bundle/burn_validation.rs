@@ -81,13 +81,12 @@ mod tests {
     /// A tuple `(AssetBase, Amount)` representing the burn list item.
     ///
     pub fn get_burn_tuple(asset_desc: &str, value: i64) -> (AssetBase, i64) {
-        use crate::keys::{IssuanceAuthorizingKey, IssuanceMasterKey, IssuanceValidatingKey};
+        use crate::keys::{IssuanceMasterKey, IssuanceValidatingKey};
 
         let imk = IssuanceMasterKey::from_bytes([0u8; 32]).unwrap();
-        let isk: IssuanceAuthorizingKey = (&imk).into();
 
         (
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc),
+            AssetBase::derive(&IssuanceValidatingKey::from(&imk), asset_desc),
             value,
         )
     }
