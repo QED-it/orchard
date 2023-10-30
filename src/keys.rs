@@ -16,6 +16,7 @@ use rand::{CryptoRng, RngCore};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zcash_note_encryption::EphemeralKeyBytes;
 
+use crate::primitives::redpallas::SigningKey;
 use crate::{
     address::Address,
     primitives::redpallas::{self, SpendAuth, VerificationKey},
@@ -29,7 +30,6 @@ use crate::{
         ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE,
     },
 };
-use crate::primitives::redpallas::SigningKey;
 
 const KDF_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_OrchardKDF";
 const ZIP32_PURPOSE: u32 = 32;
@@ -301,7 +301,6 @@ impl IssuanceMasterKey {
         conditionally_negate(self.derive_inner()).sign(rng, msg)
     }
 }
-
 
 /// A key used to validate issuance authorization signatures.
 ///
@@ -1100,8 +1099,8 @@ impl SharedSecret {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use super::{
-        DiversifierIndex, DiversifierKey, EphemeralSecretKey,
-        IssuanceMasterKey, IssuanceValidatingKey, SpendingKey,
+        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuanceMasterKey,
+        IssuanceValidatingKey, SpendingKey,
     };
     use proptest::prelude::*;
     use rand::{rngs::StdRng, SeedableRng};

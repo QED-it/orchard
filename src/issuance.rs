@@ -606,8 +606,7 @@ mod tests {
     };
     use crate::issuance::{verify_issue_bundle, IssueAction, Signed, Unauthorized};
     use crate::keys::{
-        FullViewingKey, IssuanceMasterKey, IssuanceValidatingKey, Scope,
-        SpendingKey,
+        FullViewingKey, IssuanceMasterKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
     use crate::note::{AssetBase, Nullifier};
     use crate::value::{NoteValue, ValueSum};

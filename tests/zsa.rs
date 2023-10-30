@@ -13,10 +13,7 @@ use orchard::{
     builder::Builder,
     bundle::Flags,
     circuit::{ProvingKey, VerifyingKey},
-    keys::{
-        FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey,
-        SpendingKey,
-    },
+    keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     value::NoteValue,
     Address, Anchor, Bundle, Note,
 };
