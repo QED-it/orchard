@@ -223,25 +223,25 @@ type IssuanceAuth = SpendAuth;
 
 /// An issuance key, from which all key material is derived.
 ///
-/// $\mathsf{imk}$ as defined in [ZIP 227][issuancekeycomponents].
+/// $\mathsf{isk}$ as defined in [ZIP 227][issuancekeycomponents].
 ///
 /// [issuancekeycomponents]: https://qed-it.github.io/zips/zip-0227#issuance-key-derivation
 #[derive(Debug, Copy, Clone)]
-pub struct IssuanceMasterKey([u8; 32]);
+pub struct IssuanceAuthorizingKey([u8; 32]);
 
-impl From<SpendingKey> for IssuanceMasterKey {
+impl From<SpendingKey> for IssuanceAuthorizingKey {
     fn from(sk: SpendingKey) -> Self {
-        IssuanceMasterKey(*sk.to_bytes())
+        IssuanceAuthorizingKey(*sk.to_bytes())
     }
 }
 
-impl ConstantTimeEq for IssuanceMasterKey {
+impl ConstantTimeEq for IssuanceAuthorizingKey {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.to_bytes().ct_eq(other.to_bytes())
     }
 }
 
-impl IssuanceMasterKey {
+impl IssuanceAuthorizingKey {
     /// Generates a random issuance key.
     ///
     /// This is only used when generating a random AssetBase.
@@ -255,12 +255,12 @@ impl IssuanceMasterKey {
     /// Constructs an Orchard issuance key from uniformly-random bytes.
     ///
     /// Returns `None` if the bytes do not correspond to a valid Orchard issuance key.
-    pub fn from_bytes(imk_bytes: [u8; 32]) -> CtOption<Self> {
-        let imk = IssuanceMasterKey(imk_bytes);
-        CtOption::new(imk, imk.is_valid())
+    pub fn from_bytes(isk_bytes: [u8; 32]) -> CtOption<Self> {
+        let isk = IssuanceAuthorizingKey(isk_bytes);
+        CtOption::new(isk, isk.is_valid())
     }
 
-    /// Checks whether the Orchard-ZSA issuance key is valid
+    /// Checks whether the Orchard-ZSA issuance key is valid //TODO: What are the criteria?
     pub fn is_valid(self) -> Choice {
         1u8.into()
     }
@@ -286,12 +286,12 @@ impl IssuanceMasterKey {
             .map(|esk| esk.sk().into())
     }
 
-    /// Derives the RedPallas signing key from imk. Internal use only, does not enforce all constraints.
+    /// Derives the RedPallas signing key from isk. Internal use only, does not enforce all constraints.
     fn derive_inner(&self) -> pallas::Scalar {
         to_scalar(PrfExpand::ZsaIsk.expand(&self.0))
     }
 
-    /// Sign the provided message using the `IssuanceMasterKey`.
+    /// Sign the provided message using the `IssuanceAuthorizingKey`.
     pub fn sign(
         &self,
         rng: &mut (impl RngCore + CryptoRng),
@@ -311,9 +311,9 @@ impl IssuanceMasterKey {
 #[derive(Debug, Clone, PartialOrd, Ord)]
 pub struct IssuanceValidatingKey(VerificationKey<IssuanceAuth>);
 
-impl From<&IssuanceMasterKey> for IssuanceValidatingKey {
-    fn from(imk: &IssuanceMasterKey) -> Self {
-        IssuanceValidatingKey((&(conditionally_negate(imk.derive_inner()))).into())
+impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
+    fn from(isk: &IssuanceAuthorizingKey) -> Self {
+        IssuanceValidatingKey((&(conditionally_negate(isk.derive_inner()))).into())
     }
 }
 
@@ -1098,7 +1098,7 @@ impl SharedSecret {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use super::{
-        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuanceMasterKey,
+        DiversifierIndex, DiversifierKey, EphemeralSecretKey, IssuanceAuthorizingKey,
         IssuanceValidatingKey, SpendingKey,
     };
     use proptest::prelude::*;
@@ -1119,14 +1119,14 @@ pub mod testing {
 
     prop_compose! {
         /// Generate a uniformly distributed Orchard issuance master key.
-        pub fn arb_issuance_master_key()(
+        pub fn arb_issuance_authorizing_key()(
             key in prop::array::uniform32(prop::num::u8::ANY)
-                .prop_map(IssuanceMasterKey::from_bytes)
+                .prop_map(IssuanceAuthorizingKey::from_bytes)
                 .prop_filter(
                     "Values must correspond to valid Orchard issuance keys.",
                     |opt| bool::from(opt.is_some())
                 )
-        ) -> IssuanceMasterKey {
+        ) -> IssuanceAuthorizingKey {
             key.unwrap()
         }
     }
@@ -1165,8 +1165,8 @@ pub mod testing {
 
     prop_compose! {
         /// Generate a uniformly distributed RedDSA issuance validating key.
-        pub fn arb_issuance_validating_key()(imk in arb_issuance_master_key()) -> IssuanceValidatingKey {
-            IssuanceValidatingKey::from(&imk)
+        pub fn arb_issuance_validating_key()(isk in arb_issuance_authorizing_key()) -> IssuanceValidatingKey {
+            IssuanceValidatingKey::from(&isk)
         }
     }
 }
@@ -1240,12 +1240,12 @@ mod tests {
             let ask: SpendAuthorizingKey = (&sk).into();
             assert_eq!(<[u8; 32]>::from(&ask.0), tv.ask);
 
-            let imk = IssuanceMasterKey::from_bytes(tv.sk).unwrap();
+            let isk = IssuanceAuthorizingKey::from_bytes(tv.sk).unwrap();
 
             let ak: SpendValidatingKey = (&ask).into();
             assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
 
-            let ik: IssuanceValidatingKey = (&imk).into();
+            let ik: IssuanceValidatingKey = (&isk).into();
             assert_eq!(<[u8; 32]>::from(ik.0), tv.ik);
 
             let nk: NullifierDerivingKey = (&sk).into();

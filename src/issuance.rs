@@ -12,7 +12,7 @@ use crate::issuance::Error::{
     IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
     IssueBundleInvalidSignature, ValueSumOverflow, WrongAssetDescSize,
 };
-use crate::keys::{IssuanceMasterKey, IssuanceValidatingKey};
+use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
 use crate::note::{AssetBase, Nullifier};
 use crate::primitives::redpallas::Signature;
@@ -408,13 +408,13 @@ impl IssueBundle<Unauthorized> {
 
 impl IssueBundle<Prepared> {
     /// Sign the `IssueBundle`.
-    /// The call makes sure that the provided `imk` matches the `ik` and the driven `asset` for each note in the bundle.
+    /// The call makes sure that the provided `isk` matches the `ik` and the driven `asset` for each note in the bundle.
     pub fn sign<R: RngCore + CryptoRng>(
         self,
         mut rng: R,
-        imk: &IssuanceMasterKey,
+        isk: &IssuanceAuthorizingKey,
     ) -> Result<IssueBundle<Signed>, Error> {
-        let expected_ik: IssuanceValidatingKey = (imk).into();
+        let expected_ik: IssuanceValidatingKey = (isk).into();
 
         // Make sure the `expected_ik` matches the `asset` for all notes.
         self.actions.iter().try_for_each(|action| {
@@ -426,7 +426,7 @@ impl IssueBundle<Prepared> {
             ik: self.ik,
             actions: self.actions,
             authorization: Signed {
-                signature: imk.sign(&mut rng, &self.authorization.sighash),
+                signature: isk.sign(&mut rng, &self.authorization.sighash),
             },
         })
     }
@@ -532,7 +532,7 @@ pub fn verify_issue_bundle(
 pub enum Error {
     /// The requested IssueAction not exists in the bundle.
     IssueActionNotFound,
-    /// The provided `imk` and the driven `ik` does not match at least one note type.
+    /// The provided `isk` and the derived `ik` does not match at least one note type.
     IssueBundleIkMismatchAssetBase,
     /// `asset_desc` should be between 1 and 512 bytes.
     WrongAssetDescSize,
@@ -562,7 +562,7 @@ impl fmt::Display for Error {
             IssueBundleIkMismatchAssetBase => {
                 write!(
                     f,
-                    "the provided `imk` and the derived `ik` do not match at least one note type"
+                    "the provided `isk` and the derived `ik` do not match at least one note type"
                 )
             }
             WrongAssetDescSize => {
@@ -606,7 +606,7 @@ mod tests {
     };
     use crate::issuance::{verify_issue_bundle, IssueAction, Signed, Unauthorized};
     use crate::keys::{
-        FullViewingKey, IssuanceMasterKey, IssuanceValidatingKey, Scope, SpendingKey,
+        FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
     use crate::note::{AssetBase, Nullifier};
     use crate::value::{NoteValue, ValueSum};
@@ -621,15 +621,15 @@ mod tests {
 
     fn setup_params() -> (
         OsRng,
-        IssuanceMasterKey,
+        IssuanceAuthorizingKey,
         IssuanceValidatingKey,
         Address,
         [u8; 32],
     ) {
         let mut rng = OsRng;
 
-        let imk = IssuanceMasterKey::random(&mut rng);
-        let ik: IssuanceValidatingKey = (&imk).into();
+        let isk = IssuanceAuthorizingKey::random(&mut rng);
+        let ik: IssuanceValidatingKey = (&isk).into();
 
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
         let recipient = fvk.address_at(0u32, Scope::External);
@@ -637,7 +637,7 @@ mod tests {
         let mut sighash = [0u8; 32];
         rng.fill_bytes(&mut sighash);
 
-        (rng, imk, ik, recipient, sighash)
+        (rng, isk, ik, recipient, sighash)
     }
 
     fn setup_verify_supply_test_params(
@@ -686,11 +686,11 @@ mod tests {
         note2_value: u64,
     ) -> (
         OsRng,
-        IssuanceMasterKey,
+        IssuanceAuthorizingKey,
         IssueBundle<Unauthorized>,
         [u8; 32],
     ) {
-        let (mut rng, imk, ik, recipient, sighash) = setup_params();
+        let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
         let note1 = Note::new(
             recipient,
@@ -713,7 +713,7 @@ mod tests {
 
         let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), Unauthorized);
 
-        (rng, imk, bundle, sighash)
+        (rng, isk, bundle, sighash)
     }
 
     #[test]
@@ -915,7 +915,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_sign() {
-        let (rng, imk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -928,14 +928,14 @@ mod tests {
         )
         .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(rng, &imk).unwrap();
+        let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
 
         ik.verify(&sighash, &signed.authorization.signature)
             .expect("signature should be valid");
     }
 
     #[test]
-    fn issue_bundle_invalid_imk_for_signature() {
+    fn issue_bundle_invalid_isk_for_signature() {
         let (rng, _, ik, recipient, _) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
@@ -949,11 +949,11 @@ mod tests {
         )
         .unwrap();
 
-        let wrong_imk: IssuanceMasterKey = IssuanceMasterKey::random(&mut OsRng);
+        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random(&mut OsRng);
 
         let err = bundle
             .prepare([0; 32])
-            .sign(rng, &wrong_imk)
+            .sign(rng, &wrong_isk)
             .expect_err("should not be able to sign");
 
         assert_eq!(err, IssueBundleIkMismatchAssetBase);
@@ -961,7 +961,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_incorrect_asset_for_signature() {
-        let (mut rng, imk, ik, recipient, _) = setup_params();
+        let (mut rng, isk, ik, recipient, _) = setup_params();
 
         // Create a bundle with "normal" note
         let (mut bundle, _) = IssueBundle::new(
@@ -987,7 +987,7 @@ mod tests {
 
         let err = bundle
             .prepare([0; 32])
-            .sign(rng, &imk)
+            .sign(rng, &isk)
             .expect_err("should not be able to sign");
 
         assert_eq!(err, IssueBundleIkMismatchAssetBase);
@@ -995,7 +995,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify() {
-        let (rng, imk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1008,7 +1008,7 @@ mod tests {
         )
         .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(rng, &imk).unwrap();
+        let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
         let prev_finalized = &mut HashSet::new();
 
         let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
@@ -1020,7 +1020,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_with_finalize() {
-        let (rng, imk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (mut bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1037,7 +1037,7 @@ mod tests {
             .finalize_action(String::from("Verify with finalize"))
             .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(rng, &imk).unwrap();
+        let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
         let prev_finalized = &mut HashSet::new();
 
         let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
@@ -1050,7 +1050,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_with_supply_info() {
-        let (rng, imk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let asset1_desc = "Verify with supply info 1";
         let asset2_desc = "Verify with supply info 2";
@@ -1102,7 +1102,7 @@ mod tests {
             )
             .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(rng, &imk).unwrap();
+        let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
         let prev_finalized = &mut HashSet::new();
 
         let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
@@ -1133,7 +1133,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_previously_finalized() {
-        let (rng, imk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1146,7 +1146,7 @@ mod tests {
         )
         .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(rng, &imk).unwrap();
+        let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
         let prev_finalized = &mut HashSet::new();
 
         let final_type = AssetBase::derive(&ik, &String::from("already final"));
@@ -1168,7 +1168,7 @@ mod tests {
             }
         }
 
-        let (mut rng, imk, ik, recipient, sighash) = setup_params();
+        let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1181,12 +1181,12 @@ mod tests {
         )
         .unwrap();
 
-        let wrong_imk: IssuanceMasterKey = IssuanceMasterKey::random(&mut rng);
+        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random(&mut rng);
 
-        let mut signed = bundle.prepare(sighash).sign(rng, &imk).unwrap();
+        let mut signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
 
         signed.set_authorization(Signed {
-            signature: wrong_imk.sign(&mut rng, &sighash),
+            signature: wrong_isk.sign(&mut rng, &sighash),
         });
 
         let prev_finalized = &HashSet::new();
@@ -1199,7 +1199,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_wrong_sighash() {
-        let (rng, imk, ik, recipient, random_sighash) = setup_params();
+        let (rng, isk, ik, recipient, random_sighash) = setup_params();
         let (bundle, _) = IssueBundle::new(
             ik,
             String::from("Asset description"),
@@ -1212,7 +1212,7 @@ mod tests {
         .unwrap();
 
         let sighash: [u8; 32] = bundle.commitment().into();
-        let signed = bundle.prepare(sighash).sign(rng, &imk).unwrap();
+        let signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
         let prev_finalized = &HashSet::new();
 
         assert_eq!(
@@ -1223,7 +1223,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_incorrect_asset_description() {
-        let (mut rng, imk, ik, recipient, sighash) = setup_params();
+        let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1236,7 +1236,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut signed = bundle.prepare(sighash).sign(rng, &imk).unwrap();
+        let mut signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
 
         // Add "bad" note
         let note = Note::new(
@@ -1261,7 +1261,7 @@ mod tests {
     fn issue_bundle_verify_fail_incorrect_ik() {
         let asset_description = "Asset";
 
-        let (mut rng, imk, ik, recipient, sighash) = setup_params();
+        let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1274,10 +1274,10 @@ mod tests {
         )
         .unwrap();
 
-        let mut signed = bundle.prepare(sighash).sign(rng, &imk).unwrap();
+        let mut signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
 
-        let incorrect_imk = IssuanceMasterKey::random(&mut rng);
-        let incorrect_ik: IssuanceValidatingKey = (&incorrect_imk).into();
+        let incorrect_isk = IssuanceAuthorizingKey::random(&mut rng);
+        let incorrect_ik: IssuanceValidatingKey = (&incorrect_isk).into();
 
         // Add "bad" note
         let note = Note::new(
@@ -1307,7 +1307,7 @@ mod tests {
             }
         }
 
-        let (rng, imk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1320,7 +1320,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut signed = bundle.prepare(sighash).sign(rng, &imk).unwrap();
+        let mut signed = bundle.prepare(sighash).sign(rng, &isk).unwrap();
         let prev_finalized = HashSet::new();
 
         // 1. Try too long description
@@ -1345,23 +1345,23 @@ mod tests {
 
     #[test]
     fn issue_bundle_cannot_be_signed_with_asset_base_identity_point() {
-        let (rng, imk, bundle, sighash) = identity_point_test_params(10, 20);
+        let (rng, isk, bundle, sighash) = identity_point_test_params(10, 20);
 
         assert_eq!(
-            bundle.prepare(sighash).sign(rng, &imk).unwrap_err(),
+            bundle.prepare(sighash).sign(rng, &isk).unwrap_err(),
             AssetBaseCannotBeIdentityPoint
         );
     }
 
     #[test]
     fn issue_bundle_verify_fail_asset_base_identity_point() {
-        let (mut rng, imk, bundle, sighash) = identity_point_test_params(10, 20);
+        let (mut rng, isk, bundle, sighash) = identity_point_test_params(10, 20);
 
         let signed = IssueBundle {
             ik: bundle.ik,
             actions: bundle.actions,
             authorization: Signed {
-                signature: imk.sign(&mut rng, &sighash),
+                signature: isk.sign(&mut rng, &sighash),
             },
         };
 

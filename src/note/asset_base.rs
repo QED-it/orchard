@@ -10,7 +10,7 @@ use subtle::{Choice, ConstantTimeEq, CtOption};
 use crate::constants::fixed_bases::{
     NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
 };
-use crate::keys::{IssuanceMasterKey, IssuanceValidatingKey};
+use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 
 /// Note type identifier.
 #[derive(Clone, Copy, Debug, Eq)]
@@ -102,8 +102,8 @@ impl AssetBase {
     ///
     /// This is only used in tests.
     pub(crate) fn random(rng: &mut impl RngCore) -> Self {
-        let imk = IssuanceMasterKey::random(rng);
-        let ik = IssuanceValidatingKey::from(&imk);
+        let isk = IssuanceAuthorizingKey::random(rng);
+        let ik = IssuanceValidatingKey::from(&isk);
         let asset_descr = "zsa_asset";
         AssetBase::derive(&ik, asset_descr)
     }
@@ -135,19 +135,19 @@ pub mod testing {
 
     use proptest::prelude::*;
 
-    use crate::keys::{testing::arb_issuance_master_key, IssuanceValidatingKey};
+    use crate::keys::{testing::arb_issuance_authorizing_key, IssuanceValidatingKey};
 
     prop_compose! {
         /// Generate a uniformly distributed note type
         pub fn arb_asset_id()(
             is_native in prop::bool::ANY,
-            imk in arb_issuance_master_key(),
+            isk in arb_issuance_authorizing_key(),
             str in "[A-Za-z]{255}",
         ) -> AssetBase {
             if is_native {
                 AssetBase::native()
             } else {
-                AssetBase::derive(&IssuanceValidatingKey::from(&imk), &str)
+                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str)
             }
         }
     }
@@ -163,20 +163,20 @@ pub mod testing {
     prop_compose! {
         /// Generate an asset ID
         pub fn arb_zsa_asset_id()(
-            imk in arb_issuance_master_key(),
+            isk in arb_issuance_authorizing_key(),
             str in "[A-Za-z]{255}"
         ) -> AssetBase {
-            AssetBase::derive(&IssuanceValidatingKey::from(&imk), &str)
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str)
         }
     }
 
     prop_compose! {
         /// Generate an asset ID using a specific description
         pub fn zsa_asset_id(asset_desc: String)(
-            imk in arb_issuance_master_key(),
+            isk in arb_issuance_authorizing_key(),
         ) -> AssetBase {
             assert!(super::is_asset_desc_of_valid_size(&asset_desc));
-            AssetBase::derive(&IssuanceValidatingKey::from(&imk), &asset_desc)
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc)
         }
     }
 

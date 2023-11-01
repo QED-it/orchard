@@ -5,7 +5,7 @@ use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
 use orchard::bundle::Authorized;
 use orchard::issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized};
-use orchard::keys::{IssuanceMasterKey, IssuanceValidatingKey};
+use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use orchard::note::{AssetBase, ExtractedNoteCommitment};
 use orchard::note_encryption_v3::OrchardDomainV3;
 use orchard::tree::{MerkleHashOrchard, MerklePath};
@@ -27,7 +27,7 @@ struct Keychain {
     vk: VerifyingKey,
     sk: SpendingKey,
     fvk: FullViewingKey,
-    imk: IssuanceMasterKey,
+    isk: IssuanceAuthorizingKey,
     ik: IssuanceValidatingKey,
     recipient: Address,
 }
@@ -42,8 +42,8 @@ impl Keychain {
     fn fvk(&self) -> &FullViewingKey {
         &self.fvk
     }
-    fn imk(&self) -> &IssuanceMasterKey {
-        &self.imk
+    fn isk(&self) -> &IssuanceAuthorizingKey {
+        &self.isk
     }
     fn ik(&self) -> &IssuanceValidatingKey {
         &self.ik
@@ -58,14 +58,14 @@ fn prepare_keys() -> Keychain {
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
-    let imk = IssuanceMasterKey::from_bytes([0; 32]).unwrap();
-    let ik = IssuanceValidatingKey::from(&imk);
+    let isk = IssuanceAuthorizingKey::from_bytes([0; 32]).unwrap();
+    let ik = IssuanceValidatingKey::from(&isk);
     Keychain {
         pk,
         vk,
         sk,
         fvk,
-        imk,
+        isk,
         ik,
         recipient,
     }
@@ -74,11 +74,11 @@ fn prepare_keys() -> Keychain {
 fn sign_issue_bundle(
     unauthorized: IssueBundle<Unauthorized>,
     rng: OsRng,
-    imk: &IssuanceMasterKey,
+    isk: &IssuanceAuthorizingKey,
 ) -> IssueBundle<Signed> {
     let sighash = unauthorized.commitment().into();
     let proven = unauthorized.prepare(sighash);
-    proven.sign(rng, imk).unwrap()
+    proven.sign(rng, isk).unwrap()
 }
 
 fn build_and_sign_bundle(
@@ -161,7 +161,7 @@ fn issue_zsa_notes(asset_descr: &str, keys: &Keychain) -> (Note, Note) {
         )
         .is_ok());
 
-    let issue_bundle = sign_issue_bundle(unauthorized, rng, keys.imk());
+    let issue_bundle = sign_issue_bundle(unauthorized, rng, keys.isk());
 
     // Take notes from first action
     let notes = issue_bundle.get_all_notes();
