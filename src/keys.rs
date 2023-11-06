@@ -289,7 +289,7 @@ impl IssuanceAuthorizingKey {
             .map(|esk| esk.sk().into())
     }
 
-    /// Derives the RedPallas signing key from isk. Internal use only, does not enforce all constraints.
+    /// Derives the RedPallas signing key from isk. Internal use only, does not enforce all constraints. //TOREMOVE
     fn derive_inner(&self) -> pallas::Scalar {
         to_scalar(PrfExpand::ZsaIsk.expand(&self.0))
     }
@@ -299,8 +299,9 @@ impl IssuanceAuthorizingKey {
         &self,
         rng: &mut (impl RngCore + CryptoRng),
         msg: &[u8],
-    ) -> redpallas::Signature<IssuanceAuth> {
-        conditionally_negate(self.derive_inner()).sign(rng, msg)
+    ) -> schnorr::Signature {
+        let schnorr_sk = schnorr::SigningKey::from_bytes(&self.0).unwrap();
+        schnorr_sk.sign(msg)
     }
 }
 
