@@ -1,6 +1,7 @@
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use group::{Group, GroupEncoding};
 use halo2_proofs::arithmetic::CurveExt;
+use k256::schnorr::CryptoRngCore;
 use pasta_curves::pallas;
 use rand::RngCore;
 use std::hash::{Hash, Hasher};
@@ -101,7 +102,7 @@ impl AssetBase {
     /// Generates a ZSA random asset.
     ///
     /// This is only used in tests.
-    pub(crate) fn random(rng: &mut impl RngCore) -> Self {
+    pub(crate) fn random(rng: &mut (impl RngCore + CryptoRngCore)) -> Self {
         let isk = IssuanceAuthorizingKey::random(rng);
         let ik = IssuanceValidatingKey::from(&isk);
         let asset_descr = "zsa_asset";

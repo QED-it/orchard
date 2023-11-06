@@ -5,12 +5,17 @@ use std::io::{self, Read, Write};
 
 use aes::Aes256;
 use blake2b_simd::{Hash as Blake2bHash, Params};
+use crypto_bigint::Encoding;
 use fpe::ff1::{BinaryNumeralString, FF1};
 use group::{
     ff::{Field, PrimeField},
     prime::PrimeCurveAffine,
     Curve, GroupEncoding,
 };
+use k256::elliptic_curve::FieldBytesEncoding;
+use k256::schnorr::signature::Signer;
+use k256::schnorr::CryptoRngCore;
+use k256::{schnorr, Secp256k1, U256};
 use pasta_curves::{pallas, pallas::Scalar};
 use rand::{CryptoRng, RngCore};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
@@ -248,8 +253,11 @@ impl IssuanceAuthorizingKey {
     /// Real issuance keys should be derived according to [ZIP 32].
     ///
     /// [ZIP 32]: https://zips.z.cash/zip-0032
-    pub(crate) fn random(rng: &mut impl RngCore) -> Self {
-        SpendingKey::random(rng).into()
+    pub(crate) fn random(rng: &mut (impl RngCore + CryptoRngCore)) -> Self {
+        let temp: U256 = <U256 as FieldBytesEncoding<Secp256k1>>::decode_field_bytes(
+            &(schnorr::SigningKey::random(rng).to_bytes()),
+        );
+        IssuanceAuthorizingKey(temp.to_be_bytes())
     }
 
     /// Constructs an Orchard issuance key from uniformly-random bytes.
