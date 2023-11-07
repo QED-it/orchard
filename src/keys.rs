@@ -257,12 +257,7 @@ impl IssuanceAuthorizingKey {
     /// Returns `None` if the bytes do not correspond to a valid Orchard issuance key.
     pub fn from_bytes(isk_bytes: [u8; 32]) -> CtOption<Self> {
         let isk = IssuanceAuthorizingKey(isk_bytes);
-        CtOption::new(isk, isk.is_valid())
-    }
-
-    /// Checks whether the Orchard-ZSA issuance key is valid //TODO: What are the criteria?
-    pub fn is_valid(self) -> Choice {
-        1u8.into()
+        CtOption::new(isk, 1u8.into())
     }
 
     /// Returns the raw bytes of the issuance key.
