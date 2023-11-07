@@ -13,11 +13,11 @@ use group::{
     Curve, GroupEncoding,
 };
 use k256::elliptic_curve::FieldBytesEncoding;
-use k256::schnorr::signature::Signer;
+use k256::schnorr::signature::{Signer, Verifier};
 use k256::schnorr::CryptoRngCore;
 use k256::{schnorr, Secp256k1, U256};
 use pasta_curves::{pallas, pallas::Scalar};
-use rand::{CryptoRng, RngCore};
+use rand::RngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zcash_note_encryption_zsa::EphemeralKeyBytes;
 
@@ -295,11 +295,7 @@ impl IssuanceAuthorizingKey {
     }
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
-    pub fn sign(
-        &self,
-        rng: &mut (impl RngCore + CryptoRng),
-        msg: &[u8],
-    ) -> schnorr::Signature {
+    pub fn sign(&self, msg: &[u8]) -> schnorr::Signature {
         let schnorr_sk = schnorr::SigningKey::from_bytes(&self.0).unwrap();
         schnorr_sk.sign(msg)
     }
@@ -312,24 +308,21 @@ impl IssuanceAuthorizingKey {
 /// $\mathsf{ik}$ but stored here as a RedPallas verification key.
 ///
 /// [IssuanceZSA]: https://qed-it.github.io/zips/zip-0227#issuance-key-derivation
-#[derive(Debug, Clone, PartialOrd, Ord)]
-pub struct IssuanceValidatingKey(VerificationKey<IssuanceAuth>);
+#[derive(Debug, Clone)]
+pub struct IssuanceValidatingKey(schnorr::VerifyingKey);
 
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
-        IssuanceValidatingKey((&(conditionally_negate(isk.derive_inner()))).into())
-    }
-}
-
-impl From<&IssuanceValidatingKey> for pallas::Point {
-    fn from(issuance_validating_key: &IssuanceValidatingKey) -> pallas::Point {
-        pallas::Point::from_bytes(&(&issuance_validating_key.0).into()).unwrap()
+        let schnorr_sk = schnorr::SigningKey::from_bytes(&isk.0).unwrap();
+        IssuanceValidatingKey(schnorr_sk.verifying_key().clone())
     }
 }
 
 impl PartialEq for IssuanceValidatingKey {
     fn eq(&self, other: &Self) -> bool {
-        <[u8; 32]>::from(&self.0).eq(&<[u8; 32]>::from(&other.0))
+        let temp1: [u8; 32] = self.to_bytes();
+        let temp2: [u8; 32] = other.to_bytes();
+        temp1.eq(&temp2)
     }
 }
 
@@ -341,16 +334,17 @@ impl IssuanceValidatingKey {
     pub fn to_bytes(&self) -> [u8; 32] {
         // This is correct because the wrapped point must have ỹ = 0, and
         // so the point repr is the same as I2LEOSP of its x-coordinate.
-        <[u8; 32]>::from(&self.0)
+        <U256 as FieldBytesEncoding<Secp256k1>>::decode_field_bytes(&self.0.to_bytes())
+            .to_be_bytes()
     }
 
-    /// Constructs an Orchard issuance validating key from uniformly-random bytes.
+    /// Constructs an Orchard issuance validating key from the provided bytes.
+    /// The bytes are assumed to be encoded in big-endian order.
     ///
     /// Returns `None` if the bytes do not correspond to a valid key.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        <[u8; 32]>::try_from(bytes)
+        schnorr::VerifyingKey::from_bytes(bytes)
             .ok()
-            .and_then(check_structural_validity)
             .map(IssuanceValidatingKey)
     }
 
@@ -358,8 +352,8 @@ impl IssuanceValidatingKey {
     pub fn verify(
         &self,
         msg: &[u8],
-        signature: &redpallas::Signature<IssuanceAuth>,
-    ) -> Result<(), reddsa::Error> {
+        signature: &schnorr::Signature,
+    ) -> Result<(), k256::ecdsa::Error> {
         self.0.verify(msg, signature)
     }
 }

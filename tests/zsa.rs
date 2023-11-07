@@ -78,7 +78,7 @@ fn sign_issue_bundle(
 ) -> IssueBundle<Signed> {
     let sighash = unauthorized.commitment().into();
     let proven = unauthorized.prepare(sighash);
-    proven.sign(rng, isk).unwrap()
+    proven.sign(isk).unwrap()
 }
 
 fn build_and_sign_bundle(

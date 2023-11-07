@@ -188,10 +188,8 @@ pub mod testing {
         for tv in test_vectors {
             let description = std::str::from_utf8(&tv.description).unwrap();
 
-            let calculated_asset_base = AssetBase::derive(
-                &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
-                description,
-            );
+            let calculated_asset_base =
+                AssetBase::derive(&IssuanceValidatingKey::from_bytes().unwrap(), description);
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();
 
             assert_eq!(calculated_asset_base, test_vector_asset_base);
