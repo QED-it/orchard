@@ -446,10 +446,12 @@ impl Builder {
         let value_balance = self
             .spends
             .iter()
+            .filter(|spend| spend.note.asset().is_native().unwrap_u8() == 1)
             .map(|spend| spend.note.value() - NoteValue::zero())
             .chain(
                 self.recipients
                     .iter()
+                    .filter(|recipient| recipient.asset.is_native().unwrap_u8() == 1)
                     .map(|recipient| NoteValue::zero() - recipient.value),
             )
             .fold(Some(ValueSum::zero()), |acc, note_value| acc? + note_value)
