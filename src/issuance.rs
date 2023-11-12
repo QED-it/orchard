@@ -2,8 +2,9 @@
 use blake2b_simd::Hash as Blake2bHash;
 use group::Group;
 use k256::schnorr;
+use k256::schnorr::CryptoRngCore;
 use nonempty::NonEmpty;
-use rand::{CryptoRng, RngCore};
+use rand::RngCore;
 use std::collections::HashSet;
 use std::fmt;
 
@@ -406,7 +407,7 @@ impl IssueBundle<Unauthorized> {
 impl IssueBundle<Prepared> {
     /// Sign the `IssueBundle`.
     /// The call makes sure that the provided `isk` matches the `ik` and the driven `asset` for each note in the bundle.
-    pub fn sign<R: RngCore + CryptoRng>(
+    pub fn sign<R: CryptoRngCore>(
         self,
         isk: &IssuanceAuthorizingKey,
     ) -> Result<IssueBundle<Signed>, Error> {
@@ -548,6 +549,24 @@ pub enum Error {
 }
 
 impl std::error::Error for Error {}
+
+impl PartialEq for Error {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (IssueActionNotFound, IssueActionNotFound) => true,
+            (IssueBundleIkMismatchAssetBase, IssueBundleIkMismatchAssetBase) => true,
+            (WrongAssetDescSize, WrongAssetDescSize) => true,
+            (IssueActionWithoutNoteNotFinalized, IssueActionWithoutNoteNotFinalized) => true,
+            (AssetBaseCannotBeIdentityPoint, AssetBaseCannotBeIdentityPoint) => true,
+            (IssueBundleInvalidSignature(_), IssueBundleInvalidSignature(_)) => true, //might want to do better here?
+            (IssueActionPreviouslyFinalizedAssetBase(x), IssueActionPreviouslyFinalizedAssetBase(y)) => x == y,
+            (ValueSumOverflow, ValueSumOverflow) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Error {}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1396,12 +1415,11 @@ pub mod testing {
     use crate::keys::testing::arb_issuance_validating_key;
     use crate::note::asset_base::testing::zsa_asset_id;
     use crate::note::testing::arb_zsa_note;
-    use k256::schnorr::Signature;
+    use k256::schnorr;
     use nonempty::NonEmpty;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
-    use reddsa::orchard::SpendAuth;
 
     prop_compose! {
         /// Generate a uniformly distributed signature
@@ -1410,7 +1428,7 @@ pub mod testing {
         ) -> schnorr::Signature {
             // prop::array can only generate 32 elements max, so we duplicate it
             let sig_bytes: [u8; 64] = [half_bytes, half_bytes].concat().try_into().unwrap();
-            let sig: schnorr::Signature = schnorr::Signature::from_bytes(sig_bytes);
+            let sig = schnorr::Signature::try_from(sig_bytes.as_slice()).unwrap();
             sig
         }
     }

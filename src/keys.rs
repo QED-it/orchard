@@ -253,7 +253,7 @@ impl IssuanceAuthorizingKey {
     /// Real issuance keys should be derived according to [ZIP 32].
     ///
     /// [ZIP 32]: https://zips.z.cash/zip-0032
-    pub(crate) fn random(rng: &mut (impl RngCore + CryptoRngCore)) -> Self {
+    pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
         let temp: U256 = <U256 as FieldBytesEncoding<Secp256k1>>::decode_field_bytes(
             &(schnorr::SigningKey::random(rng).to_bytes()),
         );

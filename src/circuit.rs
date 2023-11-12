@@ -1187,6 +1187,7 @@ mod tests {
     use ff::Field;
     use group::{Curve, Group, GroupEncoding};
     use halo2_proofs::{circuit::Value, dev::MockProver};
+    use k256::schnorr::CryptoRngCore;
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, RngCore};
 
@@ -1477,7 +1478,7 @@ mod tests {
         }
     }
 
-    fn generate_circuit_instance<R: RngCore>(
+    fn generate_circuit_instance<R: RngCore + CryptoRngCore>(
         is_native_asset: bool,
         split_flag: bool,
         mut rng: R,
@@ -1573,7 +1574,7 @@ mod tests {
         )
     }
 
-    fn random_note_commitment(mut rng: impl RngCore) -> NoteCommitment {
+    fn random_note_commitment(mut rng: (impl RngCore + CryptoRngCore)) -> NoteCommitment {
         NoteCommitment::derive(
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
