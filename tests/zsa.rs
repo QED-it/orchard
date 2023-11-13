@@ -73,7 +73,6 @@ fn prepare_keys() -> Keychain {
 
 fn sign_issue_bundle(
     unauthorized: IssueBundle<Unauthorized>,
-    rng: OsRng,
     isk: &IssuanceAuthorizingKey,
 ) -> IssueBundle<Signed> {
     let sighash = unauthorized.commitment().into();
@@ -161,7 +160,7 @@ fn issue_zsa_notes(asset_descr: &str, keys: &Keychain) -> (Note, Note) {
         )
         .is_ok());
 
-    let issue_bundle = sign_issue_bundle(unauthorized, rng, keys.isk());
+    let issue_bundle = sign_issue_bundle(unauthorized, keys.isk());
 
     // Take notes from first action
     let notes = issue_bundle.get_all_notes();

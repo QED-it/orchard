@@ -2,7 +2,6 @@
 use blake2b_simd::Hash as Blake2bHash;
 use group::Group;
 use k256::schnorr;
-use k256::schnorr::CryptoRngCore;
 use nonempty::NonEmpty;
 use rand::RngCore;
 use std::collections::HashSet;
@@ -407,10 +406,7 @@ impl IssueBundle<Unauthorized> {
 impl IssueBundle<Prepared> {
     /// Sign the `IssueBundle`.
     /// The call makes sure that the provided `isk` matches the `ik` and the driven `asset` for each note in the bundle.
-    pub fn sign<R: CryptoRngCore>(
-        self,
-        isk: &IssuanceAuthorizingKey,
-    ) -> Result<IssueBundle<Signed>, Error> {
+    pub fn sign(self, isk: &IssuanceAuthorizingKey) -> Result<IssueBundle<Signed>, Error> {
         let expected_ik: IssuanceValidatingKey = (isk).into();
 
         // Make sure the `expected_ik` matches the `asset` for all notes.
@@ -540,7 +536,7 @@ pub enum Error {
 
     /// Verification errors:
     /// Invalid signature.
-    IssueBundleInvalidSignature(k256::ecdsa::Error),
+    IssueBundleInvalidSignature(schnorr::Error),
     /// The provided `AssetBase` has been previously finalized.
     IssueActionPreviouslyFinalizedAssetBase(AssetBase),
 
@@ -559,7 +555,10 @@ impl PartialEq for Error {
             (IssueActionWithoutNoteNotFinalized, IssueActionWithoutNoteNotFinalized) => true,
             (AssetBaseCannotBeIdentityPoint, AssetBaseCannotBeIdentityPoint) => true,
             (IssueBundleInvalidSignature(_), IssueBundleInvalidSignature(_)) => true, //might want to do better here?
-            (IssueActionPreviouslyFinalizedAssetBase(x), IssueActionPreviouslyFinalizedAssetBase(y)) => x == y,
+            (
+                IssueActionPreviouslyFinalizedAssetBase(x),
+                IssueActionPreviouslyFinalizedAssetBase(y),
+            ) => x == y,
             (ValueSumOverflow, ValueSumOverflow) => true,
             _ => false,
         }
@@ -627,11 +626,11 @@ mod tests {
     use crate::value::{NoteValue, ValueSum};
     use crate::{Address, Note};
     use group::{Group, GroupEncoding};
+    use k256::schnorr;
     use nonempty::NonEmpty;
     use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
-    use reddsa::Error::InvalidSignature;
     use std::collections::HashSet;
 
     fn setup_params() -> (
@@ -699,12 +698,7 @@ mod tests {
     fn identity_point_test_params(
         note1_value: u64,
         note2_value: u64,
-    ) -> (
-        OsRng,
-        IssuanceAuthorizingKey,
-        IssueBundle<Unauthorized>,
-        [u8; 32],
-    ) {
+    ) -> (IssuanceAuthorizingKey, IssueBundle<Unauthorized>, [u8; 32]) {
         let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
         let note1 = Note::new(
@@ -728,7 +722,7 @@ mod tests {
 
         let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), Unauthorized);
 
-        (rng, isk, bundle, sighash)
+        (isk, bundle, sighash)
     }
 
     #[test]
@@ -749,7 +743,7 @@ mod tests {
 
     #[test]
     fn verify_supply_invalid_for_asset_base_as_identity() {
-        let (_, _, bundle, _) = identity_point_test_params(10, 20);
+        let (_, bundle, _) = identity_point_test_params(10, 20);
 
         assert_eq!(
             bundle.actions.head.verify_supply(&bundle.ik),
@@ -1201,14 +1195,14 @@ mod tests {
         let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
 
         signed.set_authorization(Signed {
-            signature: wrong_isk.sign(&mut rng, &sighash),
+            signature: wrong_isk.sign(&sighash),
         });
 
         let prev_finalized = &HashSet::new();
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
-            IssueBundleInvalidSignature(InvalidSignature)
+            IssueBundleInvalidSignature(schnorr::Error::new())
         );
     }
 
@@ -1232,7 +1226,7 @@ mod tests {
 
         assert_eq!(
             verify_issue_bundle(&signed, random_sighash, prev_finalized).unwrap_err(),
-            IssueBundleInvalidSignature(InvalidSignature)
+            IssueBundleInvalidSignature(schnorr::Error::new())
         );
     }
 
@@ -1360,7 +1354,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_cannot_be_signed_with_asset_base_identity_point() {
-        let (rng, isk, bundle, sighash) = identity_point_test_params(10, 20);
+        let (isk, bundle, sighash) = identity_point_test_params(10, 20);
 
         assert_eq!(
             bundle.prepare(sighash).sign(&isk).unwrap_err(),
@@ -1370,13 +1364,13 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_asset_base_identity_point() {
-        let (mut rng, isk, bundle, sighash) = identity_point_test_params(10, 20);
+        let (isk, bundle, sighash) = identity_point_test_params(10, 20);
 
         let signed = IssueBundle {
             ik: bundle.ik,
             actions: bundle.actions,
             authorization: Signed {
-                signature: isk.sign(&mut rng, &sighash),
+                signature: isk.sign(&sighash),
             },
         };
 

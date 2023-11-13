@@ -314,7 +314,7 @@ pub struct IssuanceValidatingKey(schnorr::VerifyingKey);
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
         let schnorr_sk = schnorr::SigningKey::from_bytes(&isk.0).unwrap();
-        IssuanceValidatingKey(schnorr_sk.verifying_key().clone())
+        IssuanceValidatingKey(*schnorr_sk.verifying_key())
     }
 }
 
@@ -1244,7 +1244,7 @@ mod tests {
             assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
 
             let ik: IssuanceValidatingKey = (&isk).into();
-            assert_eq!(<[u8; 32]>::from(ik.0), tv.ik);
+            assert_eq!(ik.to_bytes(), tv.ik);
 
             let nk: NullifierDerivingKey = (&sk).into();
             assert_eq!(nk.0.to_repr(), tv.nk);
