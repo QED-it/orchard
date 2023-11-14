@@ -1478,7 +1478,7 @@ mod tests {
         }
     }
 
-    fn generate_circuit_instance<R: RngCore + CryptoRngCore>(
+    fn generate_circuit_instance<R: CryptoRngCore>(
         is_native_asset: bool,
         split_flag: bool,
         mut rng: R,
@@ -1574,7 +1574,7 @@ mod tests {
         )
     }
 
-    fn random_note_commitment(mut rng: (impl RngCore + CryptoRngCore)) -> NoteCommitment {
+    fn random_note_commitment(mut rng: impl CryptoRngCore) -> NoteCommitment {
         NoteCommitment::derive(
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
