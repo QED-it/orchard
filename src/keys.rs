@@ -5,7 +5,6 @@ use std::io::{self, Read, Write};
 
 use aes::Aes256;
 use blake2b_simd::{Hash as Blake2bHash, Params};
-use crypto_bigint::Encoding;
 use fpe::ff1::{BinaryNumeralString, FF1};
 use group::{
     ff::{Field, PrimeField},
@@ -15,6 +14,7 @@ use group::{
 use k256::elliptic_curve::FieldBytesEncoding;
 use k256::schnorr::signature::{Signer, Verifier};
 use k256::schnorr::CryptoRngCore;
+use k256::elliptic_curve::bigint::Encoding;
 use k256::{schnorr, Secp256k1, U256};
 use pasta_curves::{pallas, pallas::Scalar};
 use rand::RngCore;

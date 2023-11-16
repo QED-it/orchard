@@ -26,7 +26,6 @@ rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 aes = "0.8"
 bitvec = "1"
 blake2b_simd = "=1.0.1" # Last version required rust 1.66
-crypto-bigint = "0.5.3"
 ff = "0.13"
 fpe = "0.6"
 group = { version = "0.13", features = ["wnaf-memuse"] }
