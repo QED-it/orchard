@@ -11,10 +11,10 @@ use group::{
     prime::PrimeCurveAffine,
     Curve, GroupEncoding,
 };
+use k256::elliptic_curve::bigint::Encoding;
 use k256::elliptic_curve::FieldBytesEncoding;
 use k256::schnorr::signature::{Signer, Verifier};
 use k256::schnorr::CryptoRngCore;
-use k256::elliptic_curve::bigint::Encoding;
 use k256::{schnorr, Secp256k1, U256};
 use pasta_curves::{pallas, pallas::Scalar};
 use rand::RngCore;
