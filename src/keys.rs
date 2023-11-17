@@ -254,10 +254,14 @@ impl IssuanceAuthorizingKey {
     ///
     /// [ZIP 32]: https://zips.z.cash/zip-0032
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
-        let temp: U256 = <U256 as FieldBytesEncoding<Secp256k1>>::decode_field_bytes(
-            &(schnorr::SigningKey::random(rng).to_bytes()),
-        );
-        IssuanceAuthorizingKey(temp.to_be_bytes())
+        loop {
+            let mut bytes = [0u8; 32];
+            rng.fill_bytes(&mut bytes);
+            let schnorr_sk = schnorr::SigningKey::from_bytes(&bytes);
+            if schnorr_sk.is_ok() {
+                break IssuanceAuthorizingKey(bytes);
+            }
+        }
     }
 
     /// Constructs an Orchard issuance key from uniformly-random bytes.
