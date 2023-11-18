@@ -546,27 +546,6 @@ pub enum Error {
 
 impl std::error::Error for Error {}
 
-impl PartialEq for Error {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (IssueActionNotFound, IssueActionNotFound) => true,
-            (IssueBundleIkMismatchAssetBase, IssueBundleIkMismatchAssetBase) => true,
-            (WrongAssetDescSize, WrongAssetDescSize) => true,
-            (IssueActionWithoutNoteNotFinalized, IssueActionWithoutNoteNotFinalized) => true,
-            (AssetBaseCannotBeIdentityPoint, AssetBaseCannotBeIdentityPoint) => true,
-            (IssueBundleInvalidSignature(_), IssueBundleInvalidSignature(_)) => true, //might want to do better here?
-            (
-                IssueActionPreviouslyFinalizedAssetBase(x),
-                IssueActionPreviouslyFinalizedAssetBase(y),
-            ) => x == y,
-            (ValueSumOverflow, ValueSumOverflow) => true,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for Error {}
-
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -615,10 +594,11 @@ mod tests {
     use super::{AssetSupply, IssueBundle, IssueInfo};
     use crate::issuance::Error::{
         AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
-        IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
-        IssueBundleInvalidSignature, WrongAssetDescSize,
+        IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+        IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, ValueSumOverflow,
+        WrongAssetDescSize,
     };
-    use crate::issuance::{verify_issue_bundle, IssueAction, Signed, Unauthorized};
+    use crate::issuance::{verify_issue_bundle, Error, IssueAction, Signed, Unauthorized};
     use crate::keys::{
         FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
@@ -632,6 +612,27 @@ mod tests {
     use rand::rngs::OsRng;
     use rand::RngCore;
     use std::collections::HashSet;
+
+    impl PartialEq for Error {
+        fn eq(&self, other: &Self) -> bool {
+            match (self, other) {
+                (IssueActionNotFound, IssueActionNotFound) => true,
+                (IssueBundleIkMismatchAssetBase, IssueBundleIkMismatchAssetBase) => true,
+                (WrongAssetDescSize, WrongAssetDescSize) => true,
+                (IssueActionWithoutNoteNotFinalized, IssueActionWithoutNoteNotFinalized) => true,
+                (AssetBaseCannotBeIdentityPoint, AssetBaseCannotBeIdentityPoint) => true,
+                (IssueBundleInvalidSignature(_), IssueBundleInvalidSignature(_)) => true, //might want to do better here?
+                (
+                    IssueActionPreviouslyFinalizedAssetBase(x),
+                    IssueActionPreviouslyFinalizedAssetBase(y),
+                ) => x == y,
+                (ValueSumOverflow, ValueSumOverflow) => true,
+                _ => false,
+            }
+        }
+    }
+
+    impl Eq for Error {}
 
     fn setup_params() -> (
         OsRng,
