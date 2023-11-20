@@ -628,12 +628,8 @@ mod tests {
                     IssueActionPreviouslyFinalizedAssetBase(y),
                 ) => x == y,
                 (IssueBundleInvalidSignature(x), IssueBundleInvalidSignature(y)) => {
-                    match (x.source(), y.source()) {
-                        (None, None) => true,
-                        (Some(_), Some(_)) => true,
-                        _ => false,
-                    }
-                },
+                    matches!((x.source(), y.source()), (None, None) | (Some(_), Some(_)))
+                }
                 _ => false,
             }
         }
