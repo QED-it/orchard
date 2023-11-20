@@ -544,8 +544,6 @@ pub enum Error {
     ValueSumOverflow,
 }
 
-impl std::error::Error for Error {}
-
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -612,6 +610,9 @@ mod tests {
     use rand::rngs::OsRng;
     use rand::RngCore;
     use std::collections::HashSet;
+    use std::error::Error as std_error;
+
+    impl std::error::Error for Error {}
 
     impl PartialEq for Error {
         fn eq(&self, other: &Self) -> bool {
@@ -621,12 +622,18 @@ mod tests {
                 (WrongAssetDescSize, WrongAssetDescSize) => true,
                 (IssueActionWithoutNoteNotFinalized, IssueActionWithoutNoteNotFinalized) => true,
                 (AssetBaseCannotBeIdentityPoint, AssetBaseCannotBeIdentityPoint) => true,
-                (IssueBundleInvalidSignature(_), IssueBundleInvalidSignature(_)) => true, //might want to do better here?
+                (ValueSumOverflow, ValueSumOverflow) => true,
                 (
                     IssueActionPreviouslyFinalizedAssetBase(x),
                     IssueActionPreviouslyFinalizedAssetBase(y),
                 ) => x == y,
-                (ValueSumOverflow, ValueSumOverflow) => true,
+                (IssueBundleInvalidSignature(x), IssueBundleInvalidSignature(y)) => {
+                    match (x.source(), y.source()) {
+                        (None, None) => true,
+                        (Some(_), Some(_)) => true,
+                        _ => false,
+                    }
+                },
                 _ => false,
             }
         }

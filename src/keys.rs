@@ -269,7 +269,9 @@ impl IssuanceAuthorizingKey {
     /// Returns `None` if the bytes do not correspond to a valid Orchard issuance key.
     pub fn from_bytes(isk_bytes: [u8; 32]) -> CtOption<Self> {
         let isk = IssuanceAuthorizingKey(isk_bytes);
-        CtOption::new(isk, 1u8.into())
+        let schnorr_sk = schnorr::SigningKey::from_bytes(&isk_bytes);
+        let choice_u8 = schnorr_sk.is_ok() as u8;
+        CtOption::new(isk, choice_u8.into())
     }
 
     /// Returns the raw bytes of the issuance key.
@@ -291,11 +293,6 @@ impl IssuanceAuthorizingKey {
         ];
         ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE)
             .map(|esk| esk.sk().into())
-    }
-
-    /// Derives the RedPallas signing key from isk. Internal use only, does not enforce all constraints. //TOREMOVE
-    fn derive_inner(&self) -> pallas::Scalar {
-        to_scalar(PrfExpand::ZsaIsk.expand(&self.0))
     }
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.

@@ -32,7 +32,7 @@ group = { version = "0.13", features = ["wnaf-memuse"] }
 halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "zsa1" }
 halo2_proofs = { git = "https://github.com/QED-it/halo2", branch = "zsa1", default-features = false, features = ["batch", "floor-planner-v1-legacy-pdqsort"] }
 hex = "0.4"
-k256 = { version = "0.13.0", features = ["arithmetic"] }
+k256 = { version = "0.13.0", features = ["arithmetic", "schnorr"] }
 lazy_static = "1"
 memuse = { version = "0.2.1", features = ["nonempty"] }
 pasta_curves = "0.5"
