@@ -1,4 +1,4 @@
-// From https://github.com/zcash-hackworks/zcash-test-vectors/ (orchard_asset_id)
+// From https://github.com/zcash-hackworks/zcash-test-vectors/ (orchard_asset_base)
 
 pub(crate) struct TestVector {
     pub(crate) key: [u8; 32],

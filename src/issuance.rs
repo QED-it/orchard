@@ -1411,7 +1411,7 @@ mod tests {
 pub mod testing {
     use crate::issuance::{IssueAction, IssueBundle, Prepared, Signed, Unauthorized};
     use crate::keys::testing::arb_issuance_validating_key;
-    use crate::note::asset_base::testing::zsa_asset_id;
+    use crate::note::asset_base::testing::zsa_asset_base;
     use crate::note::testing::arb_zsa_note;
     use k256::schnorr;
     use nonempty::NonEmpty;
@@ -1435,7 +1435,7 @@ pub mod testing {
         /// Generate an issue action
         pub fn arb_issue_action(asset_desc: String)
         (
-            asset in zsa_asset_id(asset_desc.clone()),
+            asset in zsa_asset_base(asset_desc.clone()),
         )
         (
             note in arb_zsa_note(asset),
