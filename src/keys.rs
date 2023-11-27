@@ -1231,7 +1231,6 @@ mod tests {
         }
     }
 
-    #[ignore = "Ignore until test vectors are updated."]
     #[test]
     fn test_vectors() {
         for tv in crate::test_vectors::keys::test_vectors() {
@@ -1240,7 +1239,7 @@ mod tests {
             let ask: SpendAuthorizingKey = (&sk).into();
             assert_eq!(<[u8; 32]>::from(&ask.0), tv.ask);
 
-            let isk = IssuanceAuthorizingKey::from_bytes(tv.sk).unwrap();
+            let isk = IssuanceAuthorizingKey::from_bytes(tv.isk).unwrap();
 
             let ak: SpendValidatingKey = (&ask).into();
             assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
