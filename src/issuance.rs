@@ -491,10 +491,13 @@ pub fn verify_issue_bundle(
     sighash: [u8; 32],
     finalized: &HashSet<AssetBase>, // The finalization set.
 ) -> Result<SupplyInfo, Error> {
-    bundle
+    if bundle
         .ik
         .verify(&sighash, &bundle.authorization.signature)
-        .map_err(IssueBundleInvalidSignature)?;
+        .is_err()
+    {
+        return Err(IssueBundleInvalidSignature);
+    };
 
     let supply_info =
         bundle
@@ -521,7 +524,7 @@ pub fn verify_issue_bundle(
 }
 
 /// Errors produced during the issuance process
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     /// The requested IssueAction not exists in the bundle.
     IssueActionNotFound,
@@ -536,7 +539,7 @@ pub enum Error {
 
     /// Verification errors:
     /// Invalid signature.
-    IssueBundleInvalidSignature(schnorr::Error),
+    IssueBundleInvalidSignature,
     /// The provided `AssetBase` has been previously finalized.
     IssueActionPreviouslyFinalizedAssetBase(AssetBase),
 
@@ -571,7 +574,7 @@ impl fmt::Display for Error {
                     "the AssetBase is the identity point of the Pallas curve, which is invalid."
                 )
             }
-            IssueBundleInvalidSignature(_) => {
+            IssueBundleInvalidSignature => {
                 write!(f, "invalid signature")
             }
             IssueActionPreviouslyFinalizedAssetBase(_) => {
@@ -592,9 +595,8 @@ mod tests {
     use super::{AssetSupply, IssueBundle, IssueInfo};
     use crate::issuance::Error::{
         AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
-        IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-        IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, ValueSumOverflow,
-        WrongAssetDescSize,
+        IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
+        IssueBundleInvalidSignature, WrongAssetDescSize,
     };
     use crate::issuance::{verify_issue_bundle, Error, IssueAction, Signed, Unauthorized};
     use crate::keys::{
@@ -604,38 +606,13 @@ mod tests {
     use crate::value::{NoteValue, ValueSum};
     use crate::{Address, Note};
     use group::{Group, GroupEncoding};
-    use k256::schnorr;
     use nonempty::NonEmpty;
     use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
     use std::collections::HashSet;
-    use std::error::Error as std_error;
 
     impl std::error::Error for Error {}
-
-    impl PartialEq for Error {
-        fn eq(&self, other: &Self) -> bool {
-            match (self, other) {
-                (IssueActionNotFound, IssueActionNotFound) => true,
-                (IssueBundleIkMismatchAssetBase, IssueBundleIkMismatchAssetBase) => true,
-                (WrongAssetDescSize, WrongAssetDescSize) => true,
-                (IssueActionWithoutNoteNotFinalized, IssueActionWithoutNoteNotFinalized) => true,
-                (AssetBaseCannotBeIdentityPoint, AssetBaseCannotBeIdentityPoint) => true,
-                (ValueSumOverflow, ValueSumOverflow) => true,
-                (
-                    IssueActionPreviouslyFinalizedAssetBase(x),
-                    IssueActionPreviouslyFinalizedAssetBase(y),
-                ) => x == y,
-                (IssueBundleInvalidSignature(x), IssueBundleInvalidSignature(y)) => {
-                    matches!((x.source(), y.source()), (None, None) | (Some(_), Some(_)))
-                }
-                _ => false,
-            }
-        }
-    }
-
-    impl Eq for Error {}
 
     fn setup_params() -> (
         OsRng,
@@ -1206,7 +1183,7 @@ mod tests {
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
-            IssueBundleInvalidSignature(schnorr::Error::new())
+            IssueBundleInvalidSignature
         );
     }
 
@@ -1230,7 +1207,7 @@ mod tests {
 
         assert_eq!(
             verify_issue_bundle(&signed, random_sighash, prev_finalized).unwrap_err(),
-            IssueBundleInvalidSignature(schnorr::Error::new())
+            IssueBundleInvalidSignature
         );
     }
 
@@ -1422,12 +1399,9 @@ pub mod testing {
     prop_compose! {
         /// Generate a uniformly distributed signature
         pub(crate) fn arb_signature()(
-            half_bytes in prop::array::uniform32(prop::num::u8::ANY)
+            sig_bytes in vec(prop::num::u8::ANY, 64)
         ) -> schnorr::Signature {
-            // prop::array can only generate 32 elements max, so we duplicate it
-            let sig_bytes: [u8; 64] = [half_bytes, half_bytes].concat().try_into().unwrap();
-            let sig = schnorr::Signature::try_from(sig_bytes.as_slice()).unwrap();
-            sig
+            schnorr::Signature::try_from(sig_bytes.as_slice()).unwrap()
         }
     }
 

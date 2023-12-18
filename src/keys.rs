@@ -321,9 +321,7 @@ impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
 
 impl PartialEq for IssuanceValidatingKey {
     fn eq(&self, other: &Self) -> bool {
-        let temp1: [u8; 32] = self.to_bytes();
-        let temp2: [u8; 32] = other.to_bytes();
-        temp1.eq(&temp2)
+        self.to_bytes().eq(&other.to_bytes())
     }
 }
 
