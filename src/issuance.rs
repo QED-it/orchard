@@ -491,11 +491,13 @@ pub fn verify_issue_bundle(
     sighash: [u8; 32],
     finalized: &HashSet<AssetBase>, // The finalization set.
 ) -> Result<SupplyInfo, Error> {
-    if bundle
+    let sig_error = bundle
         .ik
         .verify(&sighash, &bundle.authorization.signature)
-        .is_err()
-    {
+        .err();
+
+    if sig_error.is_some() {
+        println!("Signature Error is: {}", sig_error.unwrap());
         return Err(IssueBundleInvalidSignature);
     };
 
