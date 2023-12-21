@@ -15,7 +15,7 @@ use k256::elliptic_curve::bigint::Encoding;
 use k256::elliptic_curve::FieldBytesEncoding;
 use k256::schnorr::signature::{Signer, Verifier};
 use k256::schnorr::CryptoRngCore;
-use k256::{schnorr, Secp256k1, U256};
+use k256::{schnorr, U256};
 use pasta_curves::{pallas, pallas::Scalar};
 use rand::RngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
@@ -223,9 +223,6 @@ fn check_structural_validity(
     }
 }
 
-/// We currently use `SpendAuth` as the `IssuanceAuth`.
-type IssuanceAuth = SpendAuth;
-
 /// An issuance key, from which all key material is derived.
 ///
 /// $\mathsf{isk}$ as defined in [ZIP 227][issuancekeycomponents].
@@ -305,8 +302,6 @@ impl IssuanceAuthorizingKey {
 /// A key used to validate issuance authorization signatures.
 ///
 /// Defined in [ZIP 227: Issuance of Zcash Shielded Assets § Issuance Key Generation][IssuanceZSA].
-/// Note that this is $\mathsf{ik}^\mathbb{P}$, which by construction is equivalent to
-/// $\mathsf{ik}$ but stored here as a RedPallas verification key.
 ///
 /// [IssuanceZSA]: https://qed-it.github.io/zips/zip-0227#issuance-key-derivation
 #[derive(Debug, Clone)]
@@ -328,13 +323,11 @@ impl PartialEq for IssuanceValidatingKey {
 impl Eq for IssuanceValidatingKey {}
 
 impl IssuanceValidatingKey {
-    /// Converts this spend validating key to its serialized form,
-    /// I2LEOSP_256(ik).
+    /// Converts this issuance validating key to its serialized form,
+    /// in big-endian order as defined in BIP 340.
     pub fn to_bytes(&self) -> [u8; 32] {
-        // This is correct because the wrapped point must have ỹ = 0, and
-        // so the point repr is the same as I2LEOSP of its x-coordinate.
-        <U256 as FieldBytesEncoding<Secp256k1>>::decode_field_bytes(&self.0.to_bytes())
-            .to_be_bytes()
+        // This provides the big-endian encoding, via the FieldBytesEncoding trait in the k256 crate.
+        U256::decode_field_bytes(&self.0.to_bytes()).to_be_bytes()
     }
 
     /// Constructs an Orchard issuance validating key from the provided bytes.

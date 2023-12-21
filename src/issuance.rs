@@ -405,7 +405,7 @@ impl IssueBundle<Unauthorized> {
 
 impl IssueBundle<Prepared> {
     /// Sign the `IssueBundle`.
-    /// The call makes sure that the provided `isk` matches the `ik` and the driven `asset` for each note in the bundle.
+    /// The call makes sure that the provided `isk` matches the `ik` and the derived `asset` for each note in the bundle.
     pub fn sign(self, isk: &IssuanceAuthorizingKey) -> Result<IssueBundle<Signed>, Error> {
         let expected_ik: IssuanceValidatingKey = (isk).into();
 
@@ -491,15 +491,10 @@ pub fn verify_issue_bundle(
     sighash: [u8; 32],
     finalized: &HashSet<AssetBase>, // The finalization set.
 ) -> Result<SupplyInfo, Error> {
-    let sig_error = bundle
+    bundle
         .ik
         .verify(&sighash, &bundle.authorization.signature)
-        .err();
-
-    if sig_error.is_some() {
-        println!("Signature Error is: {}", sig_error.unwrap());
-        return Err(IssueBundleInvalidSignature);
-    };
+        .map_err(|_| IssueBundleInvalidSignature)?;
 
     let supply_info =
         bundle
