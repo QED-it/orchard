@@ -352,7 +352,7 @@ impl IssuanceValidatingKey {
         &self,
         msg: &[u8],
         signature: &schnorr::Signature,
-    ) -> Result<(), k256::ecdsa::Error> {
+    ) -> Result<(), k256::schnorr::Error> {
         self.0.verify(msg, signature)
     }
 }
