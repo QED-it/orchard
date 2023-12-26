@@ -11,8 +11,7 @@ use group::{
     prime::PrimeCurveAffine,
     Curve, GroupEncoding,
 };
-use k256::elliptic_curve::bigint::Encoding;
-use k256::elliptic_curve::FieldBytesEncoding;
+use k256::elliptic_curve::{bigint::Encoding, FieldBytesEncoding};
 use k256::schnorr::signature::{Signer, Verifier};
 use k256::{schnorr, U256};
 use pasta_curves::{pallas, pallas::Scalar};

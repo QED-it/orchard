@@ -188,11 +188,6 @@ impl Signed {
     pub fn signature(&self) -> &schnorr::Signature {
         &self.signature
     }
-
-    /// Constructs an `Signed` from its constituent parts.
-    pub fn from_parts(signature: schnorr::Signature) -> Self {
-        Signed { signature }
-    }
 }
 
 impl IssueAuth for Unauthorized {}
@@ -595,7 +590,7 @@ mod tests {
         IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         IssueBundleInvalidSignature, WrongAssetDescSize,
     };
-    use crate::issuance::{verify_issue_bundle, Error, IssueAction, Signed, Unauthorized};
+    use crate::issuance::{verify_issue_bundle, IssueAction, Signed, Unauthorized};
     use crate::keys::{
         FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
@@ -608,8 +603,6 @@ mod tests {
     use rand::rngs::OsRng;
     use rand::RngCore;
     use std::collections::HashSet;
-
-    impl std::error::Error for Error {}
 
     fn setup_params() -> (
         OsRng,
