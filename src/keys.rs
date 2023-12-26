@@ -14,7 +14,6 @@ use group::{
 use k256::elliptic_curve::bigint::Encoding;
 use k256::elliptic_curve::FieldBytesEncoding;
 use k256::schnorr::signature::{Signer, Verifier};
-use k256::schnorr::CryptoRngCore;
 use k256::{schnorr, U256};
 use pasta_curves::{pallas, pallas::Scalar};
 use rand::RngCore;
@@ -250,7 +249,7 @@ impl IssuanceAuthorizingKey {
     /// Real issuance keys should be derived according to [ZIP 32].
     ///
     /// [ZIP 32]: https://zips.z.cash/zip-0032
-    pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+    pub(crate) fn random(rng: &mut impl RngCore) -> Self {
         loop {
             let mut bytes = [0u8; 32];
             rng.fill_bytes(&mut bytes);
