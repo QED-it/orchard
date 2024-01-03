@@ -258,7 +258,7 @@ impl IssuanceAuthorizingKey {
     ///
     /// Returns `None` if the bytes do not correspond to a valid Orchard issuance key.
     pub fn from_bytes(isk_bytes: [u8; 32]) -> Option<Self> {
-        SigningKey::from_bytes(&isk_bytes)
+        NonZeroScalar::try_from(&isk_bytes as &[u8])
             .ok()
             .map(IssuanceAuthorizingKey)
     }
