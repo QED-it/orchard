@@ -613,7 +613,7 @@ mod tests {
     ) {
         let mut rng = OsRng;
 
-        let isk = IssuanceAuthorizingKey::random(&mut rng);
+        let isk = IssuanceAuthorizingKey::random();
         let ik: IssuanceValidatingKey = (&isk).into();
 
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
@@ -929,7 +929,7 @@ mod tests {
         )
         .unwrap();
 
-        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random(&mut OsRng);
+        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
 
         let err = bundle
             .prepare([0; 32])
@@ -1161,7 +1161,7 @@ mod tests {
         )
         .unwrap();
 
-        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random(&mut rng);
+        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
 
         let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
 
@@ -1256,7 +1256,7 @@ mod tests {
 
         let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
 
-        let incorrect_isk = IssuanceAuthorizingKey::random(&mut rng);
+        let incorrect_isk = IssuanceAuthorizingKey::random();
         let incorrect_ik: IssuanceValidatingKey = (&incorrect_isk).into();
 
         // Add "bad" note

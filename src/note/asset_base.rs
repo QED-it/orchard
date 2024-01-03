@@ -102,7 +102,7 @@ impl AssetBase {
     ///
     /// This is only used in tests.
     pub(crate) fn random(rng: &mut impl RngCore) -> Self {
-        let isk = IssuanceAuthorizingKey::random(rng);
+        let isk = IssuanceAuthorizingKey::random();
         let ik = IssuanceValidatingKey::from(&isk);
         let asset_descr = "zsa_asset";
         AssetBase::derive(&ik, asset_descr)
