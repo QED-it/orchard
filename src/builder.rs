@@ -21,7 +21,7 @@ use crate::{
         SpendingKey,
     },
     note::{Note, TransmittedNoteCiphertext},
-    note_encryption_v3::OrchardNoteEncryption,
+    note_encryption_orchardzsa::OrchardNoteEncryption,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -344,7 +344,7 @@ impl Builder {
     /// Returns an error if the given Merkle path does not have the required anchor for
     /// the given note.
     ///
-    /// [`OrchardDomain`]: crate::note_encryption_v3::OrchardDomainV3
+    /// [`OrchardDomain`]: crate::note_encryption_orchardzsa::OrchardZSADomain
     /// [`MerkleHashOrchard`]: crate::tree::MerkleHashOrchard
     pub fn add_spend(
         &mut self,
