@@ -347,7 +347,7 @@ impl<T: Authorization, V> Bundle<T, V> {
         &self,
         action_idx: usize,
         key: &IncomingViewingKey,
-
+        // potential param
     ) -> Option<(Note, Address, [u8; 512])> {
         let prepared_ivk = PreparedIncomingViewingKey::new(key);
         self.actions.get(action_idx).and_then(move |action| {
