@@ -26,6 +26,7 @@ use crate::{
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };
+use crate::note_encryption_orchard::OrchardDomain;
 
 const MIN_ACTIONS: usize = 2;
 
@@ -478,7 +479,7 @@ impl Builder {
     pub fn build<V: TryFrom<i64> + Copy + Into<i64>>(
         self,
         mut rng: impl RngCore,
-    ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V>, BuildError> {
+    ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V, OrchardDomain>, BuildError> {
         let mut pre_actions: Vec<_> = Vec::new();
 
         // Pair up the spends and recipients, extending with dummy values as necessary.

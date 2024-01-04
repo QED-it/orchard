@@ -308,7 +308,7 @@ impl Note {
 
 /// An encrypted note.
 #[derive(Clone)]
-pub struct TransmittedNoteCiphertext<OrchardDomain> {
+pub struct TransmittedNoteCiphertext {
     /// The serialization of the ephemeral public key
     pub epk_bytes: [u8; 32],
     /// The encrypted note ciphertext
