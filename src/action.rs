@@ -15,7 +15,7 @@ use crate::{
 /// Internally, this may both consume a note and create a note, or it may do only one of
 /// the two. TODO: Determine which is more efficient (circuit size vs bundle size).
 #[derive(Debug, Clone)]
-pub struct Action<A> {
+pub struct Action<A,T> {
     /// The nullifier of the note being spent.
     nf: Nullifier,
     /// The randomized verification key for the note being spent.
@@ -23,7 +23,7 @@ pub struct Action<A> {
     /// A commitment to the new note being created.
     cmx: ExtractedNoteCommitment,
     /// The transmitted note ciphertext.
-    encrypted_note: TransmittedNoteCiphertext,
+    encrypted_note: TransmittedNoteCiphertext<T>,
     /// A commitment to the net value created or consumed by this action.
     cv_net: ValueCommitment,
     /// The authorization for this action.
