@@ -479,7 +479,7 @@ impl Builder {
     pub fn build<V: TryFrom<i64> + Copy + Into<i64>>(
         self,
         mut rng: impl RngCore,
-    ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V, OrchardDomain>, BuildError> {
+    ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V, OrchardFlavour>, BuildError> {
         let mut pre_actions: Vec<_> = Vec::new();
 
         // Pair up the spends and recipients, extending with dummy values as necessary.
