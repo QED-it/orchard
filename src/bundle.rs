@@ -343,7 +343,7 @@ impl<T: Authorization, V> Bundle<T, V> {
     /// Performs trial decryption of the action at `action_idx` in the bundle with the
     /// specified incoming viewing key, and returns the decrypted note plaintext
     /// contents if successful.
-    pub fn decrypt_output_with_key<OrchardFlavour>(
+    pub fn decrypt_output_with_key(
         &self,
         action_idx: usize,
         key: &IncomingViewingKey,
@@ -351,8 +351,8 @@ impl<T: Authorization, V> Bundle<T, V> {
     ) -> Option<(Note, Address, [u8; 512])> {
         let prepared_ivk = PreparedIncomingViewingKey::new(key);
         self.actions.get(action_idx).and_then(move |action| {
-            //let domain = OrchardZSADomain::for_action(action);
-            let domain = OrchardDomain::for_action(action);
+            let domain = OrchardZSADomain::for_action(action);
+            // let domain = OrchardDomain::for_action(action);
             try_note_decryption(&domain, &prepared_ivk, action)
         })
     }
