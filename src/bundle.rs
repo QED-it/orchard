@@ -21,11 +21,12 @@ use crate::{
     circuit::{Instance, Proof, VerifyingKey},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::Note,
-    note_encryption_v3::OrchardDomainV3,
+    note_encryption_orchardzsa::OrchardZSADomain,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
     value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };
+use crate::note_encryption_orchard::OrchardDomain;
 
 impl<T> Action<T> {
     /// Prepares the public instance for this action, for creating and verifying the
@@ -330,7 +331,7 @@ impl<T: Authorization, V> Bundle<T, V> {
             .iter()
             .enumerate()
             .filter_map(|(idx, action)| {
-                let domain = OrchardDomainV3::for_action(action);
+                let domain = OrchardZSADomain::for_action(action);
                 prepared_keys.iter().find_map(|(ivk, prepared_ivk)| {
                     try_note_decryption(&domain, prepared_ivk, action)
                         .map(|(n, a, m)| (idx, (*ivk).clone(), n, a, m))
@@ -342,14 +343,16 @@ impl<T: Authorization, V> Bundle<T, V> {
     /// Performs trial decryption of the action at `action_idx` in the bundle with the
     /// specified incoming viewing key, and returns the decrypted note plaintext
     /// contents if successful.
-    pub fn decrypt_output_with_key(
+    pub fn decrypt_output_with_key<OrchardFlavour>(
         &self,
         action_idx: usize,
         key: &IncomingViewingKey,
+
     ) -> Option<(Note, Address, [u8; 512])> {
         let prepared_ivk = PreparedIncomingViewingKey::new(key);
         self.actions.get(action_idx).and_then(move |action| {
-            let domain = OrchardDomainV3::for_action(action);
+            //let domain = OrchardZSADomain::for_action(action);
+            let domain = OrchardDomain::for_action(action);
             try_note_decryption(&domain, &prepared_ivk, action)
         })
     }
@@ -366,7 +369,7 @@ impl<T: Authorization, V> Bundle<T, V> {
             .iter()
             .enumerate()
             .filter_map(|(idx, action)| {
-                let domain = OrchardDomainV3::for_action(action);
+                let domain = OrchardZSADomain::for_action(action);
                 keys.iter().find_map(move |key| {
                     try_output_recovery_with_ovk(
                         &domain,
@@ -390,7 +393,7 @@ impl<T: Authorization, V> Bundle<T, V> {
         key: &OutgoingViewingKey,
     ) -> Option<(Note, Address, [u8; 512])> {
         self.actions.get(action_idx).and_then(move |action| {
-            let domain = OrchardDomainV3::for_action(action);
+            let domain = OrchardZSADomain::for_action(action);
             try_output_recovery_with_ovk(
                 &domain,
                 key,
