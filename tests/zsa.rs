@@ -7,7 +7,7 @@ use orchard::bundle::Authorized;
 use orchard::issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized};
 use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use orchard::note::{AssetBase, ExtractedNoteCommitment};
-use orchard::note_encryption_v3::OrchardDomainV3;
+use orchard::note_encryption_orchardzsa::OrchardZSADomain;
 use orchard::tree::{MerkleHashOrchard, MerklePath};
 use orchard::{
     builder::Builder,
@@ -205,7 +205,7 @@ fn create_native_note(keys: &Keychain) -> Note {
         .actions()
         .iter()
         .find_map(|action| {
-            let domain = OrchardDomainV3::for_action(action);
+            let domain = OrchardZSADomain::for_action(action);
             try_note_decryption(&domain, &PreparedIncomingViewingKey::new(&ivk), action)
         })
         .unwrap();
