@@ -1148,7 +1148,7 @@ mod tests {
             }
         }
 
-        let (mut rng, isk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,

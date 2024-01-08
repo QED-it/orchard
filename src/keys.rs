@@ -1,6 +1,7 @@
 //! Key structures for Orchard.
 
 use core::mem;
+use std::fmt::{Debug, Formatter};
 use std::io::{self, Read, Write};
 
 use aes::Aes256;
@@ -11,14 +12,14 @@ use group::{
     prime::PrimeCurveAffine,
     Curve, GroupEncoding,
 };
-use k256::NonZeroScalar;
 use k256::schnorr::signature::{Signer, Verifier};
-use k256::schnorr::{Signature, SigningKey, VerifyingKey};
+use k256::schnorr::{Signature, VerifyingKey};
+use k256::{schnorr, FieldBytes, NonZeroScalar, PublicKey};
 use pasta_curves::{pallas, pallas::Scalar};
+use rand::rngs::OsRng;
 use rand::RngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zcash_note_encryption_zsa::EphemeralKeyBytes;
-use rand::rngs::OsRng;
 
 use crate::{
     address::Address,
@@ -227,18 +228,12 @@ fn check_structural_validity(
 /// $\mathsf{isk}$ as defined in [ZIP 227][issuancekeycomponents].
 ///
 /// [issuancekeycomponents]: https://qed-it.github.io/zips/zip-0227#issuance-key-derivation
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct IssuanceAuthorizingKey(NonZeroScalar);
 
 impl From<SpendingKey> for IssuanceAuthorizingKey {
     fn from(sk: SpendingKey) -> Self {
         IssuanceAuthorizingKey::from_bytes(*sk.to_bytes()).unwrap()
-    }
-}
-
-impl ConstantTimeEq for IssuanceAuthorizingKey {
-    fn ct_eq(&self, other: &Self) -> Choice {
-        self.to_bytes().ct_eq(other.to_bytes())
     }
 }
 
@@ -264,8 +259,8 @@ impl IssuanceAuthorizingKey {
     }
 
     /// Returns the raw bytes of the issuance key.
-    pub fn to_bytes(&self) -> &[u8; 32] {
-        self.0.to_bytes().try_into().unwrap()
+    pub fn to_bytes(&self) -> FieldBytes {
+        self.0.to_bytes()
     }
 
     /// Derives the Orchard-ZSA issuance key for the given seed, coin type, and account.
@@ -286,7 +281,13 @@ impl IssuanceAuthorizingKey {
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
     pub fn sign(&self, msg: &[u8]) -> Signature {
-        self.0.sign(msg)
+        schnorr::SigningKey::from(self.0).sign(msg)
+    }
+}
+
+impl Debug for IssuanceAuthorizingKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("").field(&self.0.to_bytes()).finish()
     }
 }
 
@@ -296,11 +297,11 @@ impl IssuanceAuthorizingKey {
 ///
 /// [IssuanceZSA]: https://qed-it.github.io/zips/zip-0227#issuance-key-derivation
 #[derive(Debug, Clone)]
-pub struct IssuanceValidatingKey(VerifyingKey);
+pub struct IssuanceValidatingKey(PublicKey);
 
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
-        IssuanceValidatingKey(*isk.0.verifying_key())
+        IssuanceValidatingKey(schnorr::SigningKey::from(isk.0).verifying_key().into())
     }
 }
 
@@ -317,7 +318,12 @@ impl IssuanceValidatingKey {
     /// in big-endian order as defined in BIP 340.
     pub fn to_bytes(&self) -> [u8; 32] {
         // This provides the big-endian encoding, via the FieldBytesEncoding trait in the k256 crate.
-        self.0.to_bytes().try_into().unwrap()
+        VerifyingKey::try_from(self.0)
+            .unwrap()
+            .to_bytes()
+            .as_slice()
+            .try_into()
+            .unwrap()
     }
 
     /// Constructs an Orchard issuance validating key from the provided bytes.
@@ -327,12 +333,14 @@ impl IssuanceValidatingKey {
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         VerifyingKey::from_bytes(bytes)
             .ok()
+            .map(PublicKey::from)
             .map(IssuanceValidatingKey)
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
-    pub fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), k256::schnorr::Error> {
-        self.0.verify(msg, signature)
+    pub fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), schnorr::Error> {
+        let vk = VerifyingKey::try_from(self.0)?;
+        vk.verify(msg, signature)
     }
 }
 
