@@ -14,7 +14,7 @@ use group::{
 };
 use k256::schnorr::signature::{Signer, Verifier};
 use k256::schnorr::{Signature, VerifyingKey};
-use k256::{schnorr, FieldBytes, NonZeroScalar, PublicKey};
+use k256::{schnorr, NonZeroScalar, PublicKey};
 use pasta_curves::{pallas, pallas::Scalar};
 use rand::rngs::OsRng;
 use rand::RngCore;
@@ -259,8 +259,8 @@ impl IssuanceAuthorizingKey {
     }
 
     /// Returns the raw bytes of the issuance key.
-    pub fn to_bytes(&self) -> FieldBytes {
-        self.0.to_bytes()
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0.to_bytes().as_slice().try_into().unwrap()
     }
 
     /// Derives the Orchard-ZSA issuance key for the given seed, coin type, and account.
@@ -297,7 +297,7 @@ impl Debug for IssuanceAuthorizingKey {
 ///
 /// [IssuanceZSA]: https://qed-it.github.io/zips/zip-0227#issuance-key-derivation
 #[derive(Debug, Clone)]
-pub struct IssuanceValidatingKey(PublicKey);
+pub struct IssuanceValidatingKey(k256::PublicKey);
 
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
@@ -1107,8 +1107,8 @@ pub mod testing {
             key in prop::array::uniform32(prop::num::u8::ANY)
                 .prop_map(IssuanceAuthorizingKey::from_bytes)
                 .prop_filter(
-                    "Values must correspond to valid Orchard issuance keys.",
-                    |opt| bool::from(opt.is_some())
+                    "Values must correspond to valid Orchard-ZSA issuance keys.",
+                    |opt| opt.is_some()
                 )
         ) -> IssuanceAuthorizingKey {
             key.unwrap()
@@ -1158,6 +1158,8 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use ff::PrimeField;
+    use k256::schnorr::signature::hazmat::PrehashVerifier;
+    use k256::schnorr::{SigningKey, VerifyingKey};
     use proptest::prelude::*;
 
     use super::{
@@ -1185,6 +1187,22 @@ mod tests {
         assert!(bool::from(
             EphemeralPublicKey::from_bytes(&[0xff; 32]).is_none()
         ));
+    }
+
+    #[test]
+    fn issuance_authorizing_key_from_bytes_fail_on_zero() {
+        // isk must not be the zero scalar.
+        let isk = IssuanceAuthorizingKey::from_bytes([0; 32]);
+        assert!(isk.is_none());
+    }
+
+    #[test]
+    fn issuance_authorizing_key_from_bytes_to_bytes_roundtrip() {
+        let isk = IssuanceAuthorizingKey::random();
+        let isk_bytes = isk.to_bytes();
+        let isk_roundtrip = IssuanceAuthorizingKey::from_bytes(isk_bytes);
+        assert!(isk_roundtrip.is_some());
+        assert_eq!(isk.to_bytes(), isk_roundtrip.unwrap().to_bytes());
     }
 
     proptest! {
@@ -1275,6 +1293,48 @@ mod tests {
 
             let internal_ovk = fvk.to_ovk(Scope::Internal);
             assert_eq!(internal_ovk.0, tv.internal_ovk);
+        }
+    }
+
+    #[test]
+    fn bip340_test_vector() {
+        for tv in crate::test_vectors::bip340_vector::test_vectors() {
+            let isk = IssuanceAuthorizingKey::from_bytes(tv.isk).unwrap();
+
+            let ik = IssuanceValidatingKey::from(&isk);
+            assert_eq!(ik.to_bytes(), tv.ik);
+
+            let message = tv.message;
+            let aux_rand = [0u8; 32];
+
+            let signature = SigningKey::from(isk.0)
+                .sign_prehash_with_aux_rand(&message, &aux_rand)
+                .unwrap();
+            let sig_bytes: [u8; 64] = signature.to_bytes();
+            assert_eq!(sig_bytes, tv.signature);
+
+            assert!(VerifyingKey::try_from(ik.0)
+                .unwrap()
+                .verify_prehash(&message, &signature)
+                .is_ok());
+        }
+    }
+
+    #[test]
+    fn zsa_issuance_auth_sig_test_vectors() {
+        for tv in crate::test_vectors::zsa_issuance_auth_sig::test_vectors() {
+            let isk = IssuanceAuthorizingKey::from_bytes(tv.isk).unwrap();
+
+            let ik = IssuanceValidatingKey::from(&isk);
+            assert_eq!(ik.to_bytes(), tv.ik);
+
+            let message = tv.msg;
+
+            let signature = isk.sign(&message);
+            let sig_bytes: [u8; 64] = signature.to_bytes();
+            assert_eq!(sig_bytes, tv.sig);
+
+            assert!(ik.verify(&message, &signature).is_ok());
         }
     }
 }
