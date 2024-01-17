@@ -10,7 +10,8 @@ use nonempty::NonEmpty;
 use pasta_curves::pallas;
 use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
-use crate::note::AssetBase;
+use zcash_note_encryption_zsa::NoteEncryption;
+
 use crate::{
     action::Action,
     address::Address,
@@ -20,13 +21,12 @@ use crate::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
     },
-    note::{Note, TransmittedNoteCiphertext},
-    note_encryption_orchardzsa::OrchardNoteEncryption,
+    note::{AssetBase, Note, TransmittedNoteCiphertext},
+    note_encryption::{OrchardDomain, OrchardType},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };
-use crate::note_encryption_orchard::OrchardDomain;
 
 const MIN_ACTIONS: usize = 2;
 
@@ -253,7 +253,10 @@ impl ActionInfo {
     /// # Panics
     ///
     /// Panics if the asset types of the spent and output notes do not match.
-    fn build(self, mut rng: impl RngCore) -> (Action<SigningMetadata>, Circuit) {
+    fn build<D: OrchardDomain>(
+        self,
+        mut rng: impl RngCore,
+    ) -> (Action<SigningMetadata, D>, Circuit) {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -279,7 +282,7 @@ impl ActionInfo {
         let cm_new = note.commitment();
         let cmx = cm_new.into();
 
-        let encryptor = OrchardNoteEncryption::new(
+        let encryptor = NoteEncryption::<OrchardType<D>>::new(
             self.output.ovk,
             note,
             self.output.memo.unwrap_or_else(|| {
@@ -291,7 +294,7 @@ impl ActionInfo {
 
         let encrypted_note = TransmittedNoteCiphertext {
             epk_bytes: encryptor.epk().to_bytes().0,
-            enc_ciphertext: encryptor.encrypt_note_plaintext().0,
+            enc_ciphertext: encryptor.encrypt_note_plaintext(),
             out_ciphertext: encryptor.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut rng),
         };
 
@@ -476,10 +479,10 @@ impl Builder {
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
     /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
-    pub fn build<V: TryFrom<i64> + Copy + Into<i64>>(
+    pub fn build<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain>(
         self,
         mut rng: impl RngCore,
-    ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V, OrchardFlavour>, BuildError> {
+    ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V, D>, BuildError> {
         let mut pre_actions: Vec<_> = Vec::new();
 
         // Pair up the spends and recipients, extending with dummy values as necessary.
@@ -652,13 +655,13 @@ impl<S: InProgressSignatures> InProgress<Unproven, S> {
     }
 }
 
-impl<S: InProgressSignatures, V> Bundle<InProgress<Unproven, S>, V> {
+impl<S: InProgressSignatures, V, D: OrchardDomain> Bundle<InProgress<Unproven, S>, V, D> {
     /// Creates the proof for this bundle.
     pub fn create_proof(
         self,
         pk: &ProvingKey,
         mut rng: impl RngCore,
-    ) -> Result<Bundle<InProgress<Proof, S>, V>, BuildError> {
+    ) -> Result<Bundle<InProgress<Proof, S>, V, D>, BuildError> {
         let instances: Vec<_> = self
             .actions()
             .iter()
@@ -741,7 +744,7 @@ impl MaybeSigned {
     }
 }
 
-impl<P: fmt::Debug, V> Bundle<InProgress<P, Unauthorized>, V> {
+impl<P: fmt::Debug, V, D: OrchardDomain> Bundle<InProgress<P, Unauthorized>, V, D> {
     /// Loads the sighash into this bundle, preparing it for signing.
     ///
     /// This API ensures that all signatures are created over the same sighash.
@@ -749,7 +752,7 @@ impl<P: fmt::Debug, V> Bundle<InProgress<P, Unauthorized>, V> {
         self,
         mut rng: R,
         sighash: [u8; 32],
-    ) -> Bundle<InProgress<P, PartiallyAuthorized>, V> {
+    ) -> Bundle<InProgress<P, PartiallyAuthorized>, V, D> {
         self.map_authorization(
             &mut rng,
             |rng, _, SigningMetadata { dummy_ask, parts }| {
@@ -770,7 +773,7 @@ impl<P: fmt::Debug, V> Bundle<InProgress<P, Unauthorized>, V> {
     }
 }
 
-impl<V> Bundle<InProgress<Proof, Unauthorized>, V> {
+impl<V, D: OrchardDomain> Bundle<InProgress<Proof, Unauthorized>, V, D> {
     /// Applies signatures to this bundle, in order to authorize it.
     ///
     /// This is a helper method that wraps [`Bundle::prepare`], [`Bundle::sign`], and
@@ -780,7 +783,7 @@ impl<V> Bundle<InProgress<Proof, Unauthorized>, V> {
         mut rng: R,
         sighash: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
-    ) -> Result<Bundle<Authorized, V>, BuildError> {
+    ) -> Result<Bundle<Authorized, V, D>, BuildError> {
         signing_keys
             .iter()
             .fold(self.prepare(&mut rng, sighash), |partial, ask| {
@@ -790,7 +793,7 @@ impl<V> Bundle<InProgress<Proof, Unauthorized>, V> {
     }
 }
 
-impl<P: fmt::Debug, V> Bundle<InProgress<P, PartiallyAuthorized>, V> {
+impl<P: fmt::Debug, V, D: OrchardDomain> Bundle<InProgress<P, PartiallyAuthorized>, V, D> {
     /// Signs this bundle with the given [`SpendAuthorizingKey`].
     ///
     /// This will apply signatures for all notes controlled by this spending key.
@@ -853,11 +856,11 @@ impl<P: fmt::Debug, V> Bundle<InProgress<P, PartiallyAuthorized>, V> {
     }
 }
 
-impl<V> Bundle<InProgress<Proof, PartiallyAuthorized>, V> {
+impl<V, D: OrchardDomain> Bundle<InProgress<Proof, PartiallyAuthorized>, V, D> {
     /// Finalizes this bundle, enabling it to be included in a transaction.
     ///
     /// Returns an error if any signatures are missing.
-    pub fn finalize(self) -> Result<Bundle<Authorized, V>, BuildError> {
+    pub fn finalize(self) -> Result<Bundle<Authorized, V, D>, BuildError> {
         self.try_map_authorization(
             &mut (),
             |_, _, maybe| maybe.finalize(),
@@ -922,6 +925,8 @@ pub mod testing {
         circuit::ProvingKey,
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
+        note_encryption::OrchardDomain,
+        note_encryption_v3::OrchardDomainV3,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
         value::{testing::arb_positive_note_value, NoteValue, MAX_NOTE_VALUE},
         Address, Note,
@@ -948,7 +953,9 @@ pub mod testing {
 
     impl<R: RngCore + CryptoRng> ArbitraryBundleInputs<R> {
         /// Create a bundle from the set of arbitrary bundle inputs.
-        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>>(mut self) -> Bundle<Authorized, V> {
+        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain>(
+            mut self,
+        ) -> Bundle<Authorized, V, D> {
             let fvk = FullViewingKey::from(&self.sk);
             let flags = Flags::from_parts(true, true, true);
             let mut builder = Builder::new(flags, self.anchor);
@@ -1032,17 +1039,17 @@ pub mod testing {
 
     /// Produce an arbitrary valid Orchard bundle using a random spending key.
     pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
-    ) -> impl Strategy<Value = Bundle<Authorized, V>> {
+    ) -> impl Strategy<Value = Bundle<Authorized, V, OrchardDomainV3>> {
         arb_spending_key()
             .prop_flat_map(arb_bundle_inputs)
-            .prop_map(|inputs| inputs.into_bundle::<V>())
+            .prop_map(|inputs| inputs.into_bundle::<V, OrchardDomainV3>())
     }
 
     /// Produce an arbitrary valid Orchard bundle using a specified spending key.
     pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
         k: SpendingKey,
-    ) -> impl Strategy<Value = Bundle<Authorized, V>> {
-        arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V>())
+    ) -> impl Strategy<Value = Bundle<Authorized, V, OrchardDomainV3>> {
+        arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V, OrchardDomainV3>())
     }
 }
 
@@ -1057,6 +1064,7 @@ mod tests {
         circuit::ProvingKey,
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendingKey},
+        note_encryption_v3::OrchardDomainV3,
         tree::EMPTY_ROOTS,
         value::NoteValue,
     };
@@ -1087,7 +1095,7 @@ mod tests {
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, -5000);
 
-        let bundle: Bundle<Authorized, i64> = builder
+        let bundle: Bundle<Authorized, i64, OrchardDomainV3> = builder
             .build(&mut rng)
             .unwrap()
             .create_proof(&pk, &mut rng)

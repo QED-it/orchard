@@ -12,6 +12,7 @@ use orchard::{
     bundle::Flags,
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, Scope, SpendingKey},
+    note_encryption_v3::OrchardDomainV3,
     value::NoteValue,
     Anchor, Bundle,
 };
@@ -42,7 +43,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 )
                 .unwrap();
         }
-        let bundle: Bundle<_, i64> = builder.build(rng).unwrap();
+        let bundle: Bundle<_, i64, OrchardDomainV3> = builder.build(rng).unwrap();
 
         let instances: Vec<_> = bundle
             .actions()
