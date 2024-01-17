@@ -338,6 +338,9 @@ impl Builder {
         }
     }
 
+    // FIXME: fix the doc, this line was removed from the doc:
+    // [`OrchardDomain`]: crate::note_encryption_v3::OrchardZSADomain
+
     /// Adds a note to be spent in this transaction.
     ///
     /// - `note` is a spendable note, obtained by trial-decrypting an [`Action`] using the
@@ -348,7 +351,6 @@ impl Builder {
     /// Returns an error if the given Merkle path does not have the required anchor for
     /// the given note.
     ///
-    /// [`OrchardDomain`]: crate::note_encryption_orchardzsa::OrchardZSADomain
     /// [`MerkleHashOrchard`]: crate::tree::MerkleHashOrchard
     pub fn add_spend(
         &mut self,
