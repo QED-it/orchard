@@ -208,7 +208,7 @@ pub trait OrchardDomain: fmt::Debug + Clone {
     /// A type to represent the raw bytes of an encrypted compact note.
     type CompactNoteCiphertextBytes: AsRef<[u8]> + for<'a> From<&'a [u8]> + Clone + Copy;
 
-    /// FIXME: add doc
+    /// Builds NotePlaintextBytes from Note and Memo.
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes;
 }
 
