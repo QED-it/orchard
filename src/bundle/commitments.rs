@@ -2,8 +2,11 @@
 
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
-use crate::bundle::{Authorization, Authorized, Bundle};
-use crate::issuance::{IssueAuth, IssueBundle, Signed};
+use crate::{
+    bundle::{Authorization, Authorized, Bundle},
+    issuance::{IssueAuth, IssueBundle, Signed},
+    note_encryption::OrchardDomain,
+};
 
 const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
 const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActCHash";
@@ -32,8 +35,8 @@ fn hasher(personal: &[u8; 16]) -> State {
 /// personalized with ZCASH_ORCHARD_ACTIONS_HASH_PERSONALIZATION
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
-pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
-    bundle: &Bundle<A, V>,
+pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>, D: OrchardDomain>(
+    bundle: &Bundle<A, V, D>,
 ) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
     let mut ch = hasher(ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION);
@@ -44,13 +47,13 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         ch.update(&action.nullifier().to_bytes());
         ch.update(&action.cmx().to_bytes());
         ch.update(&action.encrypted_note().epk_bytes);
-        ch.update(&action.encrypted_note().enc_ciphertext[..84]); // TODO: make sure it is backward compatible with Orchard [..52]
+        ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..84]); // TODO: make sure it is backward compatible with Orchard [..52]
 
-        mh.update(&action.encrypted_note().enc_ciphertext[84..596]);
+        mh.update(&action.encrypted_note().enc_ciphertext.as_ref()[84..596]);
 
         nh.update(&action.cv_net().to_bytes());
         nh.update(&<[u8; 32]>::from(action.rk()));
-        nh.update(&action.encrypted_note().enc_ciphertext[596..]);
+        nh.update(&action.encrypted_note().enc_ciphertext.as_ref()[596..]);
         nh.update(&action.encrypted_note().out_ciphertext);
     }
 
@@ -76,7 +79,9 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 /// Identifier Non-Malleability][zip244]
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
-pub(crate) fn hash_bundle_auth_data<V>(bundle: &Bundle<Authorized, V>) -> Blake2bHash {
+pub(crate) fn hash_bundle_auth_data<V, D: OrchardDomain>(
+    bundle: &Bundle<Authorized, V, D>,
+) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
     h.update(bundle.authorization().proof().as_ref());
     for action in bundle.actions().iter() {
