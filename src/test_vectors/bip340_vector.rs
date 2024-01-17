@@ -1,3 +1,5 @@
+// This is the first row (index = 0) from https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv
+
 pub(crate) struct TestVector {
     pub(crate) isk: [u8; 32],
     pub(crate) ik: [u8; 32],
