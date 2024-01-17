@@ -7,19 +7,23 @@ use orchard::bundle::Authorized;
 use orchard::issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized};
 use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use orchard::note::{AssetBase, ExtractedNoteCommitment};
-use orchard::note_encryption_orchardzsa::OrchardZSADomain;
+
 use orchard::tree::{MerkleHashOrchard, MerklePath};
 use orchard::{
     builder::Builder,
     bundle::Flags,
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
+    note_encryption::OrchardType,
+    note_encryption_v3::OrchardDomainV3,
     value::NoteValue,
     Address, Anchor, Bundle, Note,
 };
 use rand::rngs::OsRng;
 use std::collections::HashSet;
 use zcash_note_encryption_zsa::try_note_decryption;
+
+type OrchardV3 = OrchardType<OrchardDomainV3>;
 
 #[derive(Debug)]
 struct Keychain {
@@ -85,7 +89,7 @@ fn build_and_sign_bundle(
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
-) -> Bundle<Authorized, i64> {
+) -> Bundle<Authorized, i64, OrchardDomainV3> {
     let unauthorized = builder.build(&mut rng).unwrap();
     let sighash = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
@@ -180,7 +184,7 @@ fn issue_zsa_notes(asset_descr: &str, keys: &Keychain) -> (Note, Note) {
 fn create_native_note(keys: &Keychain) -> Note {
     let mut rng = OsRng;
 
-    let shielding_bundle: Bundle<_, i64> = {
+    let shielding_bundle: Bundle<_, i64, OrchardDomainV3> = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -205,7 +209,7 @@ fn create_native_note(keys: &Keychain) -> Note {
         .actions()
         .iter()
         .find_map(|action| {
-            let domain = OrchardZSADomain::for_action(action);
+            let domain = OrchardV3::for_action(action);
             try_note_decryption(&domain, &PreparedIncomingViewingKey::new(&ivk), action)
         })
         .unwrap();
@@ -238,7 +242,7 @@ fn build_and_verify_bundle(
     keys: &Keychain,
 ) -> Result<(), String> {
     let rng = OsRng;
-    let shielded_bundle: Bundle<_, i64> = {
+    let shielded_bundle: Bundle<_, i64, OrchardDomainV3> = {
         let mut builder = Builder::new(Flags::from_parts(true, true, true), anchor);
 
         spends
@@ -266,7 +270,7 @@ fn build_and_verify_bundle(
     Ok(())
 }
 
-fn verify_unique_spent_nullifiers(bundle: &Bundle<Authorized, i64>) -> bool {
+fn verify_unique_spent_nullifiers(bundle: &Bundle<Authorized, i64, OrchardDomainV3>) -> bool {
     let mut unique_nulifiers = Vec::new();
     let spent_nullifiers = bundle
         .actions()

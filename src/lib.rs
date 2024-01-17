@@ -26,15 +26,18 @@ pub mod issuance;
 pub mod keys;
 pub mod note;
 pub mod supply_info;
-// pub mod note_encryption; // disabled until backward compatability is implemented.
-pub mod note_encryption_orchardzsa;
 
-mod note_encryption_orchard;
+pub mod note_encryption;
+pub mod note_encryption_v2;
+pub mod note_encryption_v3;
+
 pub mod primitives;
 mod spec;
 pub mod tree;
 pub mod value;
 pub mod zip32;
+
+//pub mod domain_ext;
 
 #[cfg(test)]
 mod test_vectors;

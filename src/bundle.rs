@@ -21,14 +21,13 @@ use crate::{
     circuit::{Instance, Proof, VerifyingKey},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::Note,
-    note_encryption_orchardzsa::OrchardZSADomain,
+    note_encryption::{OrchardDomain, OrchardType},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
     value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };
-use crate::note_encryption_orchard::OrchardDomain;
 
-impl<T> Action<T> {
+impl<A, D: OrchardDomain> Action<A, D> {
     /// Prepares the public instance for this action, for creating and verifying the
     /// bundle proof.
     pub fn to_instance(&self, flags: Flags, anchor: Anchor) -> Instance {
@@ -153,9 +152,9 @@ pub trait Authorization: fmt::Debug {
 
 /// A bundle of actions to be applied to the ledger.
 #[derive(Clone)]
-pub struct Bundle<T: Authorization, V, OrchardFlavour> {
+pub struct Bundle<A: Authorization, V, D: OrchardDomain> {
     /// The list of actions that make up this bundle.
-    actions: NonEmpty<Action<T::SpendAuth>>,
+    actions: NonEmpty<Action<A::SpendAuth, D>>,
     /// Orchard-specific transaction-level flags for this bundle.
     flags: Flags,
     /// The net value moved out of the Orchard shielded pool.
@@ -163,18 +162,19 @@ pub struct Bundle<T: Authorization, V, OrchardFlavour> {
     /// This is the sum of Orchard spends minus the sum of Orchard outputs.
     value_balance: V,
     /// Assets intended for burning
+    // FIXME: use BurnType like it's in Zebra? Put it as another param of Domain trait
     burn: Vec<(AssetBase, V)>,
     /// The root of the Orchard commitment tree that this bundle commits to.
     anchor: Anchor,
     /// The authorization for this bundle.
-    authorization: T,
+    authorization: A,
 }
 
-impl<T: Authorization, V: fmt::Debug> fmt::Debug for Bundle<T, V> {
+impl<A: Authorization, V: fmt::Debug, D: OrchardDomain> fmt::Debug for Bundle<A, V, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         /// Helper struct for debug-printing actions without exposing `NonEmpty`.
-        struct Actions<'a, T>(&'a NonEmpty<Action<T>>);
-        impl<'a, T: fmt::Debug> fmt::Debug for Actions<'a, T> {
+        struct Actions<'a, A, D: OrchardDomain>(&'a NonEmpty<Action<A, D>>);
+        impl<'a, A: fmt::Debug, D: OrchardDomain> fmt::Debug for Actions<'a, A, D> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 f.debug_list().entries(self.0.iter()).finish()
             }
@@ -190,15 +190,15 @@ impl<T: Authorization, V: fmt::Debug> fmt::Debug for Bundle<T, V> {
     }
 }
 
-impl<T: Authorization, V> Bundle<T, V> {
+impl<A: Authorization, V, D: OrchardDomain> Bundle<A, V, D> {
     /// Constructs a `Bundle` from its constituent parts.
     pub fn from_parts(
-        actions: NonEmpty<Action<T::SpendAuth>>,
+        actions: NonEmpty<Action<A::SpendAuth, D>>,
         flags: Flags,
         value_balance: V,
         burn: Vec<(AssetBase, V)>,
         anchor: Anchor,
-        authorization: T,
+        authorization: A,
     ) -> Self {
         Bundle {
             actions,
@@ -211,7 +211,7 @@ impl<T: Authorization, V> Bundle<T, V> {
     }
 
     /// Returns the list of actions that make up this bundle.
-    pub fn actions(&self) -> &NonEmpty<Action<T::SpendAuth>> {
+    pub fn actions(&self) -> &NonEmpty<Action<A::SpendAuth, D>> {
         &self.actions
     }
 
@@ -240,7 +240,7 @@ impl<T: Authorization, V> Bundle<T, V> {
     /// Returns the authorization for this bundle.
     ///
     /// In the case of a `Bundle<Authorized>`, this is the proof and binding signature.
-    pub fn authorization(&self) -> &T {
+    pub fn authorization(&self) -> &A {
         &self.authorization
     }
 
@@ -249,7 +249,7 @@ impl<T: Authorization, V> Bundle<T, V> {
     pub fn try_map_value_balance<V0, E, F: Fn(V) -> Result<V0, E>>(
         self,
         f: F,
-    ) -> Result<Bundle<T, V0>, E> {
+    ) -> Result<Bundle<A, V0, D>, E> {
         Ok(Bundle {
             actions: self.actions,
             flags: self.flags,
@@ -268,9 +268,9 @@ impl<T: Authorization, V> Bundle<T, V> {
     pub fn map_authorization<R, U: Authorization>(
         self,
         context: &mut R,
-        mut spend_auth: impl FnMut(&mut R, &T, T::SpendAuth) -> U::SpendAuth,
-        step: impl FnOnce(&mut R, T) -> U,
-    ) -> Bundle<U, V> {
+        mut spend_auth: impl FnMut(&mut R, &A, A::SpendAuth) -> U::SpendAuth,
+        step: impl FnOnce(&mut R, A) -> U,
+    ) -> Bundle<U, V, D> {
         let authorization = self.authorization;
         Bundle {
             actions: self
@@ -288,9 +288,9 @@ impl<T: Authorization, V> Bundle<T, V> {
     pub fn try_map_authorization<R, U: Authorization, E>(
         self,
         context: &mut R,
-        mut spend_auth: impl FnMut(&mut R, &T, T::SpendAuth) -> Result<U::SpendAuth, E>,
-        step: impl FnOnce(&mut R, T) -> Result<U, E>,
-    ) -> Result<Bundle<U, V>, E> {
+        mut spend_auth: impl FnMut(&mut R, &A, A::SpendAuth) -> Result<U::SpendAuth, E>,
+        step: impl FnOnce(&mut R, A) -> Result<U, E>,
+    ) -> Result<Bundle<U, V, D>, E> {
         let authorization = self.authorization;
         let new_actions = self
             .actions
@@ -331,7 +331,7 @@ impl<T: Authorization, V> Bundle<T, V> {
             .iter()
             .enumerate()
             .filter_map(|(idx, action)| {
-                let domain = OrchardZSADomain::for_action(action);
+                let domain = OrchardType::<D>::for_action(action);
                 prepared_keys.iter().find_map(|(ivk, prepared_ivk)| {
                     try_note_decryption(&domain, prepared_ivk, action)
                         .map(|(n, a, m)| (idx, (*ivk).clone(), n, a, m))
@@ -351,8 +351,8 @@ impl<T: Authorization, V> Bundle<T, V> {
     ) -> Option<(Note, Address, [u8; 512])> {
         let prepared_ivk = PreparedIncomingViewingKey::new(key);
         self.actions.get(action_idx).and_then(move |action| {
-            let domain = OrchardZSADomain::for_action(action);
-            // let domain = OrchardDomain::for_action(action);
+            let domain = OrchardType::<D>::for_action(action);
+            // let domain = D::for_action(action);
             try_note_decryption(&domain, &prepared_ivk, action)
         })
     }
@@ -369,7 +369,7 @@ impl<T: Authorization, V> Bundle<T, V> {
             .iter()
             .enumerate()
             .filter_map(|(idx, action)| {
-                let domain = OrchardZSADomain::for_action(action);
+                let domain = OrchardType::<D>::for_action(action);
                 keys.iter().find_map(move |key| {
                     try_output_recovery_with_ovk(
                         &domain,
@@ -393,7 +393,7 @@ impl<T: Authorization, V> Bundle<T, V> {
         key: &OutgoingViewingKey,
     ) -> Option<(Note, Address, [u8; 512])> {
         self.actions.get(action_idx).and_then(move |action| {
-            let domain = OrchardZSADomain::for_action(action);
+            let domain = OrchardType::<D>::for_action(action);
             try_output_recovery_with_ovk(
                 &domain,
                 key,
@@ -405,7 +405,7 @@ impl<T: Authorization, V> Bundle<T, V> {
     }
 }
 
-impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
+impl<A: Authorization, V: Copy + Into<i64>, D: OrchardDomain> Bundle<A, V, D> {
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
     pub fn commitment(&self) -> BundleCommitment {
@@ -474,7 +474,7 @@ impl Authorized {
     }
 }
 
-impl<V> Bundle<Authorized, V> {
+impl<V, D: OrchardDomain> Bundle<Authorized, V, D> {
     /// Computes a commitment to the authorizing data within for this bundle.
     ///
     /// This together with `Bundle::commitment` bind the entire bundle.
@@ -490,7 +490,7 @@ impl<V> Bundle<Authorized, V> {
     }
 }
 
-impl<V: DynamicUsage> DynamicUsage for Bundle<Authorized, V> {
+impl<V: DynamicUsage, D: OrchardDomain> DynamicUsage for Bundle<Authorized, V, D> {
     fn dynamic_usage(&self) -> usize {
         self.actions.dynamic_usage()
             + self.value_balance.dynamic_usage()
@@ -558,6 +558,7 @@ pub mod testing {
     pub use crate::action::testing::{arb_action, arb_unauthorized_action};
     use crate::note::asset_base::testing::arb_zsa_asset_base;
     use crate::note::AssetBase;
+    use crate::note_encryption_v3::OrchardDomainV3;
     use crate::value::testing::arb_value_sum;
 
     /// Marker for an unauthorized bundle with no proofs or signatures.
@@ -572,7 +573,7 @@ pub mod testing {
     pub fn arb_unauthorized_action_n(
         n_actions: usize,
         flags: Flags,
-    ) -> impl Strategy<Value = (ValueSum, Action<()>)> {
+    ) -> impl Strategy<Value = (ValueSum, Action<(), OrchardDomainV3>)> {
         let spend_value_gen = if flags.spends_enabled {
             Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
         } else {
@@ -597,7 +598,12 @@ pub mod testing {
     pub fn arb_action_n(
         n_actions: usize,
         flags: Flags,
-    ) -> impl Strategy<Value = (ValueSum, Action<redpallas::Signature<SpendAuth>>)> {
+    ) -> impl Strategy<
+        Value = (
+            ValueSum,
+            Action<redpallas::Signature<SpendAuth>, OrchardDomainV3>,
+        ),
+    > {
         let spend_value_gen = if flags.spends_enabled {
             Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
         } else {
@@ -658,8 +664,8 @@ pub mod testing {
             anchor in arb_base().prop_map(Anchor::from),
             flags in Just(flags),
             burn in vec(arb_asset_to_burn(), 1usize..10)
-        ) -> Bundle<Unauthorized, ValueSum> {
-            let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
+        ) -> Bundle<Unauthorized, ValueSum, OrchardDomainV3> {
+            let (balances, actions): (Vec<ValueSum>, Vec<Action<_, _>>) = acts.into_iter().unzip();
 
             Bundle::from_parts(
                 NonEmpty::from_vec(actions).unwrap(),
@@ -689,8 +695,8 @@ pub mod testing {
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
             flags in Just(flags),
             burn in vec(arb_asset_to_burn(), 1usize..10)
-        ) -> Bundle<Authorized, ValueSum> {
-            let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
+        ) -> Bundle<Authorized, ValueSum, OrchardDomainV3> {
+            let (balances, actions): (Vec<ValueSum>, Vec<Action<_, _>, >) = acts.into_iter().unzip();
             let rng = StdRng::from_seed(rng_seed);
 
             Bundle::from_parts(
