@@ -70,7 +70,7 @@ mod tests {
         fn test_encoding_roundtrip(
             note in arb_note(NoteValue::from_raw(100)),
         ) {
-            let memo = &crate::test_vectors::note_encryption::test_vectors()[0].memo;
+            let memo = &crate::test_vectors::note_encryption_v3::test_vectors()[0].memo;
 
             // Encode.
             let mut plaintext = OrchardV3::note_plaintext_bytes(&note, memo);
