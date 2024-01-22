@@ -280,7 +280,11 @@ impl IssuanceAuthorizingKey {
     }
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
+    /// Only supports signing of messages longer than 32 bytes, using prehashing, as described in [BIP 340][bip340]
+    ///
+    /// [bip340]: https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki#messages-of-arbitrary-size
     pub fn sign(&self, msg: &[u8]) -> Signature {
+        assert!(msg.len() >= 32);
         schnorr::SigningKey::from(self.0).sign(msg)
     }
 }
@@ -1194,6 +1198,14 @@ mod tests {
         // isk must not be the zero scalar.
         let isk = IssuanceAuthorizingKey::from_bytes([0; 32]);
         assert!(isk.is_none());
+    }
+
+    #[test]
+    #[should_panic]
+    fn cannot_generate_issuance_authorization_signature_for_short_messages() {
+        let isk = IssuanceAuthorizingKey::random();
+        let msg = [0u8; 16];
+        let _ = isk.sign(&msg);
     }
 
     #[test]
