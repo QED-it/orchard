@@ -558,7 +558,7 @@ pub mod testing {
     pub use crate::action::testing::{arb_action, arb_unauthorized_action};
     use crate::note::asset_base::testing::arb_zsa_asset_base;
     use crate::note::AssetBase;
-    use crate::note_encryption_v3::OrchardDomainV3;
+    use crate::note_encryption_zsa::OrchardDomainZSA;
     use crate::value::testing::arb_value_sum;
 
     /// Marker for an unauthorized bundle with no proofs or signatures.
@@ -573,7 +573,7 @@ pub mod testing {
     pub fn arb_unauthorized_action_n(
         n_actions: usize,
         flags: Flags,
-    ) -> impl Strategy<Value = (ValueSum, Action<(), OrchardDomainV3>)> {
+    ) -> impl Strategy<Value = (ValueSum, Action<(), OrchardDomainZSA>)> {
         let spend_value_gen = if flags.spends_enabled {
             Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
         } else {
@@ -601,7 +601,7 @@ pub mod testing {
     ) -> impl Strategy<
         Value = (
             ValueSum,
-            Action<redpallas::Signature<SpendAuth>, OrchardDomainV3>,
+            Action<redpallas::Signature<SpendAuth>, OrchardDomainZSA>,
         ),
     > {
         let spend_value_gen = if flags.spends_enabled {
@@ -664,7 +664,7 @@ pub mod testing {
             anchor in arb_base().prop_map(Anchor::from),
             flags in Just(flags),
             burn in vec(arb_asset_to_burn(), 1usize..10)
-        ) -> Bundle<Unauthorized, ValueSum, OrchardDomainV3> {
+        ) -> Bundle<Unauthorized, ValueSum, OrchardDomainZSA> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_, _>>) = acts.into_iter().unzip();
 
             Bundle::from_parts(
@@ -695,7 +695,7 @@ pub mod testing {
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
             flags in Just(flags),
             burn in vec(arb_asset_to_burn(), 1usize..10)
-        ) -> Bundle<Authorized, ValueSum, OrchardDomainV3> {
+        ) -> Bundle<Authorized, ValueSum, OrchardDomainZSA> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_, _>, >) = acts.into_iter().unzip();
             let rng = StdRng::from_seed(rng_seed);
 

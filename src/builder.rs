@@ -339,7 +339,7 @@ impl Builder {
     }
 
     // FIXME: fix the doc, this line was removed from the doc:
-    // [`OrchardDomain`]: crate::note_encryption_v3::OrchardZSADomain
+    // [`OrchardDomain`]: crate::note_encryption_zsa::OrchardZSADomain
 
     /// Adds a note to be spent in this transaction.
     ///
@@ -928,7 +928,7 @@ pub mod testing {
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
         note_encryption::OrchardDomain,
-        note_encryption_v3::OrchardDomainV3,
+        note_encryption_zsa::OrchardDomainZSA,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
         value::{testing::arb_positive_note_value, NoteValue, MAX_NOTE_VALUE},
         Address, Note,
@@ -1041,17 +1041,17 @@ pub mod testing {
 
     /// Produce an arbitrary valid Orchard bundle using a random spending key.
     pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
-    ) -> impl Strategy<Value = Bundle<Authorized, V, OrchardDomainV3>> {
+    ) -> impl Strategy<Value = Bundle<Authorized, V, OrchardDomainZSA>> {
         arb_spending_key()
             .prop_flat_map(arb_bundle_inputs)
-            .prop_map(|inputs| inputs.into_bundle::<V, OrchardDomainV3>())
+            .prop_map(|inputs| inputs.into_bundle::<V, OrchardDomainZSA>())
     }
 
     /// Produce an arbitrary valid Orchard bundle using a specified spending key.
     pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
         k: SpendingKey,
-    ) -> impl Strategy<Value = Bundle<Authorized, V, OrchardDomainV3>> {
-        arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V, OrchardDomainV3>())
+    ) -> impl Strategy<Value = Bundle<Authorized, V, OrchardDomainZSA>> {
+        arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V, OrchardDomainZSA>())
     }
 }
 
@@ -1066,7 +1066,7 @@ mod tests {
         circuit::ProvingKey,
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendingKey},
-        note_encryption_v3::OrchardDomainV3,
+        note_encryption_zsa::OrchardDomainZSA,
         tree::EMPTY_ROOTS,
         value::NoteValue,
     };
@@ -1097,7 +1097,7 @@ mod tests {
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, -5000);
 
-        let bundle: Bundle<Authorized, i64, OrchardDomainV3> = builder
+        let bundle: Bundle<Authorized, i64, OrchardDomainZSA> = builder
             .build(&mut rng)
             .unwrap()
             .create_proof(&pk, &mut rng)

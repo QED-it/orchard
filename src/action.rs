@@ -133,7 +133,7 @@ pub(crate) mod testing {
             commitment::ExtractedNoteCommitment, nullifier::testing::arb_nullifier,
             testing::arb_note, TransmittedNoteCiphertext,
         },
-        note_encryption_v3::{NoteCiphertextBytes, OrchardDomainV3},
+        note_encryption_zsa::{NoteCiphertextBytes, OrchardDomainZSA},
         primitives::redpallas::{
             self,
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
@@ -150,7 +150,7 @@ pub(crate) mod testing {
             rk in arb_spendauth_verification_key(),
             note in arb_note(output_value),
             asset in arb_asset_base()
-        ) -> Action<(), OrchardDomainV3> {
+        ) -> Action<(), OrchardDomainZSA> {
             let cmx = ExtractedNoteCommitment::from(note.commitment());
             let cv_net = ValueCommitment::derive(
                 spend_value - output_value,
@@ -158,7 +158,7 @@ pub(crate) mod testing {
                 asset
             );
             // FIXME: make a real one from the note.
-            let encrypted_note = TransmittedNoteCiphertext::<OrchardDomainV3> {
+            let encrypted_note = TransmittedNoteCiphertext::<OrchardDomainZSA> {
                 epk_bytes: [0u8; 32],
                 enc_ciphertext: NoteCiphertextBytes([0u8; 612]),
                 out_ciphertext: [0u8; 80]
@@ -183,7 +183,7 @@ pub(crate) mod testing {
             rng_seed in prop::array::uniform32(prop::num::u8::ANY),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
             asset in arb_asset_base()
-        ) -> Action<redpallas::Signature<SpendAuth>, OrchardDomainV3> {
+        ) -> Action<redpallas::Signature<SpendAuth>, OrchardDomainZSA> {
             let cmx = ExtractedNoteCommitment::from(note.commitment());
             let cv_net = ValueCommitment::derive(
                 spend_value - output_value,
@@ -192,7 +192,7 @@ pub(crate) mod testing {
             );
 
             // FIXME: make a real one from the note.
-            let encrypted_note = TransmittedNoteCiphertext::<OrchardDomainV3> {
+            let encrypted_note = TransmittedNoteCiphertext::<OrchardDomainZSA> {
                 epk_bytes: [0u8; 32],
                 enc_ciphertext: NoteCiphertextBytes([0u8; 612]),
                 out_ciphertext: [0u8; 80]

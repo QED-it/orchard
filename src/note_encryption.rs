@@ -32,15 +32,15 @@ const NOTE_DIVERSIFIER_OFFSET: usize = NOTE_VERSION_OFFSET + NOTE_VERSION_SIZE;
 const NOTE_VALUE_OFFSET: usize = NOTE_DIVERSIFIER_OFFSET + NOTE_DIVERSIFIER_SIZE;
 const NOTE_RSEED_OFFSET: usize = NOTE_VALUE_OFFSET + NOTE_VALUE_SIZE;
 
-/// The size of a v2 compact note.
-pub const COMPACT_NOTE_SIZE_V2: usize =
+/// The size of a Vanilla compact note.
+pub const COMPACT_NOTE_SIZE_VANILLA: usize =
     NOTE_VERSION_SIZE + NOTE_DIVERSIFIER_SIZE + NOTE_VALUE_SIZE + NOTE_RSEED_SIZE;
 
 /// The size of the encoding of a ZSA asset id.
 const ZSA_ASSET_SIZE: usize = 32;
 
-/// The size of a v3 compact note.
-pub const COMPACT_NOTE_SIZE_V3: usize = COMPACT_NOTE_SIZE_V2 + ZSA_ASSET_SIZE;
+/// The size of a ZSA compact note.
+pub const COMPACT_NOTE_SIZE_ZSA: usize = COMPACT_NOTE_SIZE_VANILLA + ZSA_ASSET_SIZE;
 
 pub(crate) type Memo = [u8; MEMO_SIZE];
 
@@ -189,7 +189,7 @@ pub(crate) fn build_base_note_plaintext_bytes<const NOTE_PLAINTEXT_SIZE: usize>(
     np[NOTE_DIVERSIFIER_OFFSET..NOTE_VALUE_OFFSET]
         .copy_from_slice(note.recipient().diversifier().as_array());
     np[NOTE_VALUE_OFFSET..NOTE_RSEED_OFFSET].copy_from_slice(&note.value().to_bytes());
-    np[NOTE_RSEED_OFFSET..COMPACT_NOTE_SIZE_V2].copy_from_slice(note.rseed().as_bytes());
+    np[NOTE_RSEED_OFFSET..COMPACT_NOTE_SIZE_VANILLA].copy_from_slice(note.rseed().as_bytes());
 
     np
 }
@@ -244,7 +244,7 @@ impl<D: OrchardDomain> OrchardType<D> {
         );
 
         let rseed = Option::from(RandomSeed::from_bytes(
-            plaintext.as_ref()[NOTE_RSEED_OFFSET..COMPACT_NOTE_SIZE_V2]
+            plaintext.as_ref()[NOTE_RSEED_OFFSET..COMPACT_NOTE_SIZE_VANILLA]
                 .try_into()
                 .unwrap(),
             &domain.rho,
@@ -256,7 +256,7 @@ impl<D: OrchardDomain> OrchardType<D> {
         let asset = match note_version(plaintext.as_ref())? {
             0x02 => AssetBase::native(),
             0x03 => {
-                let bytes = plaintext.as_ref()[COMPACT_NOTE_SIZE_V2..COMPACT_NOTE_SIZE_V3]
+                let bytes = plaintext.as_ref()[COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA]
                     .try_into()
                     .unwrap();
                 AssetBase::from_bytes(bytes).unwrap()
