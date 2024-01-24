@@ -6,7 +6,7 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
     note_encryption::{CompactAction, OrchardType},
-    note_encryption_v3::OrchardDomainV3,
+    note_encryption_zsa::OrchardDomainZSA,
     value::NoteValue,
     Anchor, Bundle,
 };
@@ -16,7 +16,7 @@ use zcash_note_encryption_zsa::{batch, try_compact_note_decryption, try_note_dec
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 
-type OrchardV3 = OrchardType<OrchardDomainV3>;
+type OrchardZSA = OrchardType<OrchardDomainZSA>;
 
 fn bench_note_decryption(c: &mut Criterion) {
     let rng = OsRng;
@@ -73,7 +73,7 @@ fn bench_note_decryption(c: &mut Criterion) {
                 None,
             )
             .unwrap();
-        let bundle: Bundle<_, i64, OrchardDomainV3> = builder.build(rng).unwrap();
+        let bundle: Bundle<_, i64, OrchardDomainZSA> = builder.build(rng).unwrap();
         bundle
             .create_proof(&pk, rng)
             .unwrap()
@@ -82,7 +82,7 @@ fn bench_note_decryption(c: &mut Criterion) {
     };
     let action = bundle.actions().first();
 
-    let domain = OrchardV3::for_action(action);
+    let domain = OrchardZSA::for_action(action);
 
     let compact = {
         let mut group = c.benchmark_group("note-decryption");
@@ -123,10 +123,10 @@ fn bench_note_decryption(c: &mut Criterion) {
         let ivks = 2;
         let valid_ivks = vec![valid_ivk; ivks];
         let actions: Vec<_> = (0..100)
-            .map(|_| (OrchardV3::for_action(action), action.clone()))
+            .map(|_| (OrchardZSA::for_action(action), action.clone()))
             .collect();
         let compact: Vec<_> = (0..100)
-            .map(|_| (OrchardV3::for_action(action), CompactAction::from(action)))
+            .map(|_| (OrchardZSA::for_action(action), CompactAction::from(action)))
             .collect();
 
         let mut group = c.benchmark_group("batch-note-decryption");
