@@ -28,8 +28,8 @@ pub mod note;
 pub mod supply_info;
 
 pub mod note_encryption;
-pub mod note_encryption_v2;
-pub mod note_encryption_v3;
+pub mod note_encryption_vanilla;
+pub mod note_encryption_zsa;
 
 pub mod primitives;
 mod spec;

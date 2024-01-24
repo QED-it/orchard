@@ -5,18 +5,18 @@ use zcash_note_encryption_zsa::{AEAD_TAG_SIZE, MEMO_SIZE};
 use crate::{
     note_encryption::{
         build_base_note_plaintext_bytes, define_note_byte_types, Memo, OrchardDomain,
-        COMPACT_NOTE_SIZE_V2, COMPACT_NOTE_SIZE_V3,
+        COMPACT_NOTE_SIZE_VANILLA,
     },
     Note,
 };
 
-define_note_byte_types!(COMPACT_NOTE_SIZE_V3);
+define_note_byte_types!(COMPACT_NOTE_SIZE_VANILLA);
 
 /// FIXME: add doc
 #[derive(Debug, Clone)]
-pub struct OrchardDomainV3;
+pub struct OrchardDomainVanilla;
 
-impl OrchardDomain for OrchardDomainV3 {
+impl OrchardDomain for OrchardDomainVanilla {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE;
 
     type NotePlaintextBytes = NotePlaintextBytes;
@@ -25,10 +25,9 @@ impl OrchardDomain for OrchardDomainV3 {
     type CompactNoteCiphertextBytes = CompactNoteCiphertextBytes;
 
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes {
-        let mut np = build_base_note_plaintext_bytes(0x03, note);
+        let mut np = build_base_note_plaintext_bytes(0x02, note);
 
-        np[COMPACT_NOTE_SIZE_V2..COMPACT_NOTE_SIZE_V3].copy_from_slice(&note.asset().to_bytes());
-        np[COMPACT_NOTE_SIZE_V3..].copy_from_slice(memo);
+        np[COMPACT_NOTE_SIZE_VANILLA..].copy_from_slice(memo);
 
         NotePlaintextBytes(np)
     }
@@ -43,7 +42,7 @@ mod tests {
         EphemeralKeyBytes,
     };
 
-    use super::{NoteCiphertextBytes, OrchardDomainV3};
+    use super::{NoteCiphertextBytes, OrchardDomainVanilla};
     use crate::{
         action::Action,
         keys::{
@@ -51,7 +50,7 @@ mod tests {
             OutgoingViewingKey, PreparedIncomingViewingKey,
         },
         note::{
-            testing::arb_note, AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed,
+            testing::arb_native_note, AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed,
             TransmittedNoteCiphertext,
         },
         note_encryption::{note_version, prf_ock_orchard, CompactAction, OrchardType},
@@ -60,27 +59,28 @@ mod tests {
         Address, Note,
     };
 
-    type OrchardV3 = OrchardType<OrchardDomainV3>;
+    type OrchardVanilla = OrchardType<OrchardDomainVanilla>;
 
     /// Implementation of in-band secret distribution for Orchard bundles.
-    pub type OrchardNoteEncryptionV3 = zcash_note_encryption_zsa::NoteEncryption<OrchardV3>;
+    pub type OrchardNoteEncryptionVanilla =
+        zcash_note_encryption_zsa::NoteEncryption<OrchardVanilla>;
 
     proptest! {
         #[test]
         fn test_encoding_roundtrip(
-            note in arb_note(NoteValue::from_raw(100)),
+            note in arb_native_note(),
         ) {
-            let memo = &crate::test_vectors::note_encryption_v3::test_vectors()[0].memo;
+            let memo = &crate::test_vectors::note_encryption_vanilla::test_vectors()[0].memo;
 
             // Encode.
-            let mut plaintext = OrchardV3::note_plaintext_bytes(&note, memo);
+            let mut plaintext = OrchardVanilla::note_plaintext_bytes(&note, memo);
 
             // Decode.
-            let domain = OrchardV3::for_nullifier(note.rho());
+            let domain = OrchardVanilla::for_nullifier(note.rho());
             let parsed_version = note_version(plaintext.as_mut()).unwrap();
             let (compact,parsed_memo) = domain.extract_memo(&plaintext);
 
-            let (parsed_note, parsed_recipient) = OrchardV3::orchard_parse_note_plaintext_without_memo(&domain, &compact,
+            let (parsed_note, parsed_recipient) = OrchardVanilla::orchard_parse_note_plaintext_without_memo(&domain, &compact,
                 |diversifier| {
                     assert_eq!(diversifier, &note.recipient().diversifier());
                     Some(*note.recipient().pk_d())
@@ -91,13 +91,13 @@ mod tests {
             assert_eq!(parsed_note, note);
             assert_eq!(parsed_recipient, note.recipient());
             assert_eq!(&parsed_memo, memo);
-            assert_eq!(parsed_version, 0x03);
+            assert_eq!(parsed_version, 0x02);
         }
     }
 
     #[test]
     fn test_vectors() {
-        let test_vectors = crate::test_vectors::note_encryption_v3::test_vectors();
+        let test_vectors = crate::test_vectors::note_encryption_vanilla::test_vectors();
 
         for tv in test_vectors {
             //
@@ -139,7 +139,7 @@ mod tests {
 
             let recipient = Address::from_parts(d, pk_d);
 
-            let asset = AssetBase::from_bytes(&tv.asset).unwrap();
+            let asset = AssetBase::native();
 
             let note = Note::from_parts(recipient, value, asset, rho, rseed).unwrap();
             assert_eq!(ExtractedNoteCommitment::from(note.commitment()), cmx);
@@ -164,7 +164,7 @@ mod tests {
             // (Tested first because it only requires immutable references.)
             //
 
-            let domain = OrchardV3::for_nullifier(rho);
+            let domain = OrchardVanilla::for_nullifier(rho);
 
             match try_note_decryption(&domain, &ivk, &action) {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {
@@ -196,7 +196,7 @@ mod tests {
             // Test encryption
             //
 
-            let ne = OrchardNoteEncryptionV3::new_with_esk(esk, Some(ovk), note, tv.memo);
+            let ne = OrchardNoteEncryptionVanilla::new_with_esk(esk, Some(ovk), note, tv.memo);
 
             assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
             assert_eq!(
