@@ -12,9 +12,14 @@ use group::{
     prime::PrimeCurveAffine,
     Curve, GroupEncoding,
 };
-use k256::schnorr::signature::{Signer, Verifier};
-use k256::schnorr::{Signature, VerifyingKey};
-use k256::{schnorr, NonZeroScalar, PublicKey};
+use k256::{
+    schnorr,
+    schnorr::{
+        signature::{Signer, Verifier},
+        Signature, VerifyingKey,
+    },
+    NonZeroScalar, PublicKey,
+};
 use pasta_curves::{pallas, pallas::Scalar};
 use rand::rngs::OsRng;
 use rand::RngCore;
@@ -245,8 +250,7 @@ impl IssuanceAuthorizingKey {
     ///
     /// [ZIP 32]: https://zips.z.cash/zip-0032
     pub(crate) fn random() -> Self {
-        let mut rng = OsRng;
-        IssuanceAuthorizingKey(NonZeroScalar::random(&mut rng))
+        IssuanceAuthorizingKey(NonZeroScalar::random(&mut OsRng))
     }
 
     /// Constructs an Orchard issuance key from uniformly-random bytes.
@@ -260,7 +264,7 @@ impl IssuanceAuthorizingKey {
 
     /// Returns the raw bytes of the issuance key.
     pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.to_bytes().as_slice().try_into().unwrap()
+        self.0.to_bytes().try_into().unwrap() // The unwrap call never fails since ??
     }
 
     /// Derives the Orchard-ZSA issuance key for the given seed, coin type, and account.
@@ -280,18 +284,20 @@ impl IssuanceAuthorizingKey {
     }
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
-    /// Only supports signing of messages longer than 32 bytes, using prehashing, as described in [BIP 340][bip340]
+    /// Only supports signing of messages longer than 32 bytes, as described in [BIP 340][bip340]
     ///
     /// [bip340]: https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki#messages-of-arbitrary-size
-    pub fn sign(&self, msg: &[u8]) -> Signature {
+    pub fn try_sign(&self, msg: &[u8]) -> Result<Signature, schnorr::Error> {
         assert!(msg.len() >= 32);
-        schnorr::SigningKey::from(self.0).sign(msg)
+        schnorr::SigningKey::from(self.0).try_sign(msg)
     }
 }
 
 impl Debug for IssuanceAuthorizingKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("").field(&self.0.to_bytes()).finish()
+        f.debug_tuple("IssuanceAuthorizingKey")
+            .field(&self.0.to_bytes())
+            .finish()
     }
 }
 
@@ -321,13 +327,11 @@ impl IssuanceValidatingKey {
     /// Converts this issuance validating key to its serialized form,
     /// in big-endian order as defined in BIP 340.
     pub fn to_bytes(&self) -> [u8; 32] {
-        // This provides the big-endian encoding, via the FieldBytesEncoding trait in the k256 crate.
         VerifyingKey::try_from(self.0)
             .unwrap()
             .to_bytes()
-            .as_slice()
             .try_into()
-            .unwrap()
+            .unwrap() // This cannot fail
     }
 
     /// Constructs an Orchard issuance validating key from the provided bytes.
@@ -1205,16 +1209,15 @@ mod tests {
     fn cannot_generate_issuance_authorization_signature_for_short_messages() {
         let isk = IssuanceAuthorizingKey::random();
         let msg = [0u8; 16];
-        let _ = isk.sign(&msg);
+        let _ = isk.try_sign(&msg);
     }
 
     #[test]
     fn issuance_authorizing_key_from_bytes_to_bytes_roundtrip() {
         let isk = IssuanceAuthorizingKey::random();
         let isk_bytes = isk.to_bytes();
-        let isk_roundtrip = IssuanceAuthorizingKey::from_bytes(isk_bytes);
-        assert!(isk_roundtrip.is_some());
-        assert_eq!(isk.to_bytes(), isk_roundtrip.unwrap().to_bytes());
+        let isk_roundtrip = IssuanceAuthorizingKey::from_bytes(isk_bytes).unwrap();
+        assert_eq!(isk_bytes, isk_roundtrip.to_bytes());
     }
 
     proptest! {
@@ -1342,7 +1345,7 @@ mod tests {
 
             let message = tv.msg;
 
-            let signature = isk.sign(&message);
+            let signature = isk.try_sign(&message).unwrap();
             let sig_bytes: [u8; 64] = signature.to_bytes();
             assert_eq!(sig_bytes, tv.sig);
 

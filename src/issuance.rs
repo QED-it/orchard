@@ -410,12 +410,15 @@ impl IssueBundle<Prepared> {
             Ok(())
         })?;
 
+        // Make sure the signature can be generated.
+        let signature = isk
+            .try_sign(&self.authorization.sighash)
+            .map_err(|_| IssueBundleInvalidSignature)?;
+
         Ok(IssueBundle {
             ik: self.ik,
             actions: self.actions,
-            authorization: Signed {
-                signature: isk.sign(&self.authorization.sighash),
-            },
+            authorization: Signed { signature },
         })
     }
 }
@@ -1166,7 +1169,7 @@ mod tests {
         let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
 
         signed.set_authorization(Signed {
-            signature: wrong_isk.sign(&sighash),
+            signature: wrong_isk.try_sign(&sighash).unwrap(),
         });
 
         let prev_finalized = &HashSet::new();
@@ -1341,7 +1344,7 @@ mod tests {
             ik: bundle.ik,
             actions: bundle.actions,
             authorization: Signed {
-                signature: isk.sign(&sighash),
+                signature: isk.try_sign(&sighash).unwrap(),
             },
         };
 
