@@ -256,7 +256,7 @@ impl ActionInfo {
     fn build<D: OrchardDomain>(
         self,
         mut rng: impl RngCore,
-    ) -> (Action<SigningMetadata, D>, Circuit) {
+    ) -> (Action<SigningMetadata, D>, Circuit<D>) {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -484,7 +484,10 @@ impl Builder {
     pub fn build<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain>(
         self,
         mut rng: impl RngCore,
-    ) -> Result<Bundle<InProgress<Unproven, Unauthorized>, V, D>, BuildError> {
+    ) -> Result<Bundle<InProgress<Unproven<D>, Unauthorized>, V, D>, BuildError>
+    where
+        Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
+    {
         let mut pre_actions: Vec<_> = Vec::new();
 
         // Pair up the spends and recipients, extending with dummy values as necessary.
@@ -641,11 +644,17 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 ///
 /// This struct contains the private data needed to create a [`Proof`] for a [`Bundle`].
 #[derive(Clone, Debug)]
-pub struct Unproven {
-    circuits: Vec<Circuit>,
+pub struct Unproven<D>
+where
+    Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
+{
+    circuits: Vec<Circuit<D>>,
 }
 
-impl<S: InProgressSignatures> InProgress<Unproven, S> {
+impl<S: InProgressSignatures, D> InProgress<Unproven<D>, S>
+where
+    Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
+{
     /// Creates the proof for this bundle.
     pub fn create_proof(
         &self,
@@ -657,7 +666,10 @@ impl<S: InProgressSignatures> InProgress<Unproven, S> {
     }
 }
 
-impl<S: InProgressSignatures, V, D: OrchardDomain> Bundle<InProgress<Unproven, S>, V, D> {
+impl<S: InProgressSignatures, V, D: OrchardDomain> Bundle<InProgress<Unproven<D>, S>, V, D>
+where
+    Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
+{
     /// Creates the proof for this bundle.
     pub fn create_proof(
         self,
@@ -917,6 +929,8 @@ pub mod testing {
     use incrementalmerkletree::{frontier::Frontier, Hashable};
     use rand::{rngs::StdRng, CryptoRng, SeedableRng};
 
+    use pasta_curves::pallas;
+
     use proptest::collection::vec;
     use proptest::prelude::*;
 
@@ -924,7 +938,7 @@ pub mod testing {
     use crate::{
         address::testing::arb_address,
         bundle::{Authorized, Bundle, Flags},
-        circuit::ProvingKey,
+        circuit::{Circuit, ProvingKey},
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
         note_encryption::OrchardDomain,
@@ -955,9 +969,12 @@ pub mod testing {
 
     impl<R: RngCore + CryptoRng> ArbitraryBundleInputs<R> {
         /// Create a bundle from the set of arbitrary bundle inputs.
-        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain>(
+        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain + Default>(
             mut self,
-        ) -> Bundle<Authorized, V, D> {
+        ) -> Bundle<Authorized, V, D>
+        where
+            Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
+        {
             let fvk = FullViewingKey::from(&self.sk);
             let flags = Flags::from_parts(true, true, true);
             let mut builder = Builder::new(flags, self.anchor);

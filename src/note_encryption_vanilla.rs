@@ -13,7 +13,7 @@ use crate::{
 define_note_byte_types!(COMPACT_NOTE_SIZE_VANILLA);
 
 /// FIXME: add doc
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct OrchardDomainVanilla;
 
 impl OrchardDomain for OrchardDomainVanilla {
