@@ -13,7 +13,7 @@ use crate::{
 define_note_byte_types!(COMPACT_NOTE_SIZE_ZSA);
 
 /// FIXME: add doc
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct OrchardDomainZSA;
 
 impl OrchardDomain for OrchardDomainZSA {
