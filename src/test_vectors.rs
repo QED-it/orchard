@@ -1,5 +1,4 @@
 pub(crate) mod asset_base;
-pub(crate) mod bip340_vector;
 pub(crate) mod commitment_tree;
 pub(crate) mod keys;
 pub(crate) mod merkle_path;

@@ -60,12 +60,13 @@ hex = "0.4"
 proptest = "1.0.0"
 zcash_note_encryption_zsa = { package = "zcash_note_encryption", version = "0.4", git = "https://github.com/QED-it/zcash_note_encryption", branch = "zsa1", features = ["pre-zip-212"] }
 incrementalmerkletree = { version = "0.5", features = ["test-dependencies"] }
+ahash = "=0.8.6" #0.8.7 is latest, seems to depend on Rust 1.72
+half = "=2.2.1" #2.3.1 is latest, requires Rust 1.70
 
 [target.'cfg(unix)'.dev-dependencies]
 inferno = "0.11"
 clap = "=4.2.0" # Used by inferno. Last version required rust 1.70
 pprof = { version = "0.11", features = ["criterion", "flamegraph"] }
-half = "=2.2.1" #Latest version requires Rust 1.70
 
 [lib]
 bench = false
