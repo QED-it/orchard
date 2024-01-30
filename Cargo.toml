@@ -65,6 +65,7 @@ incrementalmerkletree = { version = "0.5", features = ["test-dependencies"] }
 inferno = "0.11"
 clap = "=4.2.0" # Used by inferno. Last version required rust 1.70
 pprof = { version = "0.11", features = ["criterion", "flamegraph"] }
+half = "=2.2.1" #Latest version requires Rust 1.70
 
 [lib]
 bench = false
