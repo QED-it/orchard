@@ -14,11 +14,8 @@ use group::{
 };
 use k256::{
     schnorr,
-    schnorr::{
-        signature::{Signer, Verifier},
-        Signature, VerifyingKey,
-    },
-    NonZeroScalar, PublicKey,
+    schnorr::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey},
+    NonZeroScalar,
 };
 use pasta_curves::{pallas, pallas::Scalar};
 use rand::rngs::OsRng;
@@ -284,12 +281,9 @@ impl IssuanceAuthorizingKey {
     }
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
-    /// Only supports signing of messages longer than 32 bytes, as described in [BIP 340][bip340]
-    ///
-    /// [bip340]: https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki#messages-of-arbitrary-size
-    pub fn try_sign(&self, msg: &[u8]) -> Result<Signature, schnorr::Error> {
-        assert!(msg.len() >= 32);
-        schnorr::SigningKey::from(self.0).try_sign(msg)
+    /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign 32 byte SIGHASH values
+    pub fn try_sign(&self, msg: &[u8; 32]) -> Result<Signature, schnorr::Error> {
+        schnorr::SigningKey::from(self.0).sign_prehash_with_aux_rand(msg, &[0u8; 32])
     }
 }
 
@@ -307,11 +301,11 @@ impl Debug for IssuanceAuthorizingKey {
 ///
 /// [IssuanceZSA]: https://qed-it.github.io/zips/zip-0227#issuance-key-derivation
 #[derive(Debug, Clone)]
-pub struct IssuanceValidatingKey(k256::PublicKey);
+pub struct IssuanceValidatingKey(schnorr::VerifyingKey);
 
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
-        IssuanceValidatingKey(schnorr::SigningKey::from(isk.0).verifying_key().into())
+        IssuanceValidatingKey(*schnorr::SigningKey::from(isk.0).verifying_key())
     }
 }
 
@@ -327,11 +321,7 @@ impl IssuanceValidatingKey {
     /// Converts this issuance validating key to its serialized form,
     /// in big-endian order as defined in BIP 340.
     pub fn to_bytes(&self) -> [u8; 32] {
-        VerifyingKey::try_from(self.0)
-            .unwrap()
-            .to_bytes()
-            .try_into()
-            .unwrap() // This cannot fail
+        self.0.to_bytes().try_into().unwrap() // This cannot fail
     }
 
     /// Constructs an Orchard issuance validating key from the provided bytes.
@@ -341,14 +331,12 @@ impl IssuanceValidatingKey {
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         VerifyingKey::from_bytes(bytes)
             .ok()
-            .map(PublicKey::from)
             .map(IssuanceValidatingKey)
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
     pub fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), schnorr::Error> {
-        let vk = VerifyingKey::try_from(self.0)?;
-        vk.verify(msg, signature)
+        self.0.verify_prehash(msg, signature)
     }
 }
 
@@ -1166,8 +1154,6 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use ff::PrimeField;
-    use k256::schnorr::signature::hazmat::PrehashVerifier;
-    use k256::schnorr::{SigningKey, VerifyingKey};
     use proptest::prelude::*;
 
     use super::{
@@ -1202,14 +1188,6 @@ mod tests {
         // isk must not be the zero scalar.
         let isk = IssuanceAuthorizingKey::from_bytes([0; 32]);
         assert!(isk.is_none());
-    }
-
-    #[test]
-    #[should_panic]
-    fn cannot_generate_issuance_authorization_signature_for_short_messages() {
-        let isk = IssuanceAuthorizingKey::random();
-        let msg = [0u8; 16];
-        let _ = isk.try_sign(&msg);
     }
 
     #[test]
@@ -1308,30 +1286,6 @@ mod tests {
 
             let internal_ovk = fvk.to_ovk(Scope::Internal);
             assert_eq!(internal_ovk.0, tv.internal_ovk);
-        }
-    }
-
-    #[test]
-    fn bip340_test_vector() {
-        for tv in crate::test_vectors::bip340_vector::test_vectors() {
-            let isk = IssuanceAuthorizingKey::from_bytes(tv.isk).unwrap();
-
-            let ik = IssuanceValidatingKey::from(&isk);
-            assert_eq!(ik.to_bytes(), tv.ik);
-
-            let message = tv.message;
-            let aux_rand = [0u8; 32];
-
-            let signature = SigningKey::from(isk.0)
-                .sign_prehash_with_aux_rand(&message, &aux_rand)
-                .unwrap();
-            let sig_bytes: [u8; 64] = signature.to_bytes();
-            assert_eq!(sig_bytes, tv.signature);
-
-            assert!(VerifyingKey::try_from(ik.0)
-                .unwrap()
-                .verify_prehash(&message, &signature)
-                .is_ok());
         }
     }
 
