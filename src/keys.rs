@@ -1,8 +1,10 @@
 //! Key structures for Orchard.
 
 use core::mem;
-use std::fmt::{Debug, Formatter};
-use std::io::{self, Read, Write};
+use std::{
+    fmt::{Debug, Formatter},
+    io::{self, Read, Write},
+};
 
 use aes::Aes256;
 use blake2b_simd::{Hash as Blake2bHash, Params};
@@ -14,12 +16,14 @@ use group::{
 };
 use k256::{
     schnorr,
-    schnorr::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey},
+    schnorr::{
+        signature::hazmat::{PrehashSigner, PrehashVerifier},
+        Signature, VerifyingKey,
+    },
     NonZeroScalar,
 };
 use pasta_curves::{pallas, pallas::Scalar};
-use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::{rngs::OsRng, RngCore};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zcash_note_encryption_zsa::EphemeralKeyBytes;
 
@@ -281,9 +285,9 @@ impl IssuanceAuthorizingKey {
     }
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
-    /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign 32 byte SIGHASH values
+    /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign 32 byte SIGHASH values.
     pub fn try_sign(&self, msg: &[u8; 32]) -> Result<Signature, schnorr::Error> {
-        schnorr::SigningKey::from(self.0).sign_prehash_with_aux_rand(msg, &[0u8; 32])
+        schnorr::SigningKey::from(self.0).sign_prehash(msg)
     }
 }
 
