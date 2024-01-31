@@ -258,7 +258,7 @@ impl IssuanceAuthorizingKey {
     }
 
     /// Returns the raw bytes of the issuance key.
-    // Note that the unwrap call never fails since the issuance authorizing key is exactly 32 bytes.
+    /// Unwrap call never fails since the issuance authorizing key is exactly 32 bytes.
     pub fn to_bytes(&self) -> [u8; 32] {
         self.0.to_bytes().try_into().unwrap()
     }
@@ -275,11 +275,14 @@ impl IssuanceAuthorizingKey {
             ChildIndex::try_from(coin_type)?,
             ChildIndex::try_from(account)?,
         ];
-        let esk =
-            ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE)?;
 
-        IssuanceAuthorizingKey::from_bytes(*esk.sk().to_bytes())
-            .ok_or(zip32::Error::InvalidSpendingKey)
+        // we are reusing zip32 logic for deriving the key, zip32 should be updated as discussed
+        let &isk_bytes =
+            ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE)?
+                .sk()
+                .to_bytes();
+
+        IssuanceAuthorizingKey::from_bytes(isk_bytes).ok_or(zip32::Error::InvalidSpendingKey)
     }
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
@@ -322,7 +325,7 @@ impl Eq for IssuanceValidatingKey {}
 impl IssuanceValidatingKey {
     /// Converts this issuance validating key to its serialized form,
     /// in big-endian order as defined in BIP 340.
-    // Note that the unwrap method cannot fail since the issuance validating key is exactly 32 bytes.
+    /// Unwrap call never fails since the issuance validating key is exactly 32 bytes.
     pub fn to_bytes(&self) -> [u8; 32] {
         self.0.to_bytes().try_into().unwrap()
     }
