@@ -237,12 +237,6 @@ fn check_structural_validity(
 #[derive(Copy, Clone)]
 pub struct IssuanceAuthorizingKey(NonZeroScalar);
 
-impl From<SpendingKey> for IssuanceAuthorizingKey {
-    fn from(sk: SpendingKey) -> Self {
-        IssuanceAuthorizingKey::from_bytes(*sk.to_bytes()).unwrap()
-    }
-}
-
 impl IssuanceAuthorizingKey {
     /// Generates a random issuance key.
     ///
@@ -281,8 +275,11 @@ impl IssuanceAuthorizingKey {
             ChildIndex::try_from(coin_type)?,
             ChildIndex::try_from(account)?,
         ];
-        ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE)
-            .map(|esk| esk.sk().into())
+        let esk =
+            ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE)?;
+
+        IssuanceAuthorizingKey::from_bytes(*esk.sk().to_bytes())
+            .ok_or(zip32::Error::InvalidSpendingKey)
     }
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
