@@ -24,8 +24,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     let sk = SpendingKey::from_bytes([7; 32]).unwrap();
     let recipient = FullViewingKey::from(&sk).address_at(0u32, Scope::External);
 
-    let vk = VerifyingKey::build();
-    let pk = ProvingKey::build();
+    // FIXME: consider adding test for OrchardDomainVanilla as well
+    let vk = VerifyingKey::build::<OrchardDomainZSA>();
+    let pk = ProvingKey::build::<OrchardDomainZSA>();
 
     let create_bundle = |num_recipients| {
         let mut builder = Builder::new(

@@ -20,7 +20,8 @@ type OrchardZSA = OrchardType<OrchardDomainZSA>;
 
 fn bench_note_decryption(c: &mut Criterion) {
     let rng = OsRng;
-    let pk = ProvingKey::build();
+    // FIXME: consider adding test for OrchardDomainVanilla as well
+    let pk = ProvingKey::build::<OrchardDomainZSA>();
 
     let fvk = FullViewingKey::from(&SpendingKey::from_bytes([7; 32]).unwrap());
     let valid_ivk = fvk.to_ivk(Scope::External);
