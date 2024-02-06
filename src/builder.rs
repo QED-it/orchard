@@ -310,7 +310,7 @@ impl ActionInfo {
                     parts: SigningParts { ak, alpha },
                 },
             ),
-            Circuit::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
+            Circuit::<D>::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
         )
     }
 }
@@ -552,8 +552,10 @@ impl Builder {
             .into_bsk();
 
         // Create the actions.
-        let (actions, circuits): (Vec<_>, Vec<_>) =
-            pre_actions.into_iter().map(|a| a.build(&mut rng)).unzip();
+        let (actions, circuits): (Vec<_>, Vec<_>) = pre_actions
+            .into_iter()
+            .map(|a| a.build::<D>(&mut rng))
+            .unzip();
 
         let bundle = Bundle::from_parts(
             NonEmpty::from_vec(actions).unwrap(),
@@ -1090,7 +1092,8 @@ mod tests {
 
     #[test]
     fn shielding_bundle() {
-        let pk = ProvingKey::build();
+        // FIXME: consider adding test for OrchardDomainVanilla as well
+        let pk = ProvingKey::build::<OrchardDomainZSA>();
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);

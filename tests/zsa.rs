@@ -55,8 +55,9 @@ impl Keychain {
 }
 
 fn prepare_keys() -> Keychain {
-    let pk = ProvingKey::build();
-    let vk = VerifyingKey::build();
+    // FIXME: consider adding test for OrchardDomainVanilla as well
+    let pk = ProvingKey::build::<OrchardDomainZSA>();
+    let vk = VerifyingKey::build::<OrchardDomainZSA>();
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);

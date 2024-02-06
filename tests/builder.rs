@@ -57,8 +57,9 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
 #[test]
 fn bundle_chain() {
     let mut rng = OsRng;
-    let pk = ProvingKey::build();
-    let vk = VerifyingKey::build();
+    // FIXME: consider adding test for OrchardDomainVanilla as well
+    let pk = ProvingKey::build::<OrchardDomainZSA>();
+    let vk = VerifyingKey::build::<OrchardDomainZSA>();
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
