@@ -1,50 +1,86 @@
 //! The Orchard Action circuit implementation.
 
+// FIXME: rename to zsa.rs (as it's alredy in circuit folder)?
+
 use ff::Field;
+
 use group::Curve;
-use halo2_proofs::{
-    circuit::{floor_planner, Layouter, Value},
-    plonk::{self, Constraints, Expression},
-    poly::Rotation,
-};
+
 use pasta_curves::{arithmetic::CurveAffine, pallas};
 
-use self::{
-    commit_ivk::CommitIvkChip,
-    gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
-    note_commit::NoteCommitChip,
+use halo2_gadgets::{
+    ecc::{
+        chip::{EccChip, EccConfig},
+        FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar,
+    },
+    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
+    sinsemilla::{
+        chip::{SinsemillaChip, SinsemillaConfig},
+        merkle::{
+            chip::{MerkleChip, MerkleConfig},
+            MerklePath,
+        },
+    },
+    utilities::{
+        bool_check,
+        cond_swap::{CondSwapChip, CondSwapConfig},
+        lookup_range_check::LookupRangeCheckConfig,
+    },
 };
+
+use halo2_proofs::{
+    circuit::{floor_planner, Layouter, Value},
+    plonk::{self, Advice, Column, Constraints, Expression, Instance as InstanceColumn, Selector},
+    poly::Rotation,
+};
+
 use crate::{
-    constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
+    constants::OrchardFixedBasesFull,
+    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
     note::AssetBase,
     note_encryption_zsa::OrchardDomainZSA,
 };
-use halo2_gadgets::{
-    ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
-    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
-    sinsemilla::{
-        chip::SinsemillaChip,
-        merkle::{chip::MerkleChip, MerklePath},
+
+use super::{
+    circuit_common::commit_ivk::{
+        self, {CommitIvkChip, CommitIvkConfig},
     },
-    utilities::{bool_check, cond_swap::CondSwapChip, lookup_range_check::LookupRangeCheckConfig},
+    Circuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD,
+    RK_X, RK_Y,
 };
 
-use super::{commit_ivk, gadget, note_commit, Circuit, Config};
+use self::{
+    gadget::{
+        add_chip::{AddChip, AddConfig},
+        assign_free_advice, assign_is_native_asset, assign_split_flag,
+    },
+    note_commit::{NoteCommitChip, NoteCommitConfig},
+};
 
-/// Size of the Orchard circuit.
-const K: u32 = 11;
+pub mod gadget;
+mod note_commit;
+mod value_commit_orchard;
 
-// Absolute offsets for public inputs.
-const ANCHOR: usize = 0;
-const CV_NET_X: usize = 1;
-const CV_NET_Y: usize = 2;
-const NF_OLD: usize = 3;
-const RK_X: usize = 4;
-const RK_Y: usize = 5;
-const CMX: usize = 6;
-const ENABLE_SPEND: usize = 7;
-const ENABLE_OUTPUT: usize = 8;
-const ENABLE_ZSA: usize = 9;
+/// Configuration needed to use the Orchard Action circuit.
+#[derive(Clone, Debug)]
+pub struct Config {
+    primary: Column<InstanceColumn>,
+    q_orchard: Selector,
+    advices: [Column<Advice>; 10],
+    add_config: AddConfig,
+    ecc_config: EccConfig<OrchardFixedBases>,
+    poseidon_config: PoseidonConfig<pallas::Base, 3, 2>,
+    merkle_config_1: MerkleConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+    merkle_config_2: MerkleConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+    sinsemilla_config_1:
+        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+    sinsemilla_config_2:
+        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+    commit_ivk_config: CommitIvkConfig,
+    old_note_commit_config: NoteCommitConfig,
+    new_note_commit_config: NoteCommitConfig,
+    cond_swap_config: CondSwapConfig,
+}
 
 impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
     type Config = Config;
@@ -815,7 +851,6 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use core::iter;
@@ -826,16 +861,14 @@ mod tests {
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, RngCore};
 
-    use super::super::{Circuit as GenericCircuit, Instance, Proof, ProvingKey, VerifyingKey, K};
-    use crate::builder::SpendInfo;
-    use crate::bundle::Flags;
-    use crate::note::commitment::NoteCommitTrapdoor;
-    use crate::note::{AssetBase, Nullifier};
-    use crate::note_encryption_zsa::OrchardDomainZSA;
-    use crate::primitives::redpallas::VerificationKey;
     use crate::{
+        builder::SpendInfo,
+        bundle::Flags,
+        circuit::{Circuit as GenericCircuit, Instance, Proof, ProvingKey, VerifyingKey, K},
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
-        note::{Note, NoteCommitment},
+        note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier},
+        note_encryption_zsa::OrchardDomainZSA,
+        primitives::redpallas::VerificationKey,
         tree::MerklePath,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
@@ -914,7 +947,7 @@ mod tests {
             .map(|()| generate_dummy_circuit_instance(&mut rng))
             .unzip();
 
-        let vk = VerifyingKey::build();
+        let vk = VerifyingKey::build::<OrchardDomainZSA>();
 
         // Test that the pinned verification key (representing the circuit)
         // is as expected.
@@ -955,7 +988,7 @@ mod tests {
             );
         }
 
-        let pk = ProvingKey::build();
+        let pk = ProvingKey::build::<OrchardDomainZSA>();
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(&vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
@@ -966,7 +999,7 @@ mod tests {
         use std::fs;
         use std::io::{Read, Write};
 
-        let vk = VerifyingKey::build();
+        let vk = VerifyingKey::build::<OrchardDomainZSA>();
 
         fn write_test_case<W: Write>(
             mut w: W,
@@ -1036,11 +1069,11 @@ mod tests {
                 let (circuit, instance) = generate_dummy_circuit_instance(OsRng);
                 let instances = &[instance.clone()];
 
-                let pk = ProvingKey::build();
+                let pk = ProvingKey::build::<OrchardDomainZSA>();
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
-                let file = std::fs::File::create("src/circuit_proof_test_case.bin")?;
+                let file = std::fs::File::create("src/circuit/circuit_proof_test_case_zsa.bin")?;
                 write_test_case(file, &instance, &proof)
             };
             create_proof().expect("should be able to write new proof");
@@ -1048,7 +1081,7 @@ mod tests {
 
         // Parse the hardcoded proof test case.
         let (instance, proof) = {
-            let test_case_bytes = fs::read("src/circuit_proof_test_case.bin").unwrap();
+            let test_case_bytes = fs::read("src/circuit/circuit_proof_test_case_zsa.bin").unwrap();
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
         assert_eq!(proof.0.len(), 5120);
@@ -1375,4 +1408,3 @@ mod tests {
         }
     }
 }
-*/

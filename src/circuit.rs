@@ -5,24 +5,17 @@ use core::fmt;
 use group::{Curve, GroupEncoding};
 use halo2_proofs::{
     circuit::Value,
-    plonk::{
-        self, Advice, BatchVerifier, Column, Instance as InstanceColumn, Selector, SingleVerifier,
-    },
+    plonk::{self, BatchVerifier, SingleVerifier},
     transcript::{Blake2bRead, Blake2bWrite},
 };
 use memuse::DynamicUsage;
 use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
 use rand::RngCore;
 
-use self::{
-    commit_ivk::CommitIvkConfig, gadget::add_chip::AddConfig, note_commit::NoteCommitConfig,
-};
 use crate::{
     builder::SpendInfo,
     bundle::Flags,
-    constants::{
-        OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, MERKLE_DEPTH_ORCHARD,
-    },
+    constants::MERKLE_DEPTH_ORCHARD,
     keys::{
         CommitIvkRandomness, DiversifiedTransmissionKey, NullifierDerivingKey, SpendValidatingKey,
     },
@@ -36,18 +29,10 @@ use crate::{
     tree::{Anchor, MerkleHashOrchard},
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
 };
-use halo2_gadgets::{
-    ecc::chip::EccConfig,
-    poseidon::Pow5Config as PoseidonConfig,
-    sinsemilla::{chip::SinsemillaConfig, merkle::chip::MerkleConfig},
-    utilities::cond_swap::CondSwapConfig,
-};
 
+mod circuit_common;
+mod circuit_vanilla;
 mod circuit_zsa;
-mod commit_ivk;
-pub mod gadget;
-mod note_commit;
-mod value_commit_orchard;
 
 /// Size of the Orchard circuit.
 const K: u32 = 11;
@@ -63,27 +48,6 @@ const CMX: usize = 6;
 const ENABLE_SPEND: usize = 7;
 const ENABLE_OUTPUT: usize = 8;
 const ENABLE_ZSA: usize = 9;
-
-/// Configuration needed to use the Orchard Action circuit.
-#[derive(Clone, Debug)]
-pub struct Config {
-    primary: Column<InstanceColumn>,
-    q_orchard: Selector,
-    advices: [Column<Advice>; 10],
-    add_config: AddConfig,
-    ecc_config: EccConfig<OrchardFixedBases>,
-    poseidon_config: PoseidonConfig<pallas::Base, 3, 2>,
-    merkle_config_1: MerkleConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    merkle_config_2: MerkleConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    sinsemilla_config_1:
-        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    sinsemilla_config_2:
-        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    commit_ivk_config: CommitIvkConfig,
-    old_note_commit_config: NoteCommitConfig,
-    new_note_commit_config: NoteCommitConfig,
-    cond_swap_config: CondSwapConfig,
-}
 
 /// The Orchard Action circuit.
 #[derive(Clone, Debug, Default)]
