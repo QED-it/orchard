@@ -894,6 +894,7 @@ mod tests {
             psi_old: Value::unknown(),
             rcm_old: Value::unknown(),
             cm_old: Value::unknown(),
+            psi_nf: Value::unknown(),
             alpha: Value::unknown(),
             ak: Value::unknown(),
             nk: Value::unknown(),
@@ -904,6 +905,9 @@ mod tests {
             psi_new: Value::unknown(),
             rcm_new: Value::unknown(),
             rcv: Value::unknown(),
+            asset: Value::unknown(),
+            split_flag: Value::unknown(),
+            phantom: std::marker::PhantomData,
         };
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)
