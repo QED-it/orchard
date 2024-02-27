@@ -235,6 +235,8 @@ impl Instance {
         }
     }
 
+    // FIXME: zcash orchard crate returns [[vesta::Scalar; 9]; 1]
+    // and does not assign value to instance[ENABLE_ZSA]
     fn to_halo2_instance(&self) -> [[vesta::Scalar; 10]; 1] {
         let mut instance = [vesta::Scalar::zero(); 10];
 
