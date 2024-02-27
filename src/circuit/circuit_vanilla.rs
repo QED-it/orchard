@@ -142,12 +142,11 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainVanilla> {
 
         // Fixed columns for the Sinsemilla generator lookup table
         let table_idx = meta.lookup_table_column();
-        let table_range_check_tag = meta.lookup_table_column();
         let lookup = (
             table_idx,
             meta.lookup_table_column(),
             meta.lookup_table_column(),
-            table_range_check_tag,
+            None,
         );
 
         // Instance column used for public inputs
@@ -183,8 +182,7 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainVanilla> {
 
         // We have a lot of free space in the right-most advice columns; use one of them
         // for all of our range checks.
-        let range_check =
-            LookupRangeCheckConfig::configure(meta, advices[9], table_idx, table_range_check_tag);
+        let range_check = LookupRangeCheckConfig::configure(meta, advices[9], table_idx, None);
 
         // Configuration for curve point operations.
         // This uses 10 advice columns and spans the whole circuit.
@@ -693,7 +691,7 @@ mod tests {
                 pk_d_old: Value::known(*sender_address.pk_d()),
                 v_old: Value::known(spent_note.value()),
                 rho_old: Value::known(spent_note.rho()),
-                psi_old: Value::known(psi_old),
+                psi_old: Value::known(spent_note.rseed().psi(&spent_note.rho())),
                 rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
                 cm_old: Value::known(spent_note.commitment()),
                 // For non split note, psi_nf is equal to psi_old
@@ -736,8 +734,6 @@ mod tests {
 
         let vk = VerifyingKey::build::<OrchardDomainVanilla>();
 
-        /*
-        FIXME: uncomment this
         // Test that the pinned verification key (representing the circuit)
         // is as expected.
         {
@@ -747,7 +743,6 @@ mod tests {
                 include_str!("circuit_description_vanilla").replace("\r\n", "\n")
             );
         }
-        */
 
         // Test that the proof size is as expected.
         let expected_proof_size = {
@@ -756,11 +751,9 @@ mod tests {
                     K,
                     &circuits[0],
                 );
-            // FIXME: is it correct to use 5120 instead of 4992 and 7392 instead of 7264
-            // (grabbed new values from orchard_zsa)?
             println!("{:#?}", circuit_cost);
-            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5120);
-            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7392);
+            assert_eq!(usize::from(circuit_cost.proof_size(1)), 4992);
+            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7264);
             usize::from(circuit_cost.proof_size(instances.len()))
         };
 
