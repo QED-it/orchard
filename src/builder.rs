@@ -326,6 +326,8 @@ pub struct Builder {
     anchor: Anchor,
 }
 
+type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven<D>, Unauthorized>, V, D>;
+
 impl Builder {
     /// Constructs a new empty builder for an Orchard bundle.
     pub fn new(flags: Flags, anchor: Anchor) -> Self {
@@ -484,7 +486,7 @@ impl Builder {
     pub fn build<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain>(
         self,
         mut rng: impl RngCore,
-    ) -> Result<Bundle<InProgress<Unproven<D>, Unauthorized>, V, D>, BuildError>
+    ) -> Result<UnauthorizedBundle<V, D>, BuildError>
     where
         Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
     {
