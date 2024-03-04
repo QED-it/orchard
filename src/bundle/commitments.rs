@@ -2,6 +2,8 @@
 
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
+use zcash_note_encryption_zsa::MEMO_SIZE;
+
 use crate::{
     bundle::{Authorization, Authorized, Bundle},
     issuance::{IssueAuth, IssueBundle, Signed},
@@ -47,13 +49,19 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>, D: Or
         ch.update(&action.nullifier().to_bytes());
         ch.update(&action.cmx().to_bytes());
         ch.update(&action.encrypted_note().epk_bytes);
-        ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..84]); // TODO: make sure it is backward compatible with Orchard [..52]
+        // TODO: make sure it is backward compatible with Orchard [..52]
+        ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..D::COMPACT_NOTE_SIZE]);
 
-        mh.update(&action.encrypted_note().enc_ciphertext.as_ref()[84..596]);
+        mh.update(
+            &action.encrypted_note().enc_ciphertext.as_ref()
+                [D::COMPACT_NOTE_SIZE..D::COMPACT_NOTE_SIZE + MEMO_SIZE],
+        );
 
         nh.update(&action.cv_net().to_bytes());
         nh.update(&<[u8; 32]>::from(action.rk()));
-        nh.update(&action.encrypted_note().enc_ciphertext.as_ref()[596..]);
+        nh.update(
+            &action.encrypted_note().enc_ciphertext.as_ref()[D::COMPACT_NOTE_SIZE + MEMO_SIZE..],
+        );
         nh.update(&action.encrypted_note().out_ciphertext);
     }
 
