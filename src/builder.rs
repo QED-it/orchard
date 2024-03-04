@@ -946,7 +946,6 @@ pub mod testing {
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
         note_encryption::OrchardDomain,
-        note_encryption_zsa::OrchardDomainZSA,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
         value::{testing::arb_positive_note_value, NoteValue, MAX_NOTE_VALUE},
         Address, Note,
@@ -1009,70 +1008,81 @@ pub mod testing {
         }
     }
 
-    prop_compose! {
-        /// Produce a random valid Orchard bundle.
-        fn arb_bundle_inputs(sk: SpendingKey)
-        (
-            n_notes in 1usize..30,
-            n_recipients in 1..30,
+    /// FIXME: add a proper doc
+    #[derive(Debug)]
+    pub struct BuilderArb<D: OrchardDomain> {
+        phantom: std::marker::PhantomData<D>,
+    }
 
-        )
-        (
-            // generate note values that we're certain won't exceed MAX_NOTE_VALUE in total
-            notes in vec(
-                arb_positive_note_value(MAX_NOTE_VALUE / n_notes as u64).prop_flat_map(arb_note),
-                n_notes
-            ),
-            recipient_amounts in vec(
-                arb_address().prop_flat_map(move |a| {
-                    arb_positive_note_value(MAX_NOTE_VALUE / n_recipients as u64)
-                        .prop_map(move |v| {
-                            (a,v, AssetBase::native())
-                        })
-                }),
-                n_recipients as usize,
-            ),
-            rng_seed in prop::array::uniform32(prop::num::u8::ANY)
-        ) -> ArbitraryBundleInputs<StdRng> {
-            use crate::constants::MERKLE_DEPTH_ORCHARD;
-            let mut frontier = Frontier::<MerkleHashOrchard, { MERKLE_DEPTH_ORCHARD as u8 }>::empty();
-            let mut notes_and_auth_paths: Vec<(Note, MerklePath)> = Vec::new();
+    impl<D: OrchardDomain + Default> BuilderArb<D>
+    where
+        crate::circuit::Circuit<D>: halo2_proofs::plonk::Circuit<pasta_curves::Fp>,
+    {
+        prop_compose! {
+            /// Produce a random valid Orchard bundle.
+            fn arb_bundle_inputs(sk: SpendingKey)
+            (
+                n_notes in 1usize..30,
+                n_recipients in 1..30,
 
-            for note in notes.iter() {
-                let leaf = MerkleHashOrchard::from_cmx(&note.commitment().into());
-                frontier.append(leaf);
+            )
+            (
+                // generate note values that we're certain won't exceed MAX_NOTE_VALUE in total
+                notes in vec(
+                    arb_positive_note_value(MAX_NOTE_VALUE / n_notes as u64).prop_flat_map(arb_note),
+                    n_notes
+                ),
+                recipient_amounts in vec(
+                    arb_address().prop_flat_map(move |a| {
+                        arb_positive_note_value(MAX_NOTE_VALUE / n_recipients as u64)
+                            .prop_map(move |v| {
+                                (a,v, AssetBase::native())
+                            })
+                    }),
+                    n_recipients as usize,
+                ),
+                rng_seed in prop::array::uniform32(prop::num::u8::ANY)
+            ) -> ArbitraryBundleInputs<StdRng> {
+                use crate::constants::MERKLE_DEPTH_ORCHARD;
+                let mut frontier = Frontier::<MerkleHashOrchard, { MERKLE_DEPTH_ORCHARD as u8 }>::empty();
+                let mut notes_and_auth_paths: Vec<(Note, MerklePath)> = Vec::new();
 
-                let path = frontier
-                    .witness(|addr| Some(<MerkleHashOrchard as Hashable>::empty_root(addr.level())))
-                    .ok()
-                    .flatten()
-                    .expect("we can always construct a correct Merkle path");
-                notes_and_auth_paths.push((*note, path.into()));
-            }
+                for note in notes.iter() {
+                    let leaf = MerkleHashOrchard::from_cmx(&note.commitment().into());
+                    frontier.append(leaf);
 
-            ArbitraryBundleInputs {
-                rng: StdRng::from_seed(rng_seed),
-                sk,
-                anchor: frontier.root().into(),
-                notes: notes_and_auth_paths,
-                recipient_amounts
+                    let path = frontier
+                        .witness(|addr| Some(<MerkleHashOrchard as Hashable>::empty_root(addr.level())))
+                        .ok()
+                        .flatten()
+                        .expect("we can always construct a correct Merkle path");
+                    notes_and_auth_paths.push((*note, path.into()));
+                }
+
+                ArbitraryBundleInputs {
+                    rng: StdRng::from_seed(rng_seed),
+                    sk,
+                    anchor: frontier.root().into(),
+                    notes: notes_and_auth_paths,
+                    recipient_amounts
+                }
             }
         }
-    }
 
-    /// Produce an arbitrary valid Orchard bundle using a random spending key.
-    pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
-    ) -> impl Strategy<Value = Bundle<Authorized, V, OrchardDomainZSA>> {
-        arb_spending_key()
-            .prop_flat_map(arb_bundle_inputs)
-            .prop_map(|inputs| inputs.into_bundle::<V, OrchardDomainZSA>())
-    }
+        /// Produce an arbitrary valid Orchard bundle using a random spending key.
+        pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
+        ) -> impl Strategy<Value = Bundle<Authorized, V, D>> {
+            arb_spending_key()
+                .prop_flat_map(BuilderArb::<D>::arb_bundle_inputs)
+                .prop_map(|inputs| inputs.into_bundle::<V, D>())
+        }
 
-    /// Produce an arbitrary valid Orchard bundle using a specified spending key.
-    pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
-        k: SpendingKey,
-    ) -> impl Strategy<Value = Bundle<Authorized, V, OrchardDomainZSA>> {
-        arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V, OrchardDomainZSA>())
+        /// Produce an arbitrary valid Orchard bundle using a specified spending key.
+        pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
+            k: SpendingKey,
+        ) -> impl Strategy<Value = Bundle<Authorized, V, D>> {
+            BuilderArb::<D>::arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V, D>())
+        }
     }
 }
 
