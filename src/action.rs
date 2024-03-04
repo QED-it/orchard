@@ -133,7 +133,7 @@ pub(crate) mod testing {
             commitment::ExtractedNoteCommitment, nullifier::testing::arb_nullifier,
             testing::arb_note, TransmittedNoteCiphertext,
         },
-        note_encryption_zsa::{NoteCiphertextBytes, OrchardDomainZSA},
+        note_encryption::OrchardDomain,
         primitives::redpallas::{
             self,
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
@@ -143,70 +143,80 @@ pub(crate) mod testing {
 
     use super::Action;
 
-    prop_compose! {
-        /// Generate an action without authorization data.
-        pub fn arb_unauthorized_action(spend_value: NoteValue, output_value: NoteValue)(
-            nf in arb_nullifier(),
-            rk in arb_spendauth_verification_key(),
-            note in arb_note(output_value),
-            asset in arb_asset_base()
-        ) -> Action<(), OrchardDomainZSA> {
-            let cmx = ExtractedNoteCommitment::from(note.commitment());
-            let cv_net = ValueCommitment::derive(
-                spend_value - output_value,
-                ValueCommitTrapdoor::zero(),
-                asset
-            );
-            // FIXME: make a real one from the note.
-            let encrypted_note = TransmittedNoteCiphertext::<OrchardDomainZSA> {
-                epk_bytes: [0u8; 32],
-                enc_ciphertext: NoteCiphertextBytes([0u8; 612]),
-                out_ciphertext: [0u8; 80]
-            };
-            Action {
-                nf,
-                rk,
-                cmx,
-                encrypted_note,
-                cv_net,
-                authorization: ()
-            }
-        }
+    /// FIXME: add a proper doc
+    #[derive(Debug)]
+    pub struct ActionArb<D: OrchardDomain> {
+        phantom: std::marker::PhantomData<D>,
     }
 
-    prop_compose! {
-        /// Generate an action with invalid (random) authorization data.
-        pub fn arb_action(spend_value: NoteValue, output_value: NoteValue)(
-            nf in arb_nullifier(),
-            sk in arb_spendauth_signing_key(),
-            note in arb_note(output_value),
-            rng_seed in prop::array::uniform32(prop::num::u8::ANY),
-            fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
-            asset in arb_asset_base()
-        ) -> Action<redpallas::Signature<SpendAuth>, OrchardDomainZSA> {
-            let cmx = ExtractedNoteCommitment::from(note.commitment());
-            let cv_net = ValueCommitment::derive(
-                spend_value - output_value,
-                ValueCommitTrapdoor::zero(),
-                asset
-            );
+    impl<D: OrchardDomain> ActionArb<D> {
+        prop_compose! {
+            /// Generate an action without authorization data.
+            pub fn arb_unauthorized_action(spend_value: NoteValue, output_value: NoteValue)(
+                nf in arb_nullifier(),
+                rk in arb_spendauth_verification_key(),
+                note in arb_note(output_value),
+                asset in arb_asset_base()
+            ) -> Action<(), D> {
+                let cmx = ExtractedNoteCommitment::from(note.commitment());
+                let cv_net = ValueCommitment::derive(
+                    spend_value - output_value,
+                    ValueCommitTrapdoor::zero(),
+                    asset
+                );
+                // FIXME: make a real one from the note.
+                let encrypted_note = TransmittedNoteCiphertext::<D> {
+                    epk_bytes: [0u8; 32],
+                    // FIXME: pass array with a proper length for the concrete OrchardDomain
+                    enc_ciphertext: D::NoteCiphertextBytes::from(&[0u8; 580]), //612]),
+                    out_ciphertext: [0u8; 80]
+                };
+                Action {
+                    nf,
+                    rk,
+                    cmx,
+                    encrypted_note,
+                    cv_net,
+                    authorization: ()
+                }
+            }
+        }
 
-            // FIXME: make a real one from the note.
-            let encrypted_note = TransmittedNoteCiphertext::<OrchardDomainZSA> {
-                epk_bytes: [0u8; 32],
-                enc_ciphertext: NoteCiphertextBytes([0u8; 612]),
-                out_ciphertext: [0u8; 80]
-            };
+        prop_compose! {
+            /// Generate an action with invalid (random) authorization data.
+            pub fn arb_action(spend_value: NoteValue, output_value: NoteValue)(
+                nf in arb_nullifier(),
+                sk in arb_spendauth_signing_key(),
+                note in arb_note(output_value),
+                rng_seed in prop::array::uniform32(prop::num::u8::ANY),
+                fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
+                asset in arb_asset_base()
+            ) -> Action<redpallas::Signature<SpendAuth>, D> {
+                let cmx = ExtractedNoteCommitment::from(note.commitment());
+                let cv_net = ValueCommitment::derive(
+                    spend_value - output_value,
+                    ValueCommitTrapdoor::zero(),
+                    asset
+                );
 
-            let rng = StdRng::from_seed(rng_seed);
+                // FIXME: make a real one from the note.
+                let encrypted_note = TransmittedNoteCiphertext::<D> {
+                    epk_bytes: [0u8; 32],
+                    // FIXME: pass array with a proper length for the concrete OrchardDomain
+                    enc_ciphertext: D::NoteCiphertextBytes::from(&[0u8; 580]), //612]),
+                    out_ciphertext: [0u8; 80]
+                };
 
-            Action {
-                nf,
-                rk: redpallas::VerificationKey::from(&sk),
-                cmx,
-                encrypted_note,
-                cv_net,
-                authorization: sk.sign(rng, &fake_sighash),
+                let rng = StdRng::from_seed(rng_seed);
+
+                Action {
+                    nf,
+                    rk: redpallas::VerificationKey::from(&sk),
+                    cmx,
+                    encrypted_note,
+                    cv_net,
+                    authorization: sk.sign(rng, &fake_sighash),
+                }
             }
         }
     }
