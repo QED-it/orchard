@@ -555,10 +555,10 @@ pub mod testing {
 
     use super::{Action, Authorization, Authorized, Bundle, Flags};
 
-    pub use crate::action::testing::{arb_action, arb_unauthorized_action};
+    pub use crate::action::testing::ActionArb;
     use crate::note::asset_base::testing::arb_zsa_asset_base;
     use crate::note::AssetBase;
-    use crate::note_encryption_zsa::OrchardDomainZSA;
+    use crate::note_encryption::OrchardDomain;
     use crate::value::testing::arb_value_sum;
 
     /// Marker for an unauthorized bundle with no proofs or signatures.
@@ -569,147 +569,150 @@ pub mod testing {
         type SpendAuth = ();
     }
 
-    /// Generate an unauthorized action having spend and output values less than MAX_NOTE_VALUE / n_actions.
-    pub fn arb_unauthorized_action_n(
-        n_actions: usize,
-        flags: Flags,
-    ) -> impl Strategy<Value = (ValueSum, Action<(), OrchardDomainZSA>)> {
-        let spend_value_gen = if flags.spends_enabled {
-            Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
-        } else {
-            Strategy::boxed(Just(NoteValue::zero()))
-        };
+    /// FIXME: add a proper doc
+    #[derive(Debug)]
+    pub struct BundleArb<D: OrchardDomain> {
+        phantom: std::marker::PhantomData<D>,
+    }
 
-        spend_value_gen.prop_flat_map(move |spend_value| {
-            let output_value_gen = if flags.outputs_enabled {
+    impl<D: OrchardDomain + Default> BundleArb<D> {
+        /// Generate an unauthorized action having spend and output values less than MAX_NOTE_VALUE / n_actions.
+        pub fn arb_unauthorized_action_n(
+            n_actions: usize,
+            flags: Flags,
+        ) -> impl Strategy<Value = (ValueSum, Action<(), D>)> {
+            let spend_value_gen = if flags.spends_enabled {
                 Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
             } else {
                 Strategy::boxed(Just(NoteValue::zero()))
             };
 
-            output_value_gen.prop_flat_map(move |output_value| {
-                arb_unauthorized_action(spend_value, output_value)
-                    .prop_map(move |a| (spend_value - output_value, a))
+            spend_value_gen.prop_flat_map(move |spend_value| {
+                let output_value_gen = if flags.outputs_enabled {
+                    Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
+                } else {
+                    Strategy::boxed(Just(NoteValue::zero()))
+                };
+
+                output_value_gen.prop_flat_map(move |output_value| {
+                    ActionArb::arb_unauthorized_action(spend_value, output_value)
+                        .prop_map(move |a| (spend_value - output_value, a))
+                })
             })
-        })
-    }
+        }
 
-    /// Generate an authorized action having spend and output values less than MAX_NOTE_VALUE / n_actions.
-    pub fn arb_action_n(
-        n_actions: usize,
-        flags: Flags,
-    ) -> impl Strategy<
-        Value = (
-            ValueSum,
-            Action<redpallas::Signature<SpendAuth>, OrchardDomainZSA>,
-        ),
-    > {
-        let spend_value_gen = if flags.spends_enabled {
-            Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
-        } else {
-            Strategy::boxed(Just(NoteValue::zero()))
-        };
-
-        spend_value_gen.prop_flat_map(move |spend_value| {
-            let output_value_gen = if flags.outputs_enabled {
+        /// Generate an authorized action having spend and output values less than MAX_NOTE_VALUE / n_actions.
+        pub fn arb_action_n(
+            n_actions: usize,
+            flags: Flags,
+        ) -> impl Strategy<Value = (ValueSum, Action<redpallas::Signature<SpendAuth>, D>)> {
+            let spend_value_gen = if flags.spends_enabled {
                 Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
             } else {
                 Strategy::boxed(Just(NoteValue::zero()))
             };
 
-            output_value_gen.prop_flat_map(move |output_value| {
-                arb_action(spend_value, output_value)
-                    .prop_map(move |a| (spend_value - output_value, a))
+            spend_value_gen.prop_flat_map(move |spend_value| {
+                let output_value_gen = if flags.outputs_enabled {
+                    Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
+                } else {
+                    Strategy::boxed(Just(NoteValue::zero()))
+                };
+
+                output_value_gen.prop_flat_map(move |output_value| {
+                    ActionArb::arb_action(spend_value, output_value)
+                        .prop_map(move |a| (spend_value - output_value, a))
+                })
             })
-        })
-    }
-
-    prop_compose! {
-        /// Create an arbitrary vector of assets to burn.
-        pub fn arb_asset_to_burn()
-        (
-            asset_base in arb_zsa_asset_base(),
-            value in arb_value_sum()
-        ) -> (AssetBase, ValueSum) {
-            (asset_base, value)
         }
-    }
 
-    prop_compose! {
-        /// Create an arbitrary set of flags.
-        pub fn arb_flags()(spends_enabled in prop::bool::ANY, outputs_enabled in prop::bool::ANY, zsa_enabled in prop::bool::ANY) -> Flags {
-            Flags::from_parts(spends_enabled, outputs_enabled, zsa_enabled)
+        prop_compose! {
+            /// Create an arbitrary vector of assets to burn.
+            pub fn arb_asset_to_burn()
+            (
+                asset_base in arb_zsa_asset_base(),
+                value in arb_value_sum()
+            ) -> (AssetBase, ValueSum) {
+                (asset_base, value)
+            }
         }
-    }
 
-    prop_compose! {
-        fn arb_base()(bytes in prop::array::uniform32(0u8..)) -> pallas::Base {
-            // Instead of rejecting out-of-range bytes, let's reduce them.
-            let mut buf = [0; 64];
-            buf[..32].copy_from_slice(&bytes);
-            pallas::Base::from_uniform_bytes(&buf)
+        prop_compose! {
+            /// Create an arbitrary set of flags.
+            pub fn arb_flags()(spends_enabled in prop::bool::ANY, outputs_enabled in prop::bool::ANY, zsa_enabled in prop::bool::ANY) -> Flags {
+                Flags::from_parts(spends_enabled, outputs_enabled, zsa_enabled)
+            }
         }
-    }
 
-    prop_compose! {
-        /// Generate an arbitrary unauthorized bundle. This bundle does not
-        /// necessarily respect consensus rules; for that use
-        /// [`crate::builder::testing::arb_bundle`]
-        pub fn arb_unauthorized_bundle(n_actions: usize)
-        (
-            flags in arb_flags(),
-        )
-        (
-            acts in vec(arb_unauthorized_action_n(n_actions, flags), n_actions),
-            anchor in arb_base().prop_map(Anchor::from),
-            flags in Just(flags),
-            burn in vec(arb_asset_to_burn(), 1usize..10)
-        ) -> Bundle<Unauthorized, ValueSum, OrchardDomainZSA> {
-            let (balances, actions): (Vec<ValueSum>, Vec<Action<_, _>>) = acts.into_iter().unzip();
+        prop_compose! {
+            fn arb_base()(bytes in prop::array::uniform32(0u8..)) -> pallas::Base {
+                // Instead of rejecting out-of-range bytes, let's reduce them.
+                let mut buf = [0; 64];
+                buf[..32].copy_from_slice(&bytes);
+                pallas::Base::from_uniform_bytes(&buf)
+            }
+        }
 
-            Bundle::from_parts(
-                NonEmpty::from_vec(actions).unwrap(),
-                flags,
-                balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
-                burn,
-                anchor,
-                Unauthorized,
+        prop_compose! {
+            /// Generate an arbitrary unauthorized bundle. This bundle does not
+            /// necessarily respect consensus rules; for that use
+            /// [`crate::builder::testing::arb_bundle`]
+            pub fn arb_unauthorized_bundle(n_actions: usize)
+            (
+                flags in Self::arb_flags(),
             )
+            (
+                acts in vec(Self::arb_unauthorized_action_n(n_actions, flags), n_actions),
+                anchor in Self::arb_base().prop_map(Anchor::from),
+                flags in Just(flags),
+                burn in vec(Self::arb_asset_to_burn(), 1usize..10)
+            ) -> Bundle<Unauthorized, ValueSum, D> {
+                let (balances, actions): (Vec<ValueSum>, Vec<Action<_, _>>) = acts.into_iter().unzip();
+
+                Bundle::from_parts(
+                    NonEmpty::from_vec(actions).unwrap(),
+                    flags,
+                    balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
+                    burn,
+                    anchor,
+                    Unauthorized,
+                )
+            }
         }
-    }
 
-    prop_compose! {
-        /// Generate an arbitrary bundle with fake authorization data. This bundle does not
-        /// necessarily respect consensus rules; for that use
-        /// [`crate::builder::testing::arb_bundle`]
-        pub fn arb_bundle(n_actions: usize)
-        (
-            flags in arb_flags(),
-        )
-        (
-            acts in vec(arb_action_n(n_actions, flags), n_actions),
-            anchor in arb_base().prop_map(Anchor::from),
-            sk in arb_binding_signing_key(),
-            rng_seed in prop::array::uniform32(prop::num::u8::ANY),
-            fake_proof in vec(prop::num::u8::ANY, 1973),
-            fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
-            flags in Just(flags),
-            burn in vec(arb_asset_to_burn(), 1usize..10)
-        ) -> Bundle<Authorized, ValueSum, OrchardDomainZSA> {
-            let (balances, actions): (Vec<ValueSum>, Vec<Action<_, _>, >) = acts.into_iter().unzip();
-            let rng = StdRng::from_seed(rng_seed);
-
-            Bundle::from_parts(
-                NonEmpty::from_vec(actions).unwrap(),
-                flags,
-                balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
-                burn,
-                anchor,
-                Authorized {
-                    proof: Proof::new(fake_proof),
-                    binding_signature: sk.sign(rng, &fake_sighash),
-                },
+        prop_compose! {
+            /// Generate an arbitrary bundle with fake authorization data. This bundle does not
+            /// necessarily respect consensus rules; for that use
+            /// [`crate::builder::testing::arb_bundle`]
+            pub fn arb_bundle(n_actions: usize)
+            (
+                flags in Self::arb_flags(),
             )
+            (
+                acts in vec(Self::arb_action_n(n_actions, flags), n_actions),
+                anchor in Self::arb_base().prop_map(Anchor::from),
+                sk in arb_binding_signing_key(),
+                rng_seed in prop::array::uniform32(prop::num::u8::ANY),
+                fake_proof in vec(prop::num::u8::ANY, 1973),
+                fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
+                flags in Just(flags),
+                burn in vec(Self::arb_asset_to_burn(), 1usize..10)
+            ) -> Bundle<Authorized, ValueSum, D> {
+                let (balances, actions): (Vec<ValueSum>, Vec<Action<_, _>, >) = acts.into_iter().unzip();
+                let rng = StdRng::from_seed(rng_seed);
+
+                Bundle::from_parts(
+                    NonEmpty::from_vec(actions).unwrap(),
+                    flags,
+                    balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
+                    burn,
+                    anchor,
+                    Authorized {
+                        proof: Proof::new(fake_proof),
+                        binding_signature: sk.sign(rng, &fake_sighash),
+                    },
+                )
+            }
         }
     }
 }
