@@ -1,5 +1,30 @@
 # NoteCommit
 
+In the ZSA protocol, the instance of the note commitment scheme, $\mathsf{NoteCommit}^{\mathsf{OrchardZSA}}_{\mathsf{rcm}}$, 
+differs from the Orchard note commitment $\mathsf{NoteCommit}^{\mathsf{Orchard}}_{\mathsf{rcm}}$ 
+in that for Custom Assets, the Asset Base will be added as an input to the commitment computation. 
+In the case where the Asset is the ZEC Asset, the commitment is computed identically to the Orchard note commitment, 
+without making use of the ZEC Asset Base as an input. 
+We define the note commitment scheme $\mathsf{NoteCommit}^{\mathsf{OrchardZSA}}_{\mathsf{rcm}}$ as follows. It is instantiated using the Sinsemilla Commitment. 
+
+$$\mathsf{NoteCommit}^{\mathsf{OrchardZSA}}_{\mathsf{rcm}}(\mathsf{g\star_d},
+\mathsf{pk\star_d},\mathsf{v}, \rho, \psi, \mathsf{AssetBase} ):= 
+\begin{cases} 
+\mathsf{NoteCommit}^{\mathsf{Orchard}}_{\mathsf{rcm}}(\mathsf{g\star_d},
+\mathsf{pk\star_d},\mathsf{v}, \rho, \psi), & \text{if}~ \mathsf{AssetBase} = \mathcal{V}^{\mathsf{Orchard}} \\
+ \mathsf{cm}_{\mathsf{ZSA}} & \text{otherwise}
+\end{cases}$$
+where:
+
+\begin{align*}
+\mathsf{cm}_{\mathsf{ZSA}} := & \mathsf{SinsemillaHashToPoint}("\mathsf{z.cash:ZSA-NoteCommit-M}", \\
+&\mathsf{g\star_d}|| \mathsf{pk\star_d} || \mathsf{I2LEBSP}_{64}(\mathsf{v}) || 
+\mathsf{I2LEBSP}_{l^{\mathsf{Orchard}}_{\mathsf{base}}}(\rho) || \mathsf{I2LEBSP}_{l^{\mathsf{Orchard}}_{\mathsf{base}}}(\psi) || \mathsf{asset\_base}) 
+ \\
+& + [\mathsf{rcm}] \mathsf{GroupHash}^{\mathbb{P}}("\mathsf{z.cash:Orchard-NoteCommit-r}", "")
+\end{align*}
+
+
 ## Message decomposition
 
 $\SinsemillaCommit$ is used in the
