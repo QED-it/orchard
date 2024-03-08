@@ -18,6 +18,25 @@ bundle of actions, where each action is both a spend and an output. This provide
 inherent arity-hiding as multi-JoinSplit Sprout, but using Sapling value commitments to
 balance the transaction without doubling its size.
 
+The Zcash Shielded Assets (ZSA) protocol is an extension of the Orchard protocol that enables 
+the issuance, transfer and burn of custom Assets on the Zcash chain.
+One of the key innovations of ZSA is the introduction of Asset Identifiers, enabling unique 
+representation of various assets on the Zcash chain. This mechanism relies on Asset Bases stored 
+in ZSA notes, ensuring that transactions preserve asset balance integrity through the unique 
+identification of each asset type involved. This balance preservation is critical for maintaining
+privacy and security, allowing for transactions that involve multiple asset types without 
+disclosing which (or how many distinct) Assets are being transferred.
+
+## Split notes
+
+In typical transactions, not all value from a single input note is sent to a single output. Sometimes, an input note is
+split into multiple output notes, each potentially going to different recipients or returning as change to the sender.
+In ZSA, it's crucial that the output notes in a transaction match the Asset Base (the type of asset they represent) of 
+the input notes. This is to ensure that only legitimate asset transactions occur, preventing someone from creating fake 
+asset balances by manipulating the Asset Base values in a transaction.
+
+
+
 ## Memo fields
 
 Each Orchard action has a memo field for its corresponding output, as with Sprout and
