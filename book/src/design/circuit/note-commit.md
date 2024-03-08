@@ -16,6 +16,7 @@ $$\mathsf{NoteCommit}^{\mathsf{OrchardZSA}}_{\mathsf{rcm}}(\mathsf{g\star_d},
 \end{cases}$$
 where:
 
+$$
 \begin{align*}
 \mathsf{cm}_{\mathsf{ZSA}} := & \mathsf{SinsemillaHashToPoint}("\mathsf{z.cash:ZSA-NoteCommit-M}", \\
 &\mathsf{g\star_d}|| \mathsf{pk\star_d} || \mathsf{I2LEBSP}_{64}(\mathsf{v}) || 
@@ -23,7 +24,7 @@ where:
  \\
 & + [\mathsf{rcm}] \mathsf{GroupHash}^{\mathbb{P}}("\mathsf{z.cash:Orchard-NoteCommit-r}", "")
 \end{align*}
-
+$$
 
 ## Message decomposition
 

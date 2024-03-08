@@ -39,19 +39,20 @@ $$\mathsf{v}_{\mathsf{AssetId}} = \sum_{i\in\mathcal{S}_{\mathsf{AssetId}}}\math
 $$\mathcal{S}_{\mathsf{ZEC}}\cup_{(\mathsf{AssetId},\cdot)\in\mathsf{assetBurn}}\mathcal{S}_{\mathsf{AssetId}}=  \{1,\dots,n\}$$
 However, validators cannot check these equations directly because the values are hidden by the commitments.
 Instead, validators calculate the transaction binding validating key as:
-\begin{align*}
+$$\begin{align*}
 \mathsf{bvk} = & (\sum_{i=1}^n \mathsf{cv}^{\mathsf{net}}_i) - \mathsf{ValueCommit}^{\mathsf{OrchardZSA}}_{0}(\mathcal{V}^{\mathsf{Orchard}},\mathsf{v}^{\mathsf{balanceOrchard}}) \\
 & - \sum_{(\mathsf{AssetBase}_{\mathsf{AssetId}}, \mathsf{v}_{\mathsf{AssetId}})\in \mathsf{assetBurn}}\mathsf{ValueCommit}^{\mathsf{OrchardZSA}}_{0}(\mathsf{AssetBase}_\mathsf{AssetId},\mathsf{v}_\mathsf{AssetId})
 \end{align*}
+$$
 
 The right hand side of the value balance verification equation can be expanded and calculated to:
-\begin{align*}
+$$\begin{align*}
 \mathsf{bvk} = & (\sum_{i\in\mathcal{S}_{\mathsf{ZEC}}} \mathsf{cv}^{\mathsf{net}}_i) - \mathsf{ValueCommit}^{\mathsf{OrchardZSA}}_{0}(\mathcal{V}^{\mathsf{Orchard}},\mathsf{v}^{\mathsf{balanceOrchard}}) \\
 & + \sum_{(\mathsf{AssetBase}_{\mathsf{AssetId}}, \mathsf{v}_{\mathsf{AssetId}})\in \mathsf{assetBurn}}\left( (\sum_{i\in\mathcal{S}_{\mathsf{AssetId}}} \mathsf{cv}^{\mathsf{net}}_i) - \mathsf{ValueCommit}^{\mathsf{OrchardZSA}}_{0}(\mathsf{AssetBase}_\mathsf{AssetId},\mathsf{v}_\mathsf{AssetId})\right)\\
 = & \sum_{i\in\mathcal{S}_{\mathsf{ZEC}}} [\mathsf{rcv}_i]\mathcal{R}^{\mathsf{Orchard}} + \sum_{(\mathsf{AssetBase}_{\mathsf{AssetId}}, \mathsf{v}_{\mathsf{AssetId}})\in \mathsf{assetBurn}}\left( \sum_{i\in\mathcal{S}_{\mathsf{AssetId}}} [\mathsf{rcv}_i]\mathcal{R}^{\mathsf{Orchard}} \right)\\
 = & \sum_{i=1}^{n} [\mathsf{rcv}_i]\mathcal{R}^{\mathsf{Orchard}}
 \end{align*}
-
+$$
 
 The signer knows $\mathsf{rcv}_i$, and so can calculate the corresponding signing key as:
 $$\mathsf{bsk}=\sum_{i=1}^n \mathsf{rcv}_i$$
