@@ -24,6 +24,19 @@ $$(addr, v, \rho, \psi, \mathsf{rcm}).$$
 The note plaintext includes $\mathsf{rseed}$ in place of $\psi$ and $\mathsf{rcm}$, and
 omits $\rho$ (which is a public part of the action).
 
+## Nullifiers for split note
+The nullifier is generated in the same manner as in the Orchard protocol. A boolean flag is used to decide the 
+nullifier vlaue.
+$$\mathsf{nf} = 
+\begin{cases} 
+\mathsf{Extract}_{\mathbb{P}}\big([(F_{\mathsf{nk}}(\rho) + \psi) \bmod{p}] \mathcal{G} + \mathsf{cm}\big), & \text{if}~ \mathsf{is\_split\_note} = 0 \\
+\mathsf{Extract}_{\mathbb{P}}\big([(F_{\mathsf{nk}}(\rho) + \psi) \bmod{p}] \mathcal{G} + \mathsf{cm} + \mathcal{L}^{\mathsf{Orchard}}\big), & \text{if}~ \mathsf{is\_split\_note} = 1
+\end{cases}
+$$
+where $\mathcal{L}^{\mathsf{Orchard}} = \mathsf{GroupHash}^{\mathbb{P}}("\mathsf{z.cash:Orchard}", "L")$.
+
+
+
 ## Security properties
 
 We care about several security properties for our nullifiers:
