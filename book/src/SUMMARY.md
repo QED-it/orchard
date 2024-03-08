@@ -19,3 +19,4 @@
     - [Gadgets](design/circuit/gadgets.md)
     - [CommitIvk](design/circuit/commit-ivk.md)
     - [NoteCommit](design/circuit/note-commit.md)
+    - [Value Commitment](design/circuit/value-commit.md)
