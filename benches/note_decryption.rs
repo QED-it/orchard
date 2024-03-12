@@ -5,7 +5,7 @@ use orchard::{
     circuit::ProvingKey,
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    note_encryption::{CompactAction, OrchardDomainContext},
+    note_encryption::{action::CompactAction, OrchardDomainContext},
     note_encryption_zsa::OrchardDomainZSA,
     value::NoteValue,
     Anchor, Bundle,

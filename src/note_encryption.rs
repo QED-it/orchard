@@ -340,7 +340,7 @@ impl<D: OrchardDomain> Domain for OrchardDomainContext<D> {
         plaintext: &D::NotePlaintextBytes,
     ) -> (Self::CompactNotePlaintextBytes, Self::Memo) {
         let (compact, memo) = plaintext.as_ref().split_at(D::COMPACT_NOTE_SIZE);
-        (compact.try_into().unwrap(), memo.try_into().unwrap())
+        (compact.into(), memo.try_into().unwrap())
     }
 
     fn extract_pk_d(out_plaintext: &OutPlaintextBytes) -> Option<Self::DiversifiedTransmissionKey> {
@@ -360,7 +360,7 @@ impl<D: OrchardDomain> BatchDomain for OrchardDomainContext<D> {
         let (shared_secrets, ephemeral_keys): (Vec<_>, Vec<_>) = items.unzip();
 
         SharedSecret::batch_to_affine(shared_secrets)
-            .zip(ephemeral_keys.into_iter())
+            .zip(ephemeral_keys)
             .map(|(secret, ephemeral_key)| {
                 secret.map(|dhsecret| SharedSecret::kdf_orchard_inner(dhsecret, ephemeral_key))
             })
