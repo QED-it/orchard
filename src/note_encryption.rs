@@ -20,8 +20,7 @@ use crate::{
     Address, Note,
 };
 
-mod action;
-
+pub mod action;
 pub mod note_encryption_vanilla;
 pub mod note_encryption_zsa;
 
