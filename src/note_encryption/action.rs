@@ -1,3 +1,5 @@
+//! Defines actions for Orchard shielded outputs and compact action for light clients.
+
 use std::fmt;
 
 use super::{
