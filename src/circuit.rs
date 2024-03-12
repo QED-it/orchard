@@ -30,9 +30,10 @@ use crate::{
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
 };
 
-mod circuit_common;
 mod circuit_vanilla;
 mod circuit_zsa;
+
+pub(in crate::circuit) mod commit_ivk;
 
 /// Size of the Orchard circuit.
 const K: u32 = 11;

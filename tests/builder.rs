@@ -6,7 +6,7 @@ use orchard::{
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
-    note_encryption::OrchardType,
+    note_encryption::OrchardDomainContext,
     note_encryption_zsa::OrchardDomainZSA,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
@@ -15,7 +15,7 @@ use orchard::{
 use rand::rngs::OsRng;
 use zcash_note_encryption_zsa::try_note_decryption;
 
-type OrchardZSA = OrchardType<OrchardDomainZSA>;
+type OrchardZSA = OrchardDomainContext<OrchardDomainZSA>;
 
 pub fn verify_bundle(
     bundle: &Bundle<Authorized, i64, OrchardDomainZSA>,
