@@ -20,9 +20,7 @@ impl<A, D: OrchardDomain> ShieldedOutput<OrchardDomainContext<D>> for Action<A, 
 
     // FIXME: split at COMPACT_NOTE_SIZE - is this correct?
     fn enc_ciphertext_compact(&self) -> D::CompactNoteCiphertextBytes {
-        self.encrypted_note().enc_ciphertext.as_ref()[..D::COMPACT_NOTE_SIZE]
-            .try_into()
-            .unwrap()
+        self.encrypted_note().enc_ciphertext.as_ref()[..D::COMPACT_NOTE_SIZE].into()
     }
 }
 
