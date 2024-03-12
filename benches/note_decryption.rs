@@ -5,7 +5,7 @@ use orchard::{
     circuit::ProvingKey,
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    note_encryption::{CompactAction, OrchardType},
+    note_encryption::{CompactAction, OrchardDomainContext},
     note_encryption_zsa::OrchardDomainZSA,
     value::NoteValue,
     Anchor, Bundle,
@@ -16,7 +16,7 @@ use zcash_note_encryption_zsa::{batch, try_compact_note_decryption, try_note_dec
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 
-type OrchardZSA = OrchardType<OrchardDomainZSA>;
+type OrchardZSA = OrchardDomainContext<OrchardDomainZSA>;
 
 fn bench_note_decryption(c: &mut Criterion) {
     let rng = OsRng;

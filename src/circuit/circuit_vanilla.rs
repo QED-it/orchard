@@ -36,7 +36,7 @@ use crate::{
 };
 
 use super::{
-    circuit_common::commit_ivk::{self, CommitIvkChip, CommitIvkConfig},
+    commit_ivk::{self, CommitIvkChip, CommitIvkConfig},
     Circuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
 };
 
