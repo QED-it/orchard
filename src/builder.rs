@@ -22,7 +22,7 @@ use crate::{
         SpendingKey,
     },
     note::{AssetBase, Note, TransmittedNoteCiphertext},
-    note_encryption::{OrchardDomain, OrchardType},
+    note_encryption::{OrchardDomain, OrchardDomainContext},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -282,7 +282,7 @@ impl ActionInfo {
         let cm_new = note.commitment();
         let cmx = cm_new.into();
 
-        let encryptor = NoteEncryption::<OrchardType<D>>::new(
+        let encryptor = NoteEncryption::<OrchardDomainContext<D>>::new(
             self.output.ovk,
             note,
             self.output.memo.unwrap_or_else(|| {

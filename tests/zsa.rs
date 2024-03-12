@@ -14,7 +14,7 @@ use orchard::{
     bundle::Flags,
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
-    note_encryption::OrchardType,
+    note_encryption::OrchardDomainContext,
     note_encryption_zsa::OrchardDomainZSA,
     value::NoteValue,
     Address, Anchor, Bundle, Note,
@@ -23,7 +23,7 @@ use rand::rngs::OsRng;
 use std::collections::HashSet;
 use zcash_note_encryption_zsa::try_note_decryption;
 
-type OrchardZSA = OrchardType<OrchardDomainZSA>;
+type OrchardZSA = OrchardDomainContext<OrchardDomainZSA>;
 
 #[derive(Debug)]
 struct Keychain {
