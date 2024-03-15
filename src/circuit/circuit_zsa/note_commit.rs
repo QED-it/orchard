@@ -1,3 +1,5 @@
+// TODO: try to avoid code duplication with the same module for circuit_vanilla.
+
 use core::iter;
 
 use group::ff::PrimeField;
