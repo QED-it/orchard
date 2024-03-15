@@ -34,6 +34,7 @@ mod circuit_vanilla;
 mod circuit_zsa;
 
 pub(in crate::circuit) mod commit_ivk;
+pub(in crate::circuit) mod gadget;
 
 /// Size of the Orchard circuit.
 const K: u32 = 11;

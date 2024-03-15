@@ -45,15 +45,16 @@ use super::{
     commit_ivk::{
         self, {CommitIvkChip, CommitIvkConfig},
     },
+    gadget::{
+        add_chip::{self, AddChip, AddConfig},
+        AddInstruction,
+    },
     Circuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD,
     RK_X, RK_Y,
 };
 
 use self::{
-    gadget::{
-        add_chip::{AddChip, AddConfig},
-        assign_free_advice, assign_is_native_asset, assign_split_flag,
-    },
+    gadget::{assign_free_advice, assign_is_native_asset, assign_split_flag},
     note_commit::{NoteCommitChip, NoteCommitConfig},
 };
 
