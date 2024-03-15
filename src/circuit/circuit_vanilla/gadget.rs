@@ -1,9 +1,11 @@
 //! Gadgets used in the Orchard circuit.
 
+// TODO: try to avoid code duplication with the same module for circuit_zsa.
+
 use ff::Field;
 use pasta_curves::pallas;
 
-use super::{commit_ivk::CommitIvkChip, note_commit::NoteCommitChip};
+use super::{add_chip, commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, AddInstruction};
 use crate::constants::{
     NullifierK, OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
     ValueCommitV,
@@ -20,11 +22,9 @@ use halo2_gadgets::{
     sinsemilla::{chip::SinsemillaChip, merkle::chip::MerkleChip},
 };
 use halo2_proofs::{
-    circuit::{AssignedCell, Chip, Layouter, Value},
+    circuit::{AssignedCell, Layouter, Value},
     plonk::{self, Advice, Assigned, Column},
 };
-
-pub(in crate::circuit) mod add_chip;
 
 impl super::Config {
     pub(super) fn add_chip(&self) -> add_chip::AddChip {
@@ -74,17 +74,6 @@ impl super::Config {
     pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip {
         NoteCommitChip::construct(self.old_note_commit_config.clone())
     }
-}
-
-/// An instruction set for adding two circuit words (field elements).
-pub(in crate::circuit) trait AddInstruction<F: Field>: Chip<F> {
-    /// Constraints `a + b` and returns the sum.
-    fn add(
-        &self,
-        layouter: impl Layouter<F>,
-        a: &AssignedCell<F, F>,
-        b: &AssignedCell<F, F>,
-    ) -> Result<AssignedCell<F, F>, plonk::Error>;
 }
 
 /// Witnesses the given value in a standalone region.
