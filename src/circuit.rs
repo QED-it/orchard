@@ -4,7 +4,7 @@ use core::fmt;
 
 use group::{Curve, GroupEncoding};
 use halo2_proofs::{
-    circuit::Value,
+    circuit::{floor_planner, Layouter, Value},
     plonk::{self, BatchVerifier, SingleVerifier},
     transcript::{Blake2bRead, Blake2bWrite},
 };
@@ -50,6 +50,43 @@ const CMX: usize = 6;
 const ENABLE_SPEND: usize = 7;
 const ENABLE_OUTPUT: usize = 8;
 const ENABLE_ZSA: usize = 9;
+
+/// FIXME: add doc
+pub trait OrchardCircuit: Sized + Default {
+    /// FIXME: add doc
+    type Config: Clone;
+
+    /// FIXME: add doc
+    fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config;
+
+    /// FIXME: add doc
+    fn synthesize(
+        circuit: &Circuit<Self>,
+        config: Self::Config,
+        layouter: impl Layouter<pallas::Base>,
+    ) -> Result<(), plonk::Error>;
+}
+
+impl<D: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<D> {
+    type Config = D::Config;
+    type FloorPlanner = floor_planner::V1;
+
+    fn without_witnesses(&self) -> Self {
+        Self::default()
+    }
+
+    fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
+        D::configure(meta)
+    }
+
+    fn synthesize(
+        &self,
+        config: Self::Config,
+        layouter: impl Layouter<pallas::Base>,
+    ) -> Result<(), plonk::Error> {
+        D::synthesize(self, config, layouter)
+    }
+}
 
 /// The Orchard Action circuit.
 #[derive(Clone, Debug, Default)]
@@ -160,10 +197,7 @@ pub struct VerifyingKey {
 
 impl VerifyingKey {
     /// Builds the verifying key.
-    pub fn build<D: Default>() -> Self
-    where
-        Circuit<D>: plonk::Circuit<pallas::Base>,
-    {
+    pub fn build<D: OrchardCircuit>() -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
         let circuit: Circuit<D> = Default::default();
 
@@ -182,10 +216,7 @@ pub struct ProvingKey {
 
 impl ProvingKey {
     /// Builds the proving key.
-    pub fn build<D: Default>() -> Self
-    where
-        Circuit<D>: plonk::Circuit<pallas::Base>,
-    {
+    pub fn build<D: OrchardCircuit>() -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
         let circuit: Circuit<D> = Default::default();
 
@@ -301,15 +332,12 @@ impl DynamicUsage for Proof {
 
 impl Proof {
     /// Creates a proof for the given circuits and instances.
-    pub fn create<D>(
+    pub fn create<D: OrchardCircuit>(
         pk: &ProvingKey,
         circuits: &[Circuit<D>],
         instances: &[Instance],
         mut rng: impl RngCore,
-    ) -> Result<Self, plonk::Error>
-    where
-        Circuit<D>: plonk::Circuit<pallas::Base>,
-    {
+    ) -> Result<Self, plonk::Error> {
         let instances: Vec<_> = instances.iter().map(|i| i.to_halo2_instance()).collect();
         let instances: Vec<Vec<_>> = instances
             .iter()
