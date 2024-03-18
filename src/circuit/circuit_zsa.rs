@@ -29,7 +29,7 @@ use halo2_gadgets::{
 };
 
 use halo2_proofs::{
-    circuit::{floor_planner, Layouter, Value},
+    circuit::{Layouter, Value},
     plonk::{self, Advice, Column, Constraints, Expression, Instance as InstanceColumn, Selector},
     poly::Rotation,
 };
@@ -49,8 +49,8 @@ use super::{
         add_chip::{self, AddChip, AddConfig},
         AddInstruction,
     },
-    Circuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD,
-    RK_X, RK_Y,
+    Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
+    ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
 
 use self::{
@@ -83,13 +83,8 @@ pub struct Config {
     cond_swap_config: CondSwapConfig,
 }
 
-impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
+impl OrchardCircuit for OrchardDomainZSA {
     type Config = Config;
-    type FloorPlanner = floor_planner::V1;
-
-    fn without_witnesses(&self) -> Self {
-        Self::default()
-    }
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
         // Advice columns used in the Orchard circuit.
@@ -360,7 +355,7 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
 
     #[allow(non_snake_case)]
     fn synthesize(
-        &self,
+        circuit: &Circuit<Self>,
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
@@ -376,39 +371,39 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
             let psi_nf = assign_free_advice(
                 layouter.namespace(|| "witness psi_nf"),
                 config.advices[0],
-                self.psi_nf,
+                circuit.psi_nf,
             )?;
 
             // Witness psi_old
             let psi_old = assign_free_advice(
                 layouter.namespace(|| "witness psi_old"),
                 config.advices[0],
-                self.psi_old,
+                circuit.psi_old,
             )?;
 
             // Witness rho_old
             let rho_old = assign_free_advice(
                 layouter.namespace(|| "witness rho_old"),
                 config.advices[0],
-                self.rho_old.map(|rho| rho.0),
+                circuit.rho_old.map(|rho| rho.0),
             )?;
 
             // Witness cm_old
             let cm_old = Point::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "cm_old"),
-                self.cm_old.as_ref().map(|cm| cm.inner().to_affine()),
+                circuit.cm_old.as_ref().map(|cm| cm.inner().to_affine()),
             )?;
 
             // Witness g_d_old
             let g_d_old = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "gd_old"),
-                self.g_d_old.as_ref().map(|gd| gd.to_affine()),
+                circuit.g_d_old.as_ref().map(|gd| gd.to_affine()),
             )?;
 
             // Witness ak_P.
-            let ak_P: Value<pallas::Point> = self.ak.as_ref().map(|ak| ak.into());
+            let ak_P: Value<pallas::Point> = circuit.ak.as_ref().map(|ak| ak.into());
             let ak_P = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness ak_P"),
@@ -419,28 +414,28 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
             let nk = assign_free_advice(
                 layouter.namespace(|| "witness nk"),
                 config.advices[0],
-                self.nk.map(|nk| nk.inner()),
+                circuit.nk.map(|nk| nk.inner()),
             )?;
 
             // Witness v_old.
             let v_old = assign_free_advice(
                 layouter.namespace(|| "witness v_old"),
                 config.advices[0],
-                self.v_old,
+                circuit.v_old,
             )?;
 
             // Witness v_new.
             let v_new = assign_free_advice(
                 layouter.namespace(|| "witness v_new"),
                 config.advices[0],
-                self.v_new,
+                circuit.v_new,
             )?;
 
             // Witness asset
             let asset = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness asset"),
-                self.asset.map(|asset| asset.cv_base().to_affine()),
+                circuit.asset.map(|asset| asset.cv_base().to_affine()),
             )?;
 
             (
@@ -452,7 +447,7 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
         let split_flag = assign_split_flag(
             layouter.namespace(|| "witness split_flag"),
             config.advices[0],
-            self.split_flag,
+            circuit.split_flag,
         )?;
 
         // Witness is_native_asset which is equal to
@@ -461,18 +456,18 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
         let is_native_asset = assign_is_native_asset(
             layouter.namespace(|| "witness is_native_asset"),
             config.advices[0],
-            self.asset,
+            circuit.asset,
         )?;
 
         // Merkle path validity check (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
         let root = {
-            let path = self
+            let path = circuit
                 .path
                 .map(|typed_path| typed_path.map(|node| node.inner()));
             let merkle_inputs = MerklePath::construct(
                 [config.merkle_chip_1(), config.merkle_chip_2()],
                 OrchardHashDomains::MerkleCrh,
-                self.pos,
+                circuit.pos,
                 path,
             );
             let leaf = cm_old.extract_p().inner().clone();
@@ -486,11 +481,11 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
                 // v_net is equal to
                 //   (-v_new) if split_flag = true
                 //   v_old - v_new if split_flag = false
-                let v_net = self.split_flag.and_then(|split_flag| {
+                let v_net = circuit.split_flag.and_then(|split_flag| {
                     if split_flag {
-                        Value::known(crate::value::NoteValue::zero()) - self.v_new
+                        Value::known(crate::value::NoteValue::zero()) - circuit.v_new
                     } else {
-                        self.v_old - self.v_new
+                        circuit.v_old - circuit.v_new
                     }
                 });
 
@@ -524,7 +519,7 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
             let rcv = ScalarFixed::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "rcv"),
-                self.rcv.as_ref().map(|rcv| rcv.inner()),
+                circuit.rcv.as_ref().map(|rcv| rcv.inner()),
             )?;
 
             let cv_net = gadget::value_commit_orchard(
@@ -567,8 +562,11 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
 
         // Spend authority (https://p.z.cash/ZKS:action-spend-authority)
         {
-            let alpha =
-                ScalarFixed::new(ecc_chip.clone(), layouter.namespace(|| "alpha"), self.alpha)?;
+            let alpha = ScalarFixed::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "alpha"),
+                circuit.alpha,
+            )?;
 
             // alpha_commitment = [alpha] SpendAuthG
             let (alpha_commitment, _) = {
@@ -592,7 +590,7 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
                 let rivk = ScalarFixed::new(
                     ecc_chip.clone(),
                     layouter.namespace(|| "rivk"),
-                    self.rivk.map(|rivk| rivk.inner()),
+                    circuit.rivk.map(|rivk| rivk.inner()),
                 )?;
 
                 gadget::commit_ivk(
@@ -623,7 +621,9 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
             let pk_d_old = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness pk_d_old"),
-                self.pk_d_old.map(|pk_d_old| pk_d_old.inner().to_affine()),
+                circuit
+                    .pk_d_old
+                    .map(|pk_d_old| pk_d_old.inner().to_affine()),
             )?;
             derived_pk_d_old
                 .constrain_equal(layouter.namespace(|| "pk_d_old equality"), &pk_d_old)?;
@@ -636,7 +636,7 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
             let rcm_old = ScalarFixed::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "rcm_old"),
-                self.rcm_old.as_ref().map(|rcm_old| rcm_old.inner()),
+                circuit.rcm_old.as_ref().map(|rcm_old| rcm_old.inner()),
             )?;
 
             // g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)
@@ -666,7 +666,7 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
         {
             // Witness g_d_new
             let g_d_new = {
-                let g_d_new = self.g_d_new.map(|g_d_new| g_d_new.to_affine());
+                let g_d_new = circuit.g_d_new.map(|g_d_new| g_d_new.to_affine());
                 NonIdentityPoint::new(
                     ecc_chip.clone(),
                     layouter.namespace(|| "witness g_d_new_star"),
@@ -676,7 +676,9 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
 
             // Witness pk_d_new
             let pk_d_new = {
-                let pk_d_new = self.pk_d_new.map(|pk_d_new| pk_d_new.inner().to_affine());
+                let pk_d_new = circuit
+                    .pk_d_new
+                    .map(|pk_d_new| pk_d_new.inner().to_affine());
                 NonIdentityPoint::new(
                     ecc_chip.clone(),
                     layouter.namespace(|| "witness pk_d_new"),
@@ -691,13 +693,13 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
             let psi_new = assign_free_advice(
                 layouter.namespace(|| "witness psi_new"),
                 config.advices[0],
-                self.psi_new,
+                circuit.psi_new,
             )?;
 
             let rcm_new = ScalarFixed::new(
                 ecc_chip,
                 layouter.namespace(|| "rcm_new"),
-                self.rcm_new.as_ref().map(|rcm_new| rcm_new.inner()),
+                circuit.rcm_new.as_ref().map(|rcm_new| rcm_new.inner()),
             )?;
 
             // g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)
@@ -793,7 +795,7 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
                     config.advices[2],
                     1,
                     || {
-                        self.asset.map(|asset| {
+                        circuit.asset.map(|asset| {
                             let asset_x = *asset.cv_base().to_affine().coordinates().unwrap().x();
                             let native_asset_x = *AssetBase::native()
                                 .cv_base()
@@ -817,7 +819,7 @@ impl plonk::Circuit<pallas::Base> for Circuit<OrchardDomainZSA> {
                     config.advices[3],
                     1,
                     || {
-                        self.asset.map(|asset| {
+                        circuit.asset.map(|asset| {
                             let asset_y = *asset.cv_base().to_affine().coordinates().unwrap().y();
                             let native_asset_y = *AssetBase::native()
                                 .cv_base()
