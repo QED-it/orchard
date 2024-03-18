@@ -16,7 +16,7 @@ use crate::{
     action::Action,
     address::Address,
     bundle::{Authorization, Authorized, Bundle, Flags},
-    circuit::{Circuit, Instance, Proof, ProvingKey},
+    circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
@@ -483,13 +483,10 @@ impl Builder {
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
     /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
-    pub fn build<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain>(
+    pub fn build<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain + OrchardCircuit>(
         self,
         mut rng: impl RngCore,
-    ) -> Result<UnauthorizedBundle<V, D>, BuildError>
-    where
-        Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
-    {
+    ) -> Result<UnauthorizedBundle<V, D>, BuildError> {
         let mut pre_actions: Vec<_> = Vec::new();
 
         // Pair up the spends and recipients, extending with dummy values as necessary.
@@ -648,17 +645,11 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 ///
 /// This struct contains the private data needed to create a [`Proof`] for a [`Bundle`].
 #[derive(Clone, Debug)]
-pub struct Unproven<D>
-where
-    Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
-{
+pub struct Unproven<D: OrchardCircuit> {
     circuits: Vec<Circuit<D>>,
 }
 
-impl<S: InProgressSignatures, D> InProgress<Unproven<D>, S>
-where
-    Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
-{
+impl<S: InProgressSignatures, D: OrchardCircuit> InProgress<Unproven<D>, S> {
     /// Creates the proof for this bundle.
     pub fn create_proof(
         &self,
@@ -670,9 +661,8 @@ where
     }
 }
 
-impl<S: InProgressSignatures, V, D: OrchardDomain> Bundle<InProgress<Unproven<D>, S>, V, D>
-where
-    Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
+impl<S: InProgressSignatures, V, D: OrchardDomain + OrchardCircuit>
+    Bundle<InProgress<Unproven<D>, S>, V, D>
 {
     /// Creates the proof for this bundle.
     pub fn create_proof(
@@ -933,8 +923,6 @@ pub mod testing {
     use incrementalmerkletree::{frontier::Frontier, Hashable};
     use rand::{rngs::StdRng, CryptoRng, SeedableRng};
 
-    use pasta_curves::pallas;
-
     use proptest::collection::vec;
     use proptest::prelude::*;
 
@@ -942,7 +930,7 @@ pub mod testing {
     use crate::{
         address::testing::arb_address,
         bundle::{Authorized, Bundle, Flags},
-        circuit::{Circuit, ProvingKey},
+        circuit::{OrchardCircuit, ProvingKey},
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
         note_encryption::OrchardDomain,
@@ -972,12 +960,9 @@ pub mod testing {
 
     impl<R: RngCore + CryptoRng> ArbitraryBundleInputs<R> {
         /// Create a bundle from the set of arbitrary bundle inputs.
-        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain + Default>(
+        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain + OrchardCircuit>(
             mut self,
-        ) -> Bundle<Authorized, V, D>
-        where
-            Circuit<D>: halo2_proofs::plonk::Circuit<pallas::Base>,
-        {
+        ) -> Bundle<Authorized, V, D> {
             let fvk = FullViewingKey::from(&self.sk);
             let flags = Flags::from_parts(true, true, true);
             let mut builder = Builder::new(flags, self.anchor);
@@ -995,7 +980,7 @@ pub mod testing {
                     .unwrap();
             }
 
-            let pk = ProvingKey::build();
+            let pk = ProvingKey::build::<D>();
             builder
                 .build(&mut self.rng)
                 .unwrap()
@@ -1014,10 +999,7 @@ pub mod testing {
         phantom: std::marker::PhantomData<D>,
     }
 
-    impl<D: OrchardDomain + Default> BuilderArb<D>
-    where
-        crate::circuit::Circuit<D>: halo2_proofs::plonk::Circuit<pasta_curves::Fp>,
-    {
+    impl<D: OrchardDomain + OrchardCircuit> BuilderArb<D> {
         prop_compose! {
             /// Produce a random valid Orchard bundle.
             fn arb_bundle_inputs(sk: SpendingKey)
