@@ -88,6 +88,7 @@ impl<D: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<D> {
     }
 }
 
+// FIXME: rename to CircuitCommon
 /// The Orchard Action circuit.
 #[derive(Clone, Debug, Default)]
 pub struct Circuit<D> {

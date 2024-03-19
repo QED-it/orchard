@@ -5,7 +5,8 @@
 use crate::Note;
 
 use super::{
-    build_base_note_plaintext_bytes, Memo, NoteBytes, OrchardDomain, COMPACT_NOTE_SIZE_VANILLA,
+    build_base_note_plaintext_bytes, note_bytes::NoteBytes, Memo, OrchardDomain,
+    COMPACT_NOTE_SIZE_VANILLA,
 };
 
 /// FIXME: add doc
