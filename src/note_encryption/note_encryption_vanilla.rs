@@ -1,3 +1,5 @@
+// FIXME: consider renaming this to vanilla.rs
+
 //! In-band secret distribution for Orchard bundles.
 
 use crate::Note;
@@ -75,11 +77,11 @@ mod tests {
             let rho = note.rho();
 
             // Encode.
-            let mut plaintext = OrchardVanilla::note_plaintext_bytes(&note, memo);
+            let plaintext = OrchardVanilla::note_plaintext_bytes(&note, memo);
 
             // Decode.
             let domain = OrchardVanilla::for_nullifier(rho);
-            let parsed_version = note_version(plaintext.as_mut()).unwrap();
+            let parsed_version = note_version(plaintext.as_ref()).unwrap();
             let (compact, parsed_memo) = domain.extract_memo(&plaintext);
 
             let (parsed_note, parsed_recipient) = parse_note_plaintext_without_memo(rho, &compact,
