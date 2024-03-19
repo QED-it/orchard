@@ -66,13 +66,20 @@ impl<const N: usize> AsMut<[u8]> for NoteBytes<N> {
 
 // FIXME: consider implementing and using TryFrom instead
 impl<const N: usize> From<&[u8]> for NoteBytes<N> {
-    fn from(s: &[u8]) -> Self
-    where
-        Self: Sized,
-    {
+    fn from(s: &[u8]) -> Self {
         Self(s.try_into().unwrap())
     }
 }
+
+/// Defines the behavior for types that can provide read-only access to their internal byte array.
+pub trait NoteByteReader: AsRef<[u8]> + for<'a> From<&'a [u8]> + Clone + Copy {}
+
+impl<const N: usize> NoteByteReader for NoteBytes<N> {}
+
+/// Defines the behavior for types that support both read and write access to their internal byte array.
+pub trait NoteByteWriter: AsRef<[u8]> + AsMut<[u8]> + for<'a> From<&'a [u8]> {}
+
+impl<const N: usize> NoteByteWriter for NoteBytes<N> {}
 
 /// Represents the Orchard protocol domain specifics required for note encryption and decryption.
 pub trait OrchardDomain: fmt::Debug + Clone {
@@ -86,13 +93,13 @@ pub trait OrchardDomain: fmt::Debug + Clone {
     const ENC_CIPHERTEXT_SIZE: usize = Self::NOTE_PLAINTEXT_SIZE + AEAD_TAG_SIZE;
 
     /// A type to represent the raw bytes of a note plaintext.
-    type NotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + for<'a> From<&'a [u8]>;
+    type NotePlaintextBytes: NoteByteWriter;
     /// A type to represent the raw bytes of an encrypted note plaintext.
-    type NoteCiphertextBytes: AsRef<[u8]> + for<'a> From<&'a [u8]> + Clone + Copy;
+    type NoteCiphertextBytes: NoteByteReader;
     /// A type to represent the raw bytes of a compact note.
-    type CompactNotePlaintextBytes: AsRef<[u8]> + AsMut<[u8]> + for<'a> From<&'a [u8]>;
+    type CompactNotePlaintextBytes: NoteByteWriter;
     /// A type to represent the raw bytes of an encrypted compact note.
-    type CompactNoteCiphertextBytes: AsRef<[u8]> + for<'a> From<&'a [u8]> + Clone + Copy;
+    type CompactNoteCiphertextBytes: NoteByteReader;
 
     /// Builds NotePlaintextBytes from Note and Memo.
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes;
@@ -146,6 +153,7 @@ fn prf_ock_orchard(
     )
 }
 
+// FIXME: consider returning enum instead of u8
 /// Retrieves the version of the note plaintext.
 /// Returns `Some(u8)` if the version is recognized, otherwise `None`.
 fn note_version(plaintext: &[u8]) -> Option<u8> {
