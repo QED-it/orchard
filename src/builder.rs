@@ -460,7 +460,7 @@ impl Builder {
                     .iter()
                     .map(|recipient| NoteValue::zero() - recipient.value),
             )
-            .fold(Some(ValueSum::zero()), |acc, note_value| acc? + note_value)
+            .try_fold(ValueSum::zero(), |acc, note_value| acc + note_value)
             .ok_or(OverflowError)?;
         i64::try_from(value_balance).and_then(|i| V::try_from(i).map_err(|_| value::OverflowError))
     }
@@ -537,9 +537,7 @@ impl Builder {
         let native_value_balance: V = pre_actions
             .iter()
             .filter(|action| action.spend.note.asset().is_native().into())
-            .fold(Some(ValueSum::zero()), |acc, action| {
-                acc? + action.value_sum()
-            })
+            .try_fold(ValueSum::zero(), |acc, action| acc + action.value_sum())
             .ok_or(OverflowError)?
             .into()?;
 
