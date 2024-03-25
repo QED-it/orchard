@@ -31,13 +31,13 @@ pub mod note_encryption;
 
 pub use note_encryption::{note_encryption_vanilla, note_encryption_zsa};
 
+pub mod orchard_flavor;
+
 pub mod primitives;
 mod spec;
 pub mod tree;
 pub mod value;
 pub mod zip32;
-
-//pub mod domain_ext;
 
 #[cfg(test)]
 mod test_vectors;

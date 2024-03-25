@@ -143,7 +143,11 @@ pub(crate) mod testing {
 
     use super::Action;
 
-    /// FIXME: add a proper doc
+    /// `ActionArb` serves as a utility structure in property-based testing, designed specifically to adapt
+    /// `arb_...` functions for compatibility with both variations of the Orchard protocol: Vanilla and ZSA.
+    /// This adaptation is necessary due to the proptest crate's limitation, which prevents the direct
+    /// transformation of `arb_...` functions into generic forms suitable for testing different protocol
+    /// flavors.
     #[derive(Debug)]
     pub struct ActionArb<D: OrchardDomain> {
         phantom: std::marker::PhantomData<D>,

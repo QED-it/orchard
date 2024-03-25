@@ -2,18 +2,14 @@
 
 //! In-band secret distribution for Orchard bundles.
 
-use crate::Note;
+use crate::{orchard_flavor, Note};
 
 use super::{
     build_base_note_plaintext_bytes, note_bytes::NoteBytes, Memo, OrchardDomain,
     COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
 };
 
-/// FIXME: add doc
-#[derive(Debug, Clone, Default)]
-pub struct OrchardDomainZSA;
-
-impl OrchardDomain for OrchardDomainZSA {
+impl OrchardDomain for orchard_flavor::OrchardZSA {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_ZSA;
 
     type NotePlaintextBytes = NoteBytes<{ Self::NOTE_PLAINTEXT_SIZE }>;
@@ -62,10 +58,10 @@ mod tests {
             action::CompactAction, note_version, parse_note_plaintext_without_memo,
             prf_ock_orchard, OrchardDomainContext,
         },
-        NoteBytes, OrchardDomainZSA,
+        orchard_flavor, NoteBytes,
     };
 
-    type OrchardZSA = OrchardDomainContext<OrchardDomainZSA>;
+    type OrchardZSA = OrchardDomainContext<orchard_flavor::OrchardZSA>;
 
     /// Implementation of in-band secret distribution for Orchard bundles.
     pub type OrchardNoteEncryptionZSA = zcash_note_encryption_zsa::NoteEncryption<OrchardZSA>;
