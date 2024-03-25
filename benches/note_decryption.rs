@@ -6,7 +6,7 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
     note_encryption::{action::CompactAction, OrchardDomainContext},
-    note_encryption_zsa::OrchardDomainZSA,
+    orchard_flavor,
     value::NoteValue,
     Anchor, Bundle,
 };
@@ -16,12 +16,12 @@ use zcash_note_encryption_zsa::{batch, try_compact_note_decryption, try_note_dec
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 
-type OrchardZSA = OrchardDomainContext<OrchardDomainZSA>;
+type OrchardZSA = OrchardDomainContext<orchard_flavor::OrchardZSA>;
 
 fn bench_note_decryption(c: &mut Criterion) {
     let rng = OsRng;
-    // FIXME: consider adding test for OrchardDomainVanilla as well
-    let pk = ProvingKey::build::<OrchardDomainZSA>();
+    // FIXME: consider adding test for orchard_flavor::OrchardVanilla as well
+    let pk = ProvingKey::build::<orchard_flavor::OrchardZSA>();
 
     let fvk = FullViewingKey::from(&SpendingKey::from_bytes([7; 32]).unwrap());
     let valid_ivk = fvk.to_ivk(Scope::External);
@@ -74,7 +74,7 @@ fn bench_note_decryption(c: &mut Criterion) {
                 None,
             )
             .unwrap();
-        let bundle: Bundle<_, i64, OrchardDomainZSA> = builder.build(rng).unwrap();
+        let bundle: Bundle<_, i64, orchard_flavor::OrchardZSA> = builder.build(rng).unwrap();
         bundle
             .create_proof(&pk, rng)
             .unwrap()

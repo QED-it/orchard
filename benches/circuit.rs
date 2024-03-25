@@ -12,7 +12,7 @@ use orchard::{
     bundle::Flags,
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, Scope, SpendingKey},
-    note_encryption_zsa::OrchardDomainZSA,
+    orchard_flavor,
     value::NoteValue,
     Anchor, Bundle,
 };
@@ -24,9 +24,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     let sk = SpendingKey::from_bytes([7; 32]).unwrap();
     let recipient = FullViewingKey::from(&sk).address_at(0u32, Scope::External);
 
-    // FIXME: consider adding test for OrchardDomainVanilla as well
-    let vk = VerifyingKey::build::<OrchardDomainZSA>();
-    let pk = ProvingKey::build::<OrchardDomainZSA>();
+    // FIXME: consider adding test for orchard_flavor::OrchardVanilla as well
+    let vk = VerifyingKey::build::<orchard_flavor::OrchardZSA>();
+    let pk = ProvingKey::build::<orchard_flavor::OrchardZSA>();
 
     let create_bundle = |num_recipients| {
         let mut builder = Builder::new(
@@ -44,7 +44,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 )
                 .unwrap();
         }
-        let bundle: Bundle<_, i64, OrchardDomainZSA> = builder.build(rng).unwrap();
+        let bundle: Bundle<_, i64, orchard_flavor::OrchardZSA> = builder.build(rng).unwrap();
 
         let instances: Vec<_> = bundle
             .actions()

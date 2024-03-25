@@ -32,7 +32,7 @@ use crate::{
     constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
     },
-    note_encryption_vanilla::OrchardDomainVanilla,
+    orchard_flavor,
 };
 
 use super::{
@@ -73,7 +73,7 @@ pub struct Config {
     new_note_commit_config: NoteCommitConfig,
 }
 
-impl OrchardCircuit for OrchardDomainVanilla {
+impl OrchardCircuit for orchard_flavor::OrchardVanilla {
     type Config = Config;
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
@@ -657,12 +657,12 @@ mod tests {
         circuit::{Circuit as GenericCircuit, Instance, Proof, ProvingKey, VerifyingKey, K},
         keys::SpendValidatingKey,
         note::{AssetBase, Note},
-        note_encryption_vanilla::OrchardDomainVanilla,
+        orchard_flavor,
         tree::MerklePath,
         value::{ValueCommitTrapdoor, ValueCommitment},
     };
 
-    type Circuit = GenericCircuit<OrchardDomainVanilla>;
+    type Circuit = GenericCircuit<orchard_flavor::OrchardVanilla>;
 
     fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
@@ -736,7 +736,7 @@ mod tests {
             .map(|()| generate_circuit_instance(&mut rng))
             .unzip();
 
-        let vk = VerifyingKey::build::<OrchardDomainVanilla>();
+        let vk = VerifyingKey::build::<orchard_flavor::OrchardVanilla>();
 
         // Test that the pinned verification key (representing the circuit)
         // is as expected.
@@ -778,7 +778,7 @@ mod tests {
             );
         }
 
-        let pk = ProvingKey::build::<OrchardDomainVanilla>();
+        let pk = ProvingKey::build::<orchard_flavor::OrchardVanilla>();
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(&vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
@@ -788,7 +788,7 @@ mod tests {
     fn serialized_proof_test_case() {
         use std::io::{Read, Write};
 
-        let vk = VerifyingKey::build::<OrchardDomainVanilla>();
+        let vk = VerifyingKey::build::<orchard_flavor::OrchardVanilla>();
 
         fn write_test_case<W: Write>(
             mut w: W,
@@ -857,7 +857,7 @@ mod tests {
                 let (circuit, instance) = generate_circuit_instance(OsRng);
                 let instances = &[instance.clone()];
 
-                let pk = ProvingKey::build::<OrchardDomainVanilla>();
+                let pk = ProvingKey::build::<orchard_flavor::OrchardVanilla>();
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 

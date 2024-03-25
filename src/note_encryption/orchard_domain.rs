@@ -12,12 +12,15 @@ use super::{
 /// Represents the Orchard protocol domain specifics required for note encryption and decryption.
 pub trait OrchardDomain: fmt::Debug + Clone {
     /// The size of a compact note, specific to the Orchard protocol.
+    // 52 for Vanuilla, 84 for ZSA
     const COMPACT_NOTE_SIZE: usize;
 
     /// The size of a note plaintext, including memo and other metadata.
+    // + 512 (564 for Vanilla, 596 for ZSA)
     const NOTE_PLAINTEXT_SIZE: usize = Self::COMPACT_NOTE_SIZE + MEMO_SIZE;
 
     /// The size of an encrypted note ciphertext, accounting for additional AEAD tag space.
+    // + 16 (580 for Vanilla, 612 for ZSA)
     const ENC_CIPHERTEXT_SIZE: usize = Self::NOTE_PLAINTEXT_SIZE + AEAD_TAG_SIZE;
 
     /// A type to represent the raw bytes of a note plaintext.
@@ -36,7 +39,7 @@ pub trait OrchardDomain: fmt::Debug + Clone {
 /// Orchard-specific note encryption logic.
 #[derive(Debug, Clone)]
 pub struct OrchardDomainContext<D: OrchardDomain> {
-    /// FIXME: add doc
+    /// Represents a nullifier which is used to prevent double spending within the Orchard protocol.
     pub rho: Nullifier,
     phantom: std::marker::PhantomData<D>,
 }
