@@ -167,8 +167,7 @@ pub(crate) mod testing {
                 // FIXME: make a real one from the note.
                 let encrypted_note = TransmittedNoteCiphertext::<D> {
                     epk_bytes: [0u8; 32],
-                    // FIXME: pass array with a proper length for the concrete OrchardDomain
-                    enc_ciphertext: D::NoteCiphertextBytes::from(&[0u8; 580]), //612]),
+                    enc_ciphertext: D::NoteCiphertextBytes::from(&vec![0u8; D::ENC_CIPHERTEXT_SIZE]),
                     out_ciphertext: [0u8; 80]
                 };
                 Action {
@@ -202,8 +201,7 @@ pub(crate) mod testing {
                 // FIXME: make a real one from the note.
                 let encrypted_note = TransmittedNoteCiphertext::<D> {
                     epk_bytes: [0u8; 32],
-                    // FIXME: pass array with a proper length for the concrete OrchardDomain
-                    enc_ciphertext: D::NoteCiphertextBytes::from(&[0u8; 580]), //612]),
+                    enc_ciphertext: D::NoteCiphertextBytes::from(&vec![0u8; D::ENC_CIPHERTEXT_SIZE]),
                     out_ciphertext: [0u8; 80]
                 };
 
