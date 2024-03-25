@@ -991,7 +991,11 @@ pub mod testing {
         }
     }
 
-    /// FIXME: add a proper doc
+    /// `BuilderArb` serves as a utility structure in property-based testing, designed specifically to adapt
+    /// `arb_...` functions for compatibility with both variations of the Orchard protocol: Vanilla and ZSA.
+    /// This adaptation is necessary due to the proptest crate's limitation, which prevents the direct
+    /// transformation of `arb_...` functions into generic forms suitable for testing different protocol
+    /// flavors.
     #[derive(Debug)]
     pub struct BuilderArb<D: OrchardDomain> {
         phantom: std::marker::PhantomData<D>,
@@ -1070,22 +1074,23 @@ pub mod testing {
 mod tests {
     use rand::rngs::OsRng;
 
-    use super::Builder;
-    use crate::note::AssetBase;
     use crate::{
         bundle::{Authorized, Bundle, Flags},
         circuit::ProvingKey,
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendingKey},
-        note_encryption_zsa::OrchardDomainZSA,
+        note::AssetBase,
+        orchard_flavor,
         tree::EMPTY_ROOTS,
         value::NoteValue,
     };
 
+    use super::Builder;
+
     #[test]
     fn shielding_bundle() {
-        // FIXME: consider adding test for OrchardDomainVanilla as well
-        let pk = ProvingKey::build::<OrchardDomainZSA>();
+        // FIXME: consider adding test for orchard_flavor::OrchardVanilla as well
+        let pk = ProvingKey::build::<orchard_flavor::OrchardZSA>();
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -1109,7 +1114,7 @@ mod tests {
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, -5000);
 
-        let bundle: Bundle<Authorized, i64, OrchardDomainZSA> = builder
+        let bundle: Bundle<Authorized, i64, orchard_flavor::OrchardZSA> = builder
             .build(&mut rng)
             .unwrap()
             .create_proof(&pk, &mut rng)

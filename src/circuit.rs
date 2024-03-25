@@ -51,15 +51,17 @@ const ENABLE_SPEND: usize = 7;
 const ENABLE_OUTPUT: usize = 8;
 const ENABLE_ZSA: usize = 9;
 
-/// FIXME: add doc
+/// The `OrchardCircuit` trait defines an interface for different implementations of the PLONK circuit
+/// for the different Orchard protocol flavors (Vanilla and ZSA). It serves as a bridge between
+/// plonk::Circuit interfaces and specific requirements of the Orchard protocol's variations.
 pub trait OrchardCircuit: Sized + Default {
-    /// FIXME: add doc
+    /// Substitution for Config type of plonk::Circuit trait
     type Config: Clone;
 
-    /// FIXME: add doc
+    /// Wrapper for configure function of plonk::Circuit trait
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config;
 
-    /// FIXME: add doc
+    /// Wrapper for configure function of plonk::Circuit trait
     fn synthesize(
         circuit: &Circuit<Self>,
         config: Self::Config,
