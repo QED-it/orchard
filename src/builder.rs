@@ -16,13 +16,13 @@ use crate::{
     action::Action,
     address::Address,
     bundle::{Authorization, Authorized, Bundle, Flags},
-    circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey},
+    circuit::{Instance, OrchardCircuit, OrchardCircuitBase, Proof, ProvingKey},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
     },
     note::{AssetBase, Note, TransmittedNoteCiphertext},
-    note_encryption::{OrchardDomain, OrchardDomainContext},
+    note_encryption::{OrchardDomain, OrchardDomainBase},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -256,7 +256,7 @@ impl ActionInfo {
     fn build<D: OrchardDomain>(
         self,
         mut rng: impl RngCore,
-    ) -> (Action<SigningMetadata, D>, Circuit<D>) {
+    ) -> (Action<SigningMetadata, D>, OrchardCircuitBase<D>) {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -282,7 +282,7 @@ impl ActionInfo {
         let cm_new = note.commitment();
         let cmx = cm_new.into();
 
-        let encryptor = NoteEncryption::<OrchardDomainContext<D>>::new(
+        let encryptor = NoteEncryption::<OrchardDomainBase<D>>::new(
             self.output.ovk,
             note,
             self.output.memo.unwrap_or_else(|| {
@@ -310,7 +310,9 @@ impl ActionInfo {
                     parts: SigningParts { ak, alpha },
                 },
             ),
-            Circuit::<D>::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
+            OrchardCircuitBase::<D>::from_action_context_unchecked(
+                self.spend, note, alpha, self.rcv,
+            ),
         )
     }
 }
@@ -341,7 +343,7 @@ impl Builder {
     }
 
     // FIXME: fix the doc, this line was removed from the doc:
-    // [`OrchardDomain`]: crate::note_encryption_zsa::OrchardZSADomain
+    // [`OrchardDomain`]: crate::note_encryption::OrchardDomain
 
     /// Adds a note to be spent in this transaction.
     ///
@@ -644,7 +646,7 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 /// This struct contains the private data needed to create a [`Proof`] for a [`Bundle`].
 #[derive(Clone, Debug)]
 pub struct Unproven<D: OrchardCircuit> {
-    circuits: Vec<Circuit<D>>,
+    circuits: Vec<OrchardCircuitBase<D>>,
 }
 
 impl<S: InProgressSignatures, D: OrchardCircuit> InProgress<Unproven<D>, S> {
@@ -1080,7 +1082,7 @@ mod tests {
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
-        orchard_flavor,
+        orchard_flavor::OrchardZSA,
         tree::EMPTY_ROOTS,
         value::NoteValue,
     };
@@ -1089,8 +1091,8 @@ mod tests {
 
     #[test]
     fn shielding_bundle() {
-        // FIXME: consider adding test for orchard_flavor::OrchardVanilla as well
-        let pk = ProvingKey::build::<orchard_flavor::OrchardZSA>();
+        // FIXME: consider adding test for OrchardVanilla as well
+        let pk = ProvingKey::build::<OrchardZSA>();
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -1114,7 +1116,7 @@ mod tests {
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, -5000);
 
-        let bundle: Bundle<Authorized, i64, orchard_flavor::OrchardZSA> = builder
+        let bundle: Bundle<Authorized, i64, OrchardZSA> = builder
             .build(&mut rng)
             .unwrap()
             .create_proof(&pk, &mut rng)

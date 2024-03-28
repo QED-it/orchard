@@ -38,7 +38,7 @@ use crate::{
     constants::OrchardFixedBasesFull,
     constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
     note::AssetBase,
-    orchard_flavor,
+    orchard_flavor::OrchardZSA,
 };
 
 use super::{
@@ -49,8 +49,8 @@ use super::{
         add_chip::{self, AddChip, AddConfig},
         AddInstruction,
     },
-    Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
-    ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+    OrchardCircuit, OrchardCircuitBase, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
+    ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
 
 use self::{
@@ -83,7 +83,7 @@ pub struct Config {
     cond_swap_config: CondSwapConfig,
 }
 
-impl OrchardCircuit for orchard_flavor::OrchardZSA {
+impl OrchardCircuit for OrchardZSA {
     type Config = Config;
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
@@ -355,7 +355,7 @@ impl OrchardCircuit for orchard_flavor::OrchardZSA {
 
     #[allow(non_snake_case)]
     fn synthesize(
-        circuit: &Circuit<Self>,
+        circuit: &OrchardCircuitBase<Self>,
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
@@ -871,18 +871,18 @@ mod tests {
     use crate::{
         builder::SpendInfo,
         bundle::Flags,
-        circuit::{Circuit as GenericCircuit, Instance, Proof, ProvingKey, VerifyingKey, K},
+        circuit::{Instance, OrchardCircuitBase, Proof, ProvingKey, VerifyingKey, K},
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier},
-        orchard_flavor,
+        orchard_flavor::OrchardZSA,
         primitives::redpallas::VerificationKey,
         tree::MerklePath,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
-    type Circuit = GenericCircuit<orchard_flavor::OrchardZSA>;
+    type OrchardCircuitZSA = OrchardCircuitBase<OrchardZSA>;
 
-    fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit, Instance) {
+    fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (OrchardCircuitZSA, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
 
         let sender_address = spent_note.recipient();
@@ -906,7 +906,7 @@ mod tests {
         let psi_old = spent_note.rseed().psi(&spent_note.rho());
 
         (
-            Circuit {
+            OrchardCircuitZSA {
                 path: Value::known(path.auth_path()),
                 pos: Value::known(path.position()),
                 g_d_old: Value::known(sender_address.g_d()),
@@ -954,7 +954,7 @@ mod tests {
             .map(|()| generate_dummy_circuit_instance(&mut rng))
             .unzip();
 
-        let vk = VerifyingKey::build::<orchard_flavor::OrchardZSA>();
+        let vk = VerifyingKey::build::<OrchardZSA>();
 
         // Test that the pinned verification key (representing the circuit)
         // is as expected.
@@ -995,7 +995,7 @@ mod tests {
             );
         }
 
-        let pk = ProvingKey::build::<orchard_flavor::OrchardZSA>();
+        let pk = ProvingKey::build::<OrchardZSA>();
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(&vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
@@ -1006,7 +1006,7 @@ mod tests {
         use std::fs;
         use std::io::{Read, Write};
 
-        let vk = VerifyingKey::build::<orchard_flavor::OrchardZSA>();
+        let vk = VerifyingKey::build::<OrchardZSA>();
 
         fn write_test_case<W: Write>(
             mut w: W,
@@ -1076,7 +1076,7 @@ mod tests {
                 let (circuit, instance) = generate_dummy_circuit_instance(OsRng);
                 let instances = &[instance.clone()];
 
-                let pk = ProvingKey::build::<orchard_flavor::OrchardZSA>();
+                let pk = ProvingKey::build::<OrchardZSA>();
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
@@ -1107,7 +1107,7 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = Circuit {
+        let circuit = OrchardCircuitZSA {
             path: Value::unknown(),
             pos: Value::unknown(),
             g_d_old: Value::unknown(),
@@ -1139,7 +1139,11 @@ mod tests {
             .unwrap();
     }
 
-    fn check_proof_of_orchard_circuit(circuit: &Circuit, instance: &Instance, should_pass: bool) {
+    fn check_proof_of_orchard_circuit(
+        circuit: &OrchardCircuitZSA,
+        instance: &Instance,
+        should_pass: bool,
+    ) {
         let proof_verify = MockProver::run(
             K,
             circuit,
@@ -1162,7 +1166,7 @@ mod tests {
         is_native_asset: bool,
         split_flag: bool,
         mut rng: R,
-    ) -> (Circuit, Instance) {
+    ) -> (OrchardCircuitZSA, Instance) {
         // Create asset
         let asset_base = if is_native_asset {
             AssetBase::native()
@@ -1240,7 +1244,7 @@ mod tests {
         };
 
         (
-            Circuit::from_action_context_unchecked(spend_info, output_note, alpha, rcv),
+            OrchardCircuitZSA::from_action_context_unchecked(spend_info, output_note, alpha, rcv),
             Instance {
                 anchor,
                 cv_net,
@@ -1310,7 +1314,7 @@ mod tests {
 
                 // Set cm_old to be a random NoteCommitment
                 // The proof should fail
-                let circuit_wrong_cm_old = Circuit {
+                let circuit_wrong_cm_old = OrchardCircuitZSA {
                     path: circuit.path,
                     pos: circuit.pos,
                     g_d_old: circuit.g_d_old,
@@ -1368,7 +1372,7 @@ mod tests {
                 // If split_flag = 0 , set psi_nf to be a random Pallas base element
                 // The proof should fail
                 if !split_flag {
-                    let circuit_wrong_psi_nf = Circuit {
+                    let circuit_wrong_psi_nf = OrchardCircuitZSA {
                         path: circuit.path,
                         pos: circuit.pos,
                         g_d_old: circuit.g_d_old,
