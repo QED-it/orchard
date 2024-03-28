@@ -32,7 +32,7 @@ use crate::{
     constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
     },
-    orchard_flavor,
+    orchard_flavor::OrchardVanilla,
 };
 
 use super::{
@@ -41,8 +41,8 @@ use super::{
         add_chip::{self, AddChip, AddConfig},
         AddInstruction,
     },
-    Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD,
-    RK_X, RK_Y,
+    OrchardCircuit, OrchardCircuitBase, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
+    ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
 };
 
 use self::{
@@ -73,7 +73,7 @@ pub struct Config {
     new_note_commit_config: NoteCommitConfig,
 }
 
-impl OrchardCircuit for orchard_flavor::OrchardVanilla {
+impl OrchardCircuit for OrchardVanilla {
     type Config = Config;
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
@@ -266,7 +266,7 @@ impl OrchardCircuit for orchard_flavor::OrchardVanilla {
 
     #[allow(non_snake_case)]
     fn synthesize(
-        circuit: &Circuit<Self>,
+        circuit: &OrchardCircuitBase<Self>,
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
@@ -654,17 +654,17 @@ mod tests {
 
     use crate::{
         bundle::Flags,
-        circuit::{Circuit as GenericCircuit, Instance, Proof, ProvingKey, VerifyingKey, K},
+        circuit::{Instance, OrchardCircuitBase, Proof, ProvingKey, VerifyingKey, K},
         keys::SpendValidatingKey,
         note::{AssetBase, Note},
-        orchard_flavor,
+        orchard_flavor::OrchardVanilla,
         tree::MerklePath,
         value::{ValueCommitTrapdoor, ValueCommitment},
     };
 
-    type Circuit = GenericCircuit<orchard_flavor::OrchardVanilla>;
+    type OrchardCircuitVanilla = OrchardCircuitBase<OrchardVanilla>;
 
-    fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit, Instance) {
+    fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (OrchardCircuitVanilla, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
 
         let sender_address = spent_note.recipient();
@@ -688,7 +688,7 @@ mod tests {
         let psi_old = spent_note.rseed().psi(&spent_note.rho());
 
         (
-            Circuit {
+            OrchardCircuitVanilla {
                 path: Value::known(path.auth_path()),
                 pos: Value::known(path.position()),
                 g_d_old: Value::known(sender_address.g_d()),
@@ -736,7 +736,7 @@ mod tests {
             .map(|()| generate_circuit_instance(&mut rng))
             .unzip();
 
-        let vk = VerifyingKey::build::<orchard_flavor::OrchardVanilla>();
+        let vk = VerifyingKey::build::<OrchardVanilla>();
 
         // Test that the pinned verification key (representing the circuit)
         // is as expected.
@@ -778,7 +778,7 @@ mod tests {
             );
         }
 
-        let pk = ProvingKey::build::<orchard_flavor::OrchardVanilla>();
+        let pk = ProvingKey::build::<OrchardVanilla>();
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(&vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
@@ -788,7 +788,7 @@ mod tests {
     fn serialized_proof_test_case() {
         use std::io::{Read, Write};
 
-        let vk = VerifyingKey::build::<orchard_flavor::OrchardVanilla>();
+        let vk = VerifyingKey::build::<OrchardVanilla>();
 
         fn write_test_case<W: Write>(
             mut w: W,
@@ -857,7 +857,7 @@ mod tests {
                 let (circuit, instance) = generate_circuit_instance(OsRng);
                 let instances = &[instance.clone()];
 
-                let pk = ProvingKey::build::<orchard_flavor::OrchardVanilla>();
+                let pk = ProvingKey::build::<OrchardVanilla>();
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
@@ -888,7 +888,7 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = Circuit {
+        let circuit = OrchardCircuitVanilla {
             path: Value::unknown(),
             pos: Value::unknown(),
             g_d_old: Value::unknown(),

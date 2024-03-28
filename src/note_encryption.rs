@@ -23,7 +23,7 @@ mod domain;
 mod note_bytes;
 mod orchard_domain;
 
-pub use orchard_domain::{OrchardDomain, OrchardDomainContext};
+pub use orchard_domain::{OrchardDomain, OrchardDomainBase};
 
 const PRF_OCK_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_Orchardock";
 

@@ -17,10 +17,10 @@ use crate::{
 };
 
 use super::{
-    parse_note_plaintext_without_memo, prf_ock_orchard, Memo, OrchardDomain, OrchardDomainContext,
+    parse_note_plaintext_without_memo, prf_ock_orchard, Memo, OrchardDomain, OrchardDomainBase,
 };
 
-impl<D: OrchardDomain> Domain for OrchardDomainContext<D> {
+impl<D: OrchardDomain> Domain for OrchardDomainBase<D> {
     type EphemeralSecretKey = EphemeralSecretKey;
     type EphemeralPublicKey = EphemeralPublicKey;
     type PreparedEphemeralPublicKey = PreparedEphemeralPublicKey;
@@ -151,7 +151,7 @@ impl<D: OrchardDomain> Domain for OrchardDomainContext<D> {
     }
 }
 
-impl<D: OrchardDomain> BatchDomain for OrchardDomainContext<D> {
+impl<D: OrchardDomain> BatchDomain for OrchardDomainBase<D> {
     fn batch_kdf<'a>(
         items: impl Iterator<Item = (Option<Self::SharedSecret>, &'a EphemeralKeyBytes)>,
     ) -> Vec<Option<Self::SymmetricKey>> {

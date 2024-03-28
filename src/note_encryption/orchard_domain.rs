@@ -38,13 +38,13 @@ pub trait OrchardDomain: fmt::Debug + Clone {
 
 /// Orchard-specific note encryption logic.
 #[derive(Debug, Clone)]
-pub struct OrchardDomainContext<D: OrchardDomain> {
+pub struct OrchardDomainBase<D: OrchardDomain> {
     /// Represents a nullifier which is used to prevent double spending within the Orchard protocol.
     pub rho: Nullifier,
     phantom: std::marker::PhantomData<D>,
 }
 
-impl<D: OrchardDomain> OrchardDomainContext<D> {
+impl<D: OrchardDomain> OrchardDomainBase<D> {
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
     pub fn for_action<A>(act: &Action<A, D>) -> Self {
         Self::for_nullifier(*act.nullifier())
