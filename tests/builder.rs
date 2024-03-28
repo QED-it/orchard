@@ -6,8 +6,8 @@ use orchard::{
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
-    note_encryption::OrchardDomainContext,
-    orchard_flavor,
+    note_encryption::OrchardDomainBase,
+    orchard_flavor::OrchardZSA,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
@@ -15,10 +15,10 @@ use orchard::{
 use rand::rngs::OsRng;
 use zcash_note_encryption_zsa::try_note_decryption;
 
-type OrchardZSA = OrchardDomainContext<orchard_flavor::OrchardZSA>;
+type OrchardDomainZSA = OrchardDomainBase<OrchardZSA>;
 
 pub fn verify_bundle(
-    bundle: &Bundle<Authorized, i64, orchard_flavor::OrchardZSA>,
+    bundle: &Bundle<Authorized, i64, OrchardZSA>,
     vk: &VerifyingKey,
     verify_proof: bool,
 ) {
@@ -57,16 +57,16 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
 #[test]
 fn bundle_chain() {
     let mut rng = OsRng;
-    // FIXME: consider adding test for orchard_flavor::OrchardVanilla as well
-    let pk = ProvingKey::build::<orchard_flavor::OrchardZSA>();
-    let vk = VerifyingKey::build::<orchard_flavor::OrchardZSA>();
+    // FIXME: consider adding test for OrchardVanilla as well
+    let pk = ProvingKey::build::<OrchardZSA>();
+    let vk = VerifyingKey::build::<OrchardZSA>();
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
     // Create a shielding bundle.
-    let shielding_bundle: Bundle<_, i64, orchard_flavor::OrchardZSA> = {
+    let shielding_bundle: Bundle<_, i64, OrchardZSA> = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -91,13 +91,13 @@ fn bundle_chain() {
     verify_bundle(&shielding_bundle, &vk, true);
 
     // Create a shielded bundle spending the previous output.
-    let shielded_bundle: Bundle<_, i64, orchard_flavor::OrchardZSA> = {
+    let shielded_bundle: Bundle<_, i64, OrchardZSA> = {
         let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
         let (note, _, _) = shielding_bundle
             .actions()
             .iter()
             .find_map(|action| {
-                let domain = OrchardZSA::for_action(action);
+                let domain = OrchardDomainZSA::for_action(action);
                 try_note_decryption(&domain, &ivk, action)
             })
             .unwrap();

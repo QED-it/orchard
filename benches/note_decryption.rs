@@ -5,8 +5,8 @@ use orchard::{
     circuit::ProvingKey,
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    note_encryption::{action::CompactAction, OrchardDomainContext},
-    orchard_flavor,
+    note_encryption::{action::CompactAction, OrchardDomainBase},
+    orchard_flavor::OrchardZSA,
     value::NoteValue,
     Anchor, Bundle,
 };
@@ -16,12 +16,12 @@ use zcash_note_encryption_zsa::{batch, try_compact_note_decryption, try_note_dec
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 
-type OrchardZSA = OrchardDomainContext<orchard_flavor::OrchardZSA>;
+type OrchardDomainZSA = OrchardDomainBase<OrchardZSA>;
 
 fn bench_note_decryption(c: &mut Criterion) {
     let rng = OsRng;
-    // FIXME: consider adding test for orchard_flavor::OrchardVanilla as well
-    let pk = ProvingKey::build::<orchard_flavor::OrchardZSA>();
+    // FIXME: consider adding test for OrchardVanilla as well
+    let pk = ProvingKey::build::<OrchardZSA>();
 
     let fvk = FullViewingKey::from(&SpendingKey::from_bytes([7; 32]).unwrap());
     let valid_ivk = fvk.to_ivk(Scope::External);
@@ -74,7 +74,7 @@ fn bench_note_decryption(c: &mut Criterion) {
                 None,
             )
             .unwrap();
-        let bundle: Bundle<_, i64, orchard_flavor::OrchardZSA> = builder.build(rng).unwrap();
+        let bundle: Bundle<_, i64, OrchardZSA> = builder.build(rng).unwrap();
         bundle
             .create_proof(&pk, rng)
             .unwrap()
@@ -83,7 +83,7 @@ fn bench_note_decryption(c: &mut Criterion) {
     };
     let action = bundle.actions().first();
 
-    let domain = OrchardZSA::for_action(action);
+    let domain = OrchardDomainZSA::for_action(action);
 
     let compact = {
         let mut group = c.benchmark_group("note-decryption");
@@ -124,10 +124,15 @@ fn bench_note_decryption(c: &mut Criterion) {
         let ivks = 2;
         let valid_ivks = vec![valid_ivk; ivks];
         let actions: Vec<_> = (0..100)
-            .map(|_| (OrchardZSA::for_action(action), action.clone()))
+            .map(|_| (OrchardDomainZSA::for_action(action), action.clone()))
             .collect();
         let compact: Vec<_> = (0..100)
-            .map(|_| (OrchardZSA::for_action(action), CompactAction::from(action)))
+            .map(|_| {
+                (
+                    OrchardDomainZSA::for_action(action),
+                    CompactAction::from(action),
+                )
+            })
             .collect();
 
         let mut group = c.benchmark_group("batch-note-decryption");

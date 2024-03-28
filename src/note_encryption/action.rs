@@ -4,10 +4,10 @@ use std::fmt;
 
 use super::{
     Action, EphemeralKeyBytes, ExtractedNoteCommitment, Nullifier, OrchardDomain,
-    OrchardDomainContext, ShieldedOutput,
+    OrchardDomainBase, ShieldedOutput,
 };
 
-impl<A, D: OrchardDomain> ShieldedOutput<OrchardDomainContext<D>> for Action<A, D> {
+impl<A, D: OrchardDomain> ShieldedOutput<OrchardDomainBase<D>> for Action<A, D> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.encrypted_note().epk_bytes)
     }
@@ -42,7 +42,7 @@ impl<D: OrchardDomain> fmt::Debug for CompactAction<D> {
 
 impl<A, D: OrchardDomain> From<&Action<A, D>> for CompactAction<D>
 where
-    Action<A, D>: ShieldedOutput<OrchardDomainContext<D>>,
+    Action<A, D>: ShieldedOutput<OrchardDomainBase<D>>,
 {
     fn from(action: &Action<A, D>) -> Self {
         CompactAction {
@@ -54,7 +54,7 @@ where
     }
 }
 
-impl<D: OrchardDomain> ShieldedOutput<OrchardDomainContext<D>> for CompactAction<D> {
+impl<D: OrchardDomain> ShieldedOutput<OrchardDomainBase<D>> for CompactAction<D> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.ephemeral_key.0)
     }

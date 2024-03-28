@@ -2,14 +2,14 @@
 
 //! In-band secret distribution for Orchard bundles.
 
-use crate::{orchard_flavor, Note};
+use crate::{orchard_flavor::OrchardZSA, Note};
 
 use super::{
     build_base_note_plaintext_bytes, note_bytes::NoteBytes, Memo, OrchardDomain,
     COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
 };
 
-impl OrchardDomain for orchard_flavor::OrchardZSA {
+impl OrchardDomain for OrchardZSA {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_ZSA;
 
     type NotePlaintextBytes = NoteBytes<{ Self::NOTE_PLAINTEXT_SIZE }>;
@@ -56,15 +56,15 @@ mod tests {
     use super::{
         super::{
             action::CompactAction, note_version, parse_note_plaintext_without_memo,
-            prf_ock_orchard, OrchardDomainContext,
+            prf_ock_orchard, OrchardDomainBase,
         },
-        orchard_flavor, NoteBytes,
+        NoteBytes, OrchardZSA,
     };
 
-    type OrchardZSA = OrchardDomainContext<orchard_flavor::OrchardZSA>;
+    type OrchardDomainZSA = OrchardDomainBase<OrchardZSA>;
 
     /// Implementation of in-band secret distribution for Orchard bundles.
-    pub type OrchardNoteEncryptionZSA = zcash_note_encryption_zsa::NoteEncryption<OrchardZSA>;
+    pub type OrchardNoteEncryptionZSA = zcash_note_encryption_zsa::NoteEncryption<OrchardDomainZSA>;
 
     proptest! {
         #[test]
@@ -75,10 +75,10 @@ mod tests {
             let rho = note.rho();
 
             // Encode.
-            let plaintext = OrchardZSA::note_plaintext_bytes(&note, memo);
+            let plaintext = OrchardDomainZSA::note_plaintext_bytes(&note, memo);
 
             // Decode.
-            let domain = OrchardZSA::for_nullifier(rho);
+            let domain = OrchardDomainZSA::for_nullifier(rho);
             let parsed_version = note_version(plaintext.as_ref()).unwrap();
             let (compact, parsed_memo) = domain.extract_memo(&plaintext);
 
@@ -166,7 +166,7 @@ mod tests {
             // (Tested first because it only requires immutable references.)
             //
 
-            let domain = OrchardZSA::for_nullifier(rho);
+            let domain = OrchardDomainZSA::for_nullifier(rho);
 
             match try_note_decryption(&domain, &ivk, &action) {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {
