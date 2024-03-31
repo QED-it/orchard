@@ -154,20 +154,20 @@ pub trait Authorization: fmt::Debug {
 #[derive(Clone)]
 pub struct Bundle<A: Authorization, V, D: OrchardDomain> {
     /// The list of actions that make up this bundle.
-    actions: NonEmpty<Action<A::SpendAuth, D>>,
+    pub(crate) actions: NonEmpty<Action<A::SpendAuth, D>>,
     /// Orchard-specific transaction-level flags for this bundle.
-    flags: Flags,
+    pub(crate) flags: Flags,
     /// The net value moved out of the Orchard shielded pool.
     ///
     /// This is the sum of Orchard spends minus the sum of Orchard outputs.
-    value_balance: V,
+    pub(crate) value_balance: V,
     /// Assets intended for burning
     // FIXME: use BurnType like it's in Zebra? Put it as another param of Domain trait
-    burn: Vec<(AssetBase, V)>,
+    pub(crate) burn: Vec<(AssetBase, V)>,
     /// The root of the Orchard commitment tree that this bundle commits to.
-    anchor: Anchor,
+    pub(crate) anchor: Anchor,
     /// The authorization for this bundle.
-    authorization: A,
+    pub(crate) authorization: A,
 }
 
 impl<A: Authorization, V: fmt::Debug, D: OrchardDomain> fmt::Debug for Bundle<A, V, D> {

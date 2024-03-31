@@ -33,6 +33,8 @@ pub use note_encryption::{note_encryption_vanilla, note_encryption_zsa};
 
 pub mod orchard_flavor;
 
+pub mod bundle_enum_adapter;
+
 pub mod primitives;
 mod spec;
 pub mod tree;

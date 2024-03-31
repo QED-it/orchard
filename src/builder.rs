@@ -328,7 +328,8 @@ pub struct Builder {
     anchor: Anchor,
 }
 
-type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven<D>, Unauthorized>, V, D>;
+/// A type alias for a bundle in an unauthorized state
+pub type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven<D>, Unauthorized>, V, D>;
 
 impl Builder {
     /// Constructs a new empty builder for an Orchard bundle.
@@ -633,8 +634,8 @@ pub trait InProgressSignatures: fmt::Debug {
 /// Marker for a bundle in the process of being built.
 #[derive(Clone, Debug)]
 pub struct InProgress<P, S: InProgressSignatures> {
-    proof: P,
-    sigs: S,
+    pub(crate) proof: P,
+    pub(crate) sigs: S,
 }
 
 impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> {
