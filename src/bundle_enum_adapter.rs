@@ -35,6 +35,28 @@ impl From<Unproven<OrchardZSA>> for UnprovenEnum {
     }
 }
 
+impl TryFrom<UnprovenEnum> for Unproven<OrchardVanilla> {
+    type Error = &'static str;
+
+    fn try_from(unproven: UnprovenEnum) -> Result<Self, Self::Error> {
+        match unproven {
+            UnprovenEnum::OrchardVanilla(e) => Ok(e),
+            UnprovenEnum::OrchardZSA(_) => Err("Attempted to convert OrchardZSA to OrchardVanilla"),
+        }
+    }
+}
+
+impl TryFrom<UnprovenEnum> for Unproven<OrchardZSA> {
+    type Error = &'static str;
+
+    fn try_from(unproven: UnprovenEnum) -> Result<Self, Self::Error> {
+        match unproven {
+            UnprovenEnum::OrchardZSA(e) => Ok(e),
+            UnprovenEnum::OrchardVanilla(_) => Err("Attempted to convert OrchardVanilla to OrchardZSA"),
+        }
+    }
+}
+
 /// Represents an unauthorized bundle that incorporates an enum to simplify the handling of
 /// different authorization types. This structure is part of a system designed to abstract away
 /// the complexity of handling various states of authorization in a generic and type-safe manner,
@@ -55,6 +77,46 @@ where
             anchor: bundle.anchor,
             authorization: InProgress {
                 proof: bundle.authorization.proof.into(),
+                sigs: bundle.authorization.sigs,
+            },
+        }
+    }
+}
+
+impl<V> From<UnauthorizedBundleWithEnum<V, OrchardVanilla>>
+for UnauthorizedBundle<V, OrchardVanilla>
+    where
+        UnprovenEnum: From<Unproven<OrchardVanilla>>,
+{
+    fn from(bundle: UnauthorizedBundleWithEnum<V, OrchardVanilla>) -> Self {
+        Self {
+            actions: bundle.actions,
+            flags: bundle.flags,
+            value_balance: bundle.value_balance,
+            burn: bundle.burn,
+            anchor: bundle.anchor,
+            authorization: InProgress {
+                proof: bundle.authorization.proof.try_into().unwrap(),
+                sigs: bundle.authorization.sigs,
+            },
+        }
+    }
+}
+
+impl<V> From<UnauthorizedBundleWithEnum<V, OrchardZSA>>
+for UnauthorizedBundle<V, OrchardZSA>
+    where
+        UnprovenEnum: From<Unproven<OrchardZSA>>,
+{
+    fn from(bundle: UnauthorizedBundleWithEnum<V, OrchardZSA>) -> Self {
+        Self {
+            actions: bundle.actions,
+            flags: bundle.flags,
+            value_balance: bundle.value_balance,
+            burn: bundle.burn,
+            anchor: bundle.anchor,
+            authorization: InProgress {
+                proof: bundle.authorization.proof.try_into().unwrap(),
                 sigs: bundle.authorization.sigs,
             },
         }
