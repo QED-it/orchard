@@ -628,7 +628,7 @@ fn pad_spend(spend: Option<&SpendInfo>, asset: AssetBase, mut rng: impl RngCore)
 /// Marker trait representing bundle signatures in the process of being created.
 pub trait InProgressSignatures: fmt::Debug {
     /// The authorization type of an Orchard action in the process of being authorized.
-    type SpendAuth: fmt::Debug;
+    type SpendAuth: fmt::Debug + Clone;
 }
 
 /// Marker for a bundle in the process of being built.
@@ -736,7 +736,7 @@ impl InProgressSignatures for PartiallyAuthorized {
 /// A heisen[`Signature`] for a particular [`Action`].
 ///
 /// [`Signature`]: redpallas::Signature
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MaybeSigned {
     /// The information needed to sign this [`Action`].
     SigningMetadata(SigningParts),
