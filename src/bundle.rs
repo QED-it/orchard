@@ -26,8 +26,6 @@ use crate::{
     value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };
 
-pub use commitments::OrchardHash;
-
 impl<A, D: OrchardDomain> Action<A, D> {
     /// Prepares the public instance for this action, for creating and verifying the
     /// bundle proof.
@@ -406,7 +404,7 @@ impl<A: Authorization, V, D: OrchardDomain> Bundle<A, V, D> {
     }
 }
 
-impl<A: Authorization, V: Copy + Into<i64>, D: OrchardDomain + OrchardHash> Bundle<A, V, D> {
+impl<A: Authorization, V: Copy + Into<i64>, D: OrchardDomain> Bundle<A, V, D> {
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
     pub fn commitment(&self) -> BundleCommitment {

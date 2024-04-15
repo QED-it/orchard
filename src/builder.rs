@@ -15,7 +15,7 @@ use zcash_note_encryption_zsa::NoteEncryption;
 use crate::{
     action::Action,
     address::Address,
-    bundle::{Authorization, Authorized, Bundle, Flags, OrchardHash},
+    bundle::{Authorization, Authorized, Bundle, Flags},
     circuit::{Instance, OrchardCircuit, OrchardCircuitBase, Proof, ProvingKey},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
@@ -485,10 +485,7 @@ impl Builder {
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
     /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
-    pub fn build<
-        V: TryFrom<i64> + Copy + Into<i64>,
-        D: OrchardDomain + OrchardCircuit + OrchardHash,
-    >(
+    pub fn build<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain + OrchardCircuit>(
         self,
         mut rng: impl RngCore,
     ) -> Result<UnauthorizedBundle<V, D>, BuildError> {
@@ -932,7 +929,7 @@ pub mod testing {
     use crate::note::AssetBase;
     use crate::{
         address::testing::arb_address,
-        bundle::{Authorized, Bundle, Flags, OrchardHash},
+        bundle::{Authorized, Bundle, Flags},
         circuit::{OrchardCircuit, ProvingKey},
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
@@ -963,10 +960,7 @@ pub mod testing {
 
     impl<R: RngCore + CryptoRng> ArbitraryBundleInputs<R> {
         /// Create a bundle from the set of arbitrary bundle inputs.
-        fn into_bundle<
-            V: TryFrom<i64> + Copy + Into<i64>,
-            D: OrchardDomain + OrchardCircuit + OrchardHash,
-        >(
+        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>, D: OrchardDomain + OrchardCircuit>(
             mut self,
         ) -> Bundle<Authorized, V, D> {
             let fvk = FullViewingKey::from(&self.sk);
@@ -1009,7 +1003,7 @@ pub mod testing {
         phantom: std::marker::PhantomData<D>,
     }
 
-    impl<D: OrchardDomain + OrchardCircuit + OrchardHash> BuilderArb<D> {
+    impl<D: OrchardDomain + OrchardCircuit> BuilderArb<D> {
         prop_compose! {
             /// Produce a random valid Orchard bundle.
             fn arb_bundle_inputs(sk: SpendingKey)
