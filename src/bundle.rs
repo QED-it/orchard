@@ -13,14 +13,13 @@ use memuse::DynamicUsage;
 use nonempty::NonEmpty;
 use zcash_note_encryption_zsa::{try_note_decryption, try_output_recovery_with_ovk};
 
-use crate::note::AssetBase;
 use crate::{
     action::Action,
     address::Address,
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     circuit::{Instance, Proof, VerifyingKey},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
-    note::Note,
+    note::{AssetBase, Note},
     note_encryption::{OrchardDomain, OrchardDomainBase},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
