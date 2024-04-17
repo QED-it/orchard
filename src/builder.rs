@@ -328,7 +328,7 @@ pub struct Builder {
     anchor: Anchor,
 }
 
-type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven<D>, Unauthorized>, V, D>;
+pub type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven<D>, Unauthorized>, V, D>;
 
 impl Builder {
     /// Constructs a new empty builder for an Orchard bundle.
