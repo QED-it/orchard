@@ -5,7 +5,7 @@ use zcash_note_encryption_zsa::{AEAD_TAG_SIZE, MEMO_SIZE};
 use crate::{action::Action, note::Nullifier, Note};
 
 use super::{
-    note_bytes::{NoteByteReader, NoteByteWriter},
+    note_bytes::{NoteByteConcat, NoteByteReader, NoteByteWriter},
     Memo,
 };
 
@@ -26,7 +26,7 @@ pub trait OrchardDomain: fmt::Debug + Clone {
     /// A type to represent the raw bytes of a note plaintext.
     type NotePlaintextBytes: NoteByteWriter;
     /// A type to represent the raw bytes of an encrypted note plaintext.
-    type NoteCiphertextBytes: NoteByteReader;
+    type NoteCiphertextBytes: NoteByteWriter + NoteByteConcat;
     /// A type to represent the raw bytes of a compact note.
     type CompactNotePlaintextBytes: NoteByteWriter;
     /// A type to represent the raw bytes of an encrypted compact note.
