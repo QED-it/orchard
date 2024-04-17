@@ -188,6 +188,13 @@ impl Signed {
     pub fn signature(&self) -> &schnorr::Signature {
         &self.signature
     }
+
+    /// Constructs a `Signed` from a byte array containing Schnorr signature bytes.
+    pub fn from_data(data: [u8; 64]) -> Self {
+        Signed {
+            signature: schnorr::Signature::try_from(data.as_ref()).unwrap(),
+        }
+    }
 }
 
 impl IssueAuth for Unauthorized {}
