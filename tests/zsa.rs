@@ -260,7 +260,8 @@ fn build_and_verify_bundle(
             .map_err(|err| err.to_string())?;
         assets_to_burn
             .into_iter()
-            .try_for_each(|(asset, value)| builder.add_burn(asset, value))?;
+            .try_for_each(|(asset, value)| builder.add_burn(asset, value))
+            .map_err(|err| err.to_string())?;
         build_and_sign_bundle(builder, rng, keys.pk(), keys.sk())
     };
 

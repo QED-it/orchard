@@ -12,6 +12,7 @@ use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
 use zcash_note_encryption_zsa::NoteEncryption;
 
+use crate::builder::BuildError::{BurnErrorNative, BurnErrorZero};
 use crate::{
     action::Action,
     address::Address,
@@ -45,6 +46,10 @@ pub enum BuildError {
     /// A signature is valid for more than one input. This should never happen if `alpha`
     /// is sampled correctly, and indicates a critical failure in randomness generation.
     DuplicateSignature,
+    /// Native asset cannot be burned
+    BurnErrorNative,
+    /// The value to be burned cannot be zero
+    BurnErrorZero,
 }
 
 impl Display for BuildError {
@@ -56,6 +61,8 @@ impl Display for BuildError {
             ValueSum(_) => f.write_str("Overflow occurred during value construction"),
             InvalidExternalSignature => f.write_str("External signature was invalid"),
             DuplicateSignature => f.write_str("Signature valid for more than one input"),
+            BurnErrorNative => f.write_str("Burning is only possible for non-native assets"),
+            BurnErrorZero => f.write_str("Burning is not possible for zero values"),
         }
     }
 }
@@ -415,17 +422,17 @@ impl Builder {
     }
 
     /// Add an instruction to burn a given amount of a specific asset.
-    pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), &'static str> {
+    pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
         if asset.is_native().into() {
-            return Err("Burning is only possible for non-native assets");
+            return Err(BurnErrorNative);
         }
 
         if value.inner() == 0 {
-            return Err("Burning is not possible for zero values");
+            return Err(BurnErrorZero);
         }
 
         let cur = *self.burn.get(&asset).unwrap_or(&ValueSum::zero());
-        let sum = (cur + value).ok_or("Orchard ValueSum operation overflowed")?;
+        let sum = (cur + value).ok_or(OverflowError)?;
         self.burn.insert(asset, sum);
         Ok(())
     }
@@ -641,7 +648,6 @@ pub struct InProgress<P, S: InProgressSignatures> {
 }
 
 impl<P, S: InProgressSignatures> InProgress<P, S> {
-
     /// Changes this authorization from one proof type to another.
     pub fn map_proof<F, P2>(self, f: F) -> InProgress<P2, S>
     where
