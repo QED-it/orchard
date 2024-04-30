@@ -1,4 +1,4 @@
-// From https://github.com/zcash-hackworks/zcash-test-vectors/ (orchard_note_encryption)
+// From https://github.com/zcash-hackworks/zcash-test-vectors/ (orchard_zsa_note_encryption)
 
 pub(crate) struct TestVector {
     pub(crate) incoming_viewing_key: [u8; 64],
