@@ -108,27 +108,29 @@ impl<D: OrchardDomain> CompactAction<D> {
 #[cfg(feature = "test-dependencies")]
 pub mod testing {
     use rand::RngCore;
-    use zcash_note_encryption_zsa::Domain;
+    use zcash_note_encryption_zsa::{Domain, NoteEncryption};
 
     use crate::{
         keys::OutgoingViewingKey,
-        note::{ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
+        note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
         value::NoteValue,
         Address, Note,
     };
 
-    use super::{CompactAction, OrchardDomain, OrchardNoteEncryption};
+    use super::{CompactAction, OrchardDomain, OrchardDomainBase};
+
+    // FIXME: pin fake_compact_action function to OrchardZSA or keep it generic?
 
     /// Creates a fake `CompactAction` paying the given recipient the specified value.
     ///
     /// Returns the `CompactAction` and the new note.
-    pub fn fake_compact_action<R: RngCore>(
+    pub fn fake_compact_action<R: RngCore, D: OrchardDomain>(
         rng: &mut R,
         nf_old: Nullifier,
         recipient: Address,
         value: NoteValue,
         ovk: Option<OutgoingViewingKey>,
-    ) -> (CompactAction, Note) {
+    ) -> (CompactAction<D>, Note) {
         let rho = Rho::from_nf_old(nf_old);
         let rseed = {
             loop {
@@ -140,10 +142,11 @@ pub mod testing {
                 }
             }
         };
-        let note = Note::from_parts(recipient, value, rho, rseed).unwrap();
-        let encryptor = OrchardNoteEncryption::new(ovk, note, [0u8; 512]);
+        // FIXME: consider using another AssetBase instead of native for ZSA.
+        let note = Note::from_parts(recipient, value, AssetBase::native(), rho, rseed).unwrap();
+        let encryptor = NoteEncryption::<OrchardDomainBase<D>>::new(ovk, note, [0u8; 512]);
         let cmx = ExtractedNoteCommitment::from(note.commitment());
-        let ephemeral_key = OrchardDomain::epk_bytes(encryptor.epk());
+        let ephemeral_key = OrchardDomainBase::<D>::epk_bytes(encryptor.epk());
         let enc_ciphertext = encryptor.encrypt_note_plaintext();
 
         (
