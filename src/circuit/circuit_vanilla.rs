@@ -289,7 +289,7 @@ impl OrchardCircuit for OrchardVanilla {
             let rho_old = assign_free_advice(
                 layouter.namespace(|| "witness rho_old"),
                 config.advices[0],
-                circuit.rho_old.map(|rho| rho.0),
+                circuit.rho_old.map(|rho| rho.into_inner()),
             )?;
 
             // Witness cm_old
@@ -656,7 +656,7 @@ mod tests {
         bundle::Flags,
         circuit::{Instance, OrchardCircuitBase, Proof, ProvingKey, VerifyingKey, K},
         keys::SpendValidatingKey,
-        note::{AssetBase, Note},
+        note::{AssetBase, Note, Rho},
         orchard_flavor::OrchardVanilla,
         tree::MerklePath,
         value::{ValueCommitTrapdoor, ValueCommitment},
@@ -671,11 +671,12 @@ mod tests {
         let nk = *fvk.nk();
         let rivk = fvk.rivk(fvk.scope_for_address(&spent_note.recipient()).unwrap());
         let nf_old = spent_note.nullifier(&fvk);
+        let rho = Rho::from_nf_old(nf_old);
         let ak: SpendValidatingKey = fvk.into();
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
 
-        let (_, _, output_note) = Note::dummy(&mut rng, Some(nf_old), AssetBase::native());
+        let (_, _, output_note) = Note::dummy(&mut rng, Some(rho), AssetBase::native());
         let cmx = output_note.commitment().into();
 
         let value = spent_note.value() - output_note.value();

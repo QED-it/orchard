@@ -2,9 +2,10 @@ use core::fmt;
 
 use zcash_note_encryption_zsa::{AEAD_TAG_SIZE, MEMO_SIZE};
 
-use crate::{action::Action, note::Nullifier, Note};
+use crate::{action::Action, note::Rho, Note};
 
 use super::{
+    action::CompactAction,
     note_bytes::{NoteByteConcat, NoteByteReader, NoteByteWriter},
     Memo,
 };
@@ -40,21 +41,32 @@ pub trait OrchardDomain: fmt::Debug + Clone {
 #[derive(Debug, Clone)]
 pub struct OrchardDomainBase<D: OrchardDomain> {
     /// Represents a nullifier which is used to prevent double spending within the Orchard protocol.
-    pub rho: Nullifier,
+    pub rho: Rho,
     phantom: std::marker::PhantomData<D>,
 }
 
 impl<D: OrchardDomain> OrchardDomainBase<D> {
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
-    pub fn for_action<A>(act: &Action<A, D>) -> Self {
-        Self::for_nullifier(*act.nullifier())
+    pub fn for_action<T>(act: &Action<T, D>) -> Self {
+        Self {
+            rho: act.rho(),
+            phantom: Default::default(),
+        }
     }
 
-    /// Constructs a domain from a nullifier.
-    // FIXME: is this used only in tests?
-    pub fn for_nullifier(nullifier: Nullifier) -> Self {
+    /// Constructs a domain that can be used to trial-decrypt this action's output note.
+    pub fn for_compact_action(act: &CompactAction<D>) -> Self {
         Self {
-            rho: nullifier,
+            rho: act.rho(),
+            phantom: Default::default(),
+        }
+    }
+
+    /// Constructs a domain from a rho.
+    #[cfg(test)]
+    pub fn for_rho(rho: Rho) -> Self {
+        Self {
+            rho,
             phantom: Default::default(),
         }
     }

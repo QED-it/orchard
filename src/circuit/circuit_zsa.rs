@@ -385,7 +385,7 @@ impl OrchardCircuit for OrchardZSA {
             let rho_old = assign_free_advice(
                 layouter.namespace(|| "witness rho_old"),
                 config.advices[0],
-                circuit.rho_old.map(|rho| rho.0),
+                circuit.rho_old.map(|rho| rho.into_inner()),
             )?;
 
             // Witness cm_old
@@ -873,7 +873,7 @@ mod tests {
         bundle::Flags,
         circuit::{Instance, OrchardCircuitBase, Proof, ProvingKey, VerifyingKey, K},
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
-        note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier},
+        note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
         primitives::redpallas::VerificationKey,
         tree::MerklePath,
@@ -889,11 +889,12 @@ mod tests {
         let nk = *fvk.nk();
         let rivk = fvk.rivk(fvk.scope_for_address(&spent_note.recipient()).unwrap());
         let nf_old = spent_note.nullifier(&fvk);
+        let rho = Rho::from_nf_old(nf_old);
         let ak: SpendValidatingKey = fvk.into();
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
 
-        let (_, _, output_note) = Note::dummy(&mut rng, Some(nf_old), AssetBase::native());
+        let (_, _, output_note) = Note::dummy(&mut rng, Some(rho), AssetBase::native());
         let cmx = output_note.commitment().into();
 
         let value = spent_note.value() - output_note.value();
@@ -1179,12 +1180,13 @@ mod tests {
             let sk = SpendingKey::random(&mut rng);
             let fvk: FullViewingKey = (&sk).into();
             let sender_address = fvk.address_at(0u32, Scope::External);
-            let rho_old = Nullifier::dummy(&mut rng);
+            let nf_old = Nullifier::dummy(&mut rng);
+            let rho = Rho::from_nf_old(nf_old);
             let note = Note::new(
                 sender_address,
                 NoteValue::from_raw(40),
                 asset_base,
-                rho_old,
+                rho,
                 &mut rng,
             );
             let spent_note = if split_flag {
@@ -1214,6 +1216,7 @@ mod tests {
         };
 
         let nf_old = spent_note.nullifier(&spent_note_fvk);
+        let rho = Rho::from_nf_old(nf_old);
         let ak: SpendValidatingKey = spent_note_fvk.clone().into();
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
@@ -1223,7 +1226,7 @@ mod tests {
             let fvk: FullViewingKey = (&sk).into();
             let sender_address = fvk.address_at(0u32, Scope::External);
 
-            Note::new(sender_address, output_value, asset_base, nf_old, &mut rng)
+            Note::new(sender_address, output_value, asset_base, rho, &mut rng)
         };
 
         let cmx = output_note.commitment().into();

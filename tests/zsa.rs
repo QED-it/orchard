@@ -10,8 +10,7 @@ use orchard::note::{AssetBase, ExtractedNoteCommitment};
 
 use orchard::tree::{MerkleHashOrchard, MerklePath};
 use orchard::{
-    builder::Builder,
-    bundle::Flags,
+    builder::{Builder, BundleType},
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note_encryption::OrchardDomainBase,
@@ -91,7 +90,7 @@ fn build_and_sign_bundle(
     pk: &ProvingKey,
     sk: &SpendingKey,
 ) -> Bundle<Authorized, i64, OrchardZSA> {
-    let unauthorized = builder.build(&mut rng).unwrap();
+    let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
     let sighash = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
     proven
@@ -189,9 +188,9 @@ fn create_native_note(keys: &Keychain) -> Note {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
-        let mut builder = Builder::new(Flags::from_parts(false, true, false), anchor);
+        let mut builder = Builder::new(BundleType::Coinbase, anchor);
         assert_eq!(
-            builder.add_recipient(
+            builder.add_output(
                 None,
                 keys.recipient,
                 NoteValue::from_raw(100),
@@ -200,7 +199,7 @@ fn create_native_note(keys: &Keychain) -> Note {
             ),
             Ok(())
         );
-        let unauthorized = builder.build(&mut rng).unwrap();
+        let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
         let sighash = unauthorized.commitment().into();
         let proven = unauthorized.create_proof(keys.pk(), &mut rng).unwrap();
         proven.apply_signatures(rng, sighash, &[]).unwrap()
@@ -244,7 +243,7 @@ fn build_and_verify_bundle(
 ) -> Result<(), String> {
     let rng = OsRng;
     let shielded_bundle: Bundle<_, i64, OrchardZSA> = {
-        let mut builder = Builder::new(Flags::from_parts(true, true, true), anchor);
+        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
 
         spends
             .iter()
@@ -255,7 +254,7 @@ fn build_and_verify_bundle(
         outputs
             .iter()
             .try_for_each(|output| {
-                builder.add_recipient(None, keys.recipient, output.value, output.asset, None)
+                builder.add_output(None, keys.recipient, output.value, output.asset, None)
             })
             .map_err(|err| err.to_string())?;
         assets_to_burn

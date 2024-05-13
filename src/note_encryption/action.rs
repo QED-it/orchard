@@ -4,7 +4,7 @@ use std::fmt;
 
 use super::{
     Action, EphemeralKeyBytes, ExtractedNoteCommitment, Nullifier, OrchardDomain,
-    OrchardDomainBase, ShieldedOutput,
+    OrchardDomainBase, Rho, ShieldedOutput,
 };
 
 impl<A, D: OrchardDomain> ShieldedOutput<OrchardDomainBase<D>> for Action<A, D> {
@@ -88,8 +88,72 @@ impl<D: OrchardDomain> CompactAction<D> {
         }
     }
 
-    ///Returns the nullifier of the note being spent.
+    /// Returns the nullifier of the note being spent.
     pub fn nullifier(&self) -> Nullifier {
         self.nullifier
+    }
+
+    /// Returns the commitment to the new note being created.
+    pub fn cmx(&self) -> ExtractedNoteCommitment {
+        self.cmx
+    }
+
+    /// Obtains the [`Rho`] value that was used to construct the new note being created.
+    pub fn rho(&self) -> Rho {
+        Rho::from_nf_old(self.nullifier)
+    }
+}
+
+/// Utilities for constructing test data.
+#[cfg(feature = "test-dependencies")]
+pub mod testing {
+    use rand::RngCore;
+    use zcash_note_encryption::Domain;
+
+    use crate::{
+        keys::OutgoingViewingKey,
+        note::{ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
+        value::NoteValue,
+        Address, Note,
+    };
+
+    use super::{CompactAction, OrchardDomain, OrchardNoteEncryption};
+
+    /// Creates a fake `CompactAction` paying the given recipient the specified value.
+    ///
+    /// Returns the `CompactAction` and the new note.
+    pub fn fake_compact_action<R: RngCore>(
+        rng: &mut R,
+        nf_old: Nullifier,
+        recipient: Address,
+        value: NoteValue,
+        ovk: Option<OutgoingViewingKey>,
+    ) -> (CompactAction, Note) {
+        let rho = Rho::from_nf_old(nf_old);
+        let rseed = {
+            loop {
+                let mut bytes = [0; 32];
+                rng.fill_bytes(&mut bytes);
+                let rseed = RandomSeed::from_bytes(bytes, &rho);
+                if rseed.is_some().into() {
+                    break rseed.unwrap();
+                }
+            }
+        };
+        let note = Note::from_parts(recipient, value, rho, rseed).unwrap();
+        let encryptor = OrchardNoteEncryption::new(ovk, note, [0u8; 512]);
+        let cmx = ExtractedNoteCommitment::from(note.commitment());
+        let ephemeral_key = OrchardDomain::epk_bytes(encryptor.epk());
+        let enc_ciphertext = encryptor.encrypt_note_plaintext();
+
+        (
+            CompactAction {
+                nullifier: nf_old,
+                cmx,
+                ephemeral_key,
+                enc_ciphertext: enc_ciphertext.as_ref()[..52].try_into().unwrap(),
+            },
+            note,
+        )
     }
 }

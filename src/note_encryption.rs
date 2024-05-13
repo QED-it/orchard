@@ -6,7 +6,7 @@ use zcash_note_encryption_zsa::{EphemeralKeyBytes, OutgoingCipherKey, ShieldedOu
 
 use crate::{
     action::Action,
-    note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed},
+    note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
     Address, Note,
 };
 
@@ -105,7 +105,7 @@ fn prf_ock_orchard(
 /// Domain-specific requirements:
 /// - If the note version is 3, the `plaintext` must contain a valid encoding of a ZSA asset type.
 fn parse_note_plaintext_without_memo<Bytes: AsRef<[u8]>, F>(
-    rho: Nullifier,
+    rho: Rho,
     plaintext: &Bytes,
     get_validated_pk_d: F,
 ) -> Option<(Note, Address)>

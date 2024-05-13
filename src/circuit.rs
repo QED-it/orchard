@@ -22,7 +22,7 @@ use crate::{
     note::{
         commitment::{NoteCommitTrapdoor, NoteCommitment},
         nullifier::Nullifier,
-        AssetBase, ExtractedNoteCommitment, Note,
+        AssetBase, ExtractedNoteCommitment, Note, Rho,
     },
     primitives::redpallas::{SpendAuth, VerificationKey},
     spec::NonIdentityPallasPoint,
@@ -98,7 +98,7 @@ pub struct OrchardCircuitBase<D> {
     pub(crate) g_d_old: Value<NonIdentityPallasPoint>,
     pub(crate) pk_d_old: Value<DiversifiedTransmissionKey>,
     pub(crate) v_old: Value<NoteValue>,
-    pub(crate) rho_old: Value<Nullifier>,
+    pub(crate) rho_old: Value<Rho>,
     pub(crate) psi_old: Value<pallas::Base>,
     pub(crate) rcm_old: Value<NoteCommitTrapdoor>,
     pub(crate) cm_old: Value<NoteCommitment>,
@@ -140,7 +140,7 @@ impl<D> OrchardCircuitBase<D> {
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
     ) -> Option<OrchardCircuitBase<D>> {
-        (spend.note.nullifier(&spend.fvk) == output_note.rho())
+        (Rho::from_nf_old(spend.note.nullifier(&spend.fvk)) == output_note.rho())
             .then(|| Self::from_action_context_unchecked(spend, output_note, alpha, rcv))
     }
 

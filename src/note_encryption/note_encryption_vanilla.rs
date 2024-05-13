@@ -44,7 +44,7 @@ mod tests {
         },
         note::{
             testing::arb_native_note, AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed,
-            TransmittedNoteCiphertext,
+            Rho, TransmittedNoteCiphertext,
         },
         primitives::redpallas,
         value::{NoteValue, ValueCommitment},
@@ -77,7 +77,7 @@ mod tests {
             let plaintext = OrchardDomainVanilla::note_plaintext_bytes(&note, memo);
 
             // Decode.
-            let domain = OrchardDomainVanilla::for_nullifier(rho);
+            let domain = OrchardDomainVanilla::for_rho(rho);
             let parsed_version = note_version(plaintext.as_ref()).unwrap();
             let (compact, parsed_memo) = domain.extract_memo(&plaintext);
 
@@ -115,7 +115,8 @@ mod tests {
 
             // Received Action
             let cv_net = ValueCommitment::from_bytes(&tv.cv_net).unwrap();
-            let rho = Nullifier::from_bytes(&tv.rho).unwrap();
+            let nf_old = Nullifier::from_bytes(&tv.nf_old).unwrap();
+            let rho = Rho::from_nf_old(nf_old);
             let cmx = ExtractedNoteCommitment::from_bytes(&tv.cmx).unwrap();
 
             let esk = EphemeralSecretKey::from_bytes(&tv.esk).unwrap();
@@ -146,8 +147,8 @@ mod tests {
             assert_eq!(ExtractedNoteCommitment::from(note.commitment()), cmx);
 
             let action = Action::from_parts(
-                // rho is the nullifier in the receiving Action.
-                rho,
+                // nf_old is the nullifier revealed by the receiving Action.
+                nf_old,
                 // We don't need a valid rk for this test.
                 redpallas::VerificationKey::dummy(),
                 cmx,
@@ -165,7 +166,7 @@ mod tests {
             // (Tested first because it only requires immutable references.)
             //
 
-            let domain = OrchardDomainVanilla::for_nullifier(rho);
+            let domain = OrchardDomainVanilla::for_rho(rho);
 
             match try_note_decryption(&domain, &ivk, &action) {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {

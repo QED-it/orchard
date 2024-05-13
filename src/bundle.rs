@@ -46,7 +46,7 @@ impl<A, D: OrchardDomain> Action<A, D> {
 }
 
 /// Orchard-specific flags.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Flags {
     /// Flag denoting whether Orchard spends are enabled in the transaction.
     ///
@@ -74,13 +74,45 @@ const FLAGS_EXPECTED_UNSET: u8 = !(FLAG_SPENDS_ENABLED | FLAG_OUTPUTS_ENABLED | 
 
 impl Flags {
     /// Construct a set of flags from its constituent parts
-    pub fn from_parts(spends_enabled: bool, outputs_enabled: bool, zsa_enabled: bool) -> Self {
+    pub(crate) const fn from_parts(
+        spends_enabled: bool,
+        outputs_enabled: bool,
+        zsa_enabled: bool,
+    ) -> Self {
         Flags {
             spends_enabled,
             outputs_enabled,
             zsa_enabled,
         }
     }
+
+    /// The flag set with both spends and outputs enabled and ZSA disabled.
+    pub const ENABLED_WITHOUT_ZSA: Flags = Flags {
+        spends_enabled: true,
+        outputs_enabled: true,
+        zsa_enabled: false,
+    };
+
+    /// The flags set with spends, outputs and ZSA enabled.
+    pub const ENABLED_WITH_ZSA: Flags = Flags {
+        spends_enabled: true,
+        outputs_enabled: true,
+        zsa_enabled: true,
+    };
+
+    /// The flag set with spends disabled.
+    pub const SPENDS_DISABLED: Flags = Flags {
+        spends_enabled: false,
+        outputs_enabled: true,
+        zsa_enabled: false,
+    };
+
+    /// The flag set with outputs disabled.
+    pub const OUTPUTS_DISABLED: Flags = Flags {
+        spends_enabled: true,
+        outputs_enabled: false,
+        zsa_enabled: false,
+    };
 
     /// Flag denoting whether Orchard spends are enabled in the transaction.
     ///
@@ -133,12 +165,13 @@ impl Flags {
     ///
     /// [txencoding]: https://zips.z.cash/protocol/protocol.pdf#txnencoding
     pub fn from_byte(value: u8) -> Option<Self> {
+        // https://p.z.cash/TCR:bad-txns-v5-reserved-bits-nonzero
         if value & FLAGS_EXPECTED_UNSET == 0 {
-            Some(Self::from_parts(
-                value & FLAG_SPENDS_ENABLED != 0,
-                value & FLAG_OUTPUTS_ENABLED != 0,
-                value & FLAG_ZSA_ENABLED != 0,
-            ))
+            Some(Self {
+                spends_enabled: value & FLAG_SPENDS_ENABLED != 0,
+                outputs_enabled: value & FLAG_OUTPUTS_ENABLED != 0,
+                zsa_enabled: value & FLAG_ZSA_ENABLED != 0,
+            })
         } else {
             None
         }
@@ -406,6 +439,33 @@ impl<A: Authorization, V, D: OrchardDomain> Bundle<A, V, D> {
     }
 }
 
+pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, D: 'a + OrchardDomain + OrchardHash>(
+    actions: impl IntoIterator<Item = &'a Action<A, D>>,
+    value_balance: V,
+    burn: impl Iterator<Item = (AssetBase, V)>,
+) -> redpallas::VerificationKey<Binding> {
+    // https://p.z.cash/TCR:bad-txns-orchard-binding-signature-invalid?partial
+    (actions
+        .into_iter()
+        .map(|a| a.cv_net())
+        .sum::<ValueCommitment>()
+        - ValueCommitment::derive(
+            ValueSum::from_raw(value_balance.into()),
+            ValueCommitTrapdoor::zero(),
+            AssetBase::native(),
+        )
+        - burn
+            .map(|(asset, value)| {
+                ValueCommitment::derive(
+                    ValueSum::from_raw(value.into()),
+                    ValueCommitTrapdoor::zero(),
+                    asset,
+                )
+            })
+            .sum::<ValueCommitment>())
+    .into_bvk()
+}
+
 impl<A: Authorization, V: Copy + Into<i64>, D: OrchardDomain + OrchardHash> Bundle<A, V, D> {
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
@@ -418,29 +478,7 @@ impl<A: Authorization, V: Copy + Into<i64>, D: OrchardDomain + OrchardHash> Bund
     /// This can be used to validate the [`Authorized::binding_signature`] returned from
     /// [`Bundle::authorization`].
     pub fn binding_validating_key(&self) -> redpallas::VerificationKey<Binding> {
-        (self
-            .actions
-            .iter()
-            .map(|a| a.cv_net())
-            .sum::<ValueCommitment>()
-            - ValueCommitment::derive(
-                ValueSum::from_raw(self.value_balance.into()),
-                ValueCommitTrapdoor::zero(),
-                AssetBase::native(),
-            )
-            - self
-                .burn
-                .clone()
-                .into_iter()
-                .map(|(asset, value)| {
-                    ValueCommitment::derive(
-                        ValueSum::from_raw(value.into()),
-                        ValueCommitTrapdoor::zero(),
-                        asset,
-                    )
-                })
-                .sum::<ValueCommitment>())
-        .into_bvk()
+        derive_bvk(&self.actions, self.value_balance, self.burn.iter().cloned())
     }
 }
 
