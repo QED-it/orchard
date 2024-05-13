@@ -73,11 +73,7 @@ fn bench_note_decryption(c: &mut Criterion) {
                 None,
             )
             .unwrap();
-<<<<<<< HEAD
-        let bundle: Bundle<_, i64, OrchardZSA> = builder.build(rng).unwrap();
-=======
-        let bundle: Bundle<_, i64> = builder.build(rng).unwrap().unwrap().0;
->>>>>>> zsa1
+        let bundle: Bundle<_, i64, OrchardZSA> = builder.build(rng).unwrap().unwrap().0;
         bundle
             .create_proof(&pk, rng)
             .unwrap()

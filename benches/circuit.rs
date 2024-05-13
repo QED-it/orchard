@@ -43,11 +43,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 )
                 .unwrap();
         }
-<<<<<<< HEAD
-        let bundle: Bundle<_, i64, OrchardZSA> = builder.build(rng).unwrap();
-=======
-        let bundle: Bundle<_, i64> = builder.build(rng).unwrap().unwrap().0;
->>>>>>> zsa1
+        let bundle: Bundle<_, i64, OrchardZSA> = builder.build(rng).unwrap().unwrap().0;
 
         let instances: Vec<_> = bundle
             .actions()
