@@ -108,7 +108,7 @@ impl<D: OrchardDomain> CompactAction<D> {
 #[cfg(feature = "test-dependencies")]
 pub mod testing {
     use rand::RngCore;
-    use zcash_note_encryption::Domain;
+    use zcash_note_encryption_zsa::Domain;
 
     use crate::{
         keys::OutgoingViewingKey,
