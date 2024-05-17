@@ -975,21 +975,18 @@ dependencies = [
 
 [[package]]
 name = "halo2_gadgets"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73a5e510d58a07d8ed238a5a8a436fe6c2c79e1bb2611f62688bc65007b4e6e7"
+version = "0.3.0"
+source = "git+https://github.com/QED-it/halo2?branch=improve-backward-compatability-without-zsa-default-generic-arg#5414d9526c0e774b0d0597b3fcfea06b656f4ab3"
 dependencies = [
  "arrayvec",
  "bitvec",
  "ff",
  "group",
- "halo2_poseidon",
  "halo2_proofs",
  "lazy_static",
  "pasta_curves",
  "proptest",
  "rand",
- "sinsemilla",
  "subtle",
  "uint",
 ]
@@ -1015,8 +1012,7 @@ dependencies = [
 [[package]]
 name = "halo2_proofs"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b867a8d9bbb85fca76fff60652b5cd19b853a1c4d0665cb89bee68b18d2caf0"
+source = "git+https://github.com/QED-it/halo2?branch=improve-backward-compatability-without-zsa-default-generic-arg#5414d9526c0e774b0d0597b3fcfea06b656f4ab3"
 dependencies = [
  "blake2b_simd",
  "ff",
