@@ -2,7 +2,7 @@
 
 //! In-band secret distribution for Orchard bundles.
 
-use crate::{orchard_flavor::OrchardVanilla, Note};
+use crate::{orchard_flavors::OrchardVanilla, Note};
 
 use super::{
     build_base_note_plaintext_bytes, note_bytes::NoteBytes, Memo, OrchardDomain,
