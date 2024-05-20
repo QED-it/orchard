@@ -38,7 +38,7 @@ use crate::{
     constants::OrchardFixedBasesFull,
     constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
     note::AssetBase,
-    orchard_flavor::OrchardZSA,
+    orchard_flavors::OrchardZSA,
 };
 
 use super::{
@@ -49,8 +49,8 @@ use super::{
         add_chip::{self, AddChip, AddConfig},
         AddInstruction,
     },
-    OrchardCircuit, OrchardCircuitBase, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
-    ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+    CircuitBase, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
+    ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
 
 use self::{
@@ -355,7 +355,7 @@ impl OrchardCircuit for OrchardZSA {
 
     #[allow(non_snake_case)]
     fn synthesize(
-        circuit: &OrchardCircuitBase<Self>,
+        circuit: &CircuitBase<Self>,
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
@@ -871,16 +871,16 @@ mod tests {
     use crate::{
         builder::SpendInfo,
         bundle::Flags,
-        circuit::{Instance, OrchardCircuitBase, Proof, ProvingKey, VerifyingKey, K},
+        circuit::{CircuitBase, Instance, Proof, ProvingKey, VerifyingKey, K},
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
-        orchard_flavor::OrchardZSA,
+        orchard_flavors::OrchardZSA,
         primitives::redpallas::VerificationKey,
         tree::MerklePath,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
-    type OrchardCircuitZSA = OrchardCircuitBase<OrchardZSA>;
+    type OrchardCircuitZSA = CircuitBase<OrchardZSA>;
 
     fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (OrchardCircuitZSA, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());

@@ -16,7 +16,7 @@ use crate::{
     action::Action,
     address::Address,
     bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags, OrchardHash},
-    circuit::{Instance, OrchardCircuit, OrchardCircuitBase, Proof, ProvingKey},
+    circuit::{CircuitBase, Instance, OrchardCircuit, Proof, ProvingKey},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
@@ -383,7 +383,7 @@ impl ActionInfo {
     fn build<D: OrchardDomain>(
         self,
         mut rng: impl RngCore,
-    ) -> (Action<SigningMetadata, D>, OrchardCircuitBase<D>) {
+    ) -> (Action<SigningMetadata, D>, CircuitBase<D>) {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -431,9 +431,7 @@ impl ActionInfo {
                     parts: SigningParts { ak, alpha },
                 },
             ),
-            OrchardCircuitBase::<D>::from_action_context_unchecked(
-                self.spend, note, alpha, self.rcv,
-            ),
+            CircuitBase::<D>::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
         )
     }
 }
@@ -516,9 +514,6 @@ impl Builder {
         }
     }
 
-    // FIXME: fix the doc, this line was removed from the doc:
-    // [`OrchardDomain`]: crate::note_encryption::OrchardDomain
-
     /// Adds a note to be spent in this transaction.
     ///
     /// - `note` is a spendable note, obtained by trial-decrypting an [`Action`] using the
@@ -529,6 +524,7 @@ impl Builder {
     /// Returns an error if the given Merkle path does not have the required anchor for
     /// the given note.
     ///
+    /// [`OrchardDomain`]: crate::note_encryption::OrchardDomain
     /// [`MerkleHashOrchard`]: crate::tree::MerkleHashOrchard
     pub fn add_spend(
         &mut self,
@@ -893,7 +889,7 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 /// This struct contains the private data needed to create a [`Proof`] for a [`Bundle`].
 #[derive(Clone, Debug)]
 pub struct Unproven<D: OrchardCircuit> {
-    circuits: Vec<OrchardCircuitBase<D>>,
+    circuits: Vec<CircuitBase<D>>,
 }
 
 impl<S: InProgressSignatures, D: OrchardCircuit> InProgress<Unproven<D>, S> {
@@ -1333,7 +1329,7 @@ mod tests {
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
-        orchard_flavor::OrchardZSA,
+        orchard_flavors::OrchardZSA,
         tree::EMPTY_ROOTS,
         value::NoteValue,
     };

@@ -386,7 +386,6 @@ impl<A: Authorization, V, D: OrchardDomain> Bundle<A, V, D> {
         let prepared_ivk = PreparedIncomingViewingKey::new(key);
         self.actions.get(action_idx).and_then(move |action| {
             let domain = OrchardDomainBase::<D>::for_action(action);
-            // let domain = D::for_action(action);
             try_note_decryption(&domain, &prepared_ivk, action)
         })
     }

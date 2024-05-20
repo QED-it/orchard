@@ -32,7 +32,7 @@ use crate::{
     constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
     },
-    orchard_flavor::OrchardVanilla,
+    orchard_flavors::OrchardVanilla,
 };
 
 use super::{
@@ -41,8 +41,8 @@ use super::{
         add_chip::{self, AddChip, AddConfig},
         AddInstruction,
     },
-    OrchardCircuit, OrchardCircuitBase, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
-    ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
+    CircuitBase, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
+    NF_OLD, RK_X, RK_Y,
 };
 
 use self::{
@@ -266,7 +266,7 @@ impl OrchardCircuit for OrchardVanilla {
 
     #[allow(non_snake_case)]
     fn synthesize(
-        circuit: &OrchardCircuitBase<Self>,
+        circuit: &CircuitBase<Self>,
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
@@ -654,15 +654,15 @@ mod tests {
 
     use crate::{
         bundle::Flags,
-        circuit::{Instance, OrchardCircuitBase, Proof, ProvingKey, VerifyingKey, K},
+        circuit::{CircuitBase, Instance, Proof, ProvingKey, VerifyingKey, K},
         keys::SpendValidatingKey,
         note::{AssetBase, Note, Rho},
-        orchard_flavor::OrchardVanilla,
+        orchard_flavors::OrchardVanilla,
         tree::MerklePath,
         value::{ValueCommitTrapdoor, ValueCommitment},
     };
 
-    type OrchardCircuitVanilla = OrchardCircuitBase<OrchardVanilla>;
+    type OrchardCircuitVanilla = CircuitBase<OrchardVanilla>;
 
     fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (OrchardCircuitVanilla, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
