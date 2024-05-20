@@ -1,3 +1,5 @@
+//! Domain implementations for Orchard.
+
 use blake2b_simd::Hash;
 use group::ff::PrimeField;
 
