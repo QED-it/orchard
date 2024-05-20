@@ -49,8 +49,8 @@ use super::{
         add_chip::{self, AddChip, AddConfig},
         AddInstruction,
     },
-    OrchardCircuit, CircuitBase, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
-    ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+    CircuitBase, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
+    ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
 
 use self::{
@@ -871,7 +871,7 @@ mod tests {
     use crate::{
         builder::SpendInfo,
         bundle::Flags,
-        circuit::{Instance, CircuitBase, Proof, ProvingKey, VerifyingKey, K},
+        circuit::{CircuitBase, Instance, Proof, ProvingKey, VerifyingKey, K},
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier},
         orchard_flavors::OrchardZSA,
