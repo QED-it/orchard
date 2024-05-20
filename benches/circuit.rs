@@ -12,7 +12,7 @@ use orchard::{
     bundle::Flags,
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, Scope, SpendingKey},
-    orchard_flavor::OrchardZSA,
+    orchard_flavors::OrchardZSA,
     value::NoteValue,
     Anchor, Bundle,
 };
