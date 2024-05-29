@@ -1,4 +1,7 @@
 //! The Orchard Action circuit implementation.
+//!
+//! This module defines the common structures, traits and implementations for the
+//! Orchard Action circuit, supporting both the standard ("Vanilla") and ZSA variations.
 
 use core::fmt;
 

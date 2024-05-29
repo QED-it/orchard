@@ -1,6 +1,6 @@
-//! The Orchard Action circuit implementation.
-
-// FIXME: rename to zsa.rs (as it's alredy in circuit folder)?
+//! The Orchard Action circuit implementation for the ZSA variation of the Orchard protocol.
+//!
+//! Includes the configuration, synthesis, and proof verification logic.
 
 use ff::Field;
 

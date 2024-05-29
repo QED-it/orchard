@@ -1,3 +1,5 @@
+//! Commit IVK (Incoming Viewing Key) for the Orchard circuit.
+
 use core::iter;
 
 use group::ff::{Field, PrimeField};

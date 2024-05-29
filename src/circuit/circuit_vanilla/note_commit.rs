@@ -1,5 +1,5 @@
-// TODO: try to avoid code duplication with the same module for circuit_zsa.
-//
+//! Note commitment logic for the Orchard circuit (Vanilla variation).
+
 use core::iter;
 
 use group::ff::PrimeField;

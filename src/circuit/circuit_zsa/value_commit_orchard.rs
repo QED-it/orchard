@@ -1,3 +1,5 @@
+//! Value commitment logic for the Orchard circuit (ZSA variation).
+
 pub(in crate::circuit) mod gadgets {
     use pasta_curves::pallas;
 
