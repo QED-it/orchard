@@ -24,7 +24,7 @@ pub mod action;
 pub mod note_encryption_vanilla;
 pub mod note_encryption_zsa;
 
-mod domain;
+pub mod domain;
 mod note_bytes;
 mod orchard_domain;
 
