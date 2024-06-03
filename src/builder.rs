@@ -995,16 +995,6 @@ pub mod testing {
         }
     }
 
-    /// `BuilderArb` serves as a utility structure in property-based testing, designed specifically to adapt
-    /// `arb_...` functions for compatibility with both variations of the Orchard protocol: Vanilla and ZSA.
-    /// This adaptation is necessary due to the proptest crate's limitation, which prevents the direct
-    /// transformation of `arb_...` functions into generic forms suitable for testing different protocol
-    /// flavors.
-    #[derive(Debug)]
-    pub struct BuilderArb<D: OrchardDomain> {
-        phantom: std::marker::PhantomData<D>,
-    }
-
     impl<D: OrchardDomain + OrchardCircuit + OrchardHash> BuilderArb<D> {
         prop_compose! {
             /// Produce a random valid Orchard bundle.
@@ -1071,6 +1061,16 @@ pub mod testing {
         ) -> impl Strategy<Value = Bundle<Authorized, V, D>> {
             BuilderArb::<D>::arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V, D>())
         }
+    }
+
+    /// `BuilderArb` serves as a utility structure in property-based testing, designed specifically to adapt
+    /// `arb_...` functions for compatibility with both variations of the Orchard protocol: Vanilla and ZSA.
+    /// This adaptation is necessary due to the proptest crate's limitation, which prevents the direct
+    /// transformation of `arb_...` functions into generic forms suitable for testing different protocol
+    /// flavors.
+    #[derive(Debug)]
+    pub struct BuilderArb<D: OrchardDomain> {
+        phantom: std::marker::PhantomData<D>,
     }
 }
 
