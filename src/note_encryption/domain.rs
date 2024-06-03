@@ -4,7 +4,6 @@
 //! crate for OrchardDomain types, i.e. contains a common logic of both Vanilla and
 //! ZSA variations of the Orchard protocol.
 
-
 use blake2b_simd::Hash;
 use group::ff::PrimeField;
 
