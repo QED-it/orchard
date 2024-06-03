@@ -131,7 +131,6 @@ pub(crate) mod testing {
     use zcash_note_encryption_zsa::NoteEncryption;
 
     use crate::{
-        keys::OutgoingViewingKey,
         note::{
             asset_base::testing::arb_asset_base, commitment::ExtractedNoteCommitment,
             nullifier::testing::arb_nullifier, testing::arb_note, TransmittedNoteCiphertext,
@@ -177,9 +176,8 @@ pub(crate) mod testing {
                 rk in arb_spendauth_verification_key(),
                 note in arb_note(output_value),
                 asset in arb_asset_base(),
-                ovk_bytes in prop::array::uniform32(prop::num::u8::ANY),
-                memo in prop::collection::vec(prop::num::u8::ANY, 512),
                 rng_seed in prop::array::uniform32(prop::num::u8::ANY),
+                memo in prop::collection::vec(prop::num::u8::ANY, 512),
             ) -> Action<(), D> {
                 let cmx = ExtractedNoteCommitment::from(note.commitment());
                 let cv_net = ValueCommitment::derive(
@@ -189,8 +187,7 @@ pub(crate) mod testing {
                 );
 
                 let mut rng = StdRng::from_seed(rng_seed);
-                let ovk = OutgoingViewingKey::from(ovk_bytes);
-                let encryptor = NoteEncryption::<OrchardDomainBase<D>>::new(Some(ovk), note, memo.try_into().unwrap());
+                let encryptor = NoteEncryption::<OrchardDomainBase<D>>::new(None, note, memo.try_into().unwrap());
                 let encrypted_note = Self::encrypt_note(encryptor, &cmx, &cv_net, &mut rng);
 
                 Action {
@@ -213,7 +210,6 @@ pub(crate) mod testing {
                 rng_seed in prop::array::uniform32(prop::num::u8::ANY),
                 fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
                 asset in arb_asset_base(),
-                ovk_bytes in prop::array::uniform32(prop::num::u8::ANY),
                 memo in prop::collection::vec(prop::num::u8::ANY, 512),
             ) -> Action<redpallas::Signature<SpendAuth>, D> {
                 let cmx = ExtractedNoteCommitment::from(note.commitment());
@@ -225,8 +221,7 @@ pub(crate) mod testing {
 
                 let mut rng = StdRng::from_seed(rng_seed);
 
-                let ovk = OutgoingViewingKey::from(ovk_bytes);
-                let encryptor = NoteEncryption::<OrchardDomainBase<D>>::new(Some(ovk), note, memo.try_into().unwrap());
+                let encryptor = NoteEncryption::<OrchardDomainBase<D>>::new(None, note, memo.try_into().unwrap());
                 let encrypted_note = Self::encrypt_note(encryptor, &cmx, &cv_net, &mut rng);
 
                 Action {
