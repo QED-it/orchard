@@ -1240,11 +1240,8 @@ pub mod testing {
         }
     }
 
-    /// `BuilderArb` serves as a utility structure in property-based testing, designed specifically to adapt
-    /// `arb_...` functions for compatibility with both variations of the Orchard protocol: Vanilla and ZSA.
-    /// This adaptation is necessary due to the proptest crate's limitation, which prevents the direct
-    /// transformation of `arb_...` functions into generic forms suitable for testing different protocol
-    /// flavors.
+    /// `BuilderArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol variations
+    /// in property-based testing, addressing proptest crate limitations.    
     #[derive(Debug)]
     pub struct BuilderArb<D: OrchardDomain> {
         phantom: std::marker::PhantomData<D>,
