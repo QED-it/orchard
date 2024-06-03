@@ -1,3 +1,5 @@
+//! Common gadgets and functions used in the Orchard circuit.
+
 use ff::Field;
 
 use halo2_proofs::{

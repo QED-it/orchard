@@ -1,8 +1,9 @@
-// FIXME: consider renaming this to zsa.rs
+//! In-band secret distribution for Orchard bundles (ZSA version).
+//!
+//! This module implements the note encryption logic specific to the Zcash shielded assets (ZSA)
+//! variation of the Orchard protocol.
 
-//! In-band secret distribution for Orchard bundles.
-
-use crate::{orchard_flavor::OrchardZSA, Note};
+use crate::{orchard_flavors::OrchardZSA, Note};
 
 use super::{
     build_base_note_plaintext_bytes, note_bytes::NoteBytes, Memo, OrchardDomain,

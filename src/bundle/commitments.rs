@@ -9,7 +9,7 @@ use crate::{
     issuance::{IssueAuth, IssueBundle, Signed},
     note::AssetBase,
     note_encryption::OrchardDomain,
-    orchard_flavor::{OrchardVanilla, OrchardZSA},
+    orchard_flavors::{OrchardVanilla, OrchardZSA},
 };
 
 const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
@@ -95,7 +95,6 @@ pub(crate) fn hash_bundle_txid_data<
         ch.update(&action.nullifier().to_bytes());
         ch.update(&action.cmx().to_bytes());
         ch.update(&action.encrypted_note().epk_bytes);
-        // TODO: make sure it is backward compatible with Orchard [..52]
         ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..D::COMPACT_NOTE_SIZE]);
 
         mh.update(

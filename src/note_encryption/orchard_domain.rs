@@ -1,3 +1,9 @@
+//! Represents the Orchard protocol domain specifics required for note encryption and decryption.
+//!
+//! Defines OrchardDomain triat with the constants and methods needed to handle the
+//! various sizes and types of note components. Actually this trait represents the difference
+//! between both Vanilla and ZSA variantions of the Orchard protocol.
+
 use core::fmt;
 
 use zcash_note_encryption_zsa::{AEAD_TAG_SIZE, MEMO_SIZE};

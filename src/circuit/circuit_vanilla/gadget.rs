@@ -1,6 +1,4 @@
-//! Gadgets used in the Orchard circuit.
-
-// TODO: try to avoid code duplication with the same module for circuit_zsa.
+//! Gadgets used in the Orchard circuit (Vanilla variation).
 
 use ff::Field;
 use pasta_curves::pallas;

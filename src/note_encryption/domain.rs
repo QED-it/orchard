@@ -1,4 +1,9 @@
-//! Domain implementations for Orchard.
+//! Domain-specific requirements for Orchard note encryption and decryption.
+//!
+//! This module implements Domain and BatchDomain traits from zcash_note_encryption
+//! crate for OrchardDomain types, i.e. contains a common logic of both Vanilla and
+//! ZSA variations of the Orchard protocol.
+
 
 use blake2b_simd::Hash;
 use group::ff::PrimeField;

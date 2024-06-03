@@ -7,7 +7,7 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
     note_encryption::OrchardDomainBase,
-    orchard_flavor::OrchardZSA,
+    orchard_flavors::OrchardZSA,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,

@@ -1,3 +1,8 @@
+//! Utilities for handling note bytes in the Orchard protocol.
+//!
+//! This module provides structures and traits for working with fixed-size arrays of bytes,
+//! which represent various components of notes in the Orchard protocol.
+
 /// Represents a fixed-size array of bytes for note components.
 #[derive(Clone, Copy, Debug)]
 pub struct NoteBytes<const N: usize>(pub [u8; N]);

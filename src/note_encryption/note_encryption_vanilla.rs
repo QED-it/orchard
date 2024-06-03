@@ -1,8 +1,9 @@
-// FIXME: consider renaming this to vanilla.rs
+//! In-band secret distribution for Orchard bundles (Vanilla variation).
+//!
+//! This module implements the note encryption logic specific to the standard ("Vanilla")
+//! variation of the Orchard protocol.
 
-//! In-band secret distribution for Orchard bundles.
-
-use crate::{orchard_flavor::OrchardVanilla, Note};
+use crate::{orchard_flavors::OrchardVanilla, Note};
 
 use super::{
     build_base_note_plaintext_bytes, note_bytes::NoteBytes, Memo, OrchardDomain,

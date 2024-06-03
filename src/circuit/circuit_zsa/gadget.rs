@@ -1,6 +1,4 @@
-//! Gadgets used in the Orchard circuit.
-
-// TODO: try to avoid code duplication with the same module for circuit_vanilla.
+//! Gadgets used in the Orchard circuit (ZSA variation).
 
 use ff::Field;
 use group::Curve;

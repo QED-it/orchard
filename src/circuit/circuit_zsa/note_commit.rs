@@ -1,4 +1,4 @@
-// TODO: try to avoid code duplication with the same module for circuit_vanilla.
+//! Note commitment logic for the Orchard circuit (ZSA variation).
 
 use core::iter;
 

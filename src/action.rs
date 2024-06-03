@@ -128,13 +128,15 @@ pub(crate) mod testing {
 
     use proptest::prelude::*;
 
-    use crate::note::asset_base::testing::arb_asset_base;
+    use zcash_note_encryption_zsa::NoteEncryption;
+
     use crate::{
+        keys::OutgoingViewingKey,
         note::{
-            commitment::ExtractedNoteCommitment, nullifier::testing::arb_nullifier,
-            testing::arb_note, TransmittedNoteCiphertext,
+            asset_base::testing::arb_asset_base, commitment::ExtractedNoteCommitment,
+            nullifier::testing::arb_nullifier, testing::arb_note, TransmittedNoteCiphertext,
         },
-        note_encryption::OrchardDomain,
+        note_encryption::{OrchardDomain, OrchardDomainBase},
         primitives::redpallas::{
             self,
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
@@ -155,13 +157,29 @@ pub(crate) mod testing {
     }
 
     impl<D: OrchardDomain> ActionArb<D> {
+        fn encrypt_note<R: RngCore>(
+            encryptor: NoteEncryption<OrchardDomainBase<D>>,
+            cmx: &ExtractedNoteCommitment,
+            cv_net: &ValueCommitment,
+            rng: &mut R,
+        ) -> TransmittedNoteCiphertext<D> {
+            TransmittedNoteCiphertext {
+                epk_bytes: encryptor.epk().to_bytes().0,
+                enc_ciphertext: encryptor.encrypt_note_plaintext(),
+                out_ciphertext: encryptor.encrypt_outgoing_plaintext(&cv_net, &cmx, rng),
+            }
+        }
+
         prop_compose! {
             /// Generate an action without authorization data.
             pub fn arb_unauthorized_action(spend_value: NoteValue, output_value: NoteValue)(
                 nf in arb_nullifier(),
                 rk in arb_spendauth_verification_key(),
                 note in arb_note(output_value),
-                asset in arb_asset_base()
+                asset in arb_asset_base(),
+                ovk_bytes in prop::array::uniform32(prop::num::u8::ANY),
+                memo in prop::collection::vec(prop::num::u8::ANY, 512),
+                rng_seed in prop::array::uniform32(prop::num::u8::ANY),
             ) -> Action<(), D> {
                 let cmx = ExtractedNoteCommitment::from(note.commitment());
                 let cv_net = ValueCommitment::derive(
@@ -169,12 +187,12 @@ pub(crate) mod testing {
                     ValueCommitTrapdoor::zero(),
                     asset
                 );
-                // FIXME: make a real one from the note.
-                let encrypted_note = TransmittedNoteCiphertext::<D> {
-                    epk_bytes: [0u8; 32],
-                    enc_ciphertext: D::NoteCiphertextBytes::from(vec![0u8; D::ENC_CIPHERTEXT_SIZE].as_ref()),
-                    out_ciphertext: [0u8; 80]
-                };
+
+                let mut rng = StdRng::from_seed(rng_seed);
+                let ovk = OutgoingViewingKey::from(ovk_bytes);
+                let encryptor = NoteEncryption::<OrchardDomainBase<D>>::new(Some(ovk), note, memo.try_into().unwrap());
+                let encrypted_note = Self::encrypt_note(encryptor, &cmx, &cv_net, &mut rng);
+
                 Action {
                     nf,
                     rk,
@@ -194,7 +212,9 @@ pub(crate) mod testing {
                 note in arb_note(output_value),
                 rng_seed in prop::array::uniform32(prop::num::u8::ANY),
                 fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
-                asset in arb_asset_base()
+                asset in arb_asset_base(),
+                ovk_bytes in prop::array::uniform32(prop::num::u8::ANY),
+                memo in prop::collection::vec(prop::num::u8::ANY, 512),
             ) -> Action<redpallas::Signature<SpendAuth>, D> {
                 let cmx = ExtractedNoteCommitment::from(note.commitment());
                 let cv_net = ValueCommitment::derive(
@@ -203,14 +223,11 @@ pub(crate) mod testing {
                     asset
                 );
 
-                // FIXME: make a real one from the note.
-                let encrypted_note = TransmittedNoteCiphertext::<D> {
-                    epk_bytes: [0u8; 32],
-                    enc_ciphertext: D::NoteCiphertextBytes::from(vec![0u8; D::ENC_CIPHERTEXT_SIZE].as_ref()),
-                    out_ciphertext: [0u8; 80]
-                };
+                let mut rng = StdRng::from_seed(rng_seed);
 
-                let rng = StdRng::from_seed(rng_seed);
+                let ovk = OutgoingViewingKey::from(ovk_bytes);
+                let encryptor = NoteEncryption::<OrchardDomainBase<D>>::new(Some(ovk), note, memo.try_into().unwrap());
+                let encrypted_note = Self::encrypt_note(encryptor, &cmx, &cv_net, &mut rng);
 
                 Action {
                     nf,
