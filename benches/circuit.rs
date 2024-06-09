@@ -6,26 +6,27 @@ use criterion::{BenchmarkId, Criterion};
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 
-use orchard::note::AssetBase;
 use orchard::{
     builder::{Builder, BundleType},
-    circuit::{ProvingKey, VerifyingKey},
+    bundle::OrchardHash,
+    circuit::{OrchardCircuit, ProvingKey, VerifyingKey},
     keys::{FullViewingKey, Scope, SpendingKey},
-    orchard_flavors::OrchardZSA,
+    note::AssetBase,
+    note_encryption::OrchardDomain,
+    orchard_flavors::{OrchardVanilla, OrchardZSA},
     value::NoteValue,
     Anchor, Bundle,
 };
 use rand::rngs::OsRng;
 
-fn criterion_benchmark(c: &mut Criterion) {
+fn criterion_benchmark<D: OrchardDomain + OrchardCircuit + OrchardHash>(c: &mut Criterion) {
     let rng = OsRng;
 
     let sk = SpendingKey::from_bytes([7; 32]).unwrap();
     let recipient = FullViewingKey::from(&sk).address_at(0u32, Scope::External);
 
-    // FIXME: consider adding test for OrchardVanilla as well
-    let vk = VerifyingKey::build::<OrchardZSA>();
-    let pk = ProvingKey::build::<OrchardZSA>();
+    let vk = VerifyingKey::build::<D>();
+    let pk = ProvingKey::build::<D>();
 
     let create_bundle = |num_recipients| {
         let mut builder = Builder::new(
@@ -43,7 +44,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 )
                 .unwrap();
         }
-        let bundle: Bundle<_, i64, OrchardZSA> = builder.build(rng).unwrap().unwrap().0;
+        let bundle: Bundle<_, i64, D> = builder.build(rng).unwrap().unwrap().0;
 
         let instances: Vec<_> = bundle
             .actions()
@@ -90,15 +91,25 @@ fn criterion_benchmark(c: &mut Criterion) {
 }
 
 #[cfg(unix)]
-criterion_group! {
-    name = benches;
-    config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
-    targets = criterion_benchmark
+fn create_config() -> Criterion {
+    Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)))
 }
+
 #[cfg(windows)]
-criterion_group! {
-    name = benches;
-    config = Criterion::default();
-    targets = criterion_benchmark
+fn create_config() -> Criterion {
+    Criterion::default()
 }
-criterion_main!(benches);
+
+criterion_group! {
+    name = benches_vanilla;
+    config = create_config();
+    targets = criterion_benchmark::<OrchardVanilla>
+}
+
+criterion_group! {
+    name = benches_zsa;
+    config = create_config();
+    targets = criterion_benchmark::<OrchardZSA>
+}
+
+criterion_main!(benches_vanilla, benches_zsa);
