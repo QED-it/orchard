@@ -257,7 +257,7 @@ impl<T: IssueAuth> IssueBundle<T> {
     }
 
     /// Transitions this bundle from one authorization state to another.
-    pub fn map_authorization<R, T2: IssueAuth>(
+    pub fn map_authorization<T2: IssueAuth>(
         self,
         map_auth: impl FnOnce(T) -> T2,
     ) -> IssueBundle<T2> {
