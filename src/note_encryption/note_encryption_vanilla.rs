@@ -1,29 +1,26 @@
-//! In-band secret distribution for Orchard bundles (Vanilla variation).
-//!
-//! This module implements the note encryption logic specific to the standard ("Vanilla")
-//! variation of the Orchard protocol.
+//! This module implements the note encryption logic specific for the `OrchardVanilla` flavor.
 
 use crate::{orchard_flavors::OrchardVanilla, Note};
 
 use super::{
-    build_base_note_plaintext_bytes, note_bytes::NoteBytes, Memo, OrchardDomain,
+    build_base_note_plaintext_bytes, note_bytes::NoteBytesData, Memo, OrchardDomain,
     COMPACT_NOTE_SIZE_VANILLA,
 };
 
 impl OrchardDomain for OrchardVanilla {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_VANILLA;
 
-    type NotePlaintextBytes = NoteBytes<{ Self::NOTE_PLAINTEXT_SIZE }>;
-    type NoteCiphertextBytes = NoteBytes<{ Self::ENC_CIPHERTEXT_SIZE }>;
-    type CompactNotePlaintextBytes = NoteBytes<{ Self::COMPACT_NOTE_SIZE }>;
-    type CompactNoteCiphertextBytes = NoteBytes<{ Self::COMPACT_NOTE_SIZE }>;
+    type NotePlaintextBytes = NoteBytesData<{ Self::NOTE_PLAINTEXT_SIZE }>;
+    type NoteCiphertextBytes = NoteBytesData<{ Self::ENC_CIPHERTEXT_SIZE }>;
+    type CompactNotePlaintextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
+    type CompactNoteCiphertextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
 
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes {
         let mut np = build_base_note_plaintext_bytes(0x02, note);
 
         np[COMPACT_NOTE_SIZE_VANILLA..].copy_from_slice(memo);
 
-        NoteBytes(np)
+        NoteBytesData(np)
     }
 }
 
@@ -57,7 +54,7 @@ mod tests {
             action::CompactAction, note_version, parse_note_plaintext_without_memo,
             prf_ock_orchard, OrchardDomainBase,
         },
-        {NoteBytes, OrchardVanilla},
+        {NoteBytesData, OrchardVanilla},
     };
 
     type OrchardDomainVanilla = OrchardDomainBase<OrchardVanilla>;
@@ -155,7 +152,7 @@ mod tests {
                 cmx,
                 TransmittedNoteCiphertext {
                     epk_bytes: ephemeral_key.0,
-                    enc_ciphertext: NoteBytes(tv.c_enc),
+                    enc_ciphertext: NoteBytesData(tv.c_enc),
                     out_ciphertext: tv.c_out,
                 },
                 cv_net.clone(),

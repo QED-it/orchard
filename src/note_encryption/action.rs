@@ -20,7 +20,6 @@ impl<A, D: OrchardDomain> ShieldedOutput<OrchardDomainBase<D>> for Action<A, D> 
         Some(self.encrypted_note().enc_ciphertext)
     }
 
-    // FIXME: split at COMPACT_NOTE_SIZE - is this correct?
     fn enc_ciphertext_compact(&self) -> D::CompactNoteCiphertextBytes {
         self.encrypted_note().enc_ciphertext.as_ref()[..D::COMPACT_NOTE_SIZE].into()
     }
@@ -119,8 +118,6 @@ pub mod testing {
 
     use super::{CompactAction, OrchardDomain, OrchardDomainBase};
 
-    // FIXME: pin fake_compact_action function to OrchardZSA or keep it generic?
-
     /// Creates a fake `CompactAction` paying the given recipient the specified value.
     ///
     /// Returns the `CompactAction` and the new note.
@@ -142,7 +139,6 @@ pub mod testing {
                 }
             }
         };
-        // FIXME: consider using another AssetBase instead of native for ZSA.
         let note = Note::from_parts(recipient, value, AssetBase::native(), rho, rseed).unwrap();
         let encryptor = NoteEncryption::<OrchardDomainBase<D>>::new(ovk, note, [0u8; 512]);
         let cmx = ExtractedNoteCommitment::from(note.commitment());

@@ -715,7 +715,6 @@ fn pad_spend(spend: Option<&SpendInfo>, asset: AssetBase, mut rng: impl RngCore)
 ///
 /// The returned bundle will have no proof or signatures; these can be applied with
 /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
-// FIXME: Consider factoring parts of the return type into `type` definitions
 #[allow(clippy::type_complexity)]
 pub fn bundle<V: TryFrom<i64>, D: OrchardDomain + OrchardCircuit + OrchardHash>(
     mut rng: impl RngCore,

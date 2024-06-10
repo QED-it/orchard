@@ -70,10 +70,8 @@ impl OrchardHash for OrchardZSA {
 ///   with ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION
 /// as defined in [ZIP-244: Transaction Identifier Non-Malleability][zip244]
 ///
-/// These hashes are combined with additional data, which may include the ZSA burn field for specific
-/// Orchard variants (see ZIP-226), flags, value_balance_orchard, and anchor_orchard. The inclusion of
-/// the burn field is dependent on the specific implementation of the `OrchardHash` trait, which
-/// defines whether the burn field should be included based on the variant (ZSA variant includes it).
+/// Then, hash these together along with (flags, value_balance_orchard, anchor_orchard),
+/// and potentially the burn fields, if it is an OrchardZSA action.
 ///
 /// The final hash is personalized with ZCASH_ORCHARD_HASH_PERSONALIZATION.
 ///

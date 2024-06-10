@@ -1,22 +1,19 @@
-//! In-band secret distribution for Orchard bundles (ZSA version).
-//!
-//! This module implements the note encryption logic specific to the Zcash shielded assets (ZSA)
-//! variation of the Orchard protocol.
+//! This module implements the note encryption logic specific for the `OrchardZSA` flavor.
 
 use crate::{orchard_flavors::OrchardZSA, Note};
 
 use super::{
-    build_base_note_plaintext_bytes, note_bytes::NoteBytes, Memo, OrchardDomain,
+    build_base_note_plaintext_bytes, note_bytes::NoteBytesData, Memo, OrchardDomain,
     COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
 };
 
 impl OrchardDomain for OrchardZSA {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_ZSA;
 
-    type NotePlaintextBytes = NoteBytes<{ Self::NOTE_PLAINTEXT_SIZE }>;
-    type NoteCiphertextBytes = NoteBytes<{ Self::ENC_CIPHERTEXT_SIZE }>;
-    type CompactNotePlaintextBytes = NoteBytes<{ Self::COMPACT_NOTE_SIZE }>;
-    type CompactNoteCiphertextBytes = NoteBytes<{ Self::COMPACT_NOTE_SIZE }>;
+    type NotePlaintextBytes = NoteBytesData<{ Self::NOTE_PLAINTEXT_SIZE }>;
+    type NoteCiphertextBytes = NoteBytesData<{ Self::ENC_CIPHERTEXT_SIZE }>;
+    type CompactNotePlaintextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
+    type CompactNoteCiphertextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
 
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes {
         let mut np = build_base_note_plaintext_bytes(0x03, note);
@@ -25,7 +22,7 @@ impl OrchardDomain for OrchardZSA {
             .copy_from_slice(&note.asset().to_bytes());
         np[COMPACT_NOTE_SIZE_ZSA..].copy_from_slice(memo);
 
-        NoteBytes(np)
+        NoteBytesData(np)
     }
 }
 
@@ -59,7 +56,7 @@ mod tests {
             action::CompactAction, note_version, parse_note_plaintext_without_memo,
             prf_ock_orchard, OrchardDomainBase,
         },
-        NoteBytes, OrchardZSA,
+        NoteBytesData, OrchardZSA,
     };
 
     type OrchardDomainZSA = OrchardDomainBase<OrchardZSA>;
@@ -156,7 +153,7 @@ mod tests {
                 cmx,
                 TransmittedNoteCiphertext {
                     epk_bytes: ephemeral_key.0,
-                    enc_ciphertext: NoteBytes(tv.c_enc),
+                    enc_ciphertext: NoteBytesData(tv.c_enc),
                     out_ciphertext: tv.c_out,
                 },
                 cv_net.clone(),
