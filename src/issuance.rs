@@ -255,6 +255,20 @@ impl<T: IssueAuth> IssueBundle<T> {
             authorization,
         }
     }
+
+    /// Transitions this bundle from one authorization state to another.
+    pub fn map_authorization<R, T2: IssueAuth>(
+        self,
+        context: &mut R,
+        map_auth: impl FnOnce(&mut R, T) -> T2,
+    ) -> IssueBundle<T2> {
+        let authorization = self.authorization;
+        IssueBundle {
+            ik: self.ik,
+            actions: self.actions,
+            authorization: map_auth(context, authorization),
+        }
+    }
 }
 
 impl IssueBundle<Unauthorized> {
