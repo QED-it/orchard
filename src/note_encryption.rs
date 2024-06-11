@@ -21,12 +21,11 @@ use crate::{
 };
 
 pub mod action;
-pub mod note_encryption_vanilla;
-pub mod note_encryption_zsa;
-
 pub mod domain;
 mod note_bytes;
 mod orchard_domain;
+pub mod orchard_domain_vanilla;
+pub mod orchard_domain_zsa;
 
 pub use orchard_domain::{OrchardDomain, OrchardDomainBase};
 

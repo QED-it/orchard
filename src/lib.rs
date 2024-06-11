@@ -29,8 +29,6 @@ pub mod supply_info;
 
 pub mod note_encryption;
 
-pub use note_encryption::{note_encryption_vanilla, note_encryption_zsa};
-
 pub mod orchard_flavors;
 
 pub mod primitives;
