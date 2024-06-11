@@ -41,8 +41,8 @@ use super::{
         add_chip::{self, AddChip, AddConfig},
         AddInstruction,
     },
-    CircuitBase, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
-    NF_OLD, RK_X, RK_Y,
+    Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD,
+    RK_X, RK_Y,
 };
 
 use self::{
@@ -266,7 +266,7 @@ impl OrchardCircuit for OrchardVanilla {
 
     #[allow(non_snake_case)]
     fn synthesize(
-        circuit: &CircuitBase<Self>,
+        circuit: &Circuit<Self>,
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
@@ -654,7 +654,7 @@ mod tests {
 
     use crate::{
         bundle::Flags,
-        circuit::{CircuitBase, Instance, Proof, ProvingKey, VerifyingKey, K},
+        circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K},
         keys::SpendValidatingKey,
         note::{AssetBase, Note, Rho},
         orchard_flavors::OrchardVanilla,
@@ -662,7 +662,7 @@ mod tests {
         value::{ValueCommitTrapdoor, ValueCommitment},
     };
 
-    type OrchardCircuitVanilla = CircuitBase<OrchardVanilla>;
+    type OrchardCircuitVanilla = Circuit<OrchardVanilla>;
 
     fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (OrchardCircuitVanilla, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());

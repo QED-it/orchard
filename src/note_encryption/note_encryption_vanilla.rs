@@ -65,7 +65,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn test_encoding_roundtrip(
+        fn encoding_roundtrip(
             note in arb_native_note(),
         ) {
             let memo = &crate::test_vectors::note_encryption_vanilla::test_vectors()[0].memo;

@@ -17,7 +17,7 @@ use crate::{
     action::Action,
     address::Address,
     bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags, OrchardHash},
-    circuit::{CircuitBase, Instance, OrchardCircuit, Proof, ProvingKey},
+    circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
@@ -390,7 +390,7 @@ impl ActionInfo {
     fn build<D: OrchardDomain>(
         self,
         mut rng: impl RngCore,
-    ) -> (Action<SigningMetadata, D>, CircuitBase<D>) {
+    ) -> (Action<SigningMetadata, D>, Circuit<D>) {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -438,7 +438,7 @@ impl ActionInfo {
                     parts: SigningParts { ak, alpha },
                 },
             ),
-            CircuitBase::<D>::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
+            Circuit::<D>::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
         )
     }
 }
@@ -908,7 +908,7 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 /// This struct contains the private data needed to create a [`Proof`] for a [`Bundle`].
 #[derive(Clone, Debug)]
 pub struct Unproven<D: OrchardCircuit> {
-    circuits: Vec<CircuitBase<D>>,
+    circuits: Vec<Circuit<D>>,
 }
 
 impl<S: InProgressSignatures, D: OrchardCircuit> InProgress<Unproven<D>, S> {

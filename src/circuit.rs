@@ -66,13 +66,13 @@ pub trait OrchardCircuit: Sized + Default {
 
     /// Wrapper for configure function of plonk::Circuit trait
     fn synthesize(
-        circuit: &CircuitBase<Self>,
+        circuit: &Circuit<Self>,
         config: Self::Config,
         layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error>;
 }
 
-impl<D: OrchardCircuit> plonk::Circuit<pallas::Base> for CircuitBase<D> {
+impl<D: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<D> {
     type Config = D::Config;
     type FloorPlanner = floor_planner::V1;
 
@@ -95,7 +95,7 @@ impl<D: OrchardCircuit> plonk::Circuit<pallas::Base> for CircuitBase<D> {
 
 /// The Orchard Action circuit.
 #[derive(Clone, Debug, Default)]
-pub struct CircuitBase<D> {
+pub struct Circuit<D> {
     pub(crate) path: Value<[MerkleHashOrchard; MERKLE_DEPTH_ORCHARD]>,
     pub(crate) pos: Value<u32>,
     pub(crate) g_d_old: Value<NonIdentityPallasPoint>,
@@ -121,7 +121,7 @@ pub struct CircuitBase<D> {
     phantom: std::marker::PhantomData<D>,
 }
 
-impl<D> CircuitBase<D> {
+impl<D> Circuit<D> {
     /// This constructor is public to enable creation of custom builders.
     /// If you are not creating a custom builder, use [`Builder`] to compose
     /// and authorize a transaction.
@@ -142,7 +142,7 @@ impl<D> CircuitBase<D> {
         output_note: Note,
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
-    ) -> Option<CircuitBase<D>> {
+    ) -> Option<Circuit<D>> {
         (Rho::from_nf_old(spend.note.nullifier(&spend.fvk)) == output_note.rho())
             .then(|| Self::from_action_context_unchecked(spend, output_note, alpha, rcv))
     }
@@ -152,7 +152,7 @@ impl<D> CircuitBase<D> {
         output_note: Note,
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
-    ) -> CircuitBase<D> {
+    ) -> Circuit<D> {
         let sender_address = spend.note.recipient();
         let rho_old = spend.note.rho();
         let psi_old = spend.note.rseed().psi(&rho_old);
@@ -165,7 +165,7 @@ impl<D> CircuitBase<D> {
         let psi_new = output_note.rseed().psi(&rho_new);
         let rcm_new = output_note.rseed().rcm(&rho_new);
 
-        CircuitBase {
+        Circuit {
             path: Value::known(spend.merkle_path.auth_path()),
             pos: Value::known(spend.merkle_path.position()),
             g_d_old: Value::known(sender_address.g_d()),
@@ -204,7 +204,7 @@ impl VerifyingKey {
     /// Builds the verifying key.
     pub fn build<D: OrchardCircuit>() -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
-        let circuit: CircuitBase<D> = Default::default();
+        let circuit: Circuit<D> = Default::default();
 
         let vk = plonk::keygen_vk(&params, &circuit).unwrap();
 
@@ -223,7 +223,7 @@ impl ProvingKey {
     /// Builds the proving key.
     pub fn build<D: OrchardCircuit>() -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
-        let circuit: CircuitBase<D> = Default::default();
+        let circuit: Circuit<D> = Default::default();
 
         let vk = plonk::keygen_vk(&params, &circuit).unwrap();
         let pk = plonk::keygen_pk(&params, vk, &circuit).unwrap();
@@ -339,7 +339,7 @@ impl Proof {
     /// Creates a proof for the given circuits and instances.
     pub fn create<D: OrchardCircuit>(
         pk: &ProvingKey,
-        circuits: &[CircuitBase<D>],
+        circuits: &[Circuit<D>],
         instances: &[Instance],
         mut rng: impl RngCore,
     ) -> Result<Self, plonk::Error> {
