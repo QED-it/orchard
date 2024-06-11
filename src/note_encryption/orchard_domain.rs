@@ -36,7 +36,7 @@ pub trait OrchardDomain: fmt::Debug + Clone {
 /// Orchard-specific note encryption logic.
 #[derive(Debug, Clone)]
 pub struct OrchardDomainBase<D: OrchardDomain> {
-    /// Represents a nullifier which is used to prevent double spending within the Orchard protocol.
+    /// A parameter needed to generate the nullifier.
     pub rho: Rho,
     phantom: std::marker::PhantomData<D>,
 }
