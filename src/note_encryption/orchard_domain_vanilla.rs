@@ -51,7 +51,7 @@ mod tests {
 
     use super::{
         super::{
-            action::CompactAction, note_version, parse_note_plaintext_without_memo,
+            compact_action::CompactAction, note_version, parse_note_plaintext_without_memo,
             prf_ock_orchard, OrchardDomainBase,
         },
         {NoteBytesData, OrchardVanilla},

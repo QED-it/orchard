@@ -2,10 +2,14 @@
 
 use std::fmt;
 
-use super::{
-    Action, EphemeralKeyBytes, ExtractedNoteCommitment, Nullifier, OrchardDomain,
-    OrchardDomainBase, Rho, ShieldedOutput,
+use zcash_note_encryption_zsa::ShieldedOutput;
+
+use crate::{
+    action::Action,
+    note::{ExtractedNoteCommitment, Nullifier},
 };
+
+use super::{EphemeralKeyBytes, OrchardDomain, OrchardDomainBase, Rho};
 
 impl<A, D: OrchardDomain> ShieldedOutput<OrchardDomainBase<D>> for Action<A, D> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {

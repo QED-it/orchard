@@ -7,20 +7,16 @@
 
 use blake2b_simd::Params;
 
-use zcash_note_encryption_zsa::{EphemeralKeyBytes, OutgoingCipherKey, ShieldedOutput, MEMO_SIZE};
-
-use crate::{
-    action::Action,
-    note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
-    Address, Note,
-};
+use zcash_note_encryption_zsa::{EphemeralKeyBytes, OutgoingCipherKey, MEMO_SIZE};
 
 use crate::{
     keys::{DiversifiedTransmissionKey, Diversifier, OutgoingViewingKey},
+    note::{AssetBase, RandomSeed, Rho},
     value::{NoteValue, ValueCommitment},
+    Address, Note,
 };
 
-pub mod action;
+pub mod compact_action;
 pub mod domain;
 mod note_bytes;
 mod orchard_domain;
