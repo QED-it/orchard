@@ -14,6 +14,7 @@ use halo2_gadgets::{
     sinsemilla::{chip::SinsemillaChip, CommitDomain, Message, MessagePiece},
     utilities::{bool_check, RangeConstrained},
 };
+use halo2_gadgets::utilities::lookup_range_check::LookupRangeCheck;
 
 #[derive(Clone, Debug)]
 pub struct CommitIvkConfig {
@@ -680,6 +681,7 @@ mod tests {
         },
         utilities::{lookup_range_check::LookupRangeCheckConfig, UtilitiesInstructions},
     };
+    use halo2_gadgets::utilities::lookup_range_check::LookupRangeCheck;
     use halo2_proofs::{
         circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
         dev::MockProver,

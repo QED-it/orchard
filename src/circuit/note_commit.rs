@@ -25,6 +25,7 @@ use halo2_gadgets::{
         bool_check, lookup_range_check::LookupRangeCheckConfig, FieldValue, RangeConstrained,
     },
 };
+use halo2_gadgets::utilities::lookup_range_check::LookupRangeCheck;
 
 type NoteCommitPiece = MessagePiece<
     pallas::Affine,
@@ -2036,6 +2037,7 @@ mod tests {
         sinsemilla::primitives::CommitDomain,
         utilities::lookup_range_check::LookupRangeCheckConfig,
     };
+    use halo2_gadgets::utilities::lookup_range_check::LookupRangeCheck;
 
     use ff::{Field, PrimeField, PrimeFieldBits};
     use group::Curve;

@@ -12,6 +12,7 @@ use halo2_proofs::{
     poly::Rotation,
     transcript::{Blake2bRead, Blake2bWrite},
 };
+use halo2_gadgets::utilities::lookup_range_check::LookupRangeCheck;
 use memuse::DynamicUsage;
 use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
 use rand::RngCore;
