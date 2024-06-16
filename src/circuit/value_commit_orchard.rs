@@ -4,9 +4,11 @@ pub(in crate::circuit) mod gadgets {
     use crate::constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
     };
+    use halo2_gadgets::utilities::lookup_range_check::PallasLookupConfigOptimized;
     use halo2_gadgets::{
         ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
-        sinsemilla::{self, chip::SinsemillaChip},
+        sinsemilla::{self, chip::SinsemillaChipOptimized},
+        utilities::lookup_range_check::LookupRangeCheck,
     };
     use halo2_proofs::{
         circuit::{AssignedCell, Chip, Layouter},
@@ -18,19 +20,25 @@ pub(in crate::circuit) mod gadgets {
     /// [Section 5.4.8.3 Homomorphic Pedersen commitments (Sapling and Orchard)]: https://zips.z.cash/protocol/protocol.pdf#concretehomomorphiccommit
     pub(in crate::circuit) fn value_commit_orchard(
         mut layouter: impl Layouter<pallas::Base>,
-        sinsemilla_chip: SinsemillaChip<
+        sinsemilla_chip: SinsemillaChipOptimized<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
         >,
-        ecc_chip: EccChip<OrchardFixedBases>,
+        ecc_chip: EccChip<OrchardFixedBases, PallasLookupConfigOptimized>,
         v_net_magnitude_sign: (
             AssignedCell<pallas::Base, pallas::Base>,
             AssignedCell<pallas::Base, pallas::Base>,
         ),
-        rcv: ScalarFixed<pallas::Affine, EccChip<OrchardFixedBases>>,
-        asset: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases>>,
-    ) -> Result<Point<pallas::Affine, EccChip<OrchardFixedBases>>, plonk::Error> {
+        rcv: ScalarFixed<pallas::Affine, EccChip<OrchardFixedBases, PallasLookupConfigOptimized>>,
+        asset: NonIdentityPoint<
+            pallas::Affine,
+            EccChip<OrchardFixedBases, PallasLookupConfigOptimized>,
+        >,
+    ) -> Result<
+        Point<pallas::Affine, EccChip<OrchardFixedBases, PallasLookupConfigOptimized>>,
+        plonk::Error,
+    > {
         // Check that magnitude is 64 bits.
         {
             let lookup_config = sinsemilla_chip.config().lookup_config();
@@ -103,11 +111,13 @@ mod tests {
             chip::{EccChip, EccConfig},
             NonIdentityPoint, ScalarFixed,
         },
-        sinsemilla::chip::{SinsemillaChip, SinsemillaConfig},
-        utilities::lookup_range_check::LookupRangeCheckConfig,
+        sinsemilla,
+        sinsemilla::chip::{SinsemillaChipOptimized, SinsemillaConfig},
+        utilities::lookup_range_check::LookupRangeCheckConfigOptimized,
     };
 
     use group::Curve;
+    use halo2_gadgets::utilities::lookup_range_check::PallasLookupConfigOptimized;
     use halo2_proofs::{
         circuit::{Layouter, SimpleFloorPlanner, Value},
         dev::MockProver,
@@ -123,11 +133,15 @@ mod tests {
         pub struct MyConfig {
             primary: Column<Instance>,
             advices: [Column<Advice>; 10],
-            ecc_config: EccConfig<OrchardFixedBases>,
+            ecc_config: EccConfig<OrchardFixedBases, PallasLookupConfigOptimized>,
             // Sinsemilla  config is only used to initialize the table_idx lookup table in the same
             // way as in the Orchard circuit
-            sinsemilla_config:
-                SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+            sinsemilla_config: SinsemillaConfig<
+                OrchardHashDomains,
+                OrchardCommitDomains,
+                OrchardFixedBases,
+                LookupRangeCheckConfigOptimized<pallas::Base, { sinsemilla::primitives::K }>,
+            >,
         }
         #[derive(Default)]
         struct MyCircuit {
@@ -174,7 +188,6 @@ mod tests {
                     table_idx,
                     meta.lookup_table_column(),
                     meta.lookup_table_column(),
-                    table_range_check_tag,
                 );
 
                 let lagrange_coeffs = [
@@ -189,14 +202,14 @@ mod tests {
                 ];
                 meta.enable_constant(lagrange_coeffs[0]);
 
-                let range_check = LookupRangeCheckConfig::configure(
+                let range_check = LookupRangeCheckConfigOptimized::configure_with_tag(
                     meta,
                     advices[9],
                     table_idx,
                     table_range_check_tag,
                 );
 
-                let sinsemilla_config = SinsemillaChip::configure(
+                let sinsemilla_config = SinsemillaChipOptimized::configure(
                     meta,
                     advices[..5].try_into().unwrap(),
                     advices[6],
@@ -208,12 +221,13 @@ mod tests {
                 MyConfig {
                     primary,
                     advices,
-                    ecc_config: EccChip::<OrchardFixedBases>::configure(
-                        meta,
-                        advices,
-                        lagrange_coeffs,
-                        range_check,
-                    ),
+                    ecc_config:
+                        EccChip::<OrchardFixedBases, PallasLookupConfigOptimized>::configure(
+                            meta,
+                            advices,
+                            lagrange_coeffs,
+                            range_check,
+                        ),
                     sinsemilla_config,
                 }
             }
@@ -224,12 +238,13 @@ mod tests {
                 mut layouter: impl Layouter<pallas::Base>,
             ) -> Result<(), Error> {
                 // Load the Sinsemilla generator lookup table.
-                SinsemillaChip::load(config.sinsemilla_config.clone(), &mut layouter)?;
+                SinsemillaChipOptimized::load(config.sinsemilla_config.clone(), &mut layouter)?;
 
                 // Construct an ECC chip
                 let ecc_chip = EccChip::construct(config.ecc_config);
 
-                let sinsemilla_chip = SinsemillaChip::construct(config.sinsemilla_config.clone());
+                let sinsemilla_chip =
+                    SinsemillaChipOptimized::construct(config.sinsemilla_config.clone());
 
                 // Witness the magnitude and sign of v_net = v_old - v_new
                 let v_net_magnitude_sign = {
