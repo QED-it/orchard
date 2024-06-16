@@ -163,7 +163,7 @@ pub fn hash_bundle_auth_empty() -> Blake2bHash {
 ///
 /// [zip227]: https://qed-it.github.io/zips/zip-0227
 pub fn hash_issue_bundle_auth_empty() -> Blake2bHash {
-    hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION).finalize()
+    hasher(ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION).finalize()
 }
 
 /// Construct the commitment for an absent issue bundle as defined in
