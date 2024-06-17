@@ -5,7 +5,7 @@ use orchard::{
     circuit::{OrchardCircuit, ProvingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    note_encryption::{CompactAction, OrchardDomain, OrchardDomainBase},
+    note_encryption::{CompactAction, OrchardDomain},
     orchard_flavors::{OrchardVanilla, OrchardZSA},
     value::NoteValue,
     Anchor, Bundle,
@@ -80,7 +80,7 @@ fn bench_note_decryption<D: OrchardDomain + OrchardCircuit + OrchardHash>(c: &mu
     };
     let action = bundle.actions().first();
 
-    let domain = OrchardDomainBase::for_action(action);
+    let domain = OrchardDomain::for_action(action);
 
     let compact = {
         let mut group = c.benchmark_group("note-decryption");
@@ -121,12 +121,12 @@ fn bench_note_decryption<D: OrchardDomain + OrchardCircuit + OrchardHash>(c: &mu
         let ivks = 2;
         let valid_ivks = vec![valid_ivk; ivks];
         let actions: Vec<_> = (0..100)
-            .map(|_| (OrchardDomainBase::for_action(action), action.clone()))
+            .map(|_| (OrchardDomain::for_action(action), action.clone()))
             .collect();
         let compact: Vec<_> = (0..100)
             .map(|_| {
                 (
-                    OrchardDomainBase::for_action(action),
+                    OrchardDomain::for_action(action),
                     CompactAction::from(action),
                 )
             })

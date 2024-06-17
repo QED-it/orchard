@@ -20,7 +20,7 @@ use crate::{
     circuit::{Instance, Proof, VerifyingKey},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    note_encryption::{OrchardDomain, OrchardDomainBase},
+    note_encryption::OrchardDomain,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
     value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -365,7 +365,7 @@ impl<A: Authorization, V, D: OrchardDomain> Bundle<A, V, D> {
             .iter()
             .enumerate()
             .filter_map(|(idx, action)| {
-                let domain = OrchardDomainBase::for_action(action);
+                let domain = OrchardDomain::for_action(action);
                 prepared_keys.iter().find_map(|(ivk, prepared_ivk)| {
                     try_note_decryption(&domain, prepared_ivk, action)
                         .map(|(n, a, m)| (idx, (*ivk).clone(), n, a, m))
@@ -384,7 +384,7 @@ impl<A: Authorization, V, D: OrchardDomain> Bundle<A, V, D> {
     ) -> Option<(Note, Address, [u8; 512])> {
         let prepared_ivk = PreparedIncomingViewingKey::new(key);
         self.actions.get(action_idx).and_then(move |action| {
-            let domain = OrchardDomainBase::for_action(action);
+            let domain = OrchardDomain::for_action(action);
             try_note_decryption(&domain, &prepared_ivk, action)
         })
     }
@@ -401,7 +401,7 @@ impl<A: Authorization, V, D: OrchardDomain> Bundle<A, V, D> {
             .iter()
             .enumerate()
             .filter_map(|(idx, action)| {
-                let domain = OrchardDomainBase::for_action(action);
+                let domain = OrchardDomain::for_action(action);
                 keys.iter().find_map(move |key| {
                     try_output_recovery_with_ovk(
                         &domain,
@@ -425,7 +425,7 @@ impl<A: Authorization, V, D: OrchardDomain> Bundle<A, V, D> {
         key: &OutgoingViewingKey,
     ) -> Option<(Note, Address, [u8; 512])> {
         self.actions.get(action_idx).and_then(move |action| {
-            let domain = OrchardDomainBase::for_action(action);
+            let domain = OrchardDomain::for_action(action);
             try_output_recovery_with_ovk(
                 &domain,
                 key,

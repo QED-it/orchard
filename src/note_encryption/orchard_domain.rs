@@ -46,7 +46,6 @@ pub trait NoteBytes:
     + for<'a> From<(&'a [u8], &'a [u8])>
     + Clone
     + Copy
-    + Send
 {
 }
 
@@ -74,6 +73,31 @@ pub trait OrchardDomain: fmt::Debug + Clone {
 
     /// Builds NotePlaintextBytes from Note and Memo.
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes;
+
+    /// Constructs a domain that can be used to trial-decrypt this action's output note.
+    fn for_action<T>(act: &Action<T, Self>) -> OrchardDomainBase<Self> {
+        OrchardDomainBase::<Self> {
+            rho: act.rho(),
+            phantom: Default::default(),
+        }
+    }
+
+    /// Constructs a domain that can be used to trial-decrypt this action's output note.
+    fn for_compact_action(act: &CompactAction<Self>) -> OrchardDomainBase<Self> {
+        OrchardDomainBase::<Self> {
+            rho: act.rho(),
+            phantom: Default::default(),
+        }
+    }
+
+    /// Constructs a domain from a rho.
+    #[cfg(test)]
+    fn for_rho(rho: Rho) -> OrchardDomainBase<Self> {
+        OrchardDomainBase::<Self> {
+            rho,
+            phantom: Default::default(),
+        }
+    }
 }
 
 /// Orchard-specific note encryption logic.
@@ -84,6 +108,7 @@ pub struct OrchardDomainBase<D: OrchardDomain> {
     phantom: std::marker::PhantomData<D>,
 }
 
+/*
 impl<D: OrchardDomain> OrchardDomainBase<D> {
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
     pub fn for_action<T>(act: &Action<T, D>) -> Self {
@@ -110,3 +135,4 @@ impl<D: OrchardDomain> OrchardDomainBase<D> {
         }
     }
 }
+*/

@@ -59,7 +59,7 @@ mod tests {
             parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
             NOTE_VERSION_BYTE_VANILLA,
         },
-        orchard_domain::{NoteBytesData, OrchardDomainBase},
+        orchard_domain::{NoteBytesData, OrchardDomain, OrchardDomainBase},
     };
 
     type OrchardDomainVanilla = OrchardDomainBase<OrchardVanilla>;
@@ -80,7 +80,7 @@ mod tests {
             let plaintext = OrchardDomainVanilla::note_plaintext_bytes(&note, memo);
 
             // Decode.
-            let domain = OrchardDomainVanilla::for_rho(rho);
+            let domain = OrchardVanilla::for_rho(rho);
             let parsed_version = parse_note_version(plaintext.as_ref()).unwrap();
             let (compact, parsed_memo) = domain.extract_memo(&plaintext);
 
@@ -169,7 +169,7 @@ mod tests {
             // (Tested first because it only requires immutable references.)
             //
 
-            let domain = OrchardDomainBase::for_rho(rho);
+            let domain = OrchardDomain::for_rho(rho);
 
             match try_note_decryption(&domain, &ivk, &action) {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {

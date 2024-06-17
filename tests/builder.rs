@@ -6,7 +6,7 @@ use orchard::{
     circuit::{OrchardCircuit, ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
-    note_encryption::{OrchardDomain, OrchardDomainBase},
+    note_encryption::OrchardDomain,
     orchard_flavors::{OrchardVanilla, OrchardZSA},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
@@ -107,7 +107,7 @@ fn bundle_chain<D: OrchardDomain + OrchardCircuit + OrchardHash>() {
             .actions()
             .iter()
             .find_map(|action| {
-                let domain = OrchardDomainBase::for_action(action);
+                let domain = OrchardDomain::for_action(action);
                 try_note_decryption(&domain, &ivk, action)
             })
             .unwrap();
