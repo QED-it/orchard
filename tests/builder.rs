@@ -107,7 +107,7 @@ fn bundle_chain<D: OrchardDomain + OrchardCircuit + OrchardHash>() {
             .actions()
             .iter()
             .find_map(|action| {
-                let domain = OrchardDomainBase::<D>::for_action(action);
+                let domain = OrchardDomainBase::for_action(action);
                 try_note_decryption(&domain, &ivk, action)
             })
             .unwrap();

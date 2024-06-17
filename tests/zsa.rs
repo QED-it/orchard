@@ -22,8 +22,6 @@ use rand::rngs::OsRng;
 use std::collections::HashSet;
 use zcash_note_encryption_zsa::try_note_decryption;
 
-type OrchardDomainZSA = OrchardDomainBase<OrchardZSA>;
-
 #[derive(Debug)]
 struct Keychain {
     pk: ProvingKey,
@@ -209,7 +207,7 @@ fn create_native_note(keys: &Keychain) -> Note {
         .actions()
         .iter()
         .find_map(|action| {
-            let domain = OrchardDomainZSA::for_action(action);
+            let domain = OrchardDomainBase::for_action(action);
             try_note_decryption(&domain, &PreparedIncomingViewingKey::new(&ivk), action)
         })
         .unwrap();

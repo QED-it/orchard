@@ -1,10 +1,12 @@
 //! This module implements the note encryption logic specific for the `OrchardVanilla` flavor.
 
-use crate::{orchard_flavors::OrchardVanilla, Note};
+use crate::{note::Note, orchard_flavors::OrchardVanilla};
 
 use super::{
-    build_base_note_plaintext_bytes, note_bytes::NoteBytesData, Memo, OrchardDomain,
-    COMPACT_NOTE_SIZE_VANILLA,
+    domain::{
+        build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_VANILLA,
+    },
+    orchard_domain::{NoteBytesData, OrchardDomain},
 };
 
 impl OrchardDomain for OrchardVanilla {
@@ -16,7 +18,7 @@ impl OrchardDomain for OrchardVanilla {
     type CompactNoteCiphertextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
 
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes {
-        let mut np = build_base_note_plaintext_bytes(0x02, note);
+        let mut np = build_base_note_plaintext_bytes(NOTE_VERSION_BYTE_VANILLA, note);
 
         np[COMPACT_NOTE_SIZE_VANILLA..].copy_from_slice(memo);
 
@@ -27,6 +29,7 @@ impl OrchardDomain for OrchardVanilla {
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
+
     use rand::rngs::OsRng;
 
     use zcash_note_encryption_zsa::{
@@ -36,25 +39,27 @@ mod tests {
 
     use crate::{
         action::Action,
+        address::Address,
         keys::{
             DiversifiedTransmissionKey, Diversifier, EphemeralSecretKey, IncomingViewingKey,
             OutgoingViewingKey, PreparedIncomingViewingKey,
         },
         note::{
-            testing::arb_native_note, AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed,
-            Rho, TransmittedNoteCiphertext,
+            testing::arb_native_note, AssetBase, ExtractedNoteCommitment, Note, Nullifier,
+            RandomSeed, Rho, TransmittedNoteCiphertext,
         },
+        orchard_flavors::OrchardVanilla,
         primitives::redpallas,
         value::{NoteValue, ValueCommitment},
-        Address, Note,
     };
 
-    use super::{
-        super::{
-            compact_action::CompactAction, note_version, parse_note_plaintext_without_memo,
-            prf_ock_orchard, OrchardDomainBase,
+    use super::super::{
+        compact_action::CompactAction,
+        domain::{
+            parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
+            NOTE_VERSION_BYTE_VANILLA,
         },
-        {NoteBytesData, OrchardVanilla},
+        orchard_domain::{NoteBytesData, OrchardDomainBase},
     };
 
     type OrchardDomainVanilla = OrchardDomainBase<OrchardVanilla>;
@@ -76,7 +81,7 @@ mod tests {
 
             // Decode.
             let domain = OrchardDomainVanilla::for_rho(rho);
-            let parsed_version = note_version(plaintext.as_ref()).unwrap();
+            let parsed_version = parse_note_version(plaintext.as_ref()).unwrap();
             let (compact, parsed_memo) = domain.extract_memo(&plaintext);
 
             let (parsed_note, parsed_recipient) = parse_note_plaintext_without_memo(rho, &compact,
@@ -90,7 +95,7 @@ mod tests {
             assert_eq!(parsed_note, note);
             assert_eq!(parsed_recipient, note.recipient());
             assert_eq!(&parsed_memo, memo);
-            assert_eq!(parsed_version, 0x02);
+            assert_eq!(parsed_version, NOTE_VERSION_BYTE_VANILLA);
         }
     }
 
@@ -150,7 +155,7 @@ mod tests {
                 // We don't need a valid rk for this test.
                 redpallas::VerificationKey::dummy(),
                 cmx,
-                TransmittedNoteCiphertext {
+                TransmittedNoteCiphertext::<OrchardVanilla> {
                     epk_bytes: ephemeral_key.0,
                     enc_ciphertext: NoteBytesData(tv.c_enc),
                     out_ciphertext: tv.c_out,
@@ -164,7 +169,7 @@ mod tests {
             // (Tested first because it only requires immutable references.)
             //
 
-            let domain = OrchardDomainVanilla::for_rho(rho);
+            let domain = OrchardDomainBase::for_rho(rho);
 
             match try_note_decryption(&domain, &ivk, &action) {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {

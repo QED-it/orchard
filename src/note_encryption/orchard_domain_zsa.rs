@@ -1,10 +1,13 @@
 //! This module implements the note encryption logic specific for the `OrchardZSA` flavor.
 
-use crate::{orchard_flavors::OrchardZSA, Note};
+use crate::{note::Note, orchard_flavors::OrchardZSA};
 
 use super::{
-    build_base_note_plaintext_bytes, note_bytes::NoteBytesData, Memo, OrchardDomain,
-    COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
+    domain::{
+        build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
+        NOTE_VERSION_BYTE_ZSA,
+    },
+    orchard_domain::{NoteBytesData, OrchardDomain},
 };
 
 impl OrchardDomain for OrchardZSA {
@@ -16,7 +19,7 @@ impl OrchardDomain for OrchardZSA {
     type CompactNoteCiphertextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
 
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes {
-        let mut np = build_base_note_plaintext_bytes(0x03, note);
+        let mut np = build_base_note_plaintext_bytes(NOTE_VERSION_BYTE_ZSA, note);
 
         np[COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA]
             .copy_from_slice(&note.asset().to_bytes());
@@ -29,6 +32,7 @@ impl OrchardDomain for OrchardZSA {
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
+
     use rand::rngs::OsRng;
 
     use zcash_note_encryption_zsa::{
@@ -38,25 +42,27 @@ mod tests {
 
     use crate::{
         action::Action,
+        address::Address,
         keys::{
             DiversifiedTransmissionKey, Diversifier, EphemeralSecretKey, IncomingViewingKey,
             OutgoingViewingKey, PreparedIncomingViewingKey,
         },
         note::{
-            testing::arb_note, AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho,
-            TransmittedNoteCiphertext,
+            testing::arb_note, AssetBase, ExtractedNoteCommitment, Note, Nullifier, RandomSeed,
+            Rho, TransmittedNoteCiphertext,
         },
+        orchard_flavors::OrchardZSA,
         primitives::redpallas,
         value::{NoteValue, ValueCommitment},
-        Address, Note,
     };
 
-    use super::{
-        super::{
-            compact_action::CompactAction, note_version, parse_note_plaintext_without_memo,
-            prf_ock_orchard, OrchardDomainBase,
+    use super::super::{
+        compact_action::CompactAction,
+        domain::{
+            parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
+            NOTE_VERSION_BYTE_ZSA,
         },
-        NoteBytesData, OrchardZSA,
+        orchard_domain::{NoteBytesData, OrchardDomainBase},
     };
 
     type OrchardDomainZSA = OrchardDomainBase<OrchardZSA>;
@@ -77,7 +83,7 @@ mod tests {
 
             // Decode.
             let domain = OrchardDomainZSA::for_rho(rho);
-            let parsed_version = note_version(plaintext.as_ref()).unwrap();
+            let parsed_version = parse_note_version(plaintext.as_ref()).unwrap();
             let (compact, parsed_memo) = domain.extract_memo(&plaintext);
 
             let (parsed_note, parsed_recipient) = parse_note_plaintext_without_memo(rho, &compact,
@@ -91,7 +97,7 @@ mod tests {
             assert_eq!(parsed_note, note);
             assert_eq!(parsed_recipient, note.recipient());
             assert_eq!(&parsed_memo, memo);
-            assert_eq!(parsed_version, 0x03);
+            assert_eq!(parsed_version, NOTE_VERSION_BYTE_ZSA);
         }
     }
 
@@ -151,7 +157,7 @@ mod tests {
                 // We don't need a valid rk for this test.
                 redpallas::VerificationKey::dummy(),
                 cmx,
-                TransmittedNoteCiphertext {
+                TransmittedNoteCiphertext::<OrchardZSA> {
                     epk_bytes: ephemeral_key.0,
                     enc_ciphertext: NoteBytesData(tv.c_enc),
                     out_ciphertext: tv.c_out,
@@ -165,7 +171,7 @@ mod tests {
             // (Tested first because it only requires immutable references.)
             //
 
-            let domain = OrchardDomainZSA::for_rho(rho);
+            let domain = OrchardDomainBase::for_rho(rho);
 
             match try_note_decryption(&domain, &ivk, &action) {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {

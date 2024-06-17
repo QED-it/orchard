@@ -1,15 +1,17 @@
 //! Defines actions for Orchard shielded outputs and compact action for light clients.
 
+// FIXME: move to upper (src) folder?
+
 use std::fmt;
 
-use zcash_note_encryption_zsa::ShieldedOutput;
+use zcash_note_encryption_zsa::{EphemeralKeyBytes, ShieldedOutput};
 
 use crate::{
     action::Action,
-    note::{ExtractedNoteCommitment, Nullifier},
+    note::{ExtractedNoteCommitment, Nullifier, Rho},
 };
 
-use super::{EphemeralKeyBytes, OrchardDomain, OrchardDomainBase, Rho};
+use super::orchard_domain::{OrchardDomain, OrchardDomainBase};
 
 impl<A, D: OrchardDomain> ShieldedOutput<OrchardDomainBase<D>> for Action<A, D> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
@@ -111,13 +113,14 @@ impl<D: OrchardDomain> CompactAction<D> {
 #[cfg(feature = "test-dependencies")]
 pub mod testing {
     use rand::RngCore;
+
     use zcash_note_encryption_zsa::{Domain, NoteEncryption};
 
     use crate::{
+        address::Address,
         keys::OutgoingViewingKey,
-        note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
+        note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, RandomSeed, Rho},
         value::NoteValue,
-        Address, Note,
     };
 
     use super::{CompactAction, OrchardDomain, OrchardDomainBase};
