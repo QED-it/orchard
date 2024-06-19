@@ -48,7 +48,7 @@ pub trait OrchardDomain: fmt::Debug + Clone {
 pub struct OrchardDomainBase<D: OrchardDomain> {
     /// Represents a nullifier which is used to prevent double spending within the Orchard protocol.
     pub rho: Rho,
-    phantom: std::marker::PhantomData<D>,
+    phantom: std::marker::PhantomData<fn() -> D>,
 }
 
 impl<D: OrchardDomain> OrchardDomainBase<D> {

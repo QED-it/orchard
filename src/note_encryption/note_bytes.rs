@@ -38,7 +38,7 @@ pub trait NoteByteConcat: for<'a> From<(&'a [u8], &'a [u8])> {}
 impl<const N: usize> NoteByteConcat for NoteBytes<N> {}
 
 /// Defines the behavior for types that can provide read-only access to their internal byte array.
-pub trait NoteByteReader: AsRef<[u8]> + for<'a> From<&'a [u8]> + Clone + Copy {}
+pub trait NoteByteReader: AsRef<[u8]> + for<'a> From<&'a [u8]> + Clone + Copy + Send {}
 
 impl<const N: usize> NoteByteReader for NoteBytes<N> {}
 
