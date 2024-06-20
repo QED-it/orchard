@@ -19,7 +19,7 @@ use halo2_gadgets::{
             MerklePath,
         },
     },
-    utilities::lookup_range_check::LookupRangeCheckConfig,
+    utilities::lookup_range_check::{LookupRangeCheck, LookupRangeCheckConfig},
 };
 
 use halo2_proofs::{
@@ -143,7 +143,6 @@ impl OrchardCircuit for OrchardVanilla {
             table_idx,
             meta.lookup_table_column(),
             meta.lookup_table_column(),
-            None,
         );
 
         // Instance column used for public inputs
@@ -179,7 +178,7 @@ impl OrchardCircuit for OrchardVanilla {
 
         // We have a lot of free space in the right-most advice columns; use one of them
         // for all of our range checks.
-        let range_check = LookupRangeCheckConfig::configure(meta, advices[9], table_idx, None);
+        let range_check = LookupRangeCheckConfig::configure(meta, advices[9], table_idx);
 
         // Configuration for curve point operations.
         // This uses 10 advice columns and spans the whole circuit.

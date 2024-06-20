@@ -24,7 +24,9 @@ use halo2_gadgets::{
         CommitDomain, Message, MessagePiece,
     },
     utilities::{
-        bool_check, lookup_range_check::LookupRangeCheckConfig, FieldValue, RangeConstrained,
+        bool_check,
+        lookup_range_check::{LookupRangeCheck, LookupRangeCheckConfig},
+        FieldValue, RangeConstrained,
     },
 };
 
@@ -2036,7 +2038,7 @@ mod tests {
         },
         sinsemilla::chip::SinsemillaChip,
         sinsemilla::primitives::CommitDomain,
-        utilities::lookup_range_check::LookupRangeCheckConfig,
+        utilities::lookup_range_check::{LookupRangeCheck, LookupRangeCheckConfig},
     };
 
     use ff::{Field, PrimeField, PrimeFieldBits};
@@ -2097,7 +2099,6 @@ mod tests {
                     table_idx,
                     meta.lookup_table_column(),
                     meta.lookup_table_column(),
-                    None,
                 );
                 let lagrange_coeffs = [
                     meta.fixed_column(),
@@ -2110,8 +2111,7 @@ mod tests {
                     meta.fixed_column(),
                 ];
 
-                let range_check =
-                    LookupRangeCheckConfig::configure(meta, advices[9], table_idx, None);
+                let range_check = LookupRangeCheckConfig::configure(meta, advices[9], table_idx);
                 let sinsemilla_config = SinsemillaChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,

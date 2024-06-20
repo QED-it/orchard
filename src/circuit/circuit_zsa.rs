@@ -15,16 +15,16 @@ use halo2_gadgets::{
     },
     poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
     sinsemilla::{
-        chip::{SinsemillaChip, SinsemillaConfig},
+        chip::{SinsemillaChipOptimized, SinsemillaConfig},
         merkle::{
-            chip::{MerkleChip, MerkleConfig},
+            chip::{MerkleChipOptimized, MerkleConfig},
             MerklePath,
         },
     },
     utilities::{
         bool_check,
         cond_swap::{CondSwapChip, CondSwapConfig},
-        lookup_range_check::LookupRangeCheckConfig,
+        lookup_range_check::{LookupRangeCheckConfigOptimized, PallasLookupConfigOptimized},
     },
 };
 
@@ -69,14 +69,32 @@ pub struct Config {
     q_orchard: Selector,
     advices: [Column<Advice>; 10],
     add_config: AddConfig,
-    ecc_config: EccConfig<OrchardFixedBases>,
+    ecc_config: EccConfig<OrchardFixedBases, PallasLookupConfigOptimized>,
     poseidon_config: PoseidonConfig<pallas::Base, 3, 2>,
-    merkle_config_1: MerkleConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    merkle_config_2: MerkleConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    sinsemilla_config_1:
-        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    sinsemilla_config_2:
-        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+    merkle_config_1: MerkleConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupConfigOptimized,
+    >,
+    merkle_config_2: MerkleConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupConfigOptimized,
+    >,
+    sinsemilla_config_1: SinsemillaConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupConfigOptimized,
+    >,
+    sinsemilla_config_2: SinsemillaConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupConfigOptimized,
+    >,
     commit_ivk_config: CommitIvkConfig,
     old_note_commit_config: NoteCommitConfig,
     new_note_commit_config: NoteCommitConfig,
@@ -224,7 +242,6 @@ impl OrchardCircuit for OrchardZSA {
             table_idx,
             meta.lookup_table_column(),
             meta.lookup_table_column(),
-            Some(table_range_check_tag),
         );
 
         // Instance column used for public inputs
@@ -260,17 +277,21 @@ impl OrchardCircuit for OrchardZSA {
 
         // We have a lot of free space in the right-most advice columns; use one of them
         // for all of our range checks.
-        let range_check = LookupRangeCheckConfig::configure(
+        let range_check = LookupRangeCheckConfigOptimized::configure_with_tag(
             meta,
             advices[9],
             table_idx,
-            Some(table_range_check_tag),
+            table_range_check_tag,
         );
 
         // Configuration for curve point operations.
         // This uses 10 advice columns and spans the whole circuit.
-        let ecc_config =
-            EccChip::<OrchardFixedBases>::configure(meta, advices, lagrange_coeffs, range_check);
+        let ecc_config = EccChip::<OrchardFixedBases, PallasLookupConfigOptimized>::configure(
+            meta,
+            advices,
+            lagrange_coeffs,
+            range_check,
+        );
 
         // Configuration for the Poseidon hash.
         let poseidon_config = PoseidonChip::configure::<poseidon::P128Pow5T3>(
@@ -288,7 +309,7 @@ impl OrchardCircuit for OrchardZSA {
         // Since the Sinsemilla config uses only 5 advice columns,
         // we can fit two instances side-by-side.
         let (sinsemilla_config_1, merkle_config_1) = {
-            let sinsemilla_config_1 = SinsemillaChip::configure(
+            let sinsemilla_config_1 = SinsemillaChipOptimized::configure(
                 meta,
                 advices[..5].try_into().unwrap(),
                 advices[6],
@@ -296,7 +317,7 @@ impl OrchardCircuit for OrchardZSA {
                 lookup,
                 range_check,
             );
-            let merkle_config_1 = MerkleChip::configure(meta, sinsemilla_config_1.clone());
+            let merkle_config_1 = MerkleChipOptimized::configure(meta, sinsemilla_config_1.clone());
 
             (sinsemilla_config_1, merkle_config_1)
         };
@@ -306,7 +327,7 @@ impl OrchardCircuit for OrchardZSA {
         // Since the Sinsemilla config uses only 5 advice columns,
         // we can fit two instances side-by-side.
         let (sinsemilla_config_2, merkle_config_2) = {
-            let sinsemilla_config_2 = SinsemillaChip::configure(
+            let sinsemilla_config_2 = SinsemillaChipOptimized::configure(
                 meta,
                 advices[5..].try_into().unwrap(),
                 advices[7],
@@ -314,7 +335,7 @@ impl OrchardCircuit for OrchardZSA {
                 lookup,
                 range_check,
             );
-            let merkle_config_2 = MerkleChip::configure(meta, sinsemilla_config_2.clone());
+            let merkle_config_2 = MerkleChipOptimized::configure(meta, sinsemilla_config_2.clone());
 
             (sinsemilla_config_2, merkle_config_2)
         };
@@ -360,7 +381,7 @@ impl OrchardCircuit for OrchardZSA {
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
         // Load the Sinsemilla generator lookup table used by the whole circuit.
-        SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
+        SinsemillaChipOptimized::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
         // Construct the ECC chip.
         let ecc_chip = config.ecc_chip();

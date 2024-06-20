@@ -14,8 +14,8 @@ use halo2_gadgets::{
         primitives::{self as poseidon, ConstantLength},
         Hash as PoseidonHash, PoseidonSpongeInstructions, Pow5Chip as PoseidonChip,
     },
-    sinsemilla::{chip::SinsemillaChip, merkle::chip::MerkleChip},
-    utilities::cond_swap::CondSwapChip,
+    sinsemilla::{chip::SinsemillaChipOptimized, merkle::chip::MerkleChipOptimized},
+    utilities::{cond_swap::CondSwapChip, lookup_range_check::PallasLookupConfigOptimized},
 };
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Value},
@@ -31,32 +31,32 @@ impl super::Config {
         CommitIvkChip::construct(self.commit_ivk_config.clone())
     }
 
-    pub(super) fn ecc_chip(&self) -> EccChip<OrchardFixedBases> {
+    pub(super) fn ecc_chip(&self) -> EccChip<OrchardFixedBases, PallasLookupConfigOptimized> {
         EccChip::construct(self.ecc_config.clone())
     }
 
     pub(super) fn sinsemilla_chip_1(
         &self,
-    ) -> SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        SinsemillaChip::construct(self.sinsemilla_config_1.clone())
+    ) -> SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
+        SinsemillaChipOptimized::construct(self.sinsemilla_config_1.clone())
     }
 
     pub(super) fn sinsemilla_chip_2(
         &self,
-    ) -> SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        SinsemillaChip::construct(self.sinsemilla_config_2.clone())
+    ) -> SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
+        SinsemillaChipOptimized::construct(self.sinsemilla_config_2.clone())
     }
 
     pub(super) fn merkle_chip_1(
         &self,
-    ) -> MerkleChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        MerkleChip::construct(self.merkle_config_1.clone())
+    ) -> MerkleChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
+        MerkleChipOptimized::construct(self.merkle_config_1.clone())
     }
 
     pub(super) fn merkle_chip_2(
         &self,
-    ) -> MerkleChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        MerkleChip::construct(self.merkle_config_2.clone())
+    ) -> MerkleChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
+        MerkleChipOptimized::construct(self.merkle_config_2.clone())
     }
 
     pub(super) fn poseidon_chip(&self) -> PoseidonChip<pallas::Base, 3, 2> {
