@@ -21,7 +21,7 @@ use crate::{
     value::{NoteValue, ValueCommitment},
 };
 
-use super::orchard_domain::{OrchardDomain, OrchardDomainBase};
+use super::orchard_domain::{OrchardDomain, OrchardNoteEnc};
 
 // FIXME: fix it to be "git mv" from the origina tone_encryption.rs and reorder elements
 // to reduce git diff
@@ -161,7 +161,7 @@ pub(super) fn build_base_note_plaintext_bytes<const NOTE_PLAINTEXT_SIZE: usize>(
     np
 }
 
-impl<D: OrchardDomain> Domain for OrchardDomainBase<D> {
+impl<D: OrchardNoteEnc> Domain for OrchardDomain<D> {
     type EphemeralSecretKey = EphemeralSecretKey;
     type EphemeralPublicKey = EphemeralPublicKey;
     type PreparedEphemeralPublicKey = PreparedEphemeralPublicKey;
@@ -293,7 +293,7 @@ impl<D: OrchardDomain> Domain for OrchardDomainBase<D> {
     }
 }
 
-impl<D: OrchardDomain> BatchDomain for OrchardDomainBase<D> {
+impl<D: OrchardNoteEnc> BatchDomain for OrchardDomain<D> {
     fn batch_kdf<'a>(
         items: impl Iterator<Item = (Option<Self::SharedSecret>, &'a EphemeralKeyBytes)>,
     ) -> Vec<Option<Self::SymmetricKey>> {

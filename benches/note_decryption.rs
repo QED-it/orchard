@@ -1,12 +1,11 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use orchard::{
     builder::{Builder, BundleType},
-    bundle::OrchardHash,
-    circuit::{OrchardCircuit, ProvingKey},
+    circuit::ProvingKey,
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    note_encryption::{CompactAction, OrchardDomain, OrchardDomainBase},
-    orchard_flavors::{OrchardVanilla, OrchardZSA},
+    note_encryption::{CompactAction, OrchardDomain},
+    orchard_flavors::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     value::NoteValue,
     Anchor, Bundle,
 };
@@ -16,7 +15,7 @@ use zcash_note_encryption_zsa::{batch, try_compact_note_decryption, try_note_dec
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 
-fn bench_note_decryption<D: OrchardDomain + OrchardCircuit + OrchardHash>(c: &mut Criterion) {
+fn bench_note_decryption<D: OrchardFlavor>(c: &mut Criterion) {
     let rng = OsRng;
     let pk = ProvingKey::build::<D>();
 
@@ -80,7 +79,7 @@ fn bench_note_decryption<D: OrchardDomain + OrchardCircuit + OrchardHash>(c: &mu
     };
     let action = bundle.actions().first();
 
-    let domain = OrchardDomainBase::for_action(action);
+    let domain = OrchardDomain::for_action(action);
 
     let compact = {
         let mut group = c.benchmark_group("note-decryption");
@@ -121,12 +120,12 @@ fn bench_note_decryption<D: OrchardDomain + OrchardCircuit + OrchardHash>(c: &mu
         let ivks = 2;
         let valid_ivks = vec![valid_ivk; ivks];
         let actions: Vec<_> = (0..100)
-            .map(|_| (OrchardDomainBase::for_action(action), action.clone()))
+            .map(|_| (OrchardDomain::for_action(action), action.clone()))
             .collect();
         let compact: Vec<_> = (0..100)
             .map(|_| {
                 (
-                    OrchardDomainBase::for_action(action),
+                    OrchardDomain::for_action(action),
                     CompactAction::from(action),
                 )
             })

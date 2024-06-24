@@ -6,10 +6,10 @@ use super::{
     domain::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_VANILLA,
     },
-    orchard_domain::{NoteBytesData, OrchardDomain},
+    orchard_domain::{NoteBytesData, OrchardNoteEnc},
 };
 
-impl OrchardDomain for OrchardVanilla {
+impl OrchardNoteEnc for OrchardVanilla {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_VANILLA;
 
     type NotePlaintextBytes = NoteBytesData<{ Self::NOTE_PLAINTEXT_SIZE }>;
@@ -59,10 +59,10 @@ mod tests {
             parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
             NOTE_VERSION_BYTE_VANILLA,
         },
-        orchard_domain::{NoteBytesData, OrchardDomainBase},
+        orchard_domain::{NoteBytesData, OrchardDomain},
     };
 
-    type OrchardDomainVanilla = OrchardDomainBase<OrchardVanilla>;
+    type OrchardDomainVanilla = OrchardDomain<OrchardVanilla>;
 
     /// Implementation of in-band secret distribution for Orchard bundles.
     pub type OrchardNoteEncryptionVanilla =
@@ -169,7 +169,7 @@ mod tests {
             // (Tested first because it only requires immutable references.)
             //
 
-            let domain = OrchardDomainBase::for_rho(rho);
+            let domain = OrchardDomain::for_rho(rho);
 
             match try_note_decryption(&domain, &ivk, &action) {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {

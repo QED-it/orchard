@@ -11,7 +11,6 @@ mod orchard_domain;
 mod orchard_domain_vanilla;
 mod orchard_domain_zsa;
 
-pub use {
-    compact_action::CompactAction,
-    orchard_domain::{OrchardDomain, OrchardDomainBase},
-};
+pub(crate) use orchard_domain::OrchardNoteEnc;
+
+pub use {compact_action::CompactAction, orchard_domain::OrchardDomain};

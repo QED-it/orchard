@@ -73,8 +73,8 @@ pub trait OrchardCircuit: Sized + Default {
     ) -> Result<(), plonk::Error>;
 }
 
-impl<D: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<D> {
-    type Config = D::Config;
+impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
+    type Config = C::Config;
     type FloorPlanner = floor_planner::V1;
 
     fn without_witnesses(&self) -> Self {
@@ -82,7 +82,7 @@ impl<D: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<D> {
     }
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
-        D::configure(meta)
+        C::configure(meta)
     }
 
     fn synthesize(
@@ -90,7 +90,7 @@ impl<D: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<D> {
         config: Self::Config,
         layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
-        D::synthesize(self, config, layouter)
+        C::synthesize(self, config, layouter)
     }
 }
 
@@ -203,9 +203,9 @@ pub struct VerifyingKey {
 
 impl VerifyingKey {
     /// Builds the verifying key.
-    pub fn build<D: OrchardCircuit>() -> Self {
+    pub fn build<C: OrchardCircuit>() -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
-        let circuit: Circuit<D> = Default::default();
+        let circuit: Circuit<C> = Default::default();
 
         let vk = plonk::keygen_vk(&params, &circuit).unwrap();
 
@@ -222,9 +222,9 @@ pub struct ProvingKey {
 
 impl ProvingKey {
     /// Builds the proving key.
-    pub fn build<D: OrchardCircuit>() -> Self {
+    pub fn build<C: OrchardCircuit>() -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
-        let circuit: Circuit<D> = Default::default();
+        let circuit: Circuit<C> = Default::default();
 
         let vk = plonk::keygen_vk(&params, &circuit).unwrap();
         let pk = plonk::keygen_pk(&params, vk, &circuit).unwrap();
@@ -338,9 +338,9 @@ impl DynamicUsage for Proof {
 
 impl Proof {
     /// Creates a proof for the given circuits and instances.
-    pub fn create<D: OrchardCircuit>(
+    pub fn create<C: OrchardCircuit>(
         pk: &ProvingKey,
-        circuits: &[Circuit<D>],
+        circuits: &[Circuit<C>],
         instances: &[Instance],
         mut rng: impl RngCore,
     ) -> Result<Self, plonk::Error> {

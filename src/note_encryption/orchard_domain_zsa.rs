@@ -7,10 +7,10 @@ use super::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
         NOTE_VERSION_BYTE_ZSA,
     },
-    orchard_domain::{NoteBytesData, OrchardDomain},
+    orchard_domain::{NoteBytesData, OrchardNoteEnc},
 };
 
-impl OrchardDomain for OrchardZSA {
+impl OrchardNoteEnc for OrchardZSA {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_ZSA;
 
     type NotePlaintextBytes = NoteBytesData<{ Self::NOTE_PLAINTEXT_SIZE }>;
@@ -62,10 +62,10 @@ mod tests {
             parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
             NOTE_VERSION_BYTE_ZSA,
         },
-        orchard_domain::{NoteBytesData, OrchardDomainBase},
+        orchard_domain::{NoteBytesData, OrchardDomain},
     };
 
-    type OrchardDomainZSA = OrchardDomainBase<OrchardZSA>;
+    type OrchardDomainZSA = OrchardDomain<OrchardZSA>;
 
     /// Implementation of in-band secret distribution for Orchard bundles.
     pub type OrchardNoteEncryptionZSA = zcash_note_encryption_zsa::NoteEncryption<OrchardDomainZSA>;
@@ -171,7 +171,7 @@ mod tests {
             // (Tested first because it only requires immutable references.)
             //
 
-            let domain = OrchardDomainBase::for_rho(rho);
+            let domain = OrchardDomain::for_rho(rho);
 
             match try_note_decryption(&domain, &ivk, &action) {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {

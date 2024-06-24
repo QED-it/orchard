@@ -8,18 +8,16 @@ use pprof::criterion::{Output, PProfProfiler};
 
 use orchard::{
     builder::{Builder, BundleType},
-    bundle::OrchardHash,
-    circuit::{OrchardCircuit, ProvingKey, VerifyingKey},
+    circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    note_encryption::OrchardDomain,
-    orchard_flavors::{OrchardVanilla, OrchardZSA},
+    orchard_flavors::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     value::NoteValue,
     Anchor, Bundle,
 };
 use rand::rngs::OsRng;
 
-fn criterion_benchmark<D: OrchardDomain + OrchardCircuit + OrchardHash>(c: &mut Criterion) {
+fn criterion_benchmark<D: OrchardFlavor>(c: &mut Criterion) {
     let rng = OsRng;
 
     let sk = SpendingKey::from_bytes([7; 32]).unwrap();

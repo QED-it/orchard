@@ -2,12 +2,12 @@ use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
 use orchard::{
     builder::{Builder, BundleType},
-    bundle::{Authorized, Flags, OrchardHash},
-    circuit::{OrchardCircuit, ProvingKey, VerifyingKey},
+    bundle::{Authorized, Flags},
+    circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
-    note_encryption::{OrchardDomain, OrchardDomainBase},
-    orchard_flavors::{OrchardVanilla, OrchardZSA},
+    note_encryption::OrchardDomain,
+    orchard_flavors::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
@@ -15,7 +15,7 @@ use orchard::{
 use rand::rngs::OsRng;
 use zcash_note_encryption_zsa::try_note_decryption;
 
-pub fn verify_bundle<D: OrchardDomain + OrchardHash>(
+pub fn verify_bundle<D: OrchardFlavor>(
     bundle: &Bundle<Authorized, i64, D>,
     vk: &VerifyingKey,
     verify_proof: bool,
@@ -52,7 +52,7 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
     (merkle_path, anchor)
 }
 
-fn bundle_chain<D: OrchardDomain + OrchardCircuit + OrchardHash>() {
+fn bundle_chain<D: OrchardFlavor>() {
     let mut rng = OsRng;
     let pk = ProvingKey::build::<D>();
     let vk = VerifyingKey::build::<D>();
@@ -107,7 +107,7 @@ fn bundle_chain<D: OrchardDomain + OrchardCircuit + OrchardHash>() {
             .actions()
             .iter()
             .find_map(|action| {
-                let domain = OrchardDomainBase::for_action(action);
+                let domain = OrchardDomain::for_action(action);
                 try_note_decryption(&domain, &ivk, action)
             })
             .unwrap();

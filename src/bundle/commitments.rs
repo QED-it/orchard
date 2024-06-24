@@ -1,5 +1,7 @@
 //! Utility functions for computing bundle commitments
 
+// FIXME: rename this to hash.rs?
+
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use zcash_note_encryption_zsa::MEMO_SIZE;
@@ -8,7 +10,7 @@ use crate::{
     bundle::{Authorization, Authorized, Bundle},
     issuance::{IssueAuth, IssueBundle, Signed},
     note::AssetBase,
-    note_encryption::OrchardDomain,
+    note_encryption::OrchardNoteEnc,
     orchard_flavors::{OrchardVanilla, OrchardZSA},
 };
 
@@ -80,7 +82,7 @@ impl OrchardHash for OrchardZSA {
 pub(crate) fn hash_bundle_txid_data<
     A: Authorization,
     V: Copy + Into<i64>,
-    D: OrchardDomain + OrchardHash,
+    D: OrchardNoteEnc + OrchardHash,
 >(
     bundle: &Bundle<A, V, D>,
 ) -> Blake2bHash {
@@ -134,7 +136,7 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 /// Identifier Non-Malleability][zip244]
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
-pub(crate) fn hash_bundle_auth_data<V, D: OrchardDomain>(
+pub(crate) fn hash_bundle_auth_data<V, D: OrchardNoteEnc>(
     bundle: &Bundle<Authorized, V, D>,
 ) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);

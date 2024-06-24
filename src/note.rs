@@ -10,7 +10,7 @@ use subtle::{Choice, ConditionallySelectable, CtOption};
 
 use crate::{
     keys::{EphemeralSecretKey, FullViewingKey, Scope, SpendingKey},
-    note_encryption::OrchardDomain,
+    note_encryption::OrchardNoteEnc,
     spec::{to_base, to_scalar, NonZeroPallasScalar, PrfExpand},
     value::NoteValue,
     Address,
@@ -349,7 +349,7 @@ impl Note {
 
 /// An encrypted note.
 #[derive(Clone)]
-pub struct TransmittedNoteCiphertext<D: OrchardDomain> {
+pub struct TransmittedNoteCiphertext<D: OrchardNoteEnc> {
     /// The serialization of the ephemeral public key
     pub epk_bytes: [u8; 32],
     /// The encrypted note ciphertext
@@ -359,7 +359,7 @@ pub struct TransmittedNoteCiphertext<D: OrchardDomain> {
     pub out_ciphertext: [u8; 80],
 }
 
-impl<D: OrchardDomain> fmt::Debug for TransmittedNoteCiphertext<D> {
+impl<D: OrchardNoteEnc> fmt::Debug for TransmittedNoteCiphertext<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TransmittedNoteCiphertext")
             .field("epk_bytes", &self.epk_bytes)
