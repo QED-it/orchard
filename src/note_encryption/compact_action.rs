@@ -11,7 +11,7 @@ use crate::{
     note::{ExtractedNoteCommitment, Nullifier, Rho},
 };
 
-use super::orchard_domain::{OrchardNoteEnc, OrchardDomain};
+use super::orchard_domain::{OrchardDomain, OrchardNoteEnc};
 
 impl<A, D: OrchardNoteEnc> ShieldedOutput<OrchardDomain<D>> for Action<A, D> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
@@ -123,7 +123,7 @@ pub mod testing {
         value::NoteValue,
     };
 
-    use super::{CompactAction, OrchardNoteEnc, OrchardDomain};
+    use super::{CompactAction, OrchardDomain, OrchardNoteEnc};
 
     /// Creates a fake `CompactAction` paying the given recipient the specified value.
     ///
