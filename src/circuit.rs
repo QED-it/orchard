@@ -45,7 +45,7 @@ use crate::{
     tree::{Anchor, MerkleHashOrchard},
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
 };
-use halo2_gadgets::utilities::lookup_range_check::PallasLookupConfigOptimized;
+use halo2_gadgets::utilities::lookup_range_check::PallasLookupRangeCheck45BConfig;
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, EccConfig},
@@ -53,16 +53,15 @@ use halo2_gadgets::{
     },
     poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
     sinsemilla::{
-        chip::{SinsemillaChipOptimized, SinsemillaConfig},
+        chip::{Sinsemilla45BChip, SinsemillaConfig},
         merkle::{
-            chip::{MerkleChipOptimized, MerkleConfig},
+            chip::{Merkle45BChip, MerkleConfig},
             MerklePath,
         },
     },
     utilities::{
         bool_check,
         cond_swap::{CondSwapChip, CondSwapConfig},
-        lookup_range_check::LookupRangeCheckConfigOptimized,
     },
 };
 
@@ -93,31 +92,31 @@ pub struct Config {
     q_orchard: Selector,
     advices: [Column<Advice>; 10],
     add_config: AddConfig,
-    ecc_config: EccConfig<OrchardFixedBases, PallasLookupConfigOptimized>,
+    ecc_config: EccConfig<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
     poseidon_config: PoseidonConfig<pallas::Base, 3, 2>,
     merkle_config_1: MerkleConfig<
         OrchardHashDomains,
         OrchardCommitDomains,
         OrchardFixedBases,
-        PallasLookupConfigOptimized,
+        PallasLookupRangeCheck45BConfig,
     >,
     merkle_config_2: MerkleConfig<
         OrchardHashDomains,
         OrchardCommitDomains,
         OrchardFixedBases,
-        PallasLookupConfigOptimized,
+        PallasLookupRangeCheck45BConfig,
     >,
     sinsemilla_config_1: SinsemillaConfig<
         OrchardHashDomains,
         OrchardCommitDomains,
         OrchardFixedBases,
-        PallasLookupConfigOptimized,
+        PallasLookupRangeCheck45BConfig,
     >,
     sinsemilla_config_2: SinsemillaConfig<
         OrchardHashDomains,
         OrchardCommitDomains,
         OrchardFixedBases,
-        PallasLookupConfigOptimized,
+        PallasLookupRangeCheck45BConfig,
     >,
     commit_ivk_config: CommitIvkConfig,
     old_note_commit_config: NoteCommitConfig,
@@ -404,7 +403,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
         // We have a lot of free space in the right-most advice columns; use one of them
         // for all of our range checks.
-        let range_check = LookupRangeCheckConfigOptimized::configure_with_tag(
+        let range_check = PallasLookupRangeCheck45BConfig::configure_with_tag(
             meta,
             advices[9],
             table_idx,
@@ -413,7 +412,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
 
         // Configuration for curve point operations.
         // This uses 10 advice columns and spans the whole circuit.
-        let ecc_config = EccChip::<OrchardFixedBases, PallasLookupConfigOptimized>::configure(
+        let ecc_config = EccChip::<OrchardFixedBases, PallasLookupRangeCheck45BConfig>::configure(
             meta,
             advices,
             lagrange_coeffs,
@@ -436,7 +435,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Since the Sinsemilla config uses only 5 advice columns,
         // we can fit two instances side-by-side.
         let (sinsemilla_config_1, merkle_config_1) = {
-            let sinsemilla_config_1 = SinsemillaChipOptimized::configure(
+            let sinsemilla_config_1 = Sinsemilla45BChip::configure(
                 meta,
                 advices[..5].try_into().unwrap(),
                 advices[6],
@@ -444,7 +443,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 lookup,
                 range_check,
             );
-            let merkle_config_1 = MerkleChipOptimized::configure(meta, sinsemilla_config_1.clone());
+            let merkle_config_1 = Merkle45BChip::configure(meta, sinsemilla_config_1.clone());
 
             (sinsemilla_config_1, merkle_config_1)
         };
@@ -454,7 +453,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Since the Sinsemilla config uses only 5 advice columns,
         // we can fit two instances side-by-side.
         let (sinsemilla_config_2, merkle_config_2) = {
-            let sinsemilla_config_2 = SinsemillaChipOptimized::configure(
+            let sinsemilla_config_2 = Sinsemilla45BChip::configure(
                 meta,
                 advices[5..].try_into().unwrap(),
                 advices[7],
@@ -462,7 +461,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
                 lookup,
                 range_check,
             );
-            let merkle_config_2 = MerkleChipOptimized::configure(meta, sinsemilla_config_2.clone());
+            let merkle_config_2 = Merkle45BChip::configure(meta, sinsemilla_config_2.clone());
 
             (sinsemilla_config_2, merkle_config_2)
         };
@@ -508,7 +507,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
         // Load the Sinsemilla generator lookup table used by the whole circuit.
-        SinsemillaChipOptimized::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
+        Sinsemilla45BChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
         // Construct the ECC chip.
         let ecc_chip = config.ecc_chip();
