@@ -7,7 +7,7 @@ pub(in crate::circuit) mod gadgets {
     use halo2_gadgets::utilities::lookup_range_check::PallasLookupRangeCheck45BConfig;
     use halo2_gadgets::{
         ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
-        sinsemilla::{self, chip::Sinsemilla45BChip},
+        sinsemilla::{self, chip::SinsemillaWithPrivateInitChip},
         utilities::lookup_range_check::LookupRangeCheck,
     };
     use halo2_proofs::{
@@ -20,10 +20,11 @@ pub(in crate::circuit) mod gadgets {
     /// [Section 5.4.8.3 Homomorphic Pedersen commitments (Sapling and Orchard)]: https://zips.z.cash/protocol/protocol.pdf#concretehomomorphiccommit
     pub(in crate::circuit) fn value_commit_orchard(
         mut layouter: impl Layouter<pallas::Base>,
-        sinsemilla_chip: Sinsemilla45BChip<
+        sinsemilla_chip: SinsemillaWithPrivateInitChip<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
+            PallasLookupRangeCheck45BConfig,
         >,
         ecc_chip: EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
         v_net_magnitude_sign: (
@@ -115,7 +116,7 @@ mod tests {
             NonIdentityPoint, ScalarFixed,
         },
         sinsemilla,
-        sinsemilla::chip::{Sinsemilla45BChip, SinsemillaConfig},
+        sinsemilla::chip::{SinsemillaConfig, SinsemillaWithPrivateInitChip},
         utilities::lookup_range_check::{
             LookupRangeCheck45BConfig, PallasLookupRangeCheck45BConfig,
         },
@@ -213,7 +214,7 @@ mod tests {
                     table_range_check_tag,
                 );
 
-                let sinsemilla_config = Sinsemilla45BChip::configure(
+                let sinsemilla_config = SinsemillaWithPrivateInitChip::configure(
                     meta,
                     advices[..5].try_into().unwrap(),
                     advices[6],
@@ -242,13 +243,16 @@ mod tests {
                 mut layouter: impl Layouter<pallas::Base>,
             ) -> Result<(), Error> {
                 // Load the Sinsemilla generator lookup table.
-                Sinsemilla45BChip::load(config.sinsemilla_config.clone(), &mut layouter)?;
+                SinsemillaWithPrivateInitChip::load(
+                    config.sinsemilla_config.clone(),
+                    &mut layouter,
+                )?;
 
                 // Construct an ECC chip
                 let ecc_chip = EccChip::construct(config.ecc_config);
 
                 let sinsemilla_chip =
-                    Sinsemilla45BChip::construct(config.sinsemilla_config.clone());
+                    SinsemillaWithPrivateInitChip::construct(config.sinsemilla_config.clone());
 
                 // Witness the magnitude and sign of v_net = v_old - v_new
                 let v_net_magnitude_sign = {

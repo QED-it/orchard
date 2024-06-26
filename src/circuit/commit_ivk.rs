@@ -11,7 +11,7 @@ use pasta_curves::pallas;
 use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P};
 use halo2_gadgets::{
     ecc::{chip::EccChip, ScalarFixed, X},
-    sinsemilla::{chip::Sinsemilla45BChip, CommitDomain, Message, MessagePiece},
+    sinsemilla::{chip::SinsemillaWithPrivateInitChip, CommitDomain, Message, MessagePiece},
     utilities::{bool_check, RangeConstrained},
 };
 
@@ -242,10 +242,11 @@ pub(in crate::circuit) mod gadgets {
     #[allow(non_snake_case)]
     #[allow(clippy::type_complexity)]
     pub(in crate::circuit) fn commit_ivk(
-        sinsemilla_chip: Sinsemilla45BChip<
+        sinsemilla_chip: SinsemillaWithPrivateInitChip<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
+            PallasLookupRangeCheck45BConfig,
         >,
         ecc_chip: EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
         commit_ivk_chip: CommitIvkChip,
@@ -683,7 +684,7 @@ mod tests {
             ScalarFixed,
         },
         sinsemilla::{
-            chip::{Sinsemilla45BChip, SinsemillaConfig},
+            chip::{SinsemillaConfig, SinsemillaWithPrivateInitChip},
             primitives::CommitDomain,
         },
         utilities::{lookup_range_check::LookupRangeCheck45BConfig, UtilitiesInstructions},
@@ -770,10 +771,11 @@ mod tests {
                     table_idx,
                     table_range_check_tag,
                 );
-                let sinsemilla_config = Sinsemilla45BChip::<
+                let sinsemilla_config = SinsemillaWithPrivateInitChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
+                    PallasLookupRangeCheck45BConfig,
                 >::configure(
                     meta,
                     advices[..5].try_into().unwrap(),
@@ -804,14 +806,15 @@ mod tests {
                 let (sinsemilla_config, commit_ivk_config, ecc_config) = config;
 
                 // Load the Sinsemilla generator lookup table used by the whole circuit.
-                Sinsemilla45BChip::<
+                SinsemillaWithPrivateInitChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
+                    PallasLookupRangeCheck45BConfig,
                 >::load(sinsemilla_config.clone(), &mut layouter)?;
 
                 // Construct a Sinsemilla chip
-                let sinsemilla_chip = Sinsemilla45BChip::construct(sinsemilla_config);
+                let sinsemilla_chip = SinsemillaWithPrivateInitChip::construct(sinsemilla_config);
 
                 // Construct an ECC chip
                 let ecc_chip = EccChip::construct(ecc_config);

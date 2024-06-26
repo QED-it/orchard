@@ -15,7 +15,7 @@ use halo2_gadgets::{
         primitives::{self as poseidon, ConstantLength},
         Hash as PoseidonHash, PoseidonSpongeInstructions, Pow5Chip as PoseidonChip,
     },
-    sinsemilla::{chip::Sinsemilla45BChip, merkle::chip::Merkle45BChip},
+    sinsemilla::{chip::SinsemillaWithPrivateInitChip, merkle::chip::MerkleWithPrivateInitChip},
     utilities::cond_swap::CondSwapChip,
 };
 use halo2_proofs::{
@@ -40,26 +40,46 @@ impl super::Config {
 
     pub(super) fn sinsemilla_chip_1(
         &self,
-    ) -> Sinsemilla45BChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        Sinsemilla45BChip::construct(self.sinsemilla_config_1.clone())
+    ) -> SinsemillaWithPrivateInitChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck45BConfig,
+    > {
+        SinsemillaWithPrivateInitChip::construct(self.sinsemilla_config_1.clone())
     }
 
     pub(super) fn sinsemilla_chip_2(
         &self,
-    ) -> Sinsemilla45BChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        Sinsemilla45BChip::construct(self.sinsemilla_config_2.clone())
+    ) -> SinsemillaWithPrivateInitChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck45BConfig,
+    > {
+        SinsemillaWithPrivateInitChip::construct(self.sinsemilla_config_2.clone())
     }
 
     pub(super) fn merkle_chip_1(
         &self,
-    ) -> Merkle45BChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        Merkle45BChip::construct(self.merkle_config_1.clone())
+    ) -> MerkleWithPrivateInitChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck45BConfig,
+    > {
+        MerkleWithPrivateInitChip::construct(self.merkle_config_1.clone())
     }
 
     pub(super) fn merkle_chip_2(
         &self,
-    ) -> Merkle45BChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        Merkle45BChip::construct(self.merkle_config_2.clone())
+    ) -> MerkleWithPrivateInitChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck45BConfig,
+    > {
+        MerkleWithPrivateInitChip::construct(self.merkle_config_2.clone())
     }
 
     pub(super) fn poseidon_chip(&self) -> PoseidonChip<pallas::Base, 3, 2> {
