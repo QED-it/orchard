@@ -263,9 +263,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.103"
+version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2755ff20a1d93490d26ba33a6f092a38a508398a5320df5d4b3014fcccce9410"
+checksum = "74b6a57f98764a267ff415d50a25e6e166f3831a5071af4995296ea97d210490"
 
 [[package]]
 name = "cfg-if"
@@ -1016,7 +1016,7 @@ dependencies = [
 [[package]]
 name = "halo2_gadgets"
 version = "0.3.0"
-source = "git+https://github.com/QED-it/halo2?branch=improve-backward-compatability-with-zsa#6af9ebf37481b412d6bf8cf6e2a74f74d3d13ccb"
+source = "git+https://github.com/QED-it/halo2?branch=improve-backward-compatability-with-zsa#2021f5eea4a4c5d31d82552c0965dc01acbfe86a"
 dependencies = [
  "arrayvec",
  "bitvec",
@@ -1040,7 +1040,7 @@ checksum = "47716fe1ae67969c5e0b2ef826f32db8c3be72be325e1aa3c1951d06b5575ec5"
 [[package]]
 name = "halo2_proofs"
 version = "0.3.0"
-source = "git+https://github.com/QED-it/halo2?branch=improve-backward-compatability-with-zsa#6af9ebf37481b412d6bf8cf6e2a74f74d3d13ccb"
+source = "git+https://github.com/QED-it/halo2?branch=improve-backward-compatability-with-zsa#2021f5eea4a4c5d31d82552c0965dc01acbfe86a"
 dependencies = [
  "blake2b_simd",
  "ff",

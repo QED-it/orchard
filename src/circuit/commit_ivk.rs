@@ -661,7 +661,7 @@ struct GateCells {
     z14_b2_c_prime: AssignedCell<pallas::Base, pallas::Base>,
 }
 
-// FIXME: add tests for SinsemillaChip as well (not only for SinsemillaWithPrivateInitChip)
+// FIXME: add tests for SinsemillaChip as well (not only for SinsemillaChip)
 #[cfg(test)]
 mod tests {
     use core::iter;
@@ -678,7 +678,7 @@ mod tests {
             ScalarFixed,
         },
         sinsemilla::{
-            chip::{SinsemillaConfig, SinsemillaWithPrivateInitChip},
+            chip::{SinsemillaChip, SinsemillaConfig},
             primitives::CommitDomain,
         },
         utilities::{
@@ -768,7 +768,7 @@ mod tests {
                     table_idx,
                     table_range_check_tag,
                 );
-                let sinsemilla_config = SinsemillaWithPrivateInitChip::<
+                let sinsemilla_config = SinsemillaChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
@@ -780,6 +780,7 @@ mod tests {
                     lagrange_coeffs[0],
                     lookup,
                     range_check,
+                    true,
                 );
 
                 let commit_ivk_config = CommitIvkChip::configure(meta, advices);
@@ -803,7 +804,7 @@ mod tests {
                 let (sinsemilla_config, commit_ivk_config, ecc_config) = config;
 
                 // Load the Sinsemilla generator lookup table used by the whole circuit.
-                SinsemillaWithPrivateInitChip::<
+                SinsemillaChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
@@ -811,7 +812,7 @@ mod tests {
                 >::load(sinsemilla_config.clone(), &mut layouter)?;
 
                 // Construct a Sinsemilla chip
-                let sinsemilla_chip = SinsemillaWithPrivateInitChip::construct(sinsemilla_config);
+                let sinsemilla_chip = SinsemillaChip::construct(sinsemilla_config);
 
                 // Construct an ECC chip
                 let ecc_chip = EccChip::construct(ecc_config);

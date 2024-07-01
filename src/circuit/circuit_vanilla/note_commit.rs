@@ -2123,6 +2123,7 @@ mod tests {
                     lagrange_coeffs[0],
                     lookup,
                     range_check,
+                    false,
                 );
                 let note_commit_config =
                     NoteCommitChip::configure(meta, advices, sinsemilla_config);

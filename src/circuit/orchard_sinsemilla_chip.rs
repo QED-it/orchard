@@ -1,4 +1,4 @@
-//! Defines the `OrchardSinsemillaChip` trait to abstract over `SinsemillaChip` and `SinsemillaWithPrivateInitChip` types.
+//! Defines the `OrchardSinsemillaChip` trait to abstract over `SinsemillaChip` and `SinsemillaChip` types.
 //! Used to generalize the `commit_ivk` function.
 
 use pasta_curves::pallas;
@@ -7,7 +7,7 @@ use halo2_proofs::circuit::Chip;
 
 use halo2_gadgets::{
     sinsemilla::{
-        chip::{SinsemillaChip, SinsemillaConfig, SinsemillaWithPrivateInitChip},
+        chip::{SinsemillaChip, SinsemillaConfig},
         primitives as sinsemilla, SinsemillaInstructions,
     },
     utilities::lookup_range_check::{
@@ -87,7 +87,7 @@ pub(super) trait OrchardSinsemillaChip<Lookup: PallasLookupRangeCheck>:
 impl OrchardSinsemillaChip<PallasLookupRangeCheckConfig> for BaseSinsemillaChip {}
 
 impl OrchardSinsemillaChip<PallasLookupRangeCheck45BConfig>
-    for SinsemillaWithPrivateInitChip<
+    for SinsemillaChip<
         OrchardHashDomains,
         OrchardCommitDomains,
         OrchardFixedBases,

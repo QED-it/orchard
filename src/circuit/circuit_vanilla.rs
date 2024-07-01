@@ -208,6 +208,7 @@ impl OrchardCircuit for OrchardVanilla {
                 lagrange_coeffs[0],
                 lookup,
                 range_check,
+                false,
             );
             let merkle_config_1 = MerkleChip::configure(meta, sinsemilla_config_1.clone());
 
@@ -226,6 +227,7 @@ impl OrchardCircuit for OrchardVanilla {
                 lagrange_coeffs[1],
                 lookup,
                 range_check,
+                false,
             );
             let merkle_config_2 = MerkleChip::configure(meta, sinsemilla_config_2.clone());
 
