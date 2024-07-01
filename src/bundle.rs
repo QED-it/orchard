@@ -437,7 +437,12 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
     }
 }
 
-pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, D: 'a + OrchardDomainCommon + OrchardHash>(
+pub(crate) fn derive_bvk<
+    'a,
+    A: 'a,
+    V: Clone + Into<i64>,
+    D: 'a + OrchardDomainCommon + OrchardHash,
+>(
     actions: impl IntoIterator<Item = &'a Action<A, D>>,
     value_balance: V,
     burn: impl Iterator<Item = (AssetBase, V)>,

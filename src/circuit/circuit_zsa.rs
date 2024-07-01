@@ -17,7 +17,7 @@ use halo2_gadgets::{
     sinsemilla::{
         chip::{SinsemillaConfig, SinsemillaWithPrivateInitChip},
         merkle::{
-            chip::{MerkleWithPrivateInitChip, MerkleConfig},
+            chip::{MerkleConfig, MerkleWithPrivateInitChip},
             MerklePath,
         },
     },
@@ -317,7 +317,8 @@ impl OrchardCircuit for OrchardZSA {
                 lookup,
                 range_check,
             );
-            let merkle_config_1 = MerkleWithPrivateInitChip::configure(meta, sinsemilla_config_1.clone());
+            let merkle_config_1 =
+                MerkleWithPrivateInitChip::configure(meta, sinsemilla_config_1.clone());
 
             (sinsemilla_config_1, merkle_config_1)
         };
@@ -335,7 +336,8 @@ impl OrchardCircuit for OrchardZSA {
                 lookup,
                 range_check,
             );
-            let merkle_config_2 = MerkleWithPrivateInitChip::configure(meta, sinsemilla_config_2.clone());
+            let merkle_config_2 =
+                MerkleWithPrivateInitChip::configure(meta, sinsemilla_config_2.clone());
 
             (sinsemilla_config_2, merkle_config_2)
         };

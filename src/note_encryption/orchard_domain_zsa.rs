@@ -68,7 +68,8 @@ mod tests {
     type OrchardDomainZSA = OrchardDomain<OrchardZSA>;
 
     /// Implementation of in-band secret distribution for Orchard bundles.
-    pub type OrchardDomainCommonryptionZSA = zcash_note_encryption_zsa::NoteEncryption<OrchardDomainZSA>;
+    pub type OrchardDomainCommonryptionZSA =
+        zcash_note_encryption_zsa::NoteEncryption<OrchardDomainZSA>;
 
     proptest! {
         #[test]
