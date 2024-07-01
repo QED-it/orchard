@@ -70,7 +70,7 @@ fn bench_note_decryption<FL: OrchardFlavor>(c: &mut Criterion) {
                 None,
             )
             .unwrap();
-        let bundle: Bundle<_, i64, D> = builder.build(rng).unwrap().unwrap().0;
+        let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().unwrap().0;
         bundle
             .create_proof(&pk, rng)
             .unwrap()
