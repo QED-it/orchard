@@ -661,12 +661,12 @@ struct GateCells {
     z14_b2_c_prime: AssignedCell<pallas::Base, pallas::Base>,
 }
 
-// FIXME: add tests for SinsemillaChip as well (not only for SinsemillaChip)
 #[cfg(test)]
 mod tests {
     use core::iter;
 
     use super::{gadgets, CommitIvkChip, CommitIvkConfig};
+
     use crate::constants::{
         fixed_bases::COMMIT_IVK_PERSONALIZATION, OrchardCommitDomains, OrchardFixedBases,
         OrchardHashDomains, L_ORCHARD_BASE, T_Q,
@@ -682,7 +682,10 @@ mod tests {
             primitives::CommitDomain,
         },
         utilities::{
-            lookup_range_check::{LookupRangeCheck45BConfig, PallasLookupRangeCheck45BConfig},
+            lookup_range_check::{
+                PallasLookupRangeCheck, PallasLookupRangeCheck45BConfig,
+                PallasLookupRangeCheckConfig,
+            },
             UtilitiesInstructions,
         },
     };
@@ -694,228 +697,240 @@ mod tests {
     use pasta_curves::pallas;
     use rand::rngs::OsRng;
 
-    #[test]
-    fn commit_ivk() {
-        #[derive(Default)]
-        struct MyCircuit {
-            ak: Value<pallas::Base>,
-            nk: Value<pallas::Base>,
+    trait MyLookup: PallasLookupRangeCheck {
+        fn enable_hash_from_private_point() -> bool;
+    }
+
+    impl MyLookup for PallasLookupRangeCheckConfig {
+        fn enable_hash_from_private_point() -> bool {
+            false
+        }
+    }
+
+    impl MyLookup for PallasLookupRangeCheck45BConfig {
+        fn enable_hash_from_private_point() -> bool {
+            false
+        }
+    }
+
+    #[derive(Default)]
+    struct MyCircuit<Lookup: MyLookup> {
+        ak: Value<pallas::Base>,
+        nk: Value<pallas::Base>,
+        phantom: std::marker::PhantomData<Lookup>,
+    }
+
+    impl<Lookup: MyLookup> UtilitiesInstructions<pallas::Base> for MyCircuit<Lookup> {
+        type Var = AssignedCell<pallas::Base, pallas::Base>;
+    }
+
+    impl<Lookup: MyLookup> Circuit<pallas::Base> for MyCircuit<Lookup> {
+        type Config = (
+            SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup>,
+            CommitIvkConfig,
+            EccConfig<OrchardFixedBases, Lookup>,
+        );
+
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            Self {
+                ak: Default::default(),
+                nk: Default::default(),
+                phantom: std::marker::PhantomData,
+            }
         }
 
-        impl UtilitiesInstructions<pallas::Base> for MyCircuit {
-            type Var = AssignedCell<pallas::Base, pallas::Base>;
-        }
+        fn configure(meta: &mut ConstraintSystem<pallas::Base>) -> Self::Config {
+            let advices = [
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+            ];
 
-        impl Circuit<pallas::Base> for MyCircuit {
-            type Config = (
-                SinsemillaConfig<
-                    OrchardHashDomains,
-                    OrchardCommitDomains,
-                    OrchardFixedBases,
-                    PallasLookupRangeCheck45BConfig,
-                >,
-                CommitIvkConfig,
-                EccConfig<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
+            let constants = meta.fixed_column();
+            meta.enable_constant(constants);
+
+            for advice in advices.iter() {
+                meta.enable_equality(*advice);
+            }
+
+            let table_idx = meta.lookup_table_column();
+            let lookup = (
+                table_idx,
+                meta.lookup_table_column(),
+                meta.lookup_table_column(),
             );
-            type FloorPlanner = SimpleFloorPlanner;
+            let lagrange_coeffs = [
+                meta.fixed_column(),
+                meta.fixed_column(),
+                meta.fixed_column(),
+                meta.fixed_column(),
+                meta.fixed_column(),
+                meta.fixed_column(),
+                meta.fixed_column(),
+                meta.fixed_column(),
+            ];
 
-            fn without_witnesses(&self) -> Self {
-                Self::default()
-            }
+            let range_check = Lookup::configure(meta, advices[9], table_idx);
+            let sinsemilla_config = SinsemillaChip::<
+                OrchardHashDomains,
+                OrchardCommitDomains,
+                OrchardFixedBases,
+                Lookup,
+            >::configure(
+                meta,
+                advices[..5].try_into().unwrap(),
+                advices[2],
+                lagrange_coeffs[0],
+                lookup,
+                range_check,
+                Lookup::enable_hash_from_private_point(),
+            );
 
-            fn configure(meta: &mut ConstraintSystem<pallas::Base>) -> Self::Config {
-                let advices = [
-                    meta.advice_column(),
-                    meta.advice_column(),
-                    meta.advice_column(),
-                    meta.advice_column(),
-                    meta.advice_column(),
-                    meta.advice_column(),
-                    meta.advice_column(),
-                    meta.advice_column(),
-                    meta.advice_column(),
-                    meta.advice_column(),
-                ];
+            let commit_ivk_config = CommitIvkChip::configure(meta, advices);
 
-                let constants = meta.fixed_column();
-                meta.enable_constant(constants);
+            let ecc_config = EccChip::<OrchardFixedBases, Lookup>::configure(
+                meta,
+                advices,
+                lagrange_coeffs,
+                range_check,
+            );
 
-                for advice in advices.iter() {
-                    meta.enable_equality(*advice);
-                }
+            (sinsemilla_config, commit_ivk_config, ecc_config)
+        }
 
-                let table_idx = meta.lookup_table_column();
-                let table_range_check_tag = meta.lookup_table_column();
-                let lookup = (
-                    table_idx,
-                    meta.lookup_table_column(),
-                    meta.lookup_table_column(),
-                );
-                let lagrange_coeffs = [
-                    meta.fixed_column(),
-                    meta.fixed_column(),
-                    meta.fixed_column(),
-                    meta.fixed_column(),
-                    meta.fixed_column(),
-                    meta.fixed_column(),
-                    meta.fixed_column(),
-                    meta.fixed_column(),
-                ];
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<pallas::Base>,
+        ) -> Result<(), Error> {
+            let (sinsemilla_config, commit_ivk_config, ecc_config) = config;
 
-                let range_check = LookupRangeCheck45BConfig::configure_with_tag(
-                    meta,
-                    advices[9],
-                    table_idx,
-                    table_range_check_tag,
-                );
-                let sinsemilla_config = SinsemillaChip::<
+            // Load the Sinsemilla generator lookup table used by the whole circuit.
+            SinsemillaChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
-                    PallasLookupRangeCheck45BConfig,
-                >::configure(
-                    meta,
-                    advices[..5].try_into().unwrap(),
-                    advices[2],
-                    lagrange_coeffs[0],
-                    lookup,
-                    range_check,
-                    true,
-                );
-
-                let commit_ivk_config = CommitIvkChip::configure(meta, advices);
-
-                let ecc_config =
-                    EccChip::<OrchardFixedBases, PallasLookupRangeCheck45BConfig>::configure(
-                        meta,
-                        advices,
-                        lagrange_coeffs,
-                        range_check,
-                    );
-
-                (sinsemilla_config, commit_ivk_config, ecc_config)
-            }
-
-            fn synthesize(
-                &self,
-                config: Self::Config,
-                mut layouter: impl Layouter<pallas::Base>,
-            ) -> Result<(), Error> {
-                let (sinsemilla_config, commit_ivk_config, ecc_config) = config;
-
-                // Load the Sinsemilla generator lookup table used by the whole circuit.
-                SinsemillaChip::<
-                    OrchardHashDomains,
-                    OrchardCommitDomains,
-                    OrchardFixedBases,
-                    PallasLookupRangeCheck45BConfig,
+                    Lookup,
                 >::load(sinsemilla_config.clone(), &mut layouter)?;
 
-                // Construct a Sinsemilla chip
-                let sinsemilla_chip = SinsemillaChip::construct(sinsemilla_config);
+            // Construct a Sinsemilla chip
+            let sinsemilla_chip = SinsemillaChip::construct(sinsemilla_config);
 
-                // Construct an ECC chip
-                let ecc_chip = EccChip::construct(ecc_config);
+            // Construct an ECC chip
+            let ecc_chip = EccChip::construct(ecc_config);
 
-                let commit_ivk_chip = CommitIvkChip::construct(commit_ivk_config.clone());
+            let commit_ivk_chip = CommitIvkChip::construct(commit_ivk_config.clone());
 
-                // Witness ak
-                let ak = self.load_private(
-                    layouter.namespace(|| "load ak"),
-                    commit_ivk_config.advices[0],
-                    self.ak,
-                )?;
+            // Witness ak
+            let ak = self.load_private(
+                layouter.namespace(|| "load ak"),
+                commit_ivk_config.advices[0],
+                self.ak,
+            )?;
 
-                // Witness nk
-                let nk = self.load_private(
-                    layouter.namespace(|| "load nk"),
-                    commit_ivk_config.advices[0],
-                    self.nk,
-                )?;
+            // Witness nk
+            let nk = self.load_private(
+                layouter.namespace(|| "load nk"),
+                commit_ivk_config.advices[0],
+                self.nk,
+            )?;
 
-                // Use a random scalar for rivk
-                let rivk = pallas::Scalar::random(OsRng);
-                let rivk_gadget = ScalarFixed::new(
-                    ecc_chip.clone(),
-                    layouter.namespace(|| "rivk"),
-                    Value::known(rivk),
-                )?;
+            // Use a random scalar for rivk
+            let rivk = pallas::Scalar::random(OsRng);
+            let rivk_gadget = ScalarFixed::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "rivk"),
+                Value::known(rivk),
+            )?;
 
-                let ivk = gadgets::commit_ivk(
-                    sinsemilla_chip,
-                    ecc_chip,
-                    commit_ivk_chip,
-                    layouter.namespace(|| "CommitIvk"),
-                    ak,
-                    nk,
-                    rivk_gadget,
-                )?;
+            let ivk = gadgets::commit_ivk(
+                sinsemilla_chip,
+                ecc_chip,
+                commit_ivk_chip,
+                layouter.namespace(|| "CommitIvk"),
+                ak,
+                nk,
+                rivk_gadget,
+            )?;
 
-                self.ak
-                    .zip(self.nk)
-                    .zip(ivk.inner().value())
-                    .assert_if_known(|((ak, nk), ivk)| {
-                        let expected_ivk = {
-                            let domain = CommitDomain::new(COMMIT_IVK_PERSONALIZATION);
-                            // Hash ak || nk
-                            domain
-                                .short_commit(
-                                    iter::empty()
-                                        .chain(
-                                            ak.to_le_bits().iter().by_vals().take(L_ORCHARD_BASE),
-                                        )
-                                        .chain(
-                                            nk.to_le_bits().iter().by_vals().take(L_ORCHARD_BASE),
-                                        ),
-                                    &rivk,
-                                )
-                                .unwrap()
-                        };
+            self.ak
+                .zip(self.nk)
+                .zip(ivk.inner().value())
+                .assert_if_known(|((ak, nk), ivk)| {
+                    let expected_ivk = {
+                        let domain = CommitDomain::new(COMMIT_IVK_PERSONALIZATION);
+                        // Hash ak || nk
+                        domain
+                            .short_commit(
+                                iter::empty()
+                                    .chain(ak.to_le_bits().iter().by_vals().take(L_ORCHARD_BASE))
+                                    .chain(nk.to_le_bits().iter().by_vals().take(L_ORCHARD_BASE)),
+                                &rivk,
+                            )
+                            .unwrap()
+                    };
 
-                        &&expected_ivk == ivk
-                    });
+                    &&expected_ivk == ivk
+                });
 
-                Ok(())
-            }
+            Ok(())
         }
+    }
 
+    fn commit_ivk<Lookup: MyLookup>() {
         let two_pow_254 = pallas::Base::from_u128(1 << 127).square();
         // Test different values of `ak`, `nk`
         let circuits = [
             // `ak` = 0, `nk` = 0
-            MyCircuit {
+            MyCircuit::<Lookup> {
                 ak: Value::known(pallas::Base::zero()),
                 nk: Value::known(pallas::Base::zero()),
+                phantom: std::marker::PhantomData,
             },
             // `ak` = T_Q - 1, `nk` = T_Q - 1
-            MyCircuit {
+            MyCircuit::<Lookup> {
                 ak: Value::known(pallas::Base::from_u128(T_Q - 1)),
                 nk: Value::known(pallas::Base::from_u128(T_Q - 1)),
+                phantom: std::marker::PhantomData,
             },
             // `ak` = T_Q, `nk` = T_Q
-            MyCircuit {
+            MyCircuit::<Lookup> {
                 ak: Value::known(pallas::Base::from_u128(T_Q)),
                 nk: Value::known(pallas::Base::from_u128(T_Q)),
+                phantom: std::marker::PhantomData,
             },
             // `ak` = 2^127 - 1, `nk` = 2^127 - 1
-            MyCircuit {
+            MyCircuit::<Lookup> {
                 ak: Value::known(pallas::Base::from_u128((1 << 127) - 1)),
                 nk: Value::known(pallas::Base::from_u128((1 << 127) - 1)),
+                phantom: std::marker::PhantomData,
             },
             // `ak` = 2^127, `nk` = 2^127
-            MyCircuit {
+            MyCircuit::<Lookup> {
                 ak: Value::known(pallas::Base::from_u128(1 << 127)),
                 nk: Value::known(pallas::Base::from_u128(1 << 127)),
+                phantom: std::marker::PhantomData,
             },
             // `ak` = 2^254 - 1, `nk` = 2^254 - 1
-            MyCircuit {
+            MyCircuit::<Lookup> {
                 ak: Value::known(two_pow_254 - pallas::Base::one()),
                 nk: Value::known(two_pow_254 - pallas::Base::one()),
+                phantom: std::marker::PhantomData,
             },
             // `ak` = 2^254, `nk` = 2^254
-            MyCircuit {
+            MyCircuit::<Lookup> {
                 ak: Value::known(two_pow_254),
                 nk: Value::known(two_pow_254),
+                phantom: std::marker::PhantomData,
             },
         ];
 
@@ -923,5 +938,15 @@ mod tests {
             let prover = MockProver::<pallas::Base>::run(11, circuit, vec![]).unwrap();
             assert_eq!(prover.verify(), Ok(()));
         }
+    }
+
+    #[test]
+    fn commit_ivk_vanilla() {
+        commit_ivk::<PallasLookupRangeCheckConfig>()
+    }
+
+    #[test]
+    fn commit_ivk_zsa() {
+        commit_ivk::<PallasLookupRangeCheck45BConfig>()
     }
 }

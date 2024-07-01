@@ -10,9 +10,7 @@ use halo2_gadgets::{
         chip::{SinsemillaChip, SinsemillaConfig},
         primitives as sinsemilla, SinsemillaInstructions,
     },
-    utilities::lookup_range_check::{
-        PallasLookupRangeCheck, PallasLookupRangeCheck45BConfig, PallasLookupRangeCheckConfig,
-    },
+    utilities::lookup_range_check::PallasLookupRangeCheck,
 };
 
 use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains};
@@ -84,14 +82,7 @@ pub(super) trait OrchardSinsemillaChip<Lookup: PallasLookupRangeCheck>:
 {
 }
 
-impl OrchardSinsemillaChip<PallasLookupRangeCheckConfig> for BaseSinsemillaChip {}
-
-impl OrchardSinsemillaChip<PallasLookupRangeCheck45BConfig>
-    for SinsemillaChip<
-        OrchardHashDomains,
-        OrchardCommitDomains,
-        OrchardFixedBases,
-        PallasLookupRangeCheck45BConfig,
-    >
+impl<Lookup: PallasLookupRangeCheck> OrchardSinsemillaChip<Lookup>
+    for SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup>
 {
 }
