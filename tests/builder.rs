@@ -6,7 +6,8 @@ use orchard::{
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
-    note_encryption_v3::OrchardDomainV3,
+    note_encryption::OrchardDomain,
+    orchard_flavors::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
@@ -14,7 +15,11 @@ use orchard::{
 use rand::rngs::OsRng;
 use zcash_note_encryption_zsa::try_note_decryption;
 
-pub fn verify_bundle(bundle: &Bundle<Authorized, i64>, vk: &VerifyingKey, verify_proof: bool) {
+pub fn verify_bundle<FL: OrchardFlavor>(
+    bundle: &Bundle<Authorized, i64, FL>,
+    vk: &VerifyingKey,
+    verify_proof: bool,
+) {
     if verify_proof {
         assert!(matches!(bundle.verify_proof(vk), Ok(())));
     }
@@ -47,18 +52,17 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
     (merkle_path, anchor)
 }
 
-#[test]
-fn bundle_chain() {
+fn bundle_chain<FL: OrchardFlavor>() {
     let mut rng = OsRng;
-    let pk = ProvingKey::build();
-    let vk = VerifyingKey::build();
+    let pk = ProvingKey::build::<FL>();
+    let vk = VerifyingKey::build::<FL>();
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
     // Create a shielding bundle.
-    let shielding_bundle: Bundle<_, i64> = {
+    let shielding_bundle: Bundle<_, i64, FL> = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -97,13 +101,13 @@ fn bundle_chain() {
     verify_bundle(&shielding_bundle, &vk, true);
 
     // Create a shielded bundle spending the previous output.
-    let shielded_bundle: Bundle<_, i64> = {
+    let shielded_bundle: Bundle<_, i64, FL> = {
         let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
         let (note, _, _) = shielding_bundle
             .actions()
             .iter()
             .find_map(|action| {
-                let domain = OrchardDomainV3::for_action(action);
+                let domain = OrchardDomain::for_action(action);
                 try_note_decryption(&domain, &ivk, action)
             })
             .unwrap();
@@ -132,4 +136,14 @@ fn bundle_chain() {
 
     // Verify the shielded bundle.
     verify_bundle(&shielded_bundle, &vk, true);
+}
+
+#[test]
+fn bundle_chain_vanilla() {
+    bundle_chain::<OrchardVanilla>()
+}
+
+#[test]
+fn bundle_chain_zsa() {
+    bundle_chain::<OrchardZSA>()
 }
