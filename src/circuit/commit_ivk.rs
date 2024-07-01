@@ -230,7 +230,7 @@ impl CommitIvkChip {
 }
 
 pub(in crate::circuit) mod gadgets {
-    use halo2_gadgets::utilities::{lookup_range_check::PallasLookupRC, RangeConstrained};
+    use halo2_gadgets::utilities::{lookup_range_check::PallasLookupRangeCheck, RangeConstrained};
 
     use super::*;
 
@@ -242,7 +242,7 @@ pub(in crate::circuit) mod gadgets {
     #[allow(non_snake_case)]
     #[allow(clippy::type_complexity)]
     pub(in crate::circuit) fn commit_ivk<
-        Lookup: PallasLookupRC,
+        Lookup: PallasLookupRangeCheck,
         Chip: OrchardSinsemillaChip<Lookup>,
     >(
         sinsemilla_chip: Chip,
@@ -400,7 +400,7 @@ pub(in crate::circuit) mod gadgets {
     ///
     /// [Specification](https://p.z.cash/orchard-0.1:commit-ivk-canonicity-ak?partial).
     #[allow(clippy::type_complexity)]
-    fn ak_canonicity<Lookup: PallasLookupRC>(
+    fn ak_canonicity<Lookup: PallasLookupRangeCheck>(
         lookup_config: &Lookup,
         mut layouter: impl Layouter<pallas::Base>,
         a: AssignedCell<pallas::Base, pallas::Base>,
@@ -441,7 +441,7 @@ pub(in crate::circuit) mod gadgets {
     ///
     /// [Specification](https://p.z.cash/orchard-0.1:commit-ivk-canonicity-nk?partial).
     #[allow(clippy::type_complexity)]
-    fn nk_canonicity<Lookup: PallasLookupRC>(
+    fn nk_canonicity<Lookup: PallasLookupRangeCheck>(
         lookup_config: &Lookup,
         mut layouter: impl Layouter<pallas::Base>,
         b_2: &RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
@@ -661,7 +661,7 @@ struct GateCells {
     z14_b2_c_prime: AssignedCell<pallas::Base, pallas::Base>,
 }
 
-// FIXME: add tests for SinsemillaChip as well (not only for SinsemillaChipOptimized)
+// FIXME: add tests for SinsemillaChip as well (not only for SinsemillaWithPrivateInitChip)
 #[cfg(test)]
 mod tests {
     use core::iter;
@@ -678,11 +678,11 @@ mod tests {
             ScalarFixed,
         },
         sinsemilla::{
-            chip::{SinsemillaChipOptimized, SinsemillaConfig},
+            chip::{SinsemillaConfig, SinsemillaWithPrivateInitChip},
             primitives::CommitDomain,
         },
         utilities::{
-            lookup_range_check::{LookupRangeCheckConfigOptimized, PallasLookupConfigOptimized},
+            lookup_range_check::{LookupRangeCheck45BConfig, PallasLookupRangeCheck45BConfig},
             UtilitiesInstructions,
         },
     };
@@ -712,10 +712,10 @@ mod tests {
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
-                    PallasLookupConfigOptimized,
+                    PallasLookupRangeCheck45BConfig,
                 >,
                 CommitIvkConfig,
-                EccConfig<OrchardFixedBases, PallasLookupConfigOptimized>,
+                EccConfig<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
             );
             type FloorPlanner = SimpleFloorPlanner;
 
@@ -762,16 +762,17 @@ mod tests {
                     meta.fixed_column(),
                 ];
 
-                let range_check = LookupRangeCheckConfigOptimized::configure_with_tag(
+                let range_check = LookupRangeCheck45BConfig::configure_with_tag(
                     meta,
                     advices[9],
                     table_idx,
                     table_range_check_tag,
                 );
-                let sinsemilla_config = SinsemillaChipOptimized::<
+                let sinsemilla_config = SinsemillaWithPrivateInitChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
+                    PallasLookupRangeCheck45BConfig,
                 >::configure(
                     meta,
                     advices[..5].try_into().unwrap(),
@@ -784,7 +785,7 @@ mod tests {
                 let commit_ivk_config = CommitIvkChip::configure(meta, advices);
 
                 let ecc_config =
-                    EccChip::<OrchardFixedBases, PallasLookupConfigOptimized>::configure(
+                    EccChip::<OrchardFixedBases, PallasLookupRangeCheck45BConfig>::configure(
                         meta,
                         advices,
                         lagrange_coeffs,
@@ -802,14 +803,15 @@ mod tests {
                 let (sinsemilla_config, commit_ivk_config, ecc_config) = config;
 
                 // Load the Sinsemilla generator lookup table used by the whole circuit.
-                SinsemillaChipOptimized::<
+                SinsemillaWithPrivateInitChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
+                    PallasLookupRangeCheck45BConfig,
                 >::load(sinsemilla_config.clone(), &mut layouter)?;
 
                 // Construct a Sinsemilla chip
-                let sinsemilla_chip = SinsemillaChipOptimized::construct(sinsemilla_config);
+                let sinsemilla_chip = SinsemillaWithPrivateInitChip::construct(sinsemilla_config);
 
                 // Construct an ECC chip
                 let ecc_chip = EccChip::construct(ecc_config);

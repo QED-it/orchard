@@ -20,20 +20,25 @@ use halo2_gadgets::{
         NonIdentityPoint, Point, ScalarFixed,
     },
     sinsemilla::{
-        chip::{SinsemillaChipOptimized, SinsemillaConfig},
+        chip::{SinsemillaConfig, SinsemillaWithPrivateInitChip},
         CommitDomain, Message, MessagePiece,
     },
     utilities::{
         bool_check,
         cond_swap::CondSwapChip,
-        lookup_range_check::{LookupRangeCheck, PallasLookupConfigOptimized},
+        lookup_range_check::{LookupRangeCheck, PallasLookupRangeCheck45BConfig},
         FieldValue, RangeConstrained,
     },
 };
 
 type NoteCommitPiece = MessagePiece<
     pallas::Affine,
-    SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+    SinsemillaWithPrivateInitChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck45BConfig,
+    >,
     10,
     253,
 >;
@@ -125,8 +130,13 @@ impl DecomposeB {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        lookup_config: &PallasLookupConfigOptimized,
-        chip: SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+        lookup_config: &PallasLookupRangeCheck45BConfig,
+        chip: SinsemillaWithPrivateInitChip<
+            OrchardHashDomains,
+            OrchardCommitDomains,
+            OrchardFixedBases,
+            PallasLookupRangeCheck45BConfig,
+        >,
         layouter: &mut impl Layouter<pallas::Base>,
         g_d: &NonIdentityEccPoint,
         pk_d: &NonIdentityEccPoint,
@@ -270,8 +280,13 @@ impl DecomposeD {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        lookup_config: &PallasLookupConfigOptimized,
-        chip: SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+        lookup_config: &PallasLookupRangeCheck45BConfig,
+        chip: SinsemillaWithPrivateInitChip<
+            OrchardHashDomains,
+            OrchardCommitDomains,
+            OrchardFixedBases,
+            PallasLookupRangeCheck45BConfig,
+        >,
         layouter: &mut impl Layouter<pallas::Base>,
         pk_d: &NonIdentityEccPoint,
         value: &AssignedCell<NoteValue, pallas::Base>,
@@ -392,8 +407,13 @@ impl DecomposeE {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        lookup_config: &PallasLookupConfigOptimized,
-        chip: SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+        lookup_config: &PallasLookupRangeCheck45BConfig,
+        chip: SinsemillaWithPrivateInitChip<
+            OrchardHashDomains,
+            OrchardCommitDomains,
+            OrchardFixedBases,
+            PallasLookupRangeCheck45BConfig,
+        >,
         layouter: &mut impl Layouter<pallas::Base>,
         value: &AssignedCell<NoteValue, pallas::Base>,
         rho: &AssignedCell<pallas::Base, pallas::Base>,
@@ -517,8 +537,13 @@ impl DecomposeG {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        lookup_config: &PallasLookupConfigOptimized,
-        chip: SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+        lookup_config: &PallasLookupRangeCheck45BConfig,
+        chip: SinsemillaWithPrivateInitChip<
+            OrchardHashDomains,
+            OrchardCommitDomains,
+            OrchardFixedBases,
+            PallasLookupRangeCheck45BConfig,
+        >,
         layouter: &mut impl Layouter<pallas::Base>,
         rho: &AssignedCell<pallas::Base, pallas::Base>,
         psi: &AssignedCell<pallas::Base, pallas::Base>,
@@ -653,8 +678,13 @@ impl DecomposeH {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        lookup_config: &PallasLookupConfigOptimized,
-        chip: SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+        lookup_config: &PallasLookupRangeCheck45BConfig,
+        chip: SinsemillaWithPrivateInitChip<
+            OrchardHashDomains,
+            OrchardCommitDomains,
+            OrchardFixedBases,
+            PallasLookupRangeCheck45BConfig,
+        >,
         layouter: &mut impl Layouter<pallas::Base>,
         psi: &AssignedCell<pallas::Base, pallas::Base>,
         asset: &NonIdentityEccPoint,
@@ -802,7 +832,12 @@ impl DecomposeJ {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        chip: SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
+        chip: SinsemillaWithPrivateInitChip<
+            OrchardHashDomains,
+            OrchardCommitDomains,
+            OrchardFixedBases,
+            PallasLookupRangeCheck45BConfig,
+        >,
         layouter: &mut impl Layouter<pallas::Base>,
         asset: &NonIdentityEccPoint,
     ) -> Result<
@@ -1602,7 +1637,7 @@ pub struct NoteCommitConfig {
         OrchardHashDomains,
         OrchardCommitDomains,
         OrchardFixedBases,
-        PallasLookupConfigOptimized,
+        PallasLookupRangeCheck45BConfig,
     >,
 }
 
@@ -1621,7 +1656,7 @@ impl NoteCommitChip {
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
-            PallasLookupConfigOptimized,
+            PallasLookupRangeCheck45BConfig,
         >,
     ) -> NoteCommitConfig {
         // Useful constants
@@ -1751,8 +1786,13 @@ pub(in crate::circuit) mod gadgets {
     #[allow(clippy::too_many_arguments)]
     pub(in crate::circuit) fn note_commit(
         mut layouter: impl Layouter<pallas::Base>,
-        chip: SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-        ecc_chip: EccChip<OrchardFixedBases, PallasLookupConfigOptimized>,
+        chip: SinsemillaWithPrivateInitChip<
+            OrchardHashDomains,
+            OrchardCommitDomains,
+            OrchardFixedBases,
+            PallasLookupRangeCheck45BConfig,
+        >,
+        ecc_chip: EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
         note_commit_chip: NoteCommitChip,
         cond_swap_chip: CondSwapChip<pallas::Base>,
         g_d: &NonIdentityEccPoint,
@@ -1761,10 +1801,15 @@ pub(in crate::circuit) mod gadgets {
         rho: AssignedCell<pallas::Base, pallas::Base>,
         psi: AssignedCell<pallas::Base, pallas::Base>,
         asset: &NonIdentityEccPoint,
-        rcm: ScalarFixed<pallas::Affine, EccChip<OrchardFixedBases, PallasLookupConfigOptimized>>,
+        rcm: ScalarFixed<
+            pallas::Affine,
+            EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
+        >,
         is_native_asset: AssignedCell<pallas::Base, pallas::Base>,
-    ) -> Result<Point<pallas::Affine, EccChip<OrchardFixedBases, PallasLookupConfigOptimized>>, Error>
-    {
+    ) -> Result<
+        Point<pallas::Affine, EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>>,
+        Error,
+    > {
         let lookup_config = chip.config().lookup_config();
 
         // `a` = bits 0..=249 of `x(g_d)`
@@ -2098,7 +2143,7 @@ pub(in crate::circuit) mod gadgets {
     /// - [`g_d` canonicity](https://p.z.cash/orchard-0.1:note-commit-canonicity-g_d?partial)
     /// - [`y` canonicity](https://p.z.cash/orchard-0.1:note-commit-canonicity-y?partial)
     fn canon_bitshift_130(
-        lookup_config: &PallasLookupConfigOptimized,
+        lookup_config: &PallasLookupRangeCheck45BConfig,
         mut layouter: impl Layouter<pallas::Base>,
         a: AssignedCell<pallas::Base, pallas::Base>,
     ) -> Result<CanonicityBounds, Error> {
@@ -2132,7 +2177,7 @@ pub(in crate::circuit) mod gadgets {
     ///
     /// [Specification](https://p.z.cash/orchard-0.1:note-commit-canonicity-pk_d?partial).
     fn pkd_asset_x_canonicity(
-        lookup_config: &PallasLookupConfigOptimized,
+        lookup_config: &PallasLookupRangeCheck45BConfig,
         mut layouter: impl Layouter<pallas::Base>,
         b_3: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         c: AssignedCell<pallas::Base, pallas::Base>,
@@ -2175,7 +2220,7 @@ pub(in crate::circuit) mod gadgets {
     ///
     /// [Specification](https://p.z.cash/orchard-0.1:note-commit-canonicity-rho?partial).
     fn rho_canonicity(
-        lookup_config: &PallasLookupConfigOptimized,
+        lookup_config: &PallasLookupRangeCheck45BConfig,
         mut layouter: impl Layouter<pallas::Base>,
         e_1: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         f: AssignedCell<pallas::Base, pallas::Base>,
@@ -2216,7 +2261,7 @@ pub(in crate::circuit) mod gadgets {
     ///
     /// [Specification](https://p.z.cash/orchard-0.1:note-commit-canonicity-psi?partial).
     fn psi_canonicity(
-        lookup_config: &PallasLookupConfigOptimized,
+        lookup_config: &PallasLookupRangeCheck45BConfig,
         mut layouter: impl Layouter<pallas::Base>,
         g_1: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         g_2: AssignedCell<pallas::Base, pallas::Base>,
@@ -2258,7 +2303,7 @@ pub(in crate::circuit) mod gadgets {
     /// - [`y` decomposition](https://p.z.cash/orchard-0.1:note-commit-decomposition-y?partial)
     /// - [`y` canonicity](https://p.z.cash/orchard-0.1:note-commit-canonicity-y?partial)
     fn y_canonicity(
-        lookup_config: &PallasLookupConfigOptimized,
+        lookup_config: &PallasLookupRangeCheck45BConfig,
         y_canon: &YCanonicity,
         mut layouter: impl Layouter<pallas::Base>,
         y: AssignedCell<pallas::Base, pallas::Base>,
@@ -2348,10 +2393,10 @@ mod tests {
             chip::{EccChip, EccConfig},
             NonIdentityPoint, ScalarFixed,
         },
-        sinsemilla::chip::SinsemillaChipOptimized,
+        sinsemilla::chip::SinsemillaWithPrivateInitChip,
         utilities::{
             cond_swap::{CondSwapChip, CondSwapConfig},
-            lookup_range_check::PallasLookupConfigOptimized,
+            lookup_range_check::PallasLookupRangeCheck45BConfig,
         },
     };
 
@@ -2380,7 +2425,7 @@ mod tests {
         impl Circuit<pallas::Base> for MyCircuit {
             type Config = (
                 NoteCommitConfig,
-                EccConfig<OrchardFixedBases, PallasLookupConfigOptimized>,
+                EccConfig<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
                 CondSwapConfig,
             );
             type FloorPlanner = SimpleFloorPlanner;
@@ -2429,16 +2474,17 @@ mod tests {
                     meta.fixed_column(),
                 ];
 
-                let range_check = PallasLookupConfigOptimized::configure_with_tag(
+                let range_check = PallasLookupRangeCheck45BConfig::configure_with_tag(
                     meta,
                     advices[9],
                     table_idx,
                     table_range_check_tag,
                 );
-                let sinsemilla_config = SinsemillaChipOptimized::<
+                let sinsemilla_config = SinsemillaWithPrivateInitChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
+                    PallasLookupRangeCheck45BConfig,
                 >::configure(
                     meta,
                     advices[..5].try_into().unwrap(),
@@ -2451,7 +2497,7 @@ mod tests {
                     NoteCommitChip::configure(meta, advices, sinsemilla_config);
 
                 let ecc_config =
-                    EccChip::<OrchardFixedBases, PallasLookupConfigOptimized>::configure(
+                    EccChip::<OrchardFixedBases, PallasLookupRangeCheck45BConfig>::configure(
                         meta,
                         advices,
                         lagrange_coeffs,
@@ -2472,16 +2518,17 @@ mod tests {
                 let (note_commit_config, ecc_config, cond_swap_config) = config;
 
                 // Load the Sinsemilla generator lookup table used by the whole circuit.
-                SinsemillaChipOptimized::<
+                SinsemillaWithPrivateInitChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
+                    PallasLookupRangeCheck45BConfig,
                 >::load(
                     note_commit_config.sinsemilla_config.clone(), &mut layouter
                 )?;
 
                 // Construct a Sinsemilla chip
-                let sinsemilla_chip = SinsemillaChipOptimized::construct(
+                let sinsemilla_chip = SinsemillaWithPrivateInitChip::construct(
                     note_commit_config.sinsemilla_config.clone(),
                 );
 

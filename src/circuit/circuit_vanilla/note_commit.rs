@@ -25,7 +25,7 @@ use halo2_gadgets::{
     },
     utilities::{
         bool_check,
-        lookup_range_check::{LookupRangeCheck, PallasLookupRCConfig},
+        lookup_range_check::{LookupRangeCheck, PallasLookupRangeCheckConfig},
         FieldValue, RangeConstrained,
     },
 };
@@ -124,7 +124,7 @@ impl DecomposeB {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        lookup_config: &PallasLookupRCConfig,
+        lookup_config: &PallasLookupRangeCheckConfig,
         chip: SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
         layouter: &mut impl Layouter<pallas::Base>,
         g_d: &NonIdentityEccPoint,
@@ -269,7 +269,7 @@ impl DecomposeD {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        lookup_config: &PallasLookupRCConfig,
+        lookup_config: &PallasLookupRangeCheckConfig,
         chip: SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
         layouter: &mut impl Layouter<pallas::Base>,
         pk_d: &NonIdentityEccPoint,
@@ -391,7 +391,7 @@ impl DecomposeE {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        lookup_config: &PallasLookupRCConfig,
+        lookup_config: &PallasLookupRangeCheckConfig,
         chip: SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
         layouter: &mut impl Layouter<pallas::Base>,
         value: &AssignedCell<NoteValue, pallas::Base>,
@@ -516,7 +516,7 @@ impl DecomposeG {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        lookup_config: &PallasLookupRCConfig,
+        lookup_config: &PallasLookupRangeCheckConfig,
         chip: SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
         layouter: &mut impl Layouter<pallas::Base>,
         rho: &AssignedCell<pallas::Base, pallas::Base>,
@@ -638,7 +638,7 @@ impl DecomposeH {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        lookup_config: &PallasLookupRCConfig,
+        lookup_config: &PallasLookupRangeCheckConfig,
         chip: SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
         layouter: &mut impl Layouter<pallas::Base>,
         psi: &AssignedCell<pallas::Base, pallas::Base>,
@@ -1784,7 +1784,7 @@ pub(in crate::circuit) mod gadgets {
     /// - [`g_d` canonicity](https://p.z.cash/orchard-0.1:note-commit-canonicity-g_d?partial)
     /// - [`y` canonicity](https://p.z.cash/orchard-0.1:note-commit-canonicity-y?partial)
     fn canon_bitshift_130(
-        lookup_config: &PallasLookupRCConfig,
+        lookup_config: &PallasLookupRangeCheckConfig,
         mut layouter: impl Layouter<pallas::Base>,
         a: AssignedCell<pallas::Base, pallas::Base>,
     ) -> Result<CanonicityBounds, Error> {
@@ -1818,7 +1818,7 @@ pub(in crate::circuit) mod gadgets {
     ///
     /// [Specification](https://p.z.cash/orchard-0.1:note-commit-canonicity-pk_d?partial).
     fn pkd_x_canonicity(
-        lookup_config: &PallasLookupRCConfig,
+        lookup_config: &PallasLookupRangeCheckConfig,
         mut layouter: impl Layouter<pallas::Base>,
         b_3: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         c: AssignedCell<pallas::Base, pallas::Base>,
@@ -1859,7 +1859,7 @@ pub(in crate::circuit) mod gadgets {
     ///
     /// [Specification](https://p.z.cash/orchard-0.1:note-commit-canonicity-rho?partial).
     fn rho_canonicity(
-        lookup_config: &PallasLookupRCConfig,
+        lookup_config: &PallasLookupRangeCheckConfig,
         mut layouter: impl Layouter<pallas::Base>,
         e_1: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         f: AssignedCell<pallas::Base, pallas::Base>,
@@ -1900,7 +1900,7 @@ pub(in crate::circuit) mod gadgets {
     ///
     /// [Specification](https://p.z.cash/orchard-0.1:note-commit-canonicity-psi?partial).
     fn psi_canonicity(
-        lookup_config: &PallasLookupRCConfig,
+        lookup_config: &PallasLookupRangeCheckConfig,
         mut layouter: impl Layouter<pallas::Base>,
         g_1: RangeConstrained<pallas::Base, AssignedCell<pallas::Base, pallas::Base>>,
         g_2: AssignedCell<pallas::Base, pallas::Base>,
@@ -1942,7 +1942,7 @@ pub(in crate::circuit) mod gadgets {
     /// - [`y` decomposition](https://p.z.cash/orchard-0.1:note-commit-decomposition-y?partial)
     /// - [`y` canonicity](https://p.z.cash/orchard-0.1:note-commit-canonicity-y?partial)
     fn y_canonicity(
-        lookup_config: &PallasLookupRCConfig,
+        lookup_config: &PallasLookupRangeCheckConfig,
         y_canon: &YCanonicity,
         mut layouter: impl Layouter<pallas::Base>,
         y: AssignedCell<pallas::Base, pallas::Base>,

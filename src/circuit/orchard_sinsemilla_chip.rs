@@ -1,4 +1,4 @@
-//! Defines the `OrchardSinsemillaChip` trait to abstract over `SinsemillaChip` and `SinsemillaChipOptimized` types.
+//! Defines the `OrchardSinsemillaChip` trait to abstract over `SinsemillaChip` and `SinsemillaWithPrivateInitChip` types.
 //! Used to generalize the `commit_ivk` function.
 
 use pasta_curves::pallas;
@@ -7,15 +7,11 @@ use halo2_proofs::circuit::Chip;
 
 use halo2_gadgets::{
     sinsemilla::{
-        chip::{SinsemillaChip, SinsemillaChipOptimized, SinsemillaConfig},
+        chip::{SinsemillaChip, SinsemillaConfig, SinsemillaWithPrivateInitChip},
         primitives as sinsemilla, SinsemillaInstructions,
     },
     utilities::lookup_range_check::{
-        // FIXME: rename PallasLookupConfigOptimized to PallasLookupRCConfigOptimized in halo2 (to
-        // be consistent with PallasLookupRCConfig).
-        PallasLookupConfigOptimized,
-        PallasLookupRC,
-        PallasLookupRCConfig,
+        PallasLookupRangeCheck, PallasLookupRangeCheck45BConfig, PallasLookupRangeCheckConfig,
     },
 };
 
@@ -24,7 +20,7 @@ use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomai
 type BaseSinsemillaChip =
     SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>;
 
-pub(super) trait OrchardSinsemillaChip<Lookup: PallasLookupRC>:
+pub(super) trait OrchardSinsemillaChip<Lookup: PallasLookupRangeCheck>:
     SinsemillaInstructions<
         pallas::Affine,
         { sinsemilla::K },
@@ -88,9 +84,14 @@ pub(super) trait OrchardSinsemillaChip<Lookup: PallasLookupRC>:
 {
 }
 
-impl OrchardSinsemillaChip<PallasLookupRCConfig> for BaseSinsemillaChip {}
+impl OrchardSinsemillaChip<PallasLookupRangeCheckConfig> for BaseSinsemillaChip {}
 
-impl OrchardSinsemillaChip<PallasLookupConfigOptimized>
-    for SinsemillaChipOptimized<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>
+impl OrchardSinsemillaChip<PallasLookupRangeCheck45BConfig>
+    for SinsemillaWithPrivateInitChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck45BConfig,
+    >
 {
 }
