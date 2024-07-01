@@ -21,7 +21,7 @@ use halo2_gadgets::{
         NonIdentityPoint, Point, ScalarFixed,
     },
     sinsemilla::{
-        chip::{SinsemillaConfig, SinsemillaWithPrivateInitChip},
+        chip::{SinsemillaChip, SinsemillaConfig},
         CommitDomain, Message, MessagePiece,
     },
     utilities::{
@@ -32,7 +32,7 @@ use halo2_gadgets::{
 
 type NoteCommitPiece = MessagePiece<
     pallas::Affine,
-    SinsemillaWithPrivateInitChip<
+    SinsemillaChip<
         OrchardHashDomains,
         OrchardCommitDomains,
         OrchardFixedBases,
@@ -130,7 +130,7 @@ impl DecomposeB {
     #[allow(clippy::type_complexity)]
     fn decompose(
         lookup_config: &LookupRangeCheck45BConfig<pallas::Base, 10>,
-        chip: SinsemillaWithPrivateInitChip<
+        chip: SinsemillaChip<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
@@ -280,7 +280,7 @@ impl DecomposeD {
     #[allow(clippy::type_complexity)]
     fn decompose(
         lookup_config: &LookupRangeCheck45BConfig<pallas::Base, 10>,
-        chip: SinsemillaWithPrivateInitChip<
+        chip: SinsemillaChip<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
@@ -407,7 +407,7 @@ impl DecomposeE {
     #[allow(clippy::type_complexity)]
     fn decompose(
         lookup_config: &LookupRangeCheck45BConfig<pallas::Base, 10>,
-        chip: SinsemillaWithPrivateInitChip<
+        chip: SinsemillaChip<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
@@ -537,7 +537,7 @@ impl DecomposeG {
     #[allow(clippy::type_complexity)]
     fn decompose(
         lookup_config: &LookupRangeCheck45BConfig<pallas::Base, 10>,
-        chip: SinsemillaWithPrivateInitChip<
+        chip: SinsemillaChip<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
@@ -678,7 +678,7 @@ impl DecomposeH {
     #[allow(clippy::type_complexity)]
     fn decompose(
         lookup_config: &LookupRangeCheck45BConfig<pallas::Base, 10>,
-        chip: SinsemillaWithPrivateInitChip<
+        chip: SinsemillaChip<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
@@ -831,7 +831,7 @@ impl DecomposeJ {
 
     #[allow(clippy::type_complexity)]
     fn decompose(
-        chip: SinsemillaWithPrivateInitChip<
+        chip: SinsemillaChip<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
@@ -1785,7 +1785,7 @@ pub(in crate::circuit) mod gadgets {
     #[allow(clippy::too_many_arguments)]
     pub(in crate::circuit) fn note_commit(
         mut layouter: impl Layouter<pallas::Base>,
-        chip: SinsemillaWithPrivateInitChip<
+        chip: SinsemillaChip<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
@@ -2392,7 +2392,7 @@ mod tests {
             chip::{EccChip, EccConfig},
             NonIdentityPoint, ScalarFixed,
         },
-        sinsemilla::chip::SinsemillaWithPrivateInitChip,
+        sinsemilla::chip::SinsemillaChip,
         utilities::{
             cond_swap::{CondSwapChip, CondSwapConfig},
             lookup_range_check::{LookupRangeCheck45BConfig, PallasLookupRangeCheck45BConfig},
@@ -2479,7 +2479,7 @@ mod tests {
                     table_idx,
                     table_range_check_tag,
                 );
-                let sinsemilla_config = SinsemillaWithPrivateInitChip::<
+                let sinsemilla_config = SinsemillaChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
@@ -2491,6 +2491,7 @@ mod tests {
                     lagrange_coeffs[0],
                     lookup,
                     range_check,
+                    true,
                 );
                 let note_commit_config =
                     NoteCommitChip::configure(meta, advices, sinsemilla_config);
@@ -2517,7 +2518,7 @@ mod tests {
                 let (note_commit_config, ecc_config, cond_swap_config) = config;
 
                 // Load the Sinsemilla generator lookup table used by the whole circuit.
-                SinsemillaWithPrivateInitChip::<
+                SinsemillaChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
@@ -2527,9 +2528,8 @@ mod tests {
                 )?;
 
                 // Construct a Sinsemilla chip
-                let sinsemilla_chip = SinsemillaWithPrivateInitChip::construct(
-                    note_commit_config.sinsemilla_config.clone(),
-                );
+                let sinsemilla_chip =
+                    SinsemillaChip::construct(note_commit_config.sinsemilla_config.clone());
 
                 // Construct an ECC chip
                 let ecc_chip = EccChip::construct(ecc_config);

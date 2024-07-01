@@ -11,7 +11,7 @@ use pasta_curves::pallas;
 use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P};
 use halo2_gadgets::{
     ecc::{chip::EccChip, ScalarFixed, X},
-    sinsemilla::{chip::SinsemillaWithPrivateInitChip, CommitDomain, Message, MessagePiece},
+    sinsemilla::{chip::SinsemillaChip, CommitDomain, Message, MessagePiece},
     utilities::{bool_check, RangeConstrained},
 };
 
@@ -242,7 +242,7 @@ pub(in crate::circuit) mod gadgets {
     #[allow(non_snake_case)]
     #[allow(clippy::type_complexity)]
     pub(in crate::circuit) fn commit_ivk(
-        sinsemilla_chip: SinsemillaWithPrivateInitChip<
+        sinsemilla_chip: SinsemillaChip<
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
@@ -684,7 +684,7 @@ mod tests {
             ScalarFixed,
         },
         sinsemilla::{
-            chip::{SinsemillaConfig, SinsemillaWithPrivateInitChip},
+            chip::{SinsemillaChip, SinsemillaConfig},
             primitives::CommitDomain,
         },
         utilities::{lookup_range_check::LookupRangeCheck45BConfig, UtilitiesInstructions},
@@ -771,7 +771,7 @@ mod tests {
                     table_idx,
                     table_range_check_tag,
                 );
-                let sinsemilla_config = SinsemillaWithPrivateInitChip::<
+                let sinsemilla_config = SinsemillaChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
@@ -783,6 +783,7 @@ mod tests {
                     lagrange_coeffs[0],
                     lookup,
                     range_check,
+                    true,
                 );
 
                 let commit_ivk_config = CommitIvkChip::configure(meta, advices);
@@ -806,7 +807,7 @@ mod tests {
                 let (sinsemilla_config, commit_ivk_config, ecc_config) = config;
 
                 // Load the Sinsemilla generator lookup table used by the whole circuit.
-                SinsemillaWithPrivateInitChip::<
+                SinsemillaChip::<
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
@@ -814,7 +815,7 @@ mod tests {
                 >::load(sinsemilla_config.clone(), &mut layouter)?;
 
                 // Construct a Sinsemilla chip
-                let sinsemilla_chip = SinsemillaWithPrivateInitChip::construct(sinsemilla_config);
+                let sinsemilla_chip = SinsemillaChip::construct(sinsemilla_config);
 
                 // Construct an ECC chip
                 let ecc_chip = EccChip::construct(ecc_config);

@@ -53,9 +53,9 @@ use halo2_gadgets::{
     },
     poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
     sinsemilla::{
-        chip::{SinsemillaConfig, SinsemillaWithPrivateInitChip},
+        chip::{SinsemillaChip, SinsemillaConfig},
         merkle::{
-            chip::{MerkleConfig, MerkleWithPrivateInitChip},
+            chip::{MerkleChip, MerkleConfig},
             MerklePath,
         },
     },
@@ -435,16 +435,16 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Since the Sinsemilla config uses only 5 advice columns,
         // we can fit two instances side-by-side.
         let (sinsemilla_config_1, merkle_config_1) = {
-            let sinsemilla_config_1 = SinsemillaWithPrivateInitChip::configure(
+            let sinsemilla_config_1 = SinsemillaChip::configure(
                 meta,
                 advices[..5].try_into().unwrap(),
                 advices[6],
                 lagrange_coeffs[0],
                 lookup,
                 range_check,
+                true,
             );
-            let merkle_config_1 =
-                MerkleWithPrivateInitChip::configure(meta, sinsemilla_config_1.clone());
+            let merkle_config_1 = MerkleChip::configure(meta, sinsemilla_config_1.clone());
 
             (sinsemilla_config_1, merkle_config_1)
         };
@@ -454,16 +454,16 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         // Since the Sinsemilla config uses only 5 advice columns,
         // we can fit two instances side-by-side.
         let (sinsemilla_config_2, merkle_config_2) = {
-            let sinsemilla_config_2 = SinsemillaWithPrivateInitChip::configure(
+            let sinsemilla_config_2 = SinsemillaChip::configure(
                 meta,
                 advices[5..].try_into().unwrap(),
                 advices[7],
                 lagrange_coeffs[1],
                 lookup,
                 range_check,
+                true,
             );
-            let merkle_config_2 =
-                MerkleWithPrivateInitChip::configure(meta, sinsemilla_config_2.clone());
+            let merkle_config_2 = MerkleChip::configure(meta, sinsemilla_config_2.clone());
 
             (sinsemilla_config_2, merkle_config_2)
         };
@@ -509,7 +509,7 @@ impl plonk::Circuit<pallas::Base> for Circuit {
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
         // Load the Sinsemilla generator lookup table used by the whole circuit.
-        SinsemillaWithPrivateInitChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
+        SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
         // Construct the ECC chip.
         let ecc_chip = config.ecc_chip();
