@@ -15,8 +15,8 @@ use orchard::{
 use rand::rngs::OsRng;
 use zcash_note_encryption_zsa::try_note_decryption;
 
-pub fn verify_bundle<D: OrchardFlavor>(
-    bundle: &Bundle<Authorized, i64, D>,
+pub fn verify_bundle<FL: OrchardFlavor>(
+    bundle: &Bundle<Authorized, i64, FL>,
     vk: &VerifyingKey,
     verify_proof: bool,
 ) {
@@ -52,17 +52,17 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
     (merkle_path, anchor)
 }
 
-fn bundle_chain<D: OrchardFlavor>() {
+fn bundle_chain<FL: OrchardFlavor>() {
     let mut rng = OsRng;
-    let pk = ProvingKey::build::<D>();
-    let vk = VerifyingKey::build::<D>();
+    let pk = ProvingKey::build::<FL>();
+    let vk = VerifyingKey::build::<FL>();
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
     // Create a shielding bundle.
-    let shielding_bundle: Bundle<_, i64, D> = {
+    let shielding_bundle: Bundle<_, i64, FL> = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -101,7 +101,7 @@ fn bundle_chain<D: OrchardFlavor>() {
     verify_bundle(&shielding_bundle, &vk, true);
 
     // Create a shielded bundle spending the previous output.
-    let shielded_bundle: Bundle<_, i64, D> = {
+    let shielded_bundle: Bundle<_, i64, FL> = {
         let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
         let (note, _, _) = shielding_bundle
             .actions()

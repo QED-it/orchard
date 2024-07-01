@@ -17,14 +17,14 @@ use orchard::{
 };
 use rand::rngs::OsRng;
 
-fn criterion_benchmark<D: OrchardFlavor>(c: &mut Criterion) {
+fn criterion_benchmark<FL: OrchardFlavor>(c: &mut Criterion) {
     let rng = OsRng;
 
     let sk = SpendingKey::from_bytes([7; 32]).unwrap();
     let recipient = FullViewingKey::from(&sk).address_at(0u32, Scope::External);
 
-    let vk = VerifyingKey::build::<D>();
-    let pk = ProvingKey::build::<D>();
+    let vk = VerifyingKey::build::<FL>();
+    let pk = ProvingKey::build::<FL>();
 
     let create_bundle = |num_recipients| {
         let mut builder = Builder::new(

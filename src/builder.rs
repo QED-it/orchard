@@ -16,7 +16,7 @@ use crate::builder::BuildError::{BurnErrorNative, BurnErrorZero};
 use crate::{
     action::Action,
     address::Address,
-    bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags, OrchardHash},
+    bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags},
     circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
@@ -24,6 +24,7 @@ use crate::{
     },
     note::{AssetBase, Note, Rho, TransmittedNoteCiphertext},
     note_encryption::{OrchardDomain, OrchardDomainCommon},
+    orchard_flavors::OrchardFlavor,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -635,10 +636,10 @@ impl Builder {
     /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
     // FIXME: Consider factoring parts of the return type into `type` definitions
     #[allow(clippy::type_complexity)]
-    pub fn build<V: TryFrom<i64>, D: OrchardDomainCommon + OrchardCircuit + OrchardHash>(
+    pub fn build<V: TryFrom<i64>, FL: OrchardFlavor>(
         self,
         rng: impl RngCore,
-    ) -> Result<Option<(UnauthorizedBundle<V, D>, BundleMetadata)>, BuildError> {
+    ) -> Result<Option<(UnauthorizedBundle<V, FL>, BundleMetadata)>, BuildError> {
         bundle(
             rng,
             self.anchor,
@@ -716,14 +717,14 @@ fn pad_spend(spend: Option<&SpendInfo>, asset: AssetBase, mut rng: impl RngCore)
 /// The returned bundle will have no proof or signatures; these can be applied with
 /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
 #[allow(clippy::type_complexity)]
-pub fn bundle<V: TryFrom<i64>, D: OrchardDomainCommon + OrchardCircuit + OrchardHash>(
+pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     mut rng: impl RngCore,
     anchor: Anchor,
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
     burn: HashMap<AssetBase, ValueSum>,
-) -> Result<Option<(UnauthorizedBundle<V, D>, BundleMetadata)>, BuildError> {
+) -> Result<Option<(UnauthorizedBundle<V, FL>, BundleMetadata)>, BuildError> {
     let flags = bundle_type.flags();
 
     let num_requested_spends = spends.len();
@@ -1191,11 +1192,12 @@ pub mod testing {
     use crate::note::AssetBase;
     use crate::{
         address::testing::arb_address,
-        bundle::{Authorized, Bundle, OrchardHash},
-        circuit::{OrchardCircuit, ProvingKey},
+        bundle::{Authorized, Bundle},
+        circuit::ProvingKey,
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
         note_encryption::OrchardDomainCommon,
+        orchard_flavors::OrchardFlavor,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
         value::{testing::arb_positive_note_value, NoteValue, MAX_NOTE_VALUE},
         Address, Note,
@@ -1222,12 +1224,9 @@ pub mod testing {
 
     impl<R: RngCore + CryptoRng> ArbitraryBundleInputs<R> {
         /// Create a bundle from the set of arbitrary bundle inputs.
-        fn into_bundle<
-            V: TryFrom<i64> + Copy + Into<i64>,
-            D: OrchardDomainCommon + OrchardCircuit + OrchardHash,
-        >(
+        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>, FL: OrchardFlavor>(
             mut self,
-        ) -> Bundle<Authorized, V, D> {
+        ) -> Bundle<Authorized, V, FL> {
             let fvk = FullViewingKey::from(&self.sk);
             let mut builder = Builder::new(BundleType::DEFAULT_ZSA, self.anchor);
 
@@ -1244,7 +1243,7 @@ pub mod testing {
                     .unwrap();
             }
 
-            let pk = ProvingKey::build::<D>();
+            let pk = ProvingKey::build::<FL>();
             builder
                 .build(&mut self.rng)
                 .unwrap()
@@ -1266,7 +1265,7 @@ pub mod testing {
         phantom: std::marker::PhantomData<D>,
     }
 
-    impl<D: OrchardDomainCommon + OrchardCircuit + OrchardHash> BuilderArb<D> {
+    impl<FL: OrchardFlavor> BuilderArb<FL> {
         prop_compose! {
             /// Produce a random valid Orchard bundle.
             fn arb_bundle_inputs(sk: SpendingKey)
@@ -1319,17 +1318,17 @@ pub mod testing {
 
         /// Produce an arbitrary valid Orchard bundle using a random spending key.
         pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
-        ) -> impl Strategy<Value = Bundle<Authorized, V, D>> {
+        ) -> impl Strategy<Value = Bundle<Authorized, V, FL>> {
             arb_spending_key()
-                .prop_flat_map(BuilderArb::<D>::arb_bundle_inputs)
-                .prop_map(|inputs| inputs.into_bundle::<V, D>())
+                .prop_flat_map(BuilderArb::<FL>::arb_bundle_inputs)
+                .prop_map(|inputs| inputs.into_bundle::<V, FL>())
         }
 
         /// Produce an arbitrary valid Orchard bundle using a specified spending key.
         pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
             k: SpendingKey,
-        ) -> impl Strategy<Value = Bundle<Authorized, V, D>> {
-            BuilderArb::<D>::arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V, D>())
+        ) -> impl Strategy<Value = Bundle<Authorized, V, FL>> {
+            BuilderArb::<FL>::arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V, FL>())
         }
     }
 }

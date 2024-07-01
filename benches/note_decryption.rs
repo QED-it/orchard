@@ -15,9 +15,9 @@ use zcash_note_encryption_zsa::{batch, try_compact_note_decryption, try_note_dec
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 
-fn bench_note_decryption<D: OrchardFlavor>(c: &mut Criterion) {
+fn bench_note_decryption<FL: OrchardFlavor>(c: &mut Criterion) {
     let rng = OsRng;
-    let pk = ProvingKey::build::<D>();
+    let pk = ProvingKey::build::<FL>();
 
     let fvk = FullViewingKey::from(&SpendingKey::from_bytes([7; 32]).unwrap());
     let valid_ivk = fvk.to_ivk(Scope::External);
