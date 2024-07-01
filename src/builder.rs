@@ -23,7 +23,7 @@ use crate::{
         SpendingKey,
     },
     note::{AssetBase, Note, Rho, TransmittedNoteCiphertext},
-    note_encryption::{OrchardDomain, OrchardNoteEnc},
+    note_encryption::{OrchardDomain, OrchardDomainCommon},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -387,7 +387,7 @@ impl ActionInfo {
     /// # Panics
     ///
     /// Panics if the asset types of the spent and output notes do not match.
-    fn build<D: OrchardNoteEnc>(
+    fn build<D: OrchardDomainCommon>(
         self,
         mut rng: impl RngCore,
     ) -> (Action<SigningMetadata, D>, Circuit<D>) {
@@ -635,7 +635,7 @@ impl Builder {
     /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
     // FIXME: Consider factoring parts of the return type into `type` definitions
     #[allow(clippy::type_complexity)]
-    pub fn build<V: TryFrom<i64>, D: OrchardNoteEnc + OrchardCircuit + OrchardHash>(
+    pub fn build<V: TryFrom<i64>, D: OrchardDomainCommon + OrchardCircuit + OrchardHash>(
         self,
         rng: impl RngCore,
     ) -> Result<Option<(UnauthorizedBundle<V, D>, BundleMetadata)>, BuildError> {
@@ -716,7 +716,7 @@ fn pad_spend(spend: Option<&SpendInfo>, asset: AssetBase, mut rng: impl RngCore)
 /// The returned bundle will have no proof or signatures; these can be applied with
 /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
 #[allow(clippy::type_complexity)]
-pub fn bundle<V: TryFrom<i64>, D: OrchardNoteEnc + OrchardCircuit + OrchardHash>(
+pub fn bundle<V: TryFrom<i64>, D: OrchardDomainCommon + OrchardCircuit + OrchardHash>(
     mut rng: impl RngCore,
     anchor: Anchor,
     bundle_type: BundleType,
@@ -923,7 +923,7 @@ impl<S: InProgressSignatures, C: OrchardCircuit> InProgress<Unproven<C>, S> {
     }
 }
 
-impl<S: InProgressSignatures, V, D: OrchardNoteEnc + OrchardCircuit>
+impl<S: InProgressSignatures, V, D: OrchardDomainCommon + OrchardCircuit>
     Bundle<InProgress<Unproven<D>, S>, V, D>
 {
     /// Creates the proof for this bundle.
@@ -1014,7 +1014,7 @@ impl MaybeSigned {
     }
 }
 
-impl<P: fmt::Debug, V, D: OrchardNoteEnc> Bundle<InProgress<P, Unauthorized>, V, D> {
+impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized>, V, D> {
     /// Loads the sighash into this bundle, preparing it for signing.
     ///
     /// This API ensures that all signatures are created over the same sighash.
@@ -1043,7 +1043,7 @@ impl<P: fmt::Debug, V, D: OrchardNoteEnc> Bundle<InProgress<P, Unauthorized>, V,
     }
 }
 
-impl<V, D: OrchardNoteEnc> Bundle<InProgress<Proof, Unauthorized>, V, D> {
+impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
     /// Applies signatures to this bundle, in order to authorize it.
     ///
     /// This is a helper method that wraps [`Bundle::prepare`], [`Bundle::sign`], and
@@ -1063,7 +1063,7 @@ impl<V, D: OrchardNoteEnc> Bundle<InProgress<Proof, Unauthorized>, V, D> {
     }
 }
 
-impl<P: fmt::Debug, V, D: OrchardNoteEnc> Bundle<InProgress<P, PartiallyAuthorized>, V, D> {
+impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, PartiallyAuthorized>, V, D> {
     /// Signs this bundle with the given [`SpendAuthorizingKey`].
     ///
     /// This will apply signatures for all notes controlled by this spending key.
@@ -1126,7 +1126,7 @@ impl<P: fmt::Debug, V, D: OrchardNoteEnc> Bundle<InProgress<P, PartiallyAuthoriz
     }
 }
 
-impl<V, D: OrchardNoteEnc> Bundle<InProgress<Proof, PartiallyAuthorized>, V, D> {
+impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, PartiallyAuthorized>, V, D> {
     /// Finalizes this bundle, enabling it to be included in a transaction.
     ///
     /// Returns an error if any signatures are missing.
@@ -1195,7 +1195,7 @@ pub mod testing {
         circuit::{OrchardCircuit, ProvingKey},
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
-        note_encryption::OrchardNoteEnc,
+        note_encryption::OrchardDomainCommon,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
         value::{testing::arb_positive_note_value, NoteValue, MAX_NOTE_VALUE},
         Address, Note,
@@ -1224,7 +1224,7 @@ pub mod testing {
         /// Create a bundle from the set of arbitrary bundle inputs.
         fn into_bundle<
             V: TryFrom<i64> + Copy + Into<i64>,
-            D: OrchardNoteEnc + OrchardCircuit + OrchardHash,
+            D: OrchardDomainCommon + OrchardCircuit + OrchardHash,
         >(
             mut self,
         ) -> Bundle<Authorized, V, D> {
@@ -1262,11 +1262,11 @@ pub mod testing {
     /// `BuilderArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol variations
     /// in property-based testing, addressing proptest crate limitations.    
     #[derive(Debug)]
-    pub struct BuilderArb<D: OrchardNoteEnc> {
+    pub struct BuilderArb<D: OrchardDomainCommon> {
         phantom: std::marker::PhantomData<D>,
     }
 
-    impl<D: OrchardNoteEnc + OrchardCircuit + OrchardHash> BuilderArb<D> {
+    impl<D: OrchardDomainCommon + OrchardCircuit + OrchardHash> BuilderArb<D> {
         prop_compose! {
             /// Produce a random valid Orchard bundle.
             fn arb_bundle_inputs(sk: SpendingKey)

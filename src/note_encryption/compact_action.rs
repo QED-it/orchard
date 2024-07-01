@@ -11,9 +11,9 @@ use crate::{
     note::{ExtractedNoteCommitment, Nullifier, Rho},
 };
 
-use super::orchard_domain::{OrchardDomain, OrchardNoteEnc};
+use super::orchard_domain::{OrchardDomain, OrchardDomainCommon};
 
-impl<A, D: OrchardNoteEnc> ShieldedOutput<OrchardDomain<D>> for Action<A, D> {
+impl<A, D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for Action<A, D> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.encrypted_note().epk_bytes)
     }
@@ -32,20 +32,20 @@ impl<A, D: OrchardNoteEnc> ShieldedOutput<OrchardDomain<D>> for Action<A, D> {
 }
 
 /// A compact Action for light clients.
-pub struct CompactAction<D: OrchardNoteEnc> {
+pub struct CompactAction<D: OrchardDomainCommon> {
     nullifier: Nullifier,
     cmx: ExtractedNoteCommitment,
     ephemeral_key: EphemeralKeyBytes,
     enc_ciphertext: D::CompactNoteCiphertextBytes,
 }
 
-impl<D: OrchardNoteEnc> fmt::Debug for CompactAction<D> {
+impl<D: OrchardDomainCommon> fmt::Debug for CompactAction<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CompactAction")
     }
 }
 
-impl<A, D: OrchardNoteEnc> From<&Action<A, D>> for CompactAction<D>
+impl<A, D: OrchardDomainCommon> From<&Action<A, D>> for CompactAction<D>
 where
     Action<A, D>: ShieldedOutput<OrchardDomain<D>>,
 {
@@ -59,7 +59,7 @@ where
     }
 }
 
-impl<D: OrchardNoteEnc> ShieldedOutput<OrchardDomain<D>> for CompactAction<D> {
+impl<D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for CompactAction<D> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.ephemeral_key.0)
     }
@@ -77,7 +77,7 @@ impl<D: OrchardNoteEnc> ShieldedOutput<OrchardDomain<D>> for CompactAction<D> {
     }
 }
 
-impl<D: OrchardNoteEnc> CompactAction<D> {
+impl<D: OrchardDomainCommon> CompactAction<D> {
     /// Create a CompactAction from its constituent parts
     pub fn from_parts(
         nullifier: Nullifier,
@@ -123,12 +123,12 @@ pub mod testing {
         value::NoteValue,
     };
 
-    use super::{CompactAction, OrchardDomain, OrchardNoteEnc};
+    use super::{CompactAction, OrchardDomain, OrchardDomainCommon};
 
     /// Creates a fake `CompactAction` paying the given recipient the specified value.
     ///
     /// Returns the `CompactAction` and the new note.
-    pub fn fake_compact_action<R: RngCore, D: OrchardNoteEnc>(
+    pub fn fake_compact_action<R: RngCore, D: OrchardDomainCommon>(
         rng: &mut R,
         nf_old: Nullifier,
         recipient: Address,

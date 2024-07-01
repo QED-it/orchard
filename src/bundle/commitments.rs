@@ -10,7 +10,7 @@ use crate::{
     bundle::{Authorization, Authorized, Bundle},
     issuance::{IssueAuth, IssueBundle, Signed},
     note::AssetBase,
-    note_encryption::OrchardNoteEnc,
+    note_encryption::OrchardDomainCommon,
     orchard_flavors::{OrchardVanilla, OrchardZSA},
 };
 
@@ -82,7 +82,7 @@ impl OrchardHash for OrchardZSA {
 pub(crate) fn hash_bundle_txid_data<
     A: Authorization,
     V: Copy + Into<i64>,
-    D: OrchardNoteEnc + OrchardHash,
+    D: OrchardDomainCommon + OrchardHash,
 >(
     bundle: &Bundle<A, V, D>,
 ) -> Blake2bHash {
@@ -136,7 +136,7 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 /// Identifier Non-Malleability][zip244]
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
-pub(crate) fn hash_bundle_auth_data<V, D: OrchardNoteEnc>(
+pub(crate) fn hash_bundle_auth_data<V, D: OrchardDomainCommon>(
     bundle: &Bundle<Authorized, V, D>,
 ) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);

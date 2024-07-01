@@ -53,7 +53,7 @@ pub trait NoteBytes:
 impl<const N: usize> NoteBytes for NoteBytesData<N> {}
 
 /// Represents the Orchard protocol domain specifics required for note encryption and decryption.
-pub trait OrchardNoteEnc: fmt::Debug + Clone {
+pub trait OrchardDomainCommon: fmt::Debug + Clone {
     /// The size of a compact note, specific to the Orchard protocol.
     const COMPACT_NOTE_SIZE: usize;
 
@@ -78,13 +78,13 @@ pub trait OrchardNoteEnc: fmt::Debug + Clone {
 
 /// Orchard-specific note encryption logic.
 #[derive(Debug, Clone)]
-pub struct OrchardDomain<D: OrchardNoteEnc> {
+pub struct OrchardDomain<D: OrchardDomainCommon> {
     /// A parameter needed to generate the nullifier.
     pub rho: Rho,
     phantom: std::marker::PhantomData<D>,
 }
 
-impl<D: OrchardNoteEnc> OrchardDomain<D> {
+impl<D: OrchardDomainCommon> OrchardDomain<D> {
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
     pub fn for_action<T>(act: &Action<T, D>) -> Self {
         Self {

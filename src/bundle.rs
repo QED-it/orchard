@@ -20,7 +20,7 @@ use crate::{
     circuit::{Instance, Proof, VerifyingKey},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    note_encryption::{OrchardDomain, OrchardNoteEnc},
+    note_encryption::{OrchardDomain, OrchardDomainCommon},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
     value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -28,7 +28,7 @@ use crate::{
 
 pub(crate) use commitments::OrchardHash;
 
-impl<A, D: OrchardNoteEnc> Action<A, D> {
+impl<A, D: OrchardDomainCommon> Action<A, D> {
     /// Prepares the public instance for this action, for creating and verifying the
     /// bundle proof.
     pub fn to_instance(&self, flags: Flags, anchor: Anchor) -> Instance {
@@ -186,7 +186,7 @@ pub trait Authorization: fmt::Debug {
 
 /// A bundle of actions to be applied to the ledger.
 #[derive(Clone)]
-pub struct Bundle<A: Authorization, V, D: OrchardNoteEnc> {
+pub struct Bundle<A: Authorization, V, D: OrchardDomainCommon> {
     /// The list of actions that make up this bundle.
     actions: NonEmpty<Action<A::SpendAuth, D>>,
     /// Orchard-specific transaction-level flags for this bundle.
@@ -204,11 +204,11 @@ pub struct Bundle<A: Authorization, V, D: OrchardNoteEnc> {
     authorization: A,
 }
 
-impl<A: Authorization, V: fmt::Debug, D: OrchardNoteEnc> fmt::Debug for Bundle<A, V, D> {
+impl<A: Authorization, V: fmt::Debug, D: OrchardDomainCommon> fmt::Debug for Bundle<A, V, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         /// Helper struct for debug-printing actions without exposing `NonEmpty`.
-        struct Actions<'a, A, D: OrchardNoteEnc>(&'a NonEmpty<Action<A, D>>);
-        impl<'a, A: fmt::Debug, D: OrchardNoteEnc> fmt::Debug for Actions<'a, A, D> {
+        struct Actions<'a, A, D: OrchardDomainCommon>(&'a NonEmpty<Action<A, D>>);
+        impl<'a, A: fmt::Debug, D: OrchardDomainCommon> fmt::Debug for Actions<'a, A, D> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 f.debug_list().entries(self.0.iter()).finish()
             }
@@ -224,7 +224,7 @@ impl<A: Authorization, V: fmt::Debug, D: OrchardNoteEnc> fmt::Debug for Bundle<A
     }
 }
 
-impl<A: Authorization, V, D: OrchardNoteEnc> Bundle<A, V, D> {
+impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
     /// Constructs a `Bundle` from its constituent parts.
     pub fn from_parts(
         actions: NonEmpty<Action<A::SpendAuth, D>>,
@@ -437,7 +437,7 @@ impl<A: Authorization, V, D: OrchardNoteEnc> Bundle<A, V, D> {
     }
 }
 
-pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, D: 'a + OrchardNoteEnc + OrchardHash>(
+pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, D: 'a + OrchardDomainCommon + OrchardHash>(
     actions: impl IntoIterator<Item = &'a Action<A, D>>,
     value_balance: V,
     burn: impl Iterator<Item = (AssetBase, V)>,
@@ -464,7 +464,7 @@ pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, D: 'a + OrchardNoteEnc
     .into_bvk()
 }
 
-impl<A: Authorization, V: Copy + Into<i64>, D: OrchardNoteEnc + OrchardHash> Bundle<A, V, D> {
+impl<A: Authorization, V: Copy + Into<i64>, D: OrchardDomainCommon + OrchardHash> Bundle<A, V, D> {
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
     pub fn commitment(&self) -> BundleCommitment {
@@ -511,7 +511,7 @@ impl Authorized {
     }
 }
 
-impl<V, D: OrchardNoteEnc> Bundle<Authorized, V, D> {
+impl<V, D: OrchardDomainCommon> Bundle<Authorized, V, D> {
     /// Computes a commitment to the authorizing data within for this bundle.
     ///
     /// This together with `Bundle::commitment` bind the entire bundle.
@@ -527,7 +527,7 @@ impl<V, D: OrchardNoteEnc> Bundle<Authorized, V, D> {
     }
 }
 
-impl<V: DynamicUsage, D: OrchardNoteEnc> DynamicUsage for Bundle<Authorized, V, D> {
+impl<V: DynamicUsage, D: OrchardDomainCommon> DynamicUsage for Bundle<Authorized, V, D> {
     fn dynamic_usage(&self) -> usize {
         self.actions.dynamic_usage()
             + self.value_balance.dynamic_usage()
@@ -595,7 +595,7 @@ pub mod testing {
     pub use crate::action::testing::ActionArb;
     use crate::note::asset_base::testing::arb_zsa_asset_base;
     use crate::note::AssetBase;
-    use crate::note_encryption::OrchardNoteEnc;
+    use crate::note_encryption::OrchardDomainCommon;
     use crate::value::testing::arb_value_sum;
 
     /// Marker for an unauthorized bundle with no proofs or signatures.
@@ -609,11 +609,11 @@ pub mod testing {
     /// `BundleArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol variations
     /// in property-based testing, addressing proptest crate limitations.
     #[derive(Debug)]
-    pub struct BundleArb<D: OrchardNoteEnc> {
+    pub struct BundleArb<D: OrchardDomainCommon> {
         phantom: std::marker::PhantomData<D>,
     }
 
-    impl<D: OrchardNoteEnc + Default> BundleArb<D> {
+    impl<D: OrchardDomainCommon + Default> BundleArb<D> {
         /// Generate an unauthorized action having spend and output values less than MAX_NOTE_VALUE / n_actions.
         pub fn arb_unauthorized_action_n(
             n_actions: usize,

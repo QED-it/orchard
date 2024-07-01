@@ -7,10 +7,10 @@ use super::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
         NOTE_VERSION_BYTE_ZSA,
     },
-    orchard_domain::{NoteBytesData, OrchardNoteEnc},
+    orchard_domain::{NoteBytesData, OrchardDomainCommon},
 };
 
-impl OrchardNoteEnc for OrchardZSA {
+impl OrchardDomainCommon for OrchardZSA {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_ZSA;
 
     type NotePlaintextBytes = NoteBytesData<{ Self::NOTE_PLAINTEXT_SIZE }>;
@@ -68,7 +68,7 @@ mod tests {
     type OrchardDomainZSA = OrchardDomain<OrchardZSA>;
 
     /// Implementation of in-band secret distribution for Orchard bundles.
-    pub type OrchardNoteEncryptionZSA = zcash_note_encryption_zsa::NoteEncryption<OrchardDomainZSA>;
+    pub type OrchardDomainCommonryptionZSA = zcash_note_encryption_zsa::NoteEncryption<OrchardDomainZSA>;
 
     proptest! {
         #[test]
@@ -203,7 +203,7 @@ mod tests {
             // Test encryption
             //
 
-            let ne = OrchardNoteEncryptionZSA::new_with_esk(esk, Some(ovk), note, tv.memo);
+            let ne = OrchardDomainCommonryptionZSA::new_with_esk(esk, Some(ovk), note, tv.memo);
 
             assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
             assert_eq!(

@@ -6,10 +6,10 @@ use super::{
     domain::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_VANILLA,
     },
-    orchard_domain::{NoteBytesData, OrchardNoteEnc},
+    orchard_domain::{NoteBytesData, OrchardDomainCommon},
 };
 
-impl OrchardNoteEnc for OrchardVanilla {
+impl OrchardDomainCommon for OrchardVanilla {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_VANILLA;
 
     type NotePlaintextBytes = NoteBytesData<{ Self::NOTE_PLAINTEXT_SIZE }>;
@@ -65,7 +65,7 @@ mod tests {
     type OrchardDomainVanilla = OrchardDomain<OrchardVanilla>;
 
     /// Implementation of in-band secret distribution for Orchard bundles.
-    pub type OrchardNoteEncryptionVanilla =
+    pub type OrchardDomainCommonryptionVanilla =
         zcash_note_encryption_zsa::NoteEncryption<OrchardDomainVanilla>;
 
     proptest! {
@@ -201,7 +201,7 @@ mod tests {
             // Test encryption
             //
 
-            let ne = OrchardNoteEncryptionVanilla::new_with_esk(esk, Some(ovk), note, tv.memo);
+            let ne = OrchardDomainCommonryptionVanilla::new_with_esk(esk, Some(ovk), note, tv.memo);
 
             assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
             assert_eq!(

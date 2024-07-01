@@ -2,7 +2,7 @@ use memuse::DynamicUsage;
 
 use crate::{
     note::{ExtractedNoteCommitment, Nullifier, Rho, TransmittedNoteCiphertext},
-    note_encryption::OrchardNoteEnc,
+    note_encryption::OrchardDomainCommon,
     primitives::redpallas::{self, SpendAuth},
     value::ValueCommitment,
 };
@@ -12,7 +12,7 @@ use crate::{
 /// This both creates a note (adding a commitment to the global ledger), and consumes
 /// some note created prior to this action (adding a nullifier to the global ledger).
 #[derive(Debug, Clone)]
-pub struct Action<A, D: OrchardNoteEnc> {
+pub struct Action<A, D: OrchardDomainCommon> {
     /// The nullifier of the note being spent.
     nf: Nullifier,
     /// The randomized verification key for the note being spent.
@@ -27,7 +27,7 @@ pub struct Action<A, D: OrchardNoteEnc> {
     authorization: A,
 }
 
-impl<A, D: OrchardNoteEnc> Action<A, D> {
+impl<A, D: OrchardDomainCommon> Action<A, D> {
     /// Constructs an `Action` from its constituent parts.
     pub fn from_parts(
         nf: Nullifier,
@@ -107,7 +107,7 @@ impl<A, D: OrchardNoteEnc> Action<A, D> {
     }
 }
 
-impl<D: OrchardNoteEnc> DynamicUsage for Action<redpallas::Signature<SpendAuth>, D> {
+impl<D: OrchardDomainCommon> DynamicUsage for Action<redpallas::Signature<SpendAuth>, D> {
     #[inline(always)]
     fn dynamic_usage(&self) -> usize {
         0
@@ -135,7 +135,7 @@ pub(crate) mod testing {
             asset_base::testing::arb_asset_base, commitment::ExtractedNoteCommitment,
             nullifier::testing::arb_nullifier, testing::arb_note, TransmittedNoteCiphertext,
         },
-        note_encryption::{OrchardDomain, OrchardNoteEnc},
+        note_encryption::{OrchardDomain, OrchardDomainCommon},
         primitives::redpallas::{
             self,
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
@@ -148,11 +148,11 @@ pub(crate) mod testing {
     /// `ActionArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol variations
     /// in property-based testing, addressing proptest crate limitations.
     #[derive(Debug)]
-    pub struct ActionArb<D: OrchardNoteEnc> {
+    pub struct ActionArb<D: OrchardDomainCommon> {
         phantom: std::marker::PhantomData<D>,
     }
 
-    impl<D: OrchardNoteEnc> ActionArb<D> {
+    impl<D: OrchardDomainCommon> ActionArb<D> {
         fn encrypt_note<R: RngCore>(
             encryptor: NoteEncryption<OrchardDomain<D>>,
             cmx: &ExtractedNoteCommitment,
