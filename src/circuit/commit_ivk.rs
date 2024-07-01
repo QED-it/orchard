@@ -12,9 +12,8 @@ use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomai
 use halo2_gadgets::{
     ecc::{chip::EccChip, ScalarFixed, X},
     sinsemilla::{chip::SinsemillaChip, CommitDomain, Message, MessagePiece},
-    utilities::{bool_check, RangeConstrained},
+    utilities::{bool_check, lookup_range_check::LookupRangeCheck, RangeConstrained},
 };
-use halo2_gadgets::utilities::lookup_range_check::LookupRangeCheck;
 
 #[derive(Clone, Debug)]
 pub struct CommitIvkConfig {
@@ -679,9 +678,11 @@ mod tests {
             chip::{SinsemillaChip, SinsemillaConfig},
             primitives::CommitDomain,
         },
-        utilities::{lookup_range_check::LookupRangeCheckConfig, UtilitiesInstructions},
+        utilities::{
+            lookup_range_check::{LookupRangeCheck, LookupRangeCheckConfig},
+            UtilitiesInstructions,
+        },
     };
-    use halo2_gadgets::utilities::lookup_range_check::LookupRangeCheck;
     use halo2_proofs::{
         circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
         dev::MockProver,
@@ -764,6 +765,7 @@ mod tests {
                     lagrange_coeffs[0],
                     lookup,
                     range_check,
+                    false,
                 );
 
                 let commit_ivk_config = CommitIvkChip::configure(meta, advices);
