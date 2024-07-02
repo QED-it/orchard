@@ -1344,17 +1344,15 @@ mod tests {
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
-        orchard_flavors::OrchardZSA,
+        orchard_flavors::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         tree::EMPTY_ROOTS,
         value::NoteValue,
     };
 
     use super::Builder;
 
-    #[test]
-    fn shielding_bundle() {
-        // FIXME: consider adding test for OrchardVanilla as well
-        let pk = ProvingKey::build::<OrchardZSA>();
+    fn shielding_bundle<FL: OrchardFlavor>() {
+        let pk = ProvingKey::build::<FL>();
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -1378,7 +1376,7 @@ mod tests {
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, -5000);
 
-        let bundle: Bundle<Authorized, i64, OrchardZSA> = builder
+        let bundle: Bundle<Authorized, i64, FL> = builder
             .build(&mut rng)
             .unwrap()
             .unwrap()
@@ -1389,5 +1387,15 @@ mod tests {
             .finalize()
             .unwrap();
         assert_eq!(bundle.value_balance(), &(-5000))
+    }
+
+    #[test]
+    fn shielding_bundle_vanilla() {
+        shielding_bundle::<OrchardVanilla>()
+    }
+
+    #[test]
+    fn shielding_bundle_zsa() {
+        shielding_bundle::<OrchardZSA>()
     }
 }
