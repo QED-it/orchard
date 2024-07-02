@@ -505,6 +505,7 @@ impl BundleMetadata {
 pub struct Builder {
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
+    // FIXME: Should we use NoteValue instead of ValueSum here as well?
     burn: HashMap<AssetBase, ValueSum>,
     bundle_type: BundleType,
     anchor: Anchor,
@@ -722,6 +723,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
+    // FIXME: Should we use NoteValue instead of ValueSum here as well?
     burn: HashMap<AssetBase, ValueSum>,
 ) -> Result<Option<(UnauthorizedBundle<V, FL>, BundleMetadata)>, BuildError> {
     let flags = bundle_type.flags();
@@ -841,19 +843,27 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     let (actions, circuits): (Vec<_>, Vec<_>) =
         pre_actions.into_iter().map(|a| a.build(&mut rng)).unzip();
 
+    let burn = burn
+        .into_iter()
+        .map(|(asset, value)| {
+            Ok((
+                asset,
+                NoteValue::from_raw(
+                    u64::try_from(i128::from(value))
+                        .map_err(|_| BuildError::ValueSum(value::OverflowError))?,
+                ),
+            ))
+        })
+        .collect::<Result<Vec<(AssetBase, NoteValue)>, BuildError>>()?;
+
     // Verify that bsk and bvk are consistent.
     let bvk = derive_bvk(
         &actions,
         native_value_balance,
-        burn.iter()
-            .flat_map(|(asset, value)| -> Result<_, BuildError> { Ok((*asset, (*value).into()?)) }),
+        burn.iter().cloned(),
+        //burn.iter().flat_map(|(asset, value)| -> Result<_, BuildError> { Ok((*asset, (*value).into()?)) }),
     );
     assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
-
-    let burn = burn
-        .into_iter()
-        .map(|(asset, value)| Ok((asset, value.into()?)))
-        .collect::<Result<Vec<(AssetBase, V)>, BuildError>>()?;
 
     Ok(NonEmpty::from_vec(actions).map(|actions| {
         (

@@ -249,6 +249,12 @@ impl From<ValueSum> for i128 {
     }
 }
 
+impl From<NoteValue> for ValueSum {
+    fn from(value: NoteValue) -> Self {
+        Self(value.into())
+    }
+}
+
 /// The blinding factor for a [`ValueCommitment`].
 #[derive(Clone, Copy, Debug)]
 pub struct ValueCommitTrapdoor(pallas::Scalar);

@@ -10,6 +10,7 @@ use crate::{
     note::AssetBase,
     note_encryption::OrchardDomainCommon,
     orchard_flavors::{OrchardVanilla, OrchardZSA},
+    value::NoteValue,
 };
 
 const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
@@ -30,29 +31,19 @@ fn hasher(personal: &[u8; 16]) -> State {
 /// Manages the hashing of ZSA burn-related data in transactions.
 pub trait OrchardHash {
     /// Incorporates the hash of burn items into the main transaction hash.
-    fn update_hash_with_burn<V: Copy + Into<i64>>(
-        main_hasher: &mut State,
-        burn_items: &[(AssetBase, V)],
-    );
+    fn update_hash_with_burn(main_hasher: &mut State, burn_items: &[(AssetBase, NoteValue)]);
 }
 
 impl OrchardHash for OrchardVanilla {
-    fn update_hash_with_burn<V: Copy + Into<i64>>(
-        _main_hasher: &mut State,
-        _burn_items: &[(AssetBase, V)],
-    ) {
-    }
+    fn update_hash_with_burn(_main_hasher: &mut State, _burn_items: &[(AssetBase, NoteValue)]) {}
 }
 
 impl OrchardHash for OrchardZSA {
-    fn update_hash_with_burn<V: Copy + Into<i64>>(
-        main_hasher: &mut State,
-        burn_items: &[(AssetBase, V)],
-    ) {
+    fn update_hash_with_burn(main_hasher: &mut State, burn_items: &[(AssetBase, NoteValue)]) {
         let mut burn_hasher = hasher(ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION);
         for burn_item in burn_items {
             burn_hasher.update(&burn_item.0.to_bytes());
-            burn_hasher.update(&burn_item.1.into().to_le_bytes());
+            burn_hasher.update(&burn_item.1.to_bytes());
         }
         main_hasher.update(burn_hasher.finalize().as_bytes());
     }

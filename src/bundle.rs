@@ -23,7 +23,7 @@ use crate::{
     note_encryption::{OrchardDomain, OrchardDomainCommon},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
-    value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
+    value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };
 
 pub(crate) use commitments::OrchardHash;
@@ -197,7 +197,7 @@ pub struct Bundle<A: Authorization, V, D: OrchardDomainCommon> {
     value_balance: V,
     /// Assets intended for burning
     // FIXME: use BurnType like it's in Zebra? Put it as another param of Domain trait
-    burn: Vec<(AssetBase, V)>,
+    burn: Vec<(AssetBase, NoteValue)>,
     /// The root of the Orchard commitment tree that this bundle commits to.
     anchor: Anchor,
     /// The authorization for this bundle.
@@ -230,7 +230,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
         actions: NonEmpty<Action<A::SpendAuth, D>>,
         flags: Flags,
         value_balance: V,
-        burn: Vec<(AssetBase, V)>,
+        burn: Vec<(AssetBase, NoteValue)>,
         anchor: Anchor,
         authorization: A,
     ) -> Self {
@@ -262,7 +262,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
     }
 
     /// Returns assets intended for burning
-    pub fn burn(&self) -> &Vec<(AssetBase, V)> {
+    pub fn burn(&self) -> &Vec<(AssetBase, NoteValue)> {
         &self.burn
     }
 
@@ -280,10 +280,38 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
 
     /// Construct a new bundle by applying a transformation that might fail
     /// to the value balance and balances of assets to burn.
+
+    // FIXME:
+    //
+    // This function is currently used in the `testing` module of the
+    // `librustzcash/zcash_primitives` crate, specifically in the `arb_bundle`
+    // function to convert a ValueSum-based Bundle to an Amount-based Bundle.
+    //
+    // It converts balance and burn values from one type to another (from ValueSum to Amount).
+    // To achieve this, the function uses a complex series of `TryFrom` conversions
+    // and `unwrap` calls. These conversions and unwraps are necessary to convert
+    // value_balance and burn values. The complex construction and additional
+    // `TryFrom` constraints are required because it's the only way to perform
+    // the conversion. This function is restricted to test configuration due
+    // to the use of unwrap calls.
+    //
+    // An alternative approach could be to modify this function to convert only
+    // value_balance without converting burn values, as in practice, we are only
+    // converting types. However, the types for burn values are now always NoteValue.
+    //
+    // WARNING: Contains unwrap() calls! DO NOT remove #[cfg(test)] or handle unwrap() carefully!
+    #[cfg(test)]
     pub fn try_map_value_balance<V0, E, F: Fn(V) -> Result<V0, E>>(
         self,
         f: F,
-    ) -> Result<Bundle<A, V0, D>, E> {
+    ) -> Result<Bundle<A, V0, D>, E>
+    where
+        i64: TryFrom<u64>,
+        V: TryFrom<i64>,
+        i64: TryFrom<V0>,
+        <V as TryFrom<i64>>::Error: std::fmt::Debug,
+        <i64 as TryFrom<V0>>::Error: std::fmt::Debug,
+    {
         Ok(Bundle {
             actions: self.actions,
             flags: self.flags,
@@ -291,8 +319,20 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
             burn: self
                 .burn
                 .into_iter()
-                .map(|(asset, value)| Ok((asset, f(value)?)))
-                .collect::<Result<Vec<(AssetBase, V0)>, E>>()?,
+                .map(|(asset, value)| {
+                    Ok((
+                        asset,
+                        NoteValue::from_raw(
+                            i64::try_from(f(
+                                V::try_from(value.inner().try_into().unwrap()).unwrap()
+                            )?)
+                            .unwrap()
+                            .try_into()
+                            .unwrap(),
+                        ),
+                    ))
+                })
+                .collect::<Result<Vec<(AssetBase, NoteValue)>, E>>()?,
             anchor: self.anchor,
             authorization: self.authorization,
         })
@@ -445,7 +485,7 @@ pub(crate) fn derive_bvk<
 >(
     actions: impl IntoIterator<Item = &'a Action<A, D>>,
     value_balance: V,
-    burn: impl Iterator<Item = (AssetBase, V)>,
+    burn: impl Iterator<Item = (AssetBase, NoteValue)>,
 ) -> redpallas::VerificationKey<Binding> {
     // https://p.z.cash/TCR:bad-txns-orchard-binding-signature-invalid?partial
     (actions
@@ -459,11 +499,7 @@ pub(crate) fn derive_bvk<
         )
         - burn
             .map(|(asset, value)| {
-                ValueCommitment::derive(
-                    ValueSum::from_raw(value.into()),
-                    ValueCommitTrapdoor::zero(),
-                    asset,
-                )
+                ValueCommitment::derive(ValueSum::from(value), ValueCommitTrapdoor::zero(), asset)
             })
             .sum::<ValueCommitment>())
     .into_bvk()
@@ -601,7 +637,7 @@ pub mod testing {
     use crate::note::asset_base::testing::arb_zsa_asset_base;
     use crate::note::AssetBase;
     use crate::note_encryption::OrchardDomainCommon;
-    use crate::value::testing::arb_value_sum;
+    use crate::value::testing::arb_note_value;
 
     /// Marker for an unauthorized bundle with no proofs or signatures.
     #[derive(Debug)]
@@ -674,8 +710,8 @@ pub mod testing {
             pub fn arb_asset_to_burn()
             (
                 asset_base in arb_zsa_asset_base(),
-                value in arb_value_sum()
-            ) -> (AssetBase, ValueSum) {
+                value in arb_note_value()
+            ) -> (AssetBase, NoteValue) {
                 (asset_base, value)
             }
         }
