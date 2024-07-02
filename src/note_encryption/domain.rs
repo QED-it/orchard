@@ -23,9 +23,6 @@ use crate::{
 
 use super::orchard_domain::{OrchardDomain, OrchardDomainCommon};
 
-// FIXME: fix it to be "git mv" from the origina tone_encryption.rs and reorder elements
-// to reduce git diff
-
 const PRF_OCK_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_Orchardock";
 
 const NOTE_VERSION_SIZE: usize = 1;
@@ -90,11 +87,6 @@ pub(super) fn parse_note_version(plaintext: &[u8]) -> Option<u8> {
         _ => None,
     })
 }
-
-// FIXME: Unwrap calls stop the entire process. Should we do that if we receive invalid bytes
-// from external sources (network, etc.)? Or should we return None? Although, the code is
-// protected from unwrap failures, as this function is called from Domain methods, which get
-// CompactNotePlaintextBytes as an argument (that guarantees the proper byte array length).
 
 /// Parses the note plaintext (excluding the memo) and extracts the note and address if valid.
 /// Domain-specific requirements:
@@ -220,7 +212,6 @@ impl<D: OrchardDomainCommon> Domain for OrchardDomain<D> {
     }
 
     fn note_plaintext_bytes(note: &Self::Note, memo: &Self::Memo) -> D::NotePlaintextBytes {
-        // FIXME: should it include asset base?
         D::build_note_plaintext_bytes(note, memo)
     }
 
@@ -273,8 +264,6 @@ impl<D: OrchardDomainCommon> Domain for OrchardDomain<D> {
         parse_note_plaintext_without_memo(self.rho, plaintext, |_| Some(*pk_d))
     }
 
-    // FIXME: consider implementing and using:
-    // OrchardDomain::split_note_plaintext(plaintext: &Self::NotePlaintextBytes) -> (Self::CompactNotePlaintextBytes, Memo)
     fn extract_memo(
         &self,
         plaintext: &D::NotePlaintextBytes,

@@ -634,7 +634,6 @@ impl Builder {
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
     /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
-    // FIXME: Consider factoring parts of the return type into `type` definitions
     #[allow(clippy::type_complexity)]
     pub fn build<V: TryFrom<i64>, FL: OrchardFlavor>(
         self,

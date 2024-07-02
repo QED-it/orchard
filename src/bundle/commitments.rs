@@ -1,7 +1,5 @@
 //! Utility functions for computing bundle commitments
 
-// FIXME: rename this to hash.rs?
-
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use zcash_note_encryption_zsa::MEMO_SIZE;
@@ -28,9 +26,6 @@ const ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION: &[u8; 16] = b"ZTxAuthZSAOrHas
 fn hasher(personal: &[u8; 16]) -> State {
     Params::new().hash_length(32).personal(personal).to_state()
 }
-
-// FIXME: Consider not using a separate OrchardHash trait and instead move update_hash_with_burn to
-// the OrchardDomain or OrchardFlavour trait.
 
 /// Manages the hashing of ZSA burn-related data in transactions.
 pub trait OrchardHash {
