@@ -68,7 +68,10 @@ fn bundle_chain<FL: OrchardFlavor>() {
 
         let mut builder = Builder::new(
             BundleType::Transactional {
-                flags: Flags::SPENDS_DISABLED,
+                // FIXME: Should we use SPENDS_DISABLED_WITH_ZSA for FL=OrchardZSA case?
+                // The original zsa1 code used the following:
+                // let mut builder = Builder::new(Flags::from_parts(false, true, false), anchor);
+                flags: Flags::SPENDS_DISABLED_WITHOUT_ZSA,
                 bundle_required: false,
             },
             anchor,
@@ -100,20 +103,44 @@ fn bundle_chain<FL: OrchardFlavor>() {
     // Verify the shielding bundle.
     verify_bundle(&shielding_bundle, &vk, true);
 
-    // Create a shielded bundle spending the previous output.
-    let shielded_bundle: Bundle<_, i64, FL> = {
+    let note = {
         let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
-        let (note, _, _) = shielding_bundle
+        shielding_bundle
             .actions()
             .iter()
             .find_map(|action| {
                 let domain = OrchardDomain::for_action(action);
                 try_note_decryption(&domain, &ivk, action)
             })
-            .unwrap();
+            .unwrap()
+            .0
+    };
 
+    // Test that spend adding attempt fails when spends are disabled.
+    // Note: We do not need a separate positive test for spends enabled
+    // as the following code adds spends with spends enabled.
+    {
         let (merkle_path, anchor) = build_merkle_path(&note);
 
+        let mut builder = Builder::new(
+            BundleType::Transactional {
+                // FIXME: Should we use SPENDS_DISABLED_WITH_ZSA for FL=OrchardZSA case?
+                flags: Flags::SPENDS_DISABLED_WITHOUT_ZSA,
+                bundle_required: false,
+            },
+            anchor,
+        );
+
+        assert!(builder.add_spend(fvk.clone(), note, merkle_path).is_err());
+    }
+
+    // Create a shielded bundle spending the previous output.
+    let shielded_bundle: Bundle<_, i64, FL> = {
+        let (merkle_path, anchor) = build_merkle_path(&note);
+
+        // FIXME: Should we use DEFAULT_ZSA for FL=OrchardZSA case?
+        // The original zsa1 code used the following:
+        // let mut builder = Builder::new(Flags::from_parts(true, true, false), anchor);
         let mut builder = Builder::new(BundleType::DEFAULT_VANILLA, anchor);
         assert_eq!(builder.add_spend(fvk, note, merkle_path), Ok(()));
         assert_eq!(

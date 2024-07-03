@@ -100,11 +100,18 @@ impl Flags {
         zsa_enabled: true,
     };
 
-    /// The flag set with spends disabled.
-    pub const SPENDS_DISABLED: Flags = Flags {
+    /// The flag set with spends and ZSA disabled.
+    pub const SPENDS_DISABLED_WITHOUT_ZSA: Flags = Flags {
         spends_enabled: false,
         outputs_enabled: true,
         zsa_enabled: false,
+    };
+
+    /// The flag set with spends disabled and ZSA enabled.
+    pub const SPENDS_DISABLED_WITH_ZSA: Flags = Flags {
+        spends_enabled: false,
+        outputs_enabled: true,
+        zsa_enabled: true,
     };
 
     /// The flag set with outputs disabled.

@@ -113,7 +113,9 @@ impl BundleType {
     pub fn flags(&self) -> Flags {
         match self {
             BundleType::Transactional { flags, .. } => *flags,
-            BundleType::Coinbase => Flags::SPENDS_DISABLED,
+            // FIXME: is it correct to use SPENDS_DISABLED_WITHOUT_ZSA (i.e does coinbase always have
+            // ZSA disabled)?
+            BundleType::Coinbase => Flags::SPENDS_DISABLED_WITHOUT_ZSA,
         }
     }
 }
