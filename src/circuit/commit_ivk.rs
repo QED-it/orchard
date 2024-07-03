@@ -698,19 +698,15 @@ mod tests {
     use rand::rngs::OsRng;
 
     trait MyLookup: PallasLookupRangeCheck {
-        fn enable_hash_from_private_point() -> bool;
+        const ENABLE_HASH_FROM_PRIVATE_POINT: bool;
     }
 
     impl MyLookup for PallasLookupRangeCheckConfig {
-        fn enable_hash_from_private_point() -> bool {
-            false
-        }
+        const ENABLE_HASH_FROM_PRIVATE_POINT: bool = false;
     }
 
     impl MyLookup for PallasLookupRangeCheck45BConfig {
-        fn enable_hash_from_private_point() -> bool {
-            false
-        }
+        const ENABLE_HASH_FROM_PRIVATE_POINT: bool = true;
     }
 
     #[derive(Default)]
@@ -792,7 +788,7 @@ mod tests {
                 lagrange_coeffs[0],
                 lookup,
                 range_check,
-                Lookup::enable_hash_from_private_point(),
+                Lookup::ENABLE_HASH_FROM_PRIVATE_POINT,
             );
 
             let commit_ivk_config = CommitIvkChip::configure(meta, advices);
