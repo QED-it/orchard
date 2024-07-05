@@ -499,6 +499,9 @@ impl BundleMetadata {
     }
 }
 
+/// A tuple containing an in-progress bundle with no proofs or signatures, and its associated metadata.
+pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, BundleMetadata);
+
 /// A builder that constructs a [`Bundle`] from a set of notes to be spent, and outputs
 /// to receive funds.
 #[derive(Debug)]
@@ -638,7 +641,7 @@ impl Builder {
     pub fn build<V: TryFrom<i64>, FL: OrchardFlavor>(
         self,
         rng: impl RngCore,
-    ) -> Result<Option<(UnauthorizedBundle<V, FL>, BundleMetadata)>, BuildError> {
+    ) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
         bundle(
             rng,
             self.anchor,
@@ -724,7 +727,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     outputs: Vec<OutputInfo>,
     // FIXME: Should we use NoteValue instead of ValueSum here as well?
     burn: HashMap<AssetBase, ValueSum>,
-) -> Result<Option<(UnauthorizedBundle<V, FL>, BundleMetadata)>, BuildError> {
+) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
     let flags = bundle_type.flags();
 
     let num_requested_spends = spends.len();
