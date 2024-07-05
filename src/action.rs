@@ -145,6 +145,8 @@ pub(crate) mod testing {
 
     use super::Action;
 
+    /// `ActionArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol flavors
+    /// in property-based testing, addressing proptest crate limitations.
     #[derive(Debug)]
     pub struct ActionArb<D: OrchardDomainCommon> {
         phantom: std::marker::PhantomData<D>,
