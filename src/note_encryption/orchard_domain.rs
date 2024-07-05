@@ -25,8 +25,6 @@ impl<const N: usize> AsMut<[u8]> for NoteBytesData<N> {
     }
 }
 
-// FIXME: consider implementing and using TryFrom instead (see also review comments in
-// zcash_note_encryption PR)
 impl<const N: usize> From<&[u8]> for NoteBytesData<N> {
     fn from(s: &[u8]) -> Self {
         Self(s.try_into().unwrap())

@@ -5,7 +5,7 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
     note_encryption::{CompactAction, OrchardDomain},
-    orchard_flavors::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+    orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     value::NoteValue,
     Anchor, Bundle,
 };

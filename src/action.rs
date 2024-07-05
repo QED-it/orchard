@@ -133,7 +133,7 @@ pub(crate) mod testing {
     use crate::{
         note::{
             asset_base::testing::arb_asset_base, commitment::ExtractedNoteCommitment,
-            nullifier::testing::arb_nullifier, testing::arb_note, TransmittedNoteCiphertext,
+            nullifier::testing::arb_nullifier, testing::arb_note, Note, TransmittedNoteCiphertext,
         },
         note_encryption::{OrchardDomain, OrchardDomainCommon},
         primitives::redpallas::{
@@ -145,8 +145,6 @@ pub(crate) mod testing {
 
     use super::Action;
 
-    /// `ActionArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol variations
-    /// in property-based testing, addressing proptest crate limitations.
     #[derive(Debug)]
     pub struct ActionArb<D: OrchardDomainCommon> {
         phantom: std::marker::PhantomData<D>,
@@ -154,11 +152,15 @@ pub(crate) mod testing {
 
     impl<D: OrchardDomainCommon> ActionArb<D> {
         fn encrypt_note<R: RngCore>(
-            encryptor: NoteEncryption<OrchardDomain<D>>,
+            note: Note,
+            memo: Vec<u8>,
             cmx: &ExtractedNoteCommitment,
             cv_net: &ValueCommitment,
             rng: &mut R,
         ) -> TransmittedNoteCiphertext<D> {
+            let encryptor =
+                NoteEncryption::<OrchardDomain<D>>::new(None, note, memo.try_into().unwrap());
+
             TransmittedNoteCiphertext {
                 epk_bytes: encryptor.epk().to_bytes().0,
                 enc_ciphertext: encryptor.encrypt_note_plaintext(),
@@ -184,8 +186,7 @@ pub(crate) mod testing {
                 );
 
                 let mut rng = StdRng::from_seed(rng_seed);
-                let encryptor = NoteEncryption::<OrchardDomain<D>>::new(None, note, memo.try_into().unwrap());
-                let encrypted_note = Self::encrypt_note(encryptor, &cmx, &cv_net, &mut rng);
+                let encrypted_note = Self::encrypt_note(note, memo, &cmx, &cv_net, &mut rng);
 
                 Action {
                     nf,
@@ -218,8 +219,7 @@ pub(crate) mod testing {
 
                 let mut rng = StdRng::from_seed(rng_seed);
 
-                let encryptor = NoteEncryption::<OrchardDomain<D>>::new(None, note, memo.try_into().unwrap());
-                let encrypted_note = Self::encrypt_note(encryptor, &cmx, &cv_net, &mut rng);
+                let encrypted_note = Self::encrypt_note(note, memo, &cmx, &cv_net, &mut rng);
 
                 Action {
                     nf,

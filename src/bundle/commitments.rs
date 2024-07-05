@@ -9,7 +9,7 @@ use crate::{
     issuance::{IssueAuth, IssueBundle, Signed},
     note::AssetBase,
     note_encryption::OrchardDomainCommon,
-    orchard_flavors::{OrchardVanilla, OrchardZSA},
+    orchard_flavor::{OrchardVanilla, OrchardZSA},
     value::NoteValue,
 };
 
@@ -100,7 +100,6 @@ pub(crate) fn hash_bundle_txid_data<
     h.update(mh.finalize().as_bytes());
     h.update(nh.finalize().as_bytes());
 
-    // Delegate complete handling of the burn data to the OrchardHash implementation
     D::update_hash_with_burn(&mut h, &bundle.burn);
 
     h.update(&[bundle.flags().to_byte()]);

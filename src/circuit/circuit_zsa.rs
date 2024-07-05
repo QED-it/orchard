@@ -38,7 +38,7 @@ use crate::{
     constants::OrchardFixedBasesFull,
     constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
     note::AssetBase,
-    orchard_flavors::OrchardZSA,
+    orchard_flavor::OrchardZSA,
 };
 
 use super::{
@@ -897,7 +897,7 @@ mod tests {
         circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K},
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
-        orchard_flavors::OrchardZSA,
+        orchard_flavor::OrchardZSA,
         primitives::redpallas::VerificationKey,
         tree::MerklePath,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},

@@ -24,7 +24,7 @@ use crate::{
     },
     note::{AssetBase, Note, Rho, TransmittedNoteCiphertext},
     note_encryption::{OrchardDomain, OrchardDomainCommon},
-    orchard_flavors::OrchardFlavor,
+    orchard_flavor::OrchardFlavor,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -113,8 +113,6 @@ impl BundleType {
     pub fn flags(&self) -> Flags {
         match self {
             BundleType::Transactional { flags, .. } => *flags,
-            // FIXME: is it correct to use SPENDS_DISABLED_WITHOUT_ZSA (i.e does coinbase always have
-            // ZSA disabled)?
             BundleType::Coinbase => Flags::SPENDS_DISABLED_WITHOUT_ZSA,
         }
     }
@@ -637,7 +635,6 @@ impl Builder {
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
     /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
-    #[allow(clippy::type_complexity)]
     pub fn build<V: TryFrom<i64>, FL: OrchardFlavor>(
         self,
         rng: impl RngCore,
@@ -852,19 +849,14 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                 asset,
                 NoteValue::from_raw(
                     u64::try_from(i128::from(value))
-                        .map_err(|_| BuildError::ValueSum(value::OverflowError))?,
+                        .map_err(|_| BuildError::ValueSum(OverflowError))?,
                 ),
             ))
         })
         .collect::<Result<Vec<(AssetBase, NoteValue)>, BuildError>>()?;
 
     // Verify that bsk and bvk are consistent.
-    let bvk = derive_bvk(
-        &actions,
-        native_value_balance,
-        burn.iter().cloned(),
-        //burn.iter().flat_map(|(asset, value)| -> Result<_, BuildError> { Ok((*asset, (*value).into()?)) }),
-    );
+    let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
     assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
 
     Ok(NonEmpty::from_vec(actions).map(|actions| {
@@ -935,15 +927,13 @@ impl<S: InProgressSignatures, C: OrchardCircuit> InProgress<Unproven<C>, S> {
     }
 }
 
-impl<S: InProgressSignatures, V, D: OrchardDomainCommon + OrchardCircuit>
-    Bundle<InProgress<Unproven<D>, S>, V, D>
-{
+impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven<FL>, S>, V, FL> {
     /// Creates the proof for this bundle.
     pub fn create_proof(
         self,
         pk: &ProvingKey,
         mut rng: impl RngCore,
-    ) -> Result<Bundle<InProgress<Proof, S>, V, D>, BuildError> {
+    ) -> Result<Bundle<InProgress<Proof, S>, V, FL>, BuildError> {
         let instances: Vec<_> = self
             .actions()
             .iter()
@@ -1208,7 +1198,7 @@ pub mod testing {
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
         note_encryption::OrchardDomainCommon,
-        orchard_flavors::OrchardFlavor,
+        orchard_flavor::OrchardFlavor,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
         value::{testing::arb_positive_note_value, NoteValue, MAX_NOTE_VALUE},
         Address, Note,
@@ -1355,7 +1345,7 @@ mod tests {
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
-        orchard_flavors::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+        orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         tree::EMPTY_ROOTS,
         value::NoteValue,
     };

@@ -1,7 +1,5 @@
 //! Defines actions for Orchard shielded outputs and compact action for light clients.
 
-// FIXME: move to upper (src) folder?
-
 use std::fmt;
 
 use zcash_note_encryption_zsa::{EphemeralKeyBytes, ShieldedOutput};

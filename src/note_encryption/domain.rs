@@ -46,10 +46,10 @@ const ZSA_ASSET_SIZE: usize = 32;
 pub(super) const COMPACT_NOTE_SIZE_ZSA: usize = COMPACT_NOTE_SIZE_VANILLA + ZSA_ASSET_SIZE;
 
 /// The version byte for Vanilla.
-pub(super) const NOTE_VERSION_BYTE_VANILLA: u8 = 0x02;
+pub(super) const NOTE_VERSION_BYTE_V2: u8 = 0x02;
 
 /// The version byte for ZSA.
-pub(super) const NOTE_VERSION_BYTE_ZSA: u8 = 0x03;
+pub(super) const NOTE_VERSION_BYTE_V3: u8 = 0x03;
 
 pub(super) type Memo = [u8; MEMO_SIZE];
 
@@ -83,7 +83,7 @@ pub(super) fn prf_ock_orchard(
 /// Returns `Some(u8)` if the version is recognized, otherwise `None`.
 pub(super) fn parse_note_version(plaintext: &[u8]) -> Option<u8> {
     plaintext.first().and_then(|version| match *version {
-        NOTE_VERSION_BYTE_VANILLA | NOTE_VERSION_BYTE_ZSA => Some(*version),
+        NOTE_VERSION_BYTE_V2 | NOTE_VERSION_BYTE_V3 => Some(*version),
         _ => None,
     })
 }
@@ -123,8 +123,8 @@ where
     let recipient = Address::from_parts(diversifier, pk_d);
 
     let asset = match parse_note_version(plaintext.as_ref())? {
-        NOTE_VERSION_BYTE_VANILLA => AssetBase::native(),
-        NOTE_VERSION_BYTE_ZSA => {
+        NOTE_VERSION_BYTE_V2 => AssetBase::native(),
+        NOTE_VERSION_BYTE_V3 => {
             let bytes = plaintext.as_ref()[COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA]
                 .try_into()
                 .unwrap();

@@ -6,9 +6,8 @@ use tracing::debug;
 use super::{Authorized, Bundle};
 
 use crate::{
-    bundle::OrchardHash,
     circuit::VerifyingKey,
-    note_encryption::OrchardDomainCommon,
+    orchard_flavor::OrchardFlavor,
     primitives::redpallas::{self, Binding, SpendAuth},
 };
 
@@ -38,9 +37,9 @@ impl BatchValidator {
     }
 
     /// Adds the proof and RedPallas signatures from the given bundle to the validator.
-    pub fn add_bundle<V: Copy + Into<i64>, D: OrchardDomainCommon + OrchardHash>(
+    pub fn add_bundle<V: Copy + Into<i64>, FL: OrchardFlavor>(
         &mut self,
-        bundle: &Bundle<Authorized, V, D>,
+        bundle: &Bundle<Authorized, V, FL>,
         sighash: [u8; 32],
     ) {
         for action in bundle.actions().iter() {

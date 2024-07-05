@@ -29,7 +29,7 @@ pub mod supply_info;
 
 pub mod note_encryption;
 
-pub mod orchard_flavors;
+pub mod orchard_flavor;
 
 pub mod primitives;
 mod spec;

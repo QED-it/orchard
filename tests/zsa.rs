@@ -14,7 +14,7 @@ use orchard::{
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note_encryption::OrchardDomain,
-    orchard_flavors::OrchardZSA,
+    orchard_flavor::OrchardZSA,
     value::NoteValue,
     Address, Anchor, Bundle, Note,
 };

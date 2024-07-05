@@ -7,7 +7,7 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
     note_encryption::OrchardDomain,
-    orchard_flavors::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+    orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
@@ -52,7 +52,22 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
     (merkle_path, anchor)
 }
 
-fn bundle_chain<FL: OrchardFlavor>() {
+trait BundleOrchardFlavor: OrchardFlavor {
+    const DEFAULT_BUNDLE_TYPE: BundleType;
+    const SPENDS_DISABLED_FLAGS: Flags;
+}
+
+impl BundleOrchardFlavor for OrchardVanilla {
+    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT_VANILLA;
+    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED_WITHOUT_ZSA;
+}
+
+impl BundleOrchardFlavor for OrchardZSA {
+    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT_ZSA;
+    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED_WITH_ZSA;
+}
+
+fn bundle_chain<FL: BundleOrchardFlavor>() {
     let mut rng = OsRng;
     let pk = ProvingKey::build::<FL>();
     let vk = VerifyingKey::build::<FL>();
@@ -68,10 +83,7 @@ fn bundle_chain<FL: OrchardFlavor>() {
 
         let mut builder = Builder::new(
             BundleType::Transactional {
-                // FIXME: Should we use SPENDS_DISABLED_WITH_ZSA for FL=OrchardZSA case?
-                // The original zsa1 code used the following:
-                // let mut builder = Builder::new(Flags::from_parts(false, true, false), anchor);
-                flags: Flags::SPENDS_DISABLED_WITHOUT_ZSA,
+                flags: FL::SPENDS_DISABLED_FLAGS,
                 bundle_required: false,
             },
             anchor,
@@ -124,7 +136,8 @@ fn bundle_chain<FL: OrchardFlavor>() {
 
         let mut builder = Builder::new(
             BundleType::Transactional {
-                // FIXME: Should we use SPENDS_DISABLED_WITH_ZSA for FL=OrchardZSA case?
+                // Intentionally testing with SPENDS_DISABLED_WITHOUT_ZSA as SPENDS_DISABLED_WITH_ZSA is already
+                // tested above (for OrchardZSA case). Both should work.
                 flags: Flags::SPENDS_DISABLED_WITHOUT_ZSA,
                 bundle_required: false,
             },
@@ -138,10 +151,7 @@ fn bundle_chain<FL: OrchardFlavor>() {
     let shielded_bundle: Bundle<_, i64, FL> = {
         let (merkle_path, anchor) = build_merkle_path(&note);
 
-        // FIXME: Should we use DEFAULT_ZSA for FL=OrchardZSA case?
-        // The original zsa1 code used the following:
-        // let mut builder = Builder::new(Flags::from_parts(true, true, false), anchor);
-        let mut builder = Builder::new(BundleType::DEFAULT_VANILLA, anchor);
+        let mut builder = Builder::new(FL::DEFAULT_BUNDLE_TYPE, anchor);
         assert_eq!(builder.add_spend(fvk, note, merkle_path), Ok(()));
         assert_eq!(
             builder.add_output(

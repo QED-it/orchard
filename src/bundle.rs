@@ -21,6 +21,7 @@ use crate::{
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
     note_encryption::{OrchardDomain, OrchardDomainCommon},
+    orchard_flavor::OrchardFlavor,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -203,7 +204,6 @@ pub struct Bundle<A: Authorization, V, D: OrchardDomainCommon> {
     /// This is the sum of Orchard spends minus the sum of Orchard outputs.
     value_balance: V,
     /// Assets intended for burning
-    // FIXME: use BurnType like it's in Zebra? Put it as another param of Domain trait
     burn: Vec<(AssetBase, NoteValue)>,
     /// The root of the Orchard commitment tree that this bundle commits to.
     anchor: Anchor,
@@ -484,13 +484,8 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
     }
 }
 
-pub(crate) fn derive_bvk<
-    'a,
-    A: 'a,
-    V: Clone + Into<i64>,
-    D: 'a + OrchardDomainCommon + OrchardHash,
->(
-    actions: impl IntoIterator<Item = &'a Action<A, D>>,
+pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, FL: 'a + OrchardFlavor>(
+    actions: impl IntoIterator<Item = &'a Action<A, FL>>,
     value_balance: V,
     burn: impl Iterator<Item = (AssetBase, NoteValue)>,
 ) -> redpallas::VerificationKey<Binding> {
@@ -512,7 +507,7 @@ pub(crate) fn derive_bvk<
     .into_bvk()
 }
 
-impl<A: Authorization, V: Copy + Into<i64>, D: OrchardDomainCommon + OrchardHash> Bundle<A, V, D> {
+impl<A: Authorization, V: Copy + Into<i64>, FL: OrchardFlavor> Bundle<A, V, FL> {
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
     pub fn commitment(&self) -> BundleCommitment {
