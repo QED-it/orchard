@@ -178,9 +178,9 @@ pub fn hash_issue_bundle_txid_empty() -> Blake2bHash {
 pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION);
     let mut ia = hasher(ZCASH_ORCHARD_ZSA_ISSUE_ACTION_PERSONALIZATION);
-    let mut ind = hasher(ZCASH_ORCHARD_ZSA_ISSUE_NOTE_PERSONALIZATION);
 
     for action in bundle.actions().iter() {
+        let mut ind = hasher(ZCASH_ORCHARD_ZSA_ISSUE_NOTE_PERSONALIZATION);
         for note in action.notes().iter() {
             ind.update(&note.recipient().to_raw_address_bytes());
             ind.update(&note.value().to_bytes());
