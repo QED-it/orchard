@@ -12,7 +12,7 @@ use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
 use zcash_note_encryption_zsa::NoteEncryption;
 
-use crate::builder::BuildError::{BurnErrorNative, BurnErrorZero};
+use crate::builder::BuildError::{BurnNative, BurnZero};
 use crate::{
     action::Action,
     address::Address,
@@ -142,9 +142,11 @@ pub enum BuildError {
     /// The bundle being constructed violated the construction rules for the requested bundle type.
     BundleTypeNotSatisfiable,
     /// Native asset cannot be burned
-    BurnErrorNative,
+    BurnNative,
     /// The value to be burned cannot be zero
-    BurnErrorZero,
+    BurnZero,
+    /// The asset to be burned is duplicated.
+    BurnDuplicateAsset,
 }
 
 impl Display for BuildError {
@@ -164,8 +166,9 @@ impl Display for BuildError {
             AnchorMismatch => {
                 f.write_str("All spends must share the anchor requested for the transaction.")
             }
-            BurnErrorNative => f.write_str("Burning is only possible for non-native assets"),
-            BurnErrorZero => f.write_str("Burning is not possible for zero values"),
+            BurnNative => f.write_str("Burning is only possible for non-native assets"),
+            BurnZero => f.write_str("Burning is not possible for zero values"),
+            BurnDuplicateAsset => f.write_str("Duplicate assets are not allowed when burning"),
         }
     }
 }
@@ -508,8 +511,7 @@ pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, Bun
 pub struct Builder {
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    // FIXME: Should we use NoteValue instead of ValueSum here as well?
-    burn: HashMap<AssetBase, ValueSum>,
+    burn: HashMap<AssetBase, NoteValue>,
     bundle_type: BundleType,
     anchor: Anchor,
 }
@@ -582,19 +584,26 @@ impl Builder {
     }
 
     /// Add an instruction to burn a given amount of a specific asset.
+    // FIXME: Should we add `add_burn` into `testing` (into `arb_bundle` function)
+    // (like `add_spend` and `add_output` are used there)?
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
+        use std::collections::hash_map::Entry;
+
         if asset.is_native().into() {
-            return Err(BurnErrorNative);
+            return Err(BurnNative);
         }
 
         if value.inner() == 0 {
-            return Err(BurnErrorZero);
+            return Err(BurnZero);
         }
 
-        let cur = *self.burn.get(&asset).unwrap_or(&ValueSum::zero());
-        let sum = (cur + value).ok_or(OverflowError)?;
-        self.burn.insert(asset, sum);
-        Ok(())
+        match self.burn.entry(asset) {
+            Entry::Occupied(_) => Err(BuildError::BurnDuplicateAsset),
+            Entry::Vacant(entry) => {
+                entry.insert(value);
+                Ok(())
+            }
+        }
     }
 
     /// Returns the action spend components that will be produced by the
@@ -725,8 +734,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    // FIXME: Should we use NoteValue instead of ValueSum here as well?
-    burn: HashMap<AssetBase, ValueSum>,
+    burn: HashMap<AssetBase, NoteValue>,
 ) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
     let flags = bundle_type.flags();
 
@@ -895,6 +903,7 @@ pub struct InProgress<P, S: InProgressSignatures> {
 
 impl<P, S: InProgressSignatures> InProgress<P, S> {
     /// Changes this authorization from one proof type to another.
+    // FIXME: Change comment to "mutate the proof using the provided function"
     pub fn map_proof<F, P2>(self, f: F) -> InProgress<P2, S>
     where
         F: FnOnce(P) -> P2,
