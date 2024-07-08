@@ -5,7 +5,7 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
     note_encryption::{CompactAction, OrchardDomain},
-    orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+    orchard_flavor::{OrchardVanilla, OrchardZSA},
     value::NoteValue,
     Anchor, Bundle,
 };
@@ -15,7 +15,11 @@ use zcash_note_encryption_zsa::{batch, try_compact_note_decryption, try_note_dec
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 
-fn bench_note_decryption<FL: OrchardFlavor>(c: &mut Criterion) {
+mod utils;
+
+use utils::OrchardFlavorBench;
+
+fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let rng = OsRng;
     let pk = ProvingKey::build::<FL>();
 
@@ -82,7 +86,7 @@ fn bench_note_decryption<FL: OrchardFlavor>(c: &mut Criterion) {
     let domain = OrchardDomain::for_action(action);
 
     let compact = {
-        let mut group = c.benchmark_group("note-decryption");
+        let mut group = FL::benchmark_group(c, "note-decryption");
         group.throughput(Throughput::Elements(1));
 
         group.bench_function("valid", |b| {
@@ -104,7 +108,7 @@ fn bench_note_decryption<FL: OrchardFlavor>(c: &mut Criterion) {
     };
 
     {
-        let mut group = c.benchmark_group("compact-note-decryption");
+        let mut group = FL::benchmark_group(c, "compact-note-decryption");
         group.throughput(Throughput::Elements(invalid_ivks.len() as u64));
         group.bench_function("invalid", |b| {
             b.iter(|| {
@@ -131,7 +135,7 @@ fn bench_note_decryption<FL: OrchardFlavor>(c: &mut Criterion) {
             })
             .collect();
 
-        let mut group = c.benchmark_group("batch-note-decryption");
+        let mut group = FL::benchmark_group(c, "batch-note-decryption");
 
         for size in [10, 50, 100] {
             group.throughput(Throughput::Elements((ivks * size) as u64));

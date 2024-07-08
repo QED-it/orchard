@@ -11,13 +11,17 @@ use orchard::{
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+    orchard_flavor::{OrchardVanilla, OrchardZSA},
     value::NoteValue,
     Anchor, Bundle,
 };
 use rand::rngs::OsRng;
 
-fn criterion_benchmark<FL: OrchardFlavor>(c: &mut Criterion) {
+mod utils;
+
+use utils::OrchardFlavorBench;
+
+fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let rng = OsRng;
 
     let sk = SpendingKey::from_bytes([7; 32]).unwrap();
@@ -56,7 +60,7 @@ fn criterion_benchmark<FL: OrchardFlavor>(c: &mut Criterion) {
     let recipients_range = 1..=4;
 
     {
-        let mut group = c.benchmark_group("proving");
+        let mut group = FL::benchmark_group(c, "proving");
         group.sample_size(10);
         for num_recipients in recipients_range.clone() {
             let (bundle, instances) = create_bundle(num_recipients);
@@ -72,7 +76,7 @@ fn criterion_benchmark<FL: OrchardFlavor>(c: &mut Criterion) {
     }
 
     {
-        let mut group = c.benchmark_group("verifying");
+        let mut group = FL::benchmark_group(c, "verifying");
         for num_recipients in recipients_range {
             let (bundle, instances) = create_bundle(num_recipients);
             let bundle = bundle
