@@ -166,7 +166,7 @@ pub(crate) mod testing {
             TransmittedNoteCiphertext {
                 epk_bytes: encryptor.epk().to_bytes().0,
                 enc_ciphertext: encryptor.encrypt_note_plaintext(),
-                out_ciphertext: encryptor.encrypt_outgoing_plaintext(&cv_net, &cmx, rng),
+                out_ciphertext: encryptor.encrypt_outgoing_plaintext(cv_net, cmx, rng),
             }
         }
 
