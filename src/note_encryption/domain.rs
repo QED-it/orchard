@@ -17,7 +17,7 @@ use crate::{
         DiversifiedTransmissionKey, Diversifier, EphemeralPublicKey, EphemeralSecretKey,
         OutgoingViewingKey, PreparedEphemeralPublicKey, PreparedIncomingViewingKey, SharedSecret,
     },
-    note::{AssetBase, ExtractedNoteCommitment, Note, RandomSeed, Rho},
+    note::{ExtractedNoteCommitment, Note, RandomSeed, Rho},
     value::{NoteValue, ValueCommitment},
 };
 
@@ -44,12 +44,6 @@ const ZSA_ASSET_SIZE: usize = 32;
 
 /// The size of a ZSA compact note.
 pub(super) const COMPACT_NOTE_SIZE_ZSA: usize = COMPACT_NOTE_SIZE_VANILLA + ZSA_ASSET_SIZE;
-
-/// The version byte for Vanilla.
-pub(super) const NOTE_VERSION_BYTE_V2: u8 = 0x02;
-
-/// The version byte for ZSA.
-pub(super) const NOTE_VERSION_BYTE_V3: u8 = 0x03;
 
 pub(super) type Memo = [u8; MEMO_SIZE];
 
@@ -78,27 +72,32 @@ pub(super) fn prf_ock_orchard(
     )
 }
 
-// FIXME: consider returning enum instead of u8
-/// Retrieves the version of the note plaintext.
-/// Returns `Some(u8)` if the version is recognized, otherwise `None`.
-pub(super) fn parse_note_version(plaintext: &[u8]) -> Option<u8> {
-    plaintext.first().and_then(|version| match *version {
-        NOTE_VERSION_BYTE_V2 | NOTE_VERSION_BYTE_V3 => Some(*version),
-        _ => None,
-    })
+/// Checks if the version of the note plaintext matches the expected version for the domain.
+pub(super) fn validate_note_version<D: OrchardDomainCommon>(
+    plaintext: &D::CompactNotePlaintextBytes,
+) -> bool {
+    plaintext
+        .as_ref()
+        .first()
+        .map_or(false, |version| *version == D::NOTE_VERSION_BYTE)
 }
 
 /// Parses the note plaintext (excluding the memo) and extracts the note and address if valid.
 /// Domain-specific requirements:
 /// - If the note version is 3, the `plaintext` must contain a valid encoding of a ZSA asset type.
-pub(super) fn parse_note_plaintext_without_memo<Bytes: AsRef<[u8]>, F>(
+pub(super) fn parse_note_plaintext_without_memo<D: OrchardDomainCommon, F>(
     rho: Rho,
-    plaintext: &Bytes,
+    plaintext: &D::CompactNotePlaintextBytes,
     get_validated_pk_d: F,
 ) -> Option<(Note, Address)>
 where
     F: FnOnce(&Diversifier) -> Option<DiversifiedTransmissionKey>,
 {
+    if !validate_note_version::<D>(plaintext) {
+        return None;
+    }
+
+    // FIXME: Is the following comment correct and clear?
     // The unwraps below are guaranteed to succeed by the assertion above
     let diversifier = Diversifier::from_bytes(
         plaintext.as_ref()[NOTE_DIVERSIFIER_OFFSET..NOTE_VALUE_OFFSET]
@@ -121,19 +120,9 @@ where
 
     let pk_d = get_validated_pk_d(&diversifier)?;
     let recipient = Address::from_parts(diversifier, pk_d);
-
-    let asset = match parse_note_version(plaintext.as_ref())? {
-        NOTE_VERSION_BYTE_V2 => AssetBase::native(),
-        NOTE_VERSION_BYTE_V3 => {
-            let bytes = plaintext.as_ref()[COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA]
-                .try_into()
-                .unwrap();
-            AssetBase::from_bytes(bytes).unwrap()
-        }
-        _ => panic!("invalid note version"),
-    };
-
+    let asset = D::extract_asset(plaintext)?;
     let note = Option::from(Note::from_parts(recipient, value, asset, rho, rseed))?;
+
     Some((note, recipient))
 }
 
@@ -251,7 +240,7 @@ impl<D: OrchardDomainCommon> Domain for OrchardDomain<D> {
         ivk: &Self::IncomingViewingKey,
         plaintext: &D::CompactNotePlaintextBytes,
     ) -> Option<(Self::Note, Self::Recipient)> {
-        parse_note_plaintext_without_memo(self.rho, plaintext, |diversifier| {
+        parse_note_plaintext_without_memo::<D, _>(self.rho, plaintext, |diversifier| {
             Some(DiversifiedTransmissionKey::derive(ivk, diversifier))
         })
     }
@@ -261,7 +250,7 @@ impl<D: OrchardDomainCommon> Domain for OrchardDomain<D> {
         pk_d: &Self::DiversifiedTransmissionKey,
         plaintext: &D::CompactNotePlaintextBytes,
     ) -> Option<(Self::Note, Self::Recipient)> {
-        parse_note_plaintext_without_memo(self.rho, plaintext, |_| Some(*pk_d))
+        parse_note_plaintext_without_memo::<D, _>(self.rho, plaintext, |_| Some(*pk_d))
     }
 
     fn extract_memo(

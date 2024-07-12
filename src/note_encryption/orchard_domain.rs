@@ -5,7 +5,11 @@ use core::fmt;
 
 use zcash_note_encryption_zsa::{AEAD_TAG_SIZE, MEMO_SIZE};
 
-use crate::{action::Action, note::Rho, Note};
+use crate::{
+    action::Action,
+    note::{AssetBase, Rho},
+    Note,
+};
 
 use super::{compact_action::CompactAction, domain::Memo};
 
@@ -62,6 +66,9 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
     /// The size of an encrypted note ciphertext, accounting for additional AEAD tag space.
     const ENC_CIPHERTEXT_SIZE: usize = Self::NOTE_PLAINTEXT_SIZE + AEAD_TAG_SIZE;
 
+    /// The note version byte.
+    const NOTE_VERSION_BYTE: u8;
+
     /// The raw bytes of a note plaintext.
     type NotePlaintextBytes: NoteBytes;
     /// The raw bytes of an encrypted note plaintext.
@@ -73,6 +80,9 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
 
     /// Builds NotePlaintextBytes from Note and Memo.
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes;
+
+    /// Extracts the asset from the note plaintext.
+    fn extract_asset(plaintext: &Self::CompactNotePlaintextBytes) -> Option<AssetBase>;
 }
 
 /// Orchard-specific note encryption logic.

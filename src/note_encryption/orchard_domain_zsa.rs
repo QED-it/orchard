@@ -1,11 +1,13 @@
 //! This module implements the note encryption logic specific for the `OrchardZSA` flavor.
 
-use crate::{note::Note, orchard_flavor::OrchardZSA};
+use crate::{
+    note::{AssetBase, Note},
+    orchard_flavor::OrchardZSA,
+};
 
 use super::{
     domain::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
-        NOTE_VERSION_BYTE_V3,
     },
     orchard_domain::{NoteBytesData, OrchardDomainCommon},
 };
@@ -18,14 +20,24 @@ impl OrchardDomainCommon for OrchardZSA {
     type CompactNotePlaintextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
     type CompactNoteCiphertextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
 
+    const NOTE_VERSION_BYTE: u8 = 0x03;
+
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes {
-        let mut np = build_base_note_plaintext_bytes(NOTE_VERSION_BYTE_V3, note);
+        let mut np = build_base_note_plaintext_bytes(Self::NOTE_VERSION_BYTE, note);
 
         np[COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA]
             .copy_from_slice(&note.asset().to_bytes());
         np[COMPACT_NOTE_SIZE_ZSA..].copy_from_slice(memo);
 
         NoteBytesData(np)
+    }
+
+    fn extract_asset(plaintext: &Self::CompactNotePlaintextBytes) -> Option<AssetBase> {
+        let bytes = plaintext.as_ref()[COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA]
+            .try_into()
+            .unwrap();
+
+        AssetBase::from_bytes(bytes).into()
     }
 }
 
@@ -58,10 +70,7 @@ mod tests {
 
     use super::super::{
         compact_action::CompactAction,
-        domain::{
-            parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
-            NOTE_VERSION_BYTE_V3,
-        },
+        domain::{parse_note_plaintext_without_memo, prf_ock_orchard, validate_note_version},
         orchard_domain::{NoteBytesData, OrchardDomain},
     };
 
@@ -84,10 +93,11 @@ mod tests {
 
             // Decode.
             let domain = OrchardDomainZSA::for_rho(rho);
-            let version = parse_note_version(plaintext.as_ref()).unwrap();
             let (compact, parsed_memo) = domain.extract_memo(&plaintext);
 
-            let (parsed_note, parsed_recipient) = parse_note_plaintext_without_memo(rho, &compact,
+            assert!(validate_note_version::<OrchardZSA>(&compact));
+
+            let (parsed_note, parsed_recipient) = parse_note_plaintext_without_memo::<OrchardZSA, _>(rho, &compact,
                 |diversifier| {
                     assert_eq!(diversifier, &note.recipient().diversifier());
                     Some(*note.recipient().pk_d())
@@ -98,7 +108,6 @@ mod tests {
             assert_eq!(parsed_note, note);
             assert_eq!(parsed_recipient, note.recipient());
             assert_eq!(&parsed_memo, memo);
-            assert_eq!(version, NOTE_VERSION_BYTE_V3);
         }
     }
 
