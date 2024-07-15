@@ -19,9 +19,10 @@ use halo2_gadgets::{
             MerklePath,
         },
     },
-    utilities::lookup_range_check::{LookupRangeCheck, LookupRangeCheckConfig},
+    utilities::lookup_range_check::{
+        LookupRangeCheck, LookupRangeCheckConfig, PallasLookupRangeCheckConfig,
+    },
 };
-
 use halo2_proofs::{
     circuit::{Layouter, Value},
     plonk::{self, Advice, Column, Constraints, Expression, Instance as InstanceColumn, Selector},
@@ -67,8 +68,8 @@ pub struct Config {
     sinsemilla_config_2:
         SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
     commit_ivk_config: CommitIvkConfig,
-    old_note_commit_config: NoteCommitConfig,
-    new_note_commit_config: NoteCommitConfig,
+    old_note_commit_config: NoteCommitConfig<PallasLookupRangeCheckConfig>,
+    new_note_commit_config: NoteCommitConfig<PallasLookupRangeCheckConfig>,
 }
 
 impl OrchardCircuit for OrchardVanilla {

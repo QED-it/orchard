@@ -81,11 +81,11 @@ impl super::Config {
         PoseidonChip::construct(self.poseidon_config.clone())
     }
 
-    pub(super) fn note_commit_chip_new(&self) -> NoteCommitChip {
+    pub(super) fn note_commit_chip_new(&self) -> NoteCommitChip<PallasLookupRangeCheck45BConfig> {
         NoteCommitChip::construct(self.new_note_commit_config.clone())
     }
 
-    pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip {
+    pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip<PallasLookupRangeCheck45BConfig> {
         NoteCommitChip::construct(self.old_note_commit_config.clone())
     }
 

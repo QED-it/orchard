@@ -14,6 +14,7 @@ use halo2_gadgets::{
         PoseidonSpongeInstructions, Pow5Chip as PoseidonChip,
     },
     sinsemilla::{chip::SinsemillaChip, merkle::chip::MerkleChip},
+    utilities::lookup_range_check::PallasLookupRangeCheckConfig,
 };
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter},
@@ -61,11 +62,11 @@ impl super::Config {
         PoseidonChip::construct(self.poseidon_config.clone())
     }
 
-    pub(super) fn note_commit_chip_new(&self) -> NoteCommitChip {
+    pub(super) fn note_commit_chip_new(&self) -> NoteCommitChip<PallasLookupRangeCheckConfig> {
         NoteCommitChip::construct(self.new_note_commit_config.clone())
     }
 
-    pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip {
+    pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip<PallasLookupRangeCheckConfig> {
         NoteCommitChip::construct(self.old_note_commit_config.clone())
     }
 }

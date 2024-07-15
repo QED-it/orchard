@@ -38,6 +38,7 @@ mod circuit_zsa;
 
 pub(in crate::circuit) mod commit_ivk;
 pub(in crate::circuit) mod gadget;
+pub(in crate::circuit) mod note_commit;
 pub(in crate::circuit) mod orchard_sinsemilla_chip;
 
 /// Size of the Orchard circuit.

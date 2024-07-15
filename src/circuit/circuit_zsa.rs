@@ -92,8 +92,8 @@ pub struct Config {
         PallasLookupRangeCheck45BConfig,
     >,
     commit_ivk_config: CommitIvkConfig,
-    old_note_commit_config: NoteCommitConfig,
-    new_note_commit_config: NoteCommitConfig,
+    old_note_commit_config: NoteCommitConfig<PallasLookupRangeCheck45BConfig>,
+    new_note_commit_config: NoteCommitConfig<PallasLookupRangeCheck45BConfig>,
 }
 
 impl OrchardCircuit for OrchardZSA {
