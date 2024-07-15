@@ -107,11 +107,13 @@ impl NoteValue {
         NoteValue(value)
     }
 
-    pub(crate) fn from_bytes(bytes: [u8; 8]) -> Self {
+    /// Creates a note value from a byte array.
+    pub fn from_bytes(bytes: [u8; 8]) -> Self {
         NoteValue(u64::from_le_bytes(bytes))
     }
 
-    pub(crate) fn to_bytes(self) -> [u8; 8] {
+    /// Converts the note value to a byte array.
+    pub fn to_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
 
