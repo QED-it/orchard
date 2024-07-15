@@ -3,14 +3,11 @@
 use pasta_curves::pallas;
 
 use super::{add_chip, commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, AddInstruction};
-use crate::constants::{
-    OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
-    ValueCommitV,
-};
+use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains};
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, EccPoint},
-        EccInstructions, FixedPoint, FixedPointShort, Point, ScalarFixed, ScalarFixedShort, X,
+        EccInstructions, Point, X,
     },
     poseidon::{
         primitives::{self as poseidon, ConstantLength},
@@ -73,41 +70,6 @@ impl super::Config {
     }
 }
 
-/// `ValueCommit^Orchard` from [Section 5.4.8.3 Homomorphic Pedersen commitments (Sapling and Orchard)].
-///
-/// [Section 5.4.8.3 Homomorphic Pedersen commitments (Sapling and Orchard)]: https://zips.z.cash/protocol/protocol.pdf#concretehomomorphiccommit
-pub(in crate::circuit) fn value_commit_orchard<
-    EccChip: EccInstructions<
-        pallas::Affine,
-        FixedPoints = OrchardFixedBases,
-        Var = AssignedCell<pallas::Base, pallas::Base>,
-    >,
->(
-    mut layouter: impl Layouter<pallas::Base>,
-    ecc_chip: EccChip,
-    v: ScalarFixedShort<pallas::Affine, EccChip>,
-    rcv: ScalarFixed<pallas::Affine, EccChip>,
-) -> Result<Point<pallas::Affine, EccChip>, plonk::Error> {
-    // commitment = [v] ValueCommitV
-    let (commitment, _) = {
-        let value_commit_v = ValueCommitV;
-        let value_commit_v = FixedPointShort::from_inner(ecc_chip.clone(), value_commit_v);
-        value_commit_v.mul(layouter.namespace(|| "[v] ValueCommitV"), v)?
-    };
-
-    // blind = [rcv] ValueCommitR
-    let (blind, _rcv) = {
-        let value_commit_r = OrchardFixedBasesFull::ValueCommitR;
-        let value_commit_r = FixedPoint::from_inner(ecc_chip, value_commit_r);
-
-        // [rcv] ValueCommitR
-        value_commit_r.mul(layouter.namespace(|| "[rcv] ValueCommitR"), rcv)?
-    };
-
-    // [v] ValueCommitV + [rcv] ValueCommitR
-    commitment.add(layouter.namespace(|| "cv"), &blind)
-}
-
 /// `DeriveNullifier` from [Section 4.16: Note Commitments and Nullifiers].
 ///
 /// [Section 4.16: Note Commitments and Nullifiers]: https://zips.z.cash/protocol/protocol.pdf#commitmentsandnullifiers
@@ -146,3 +108,4 @@ pub(in crate::circuit) fn derive_nullifier<
 
 pub(in crate::circuit) use super::commit_ivk::gadgets::commit_ivk;
 pub(in crate::circuit) use super::note_commit::gadgets::note_commit;
+pub(in crate::circuit) use super::value_commit_orchard::gadgets::value_commit_orchard;

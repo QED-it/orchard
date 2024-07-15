@@ -49,6 +49,7 @@ use self::note_commit::{NoteCommitChip, NoteCommitConfig};
 
 mod gadget;
 mod note_commit;
+mod value_commit_orchard;
 
 /// Configuration needed to use the Orchard Action circuit.
 #[derive(Clone, Debug)]
