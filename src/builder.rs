@@ -902,8 +902,7 @@ pub struct InProgress<P, S: InProgressSignatures> {
 }
 
 impl<P, S: InProgressSignatures> InProgress<P, S> {
-    /// Changes this authorization from one proof type to another.
-    // FIXME: Change comment to "mutate the proof using the provided function"
+    /// Mutate the proof using the provided function.
     pub fn map_proof<F, P2>(self, f: F) -> InProgress<P2, S>
     where
         F: FnOnce(P) -> P2,

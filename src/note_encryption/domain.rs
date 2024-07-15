@@ -97,8 +97,7 @@ where
         return None;
     }
 
-    // FIXME: Is the following comment correct and clear?
-    // The unwraps below are guaranteed to succeed by the assertion above
+    // The unwraps below are guaranteed to succeed
     let diversifier = Diversifier::from_bytes(
         plaintext.as_ref()[NOTE_DIVERSIFIER_OFFSET..NOTE_VALUE_OFFSET]
             .try_into()
