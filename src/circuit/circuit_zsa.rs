@@ -562,7 +562,7 @@ impl OrchardCircuit for OrchardZSA {
         // Nullifier integrity (https://p.z.cash/ZKS:action-nullifier-integrity).
         let nf_old = {
             let nf_old = gadget::derive_nullifier(
-                layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_nf, cm_old)"),
+                &mut layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_nf, cm_old)"),
                 config.poseidon_chip(),
                 config.add_chip(),
                 ecc_chip.clone(),

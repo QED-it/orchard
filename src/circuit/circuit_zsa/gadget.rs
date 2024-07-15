@@ -5,12 +5,12 @@ use pasta_curves::arithmetic::CurveExt;
 use pasta_curves::pallas;
 
 use super::{add_chip, commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, AddInstruction};
-use crate::constants::{NullifierK, OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains};
+use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains};
 use halo2_gadgets::{
-    ecc::{chip::EccChip, chip::EccPoint, EccInstructions, FixedPointBaseField, Point, X},
+    ecc::{chip::EccChip, chip::EccPoint, EccInstructions, Point, X},
     poseidon::{
         primitives::{self as poseidon, ConstantLength},
-        Hash as PoseidonHash, PoseidonSpongeInstructions, Pow5Chip as PoseidonChip,
+        PoseidonSpongeInstructions, Pow5Chip as PoseidonChip,
     },
     sinsemilla::{chip::SinsemillaChip, merkle::chip::MerkleChip},
     utilities::{cond_swap::CondSwapChip, lookup_range_check::PallasLookupRangeCheck45BConfig},
@@ -108,7 +108,7 @@ pub(in crate::circuit) fn derive_nullifier<
         Var = AssignedCell<pallas::Base, pallas::Base>,
     >,
 >(
-    mut layouter: impl Layouter<pallas::Base>,
+    layouter: &mut impl Layouter<pallas::Base>,
     poseidon_chip: PoseidonChip,
     add_chip: AddChip,
     ecc_chip: EccChip,
@@ -119,39 +119,16 @@ pub(in crate::circuit) fn derive_nullifier<
     nk: AssignedCell<pallas::Base, pallas::Base>,
     split_flag: AssignedCell<pallas::Base, pallas::Base>,
 ) -> Result<X<pallas::Affine, EccChip>, plonk::Error> {
-    // hash = poseidon_hash(nk, rho)
-    let hash = {
-        let poseidon_message = [nk, rho];
-        let poseidon_hasher =
-            PoseidonHash::init(poseidon_chip, layouter.namespace(|| "Poseidon init"))?;
-        poseidon_hasher.hash(
-            layouter.namespace(|| "Poseidon hash (nk, rho)"),
-            poseidon_message,
-        )?
-    };
-
-    // Add hash output to psi.
-    // `scalar` = poseidon_hash(nk, rho) + psi.
-    let scalar = add_chip.add(
-        layouter.namespace(|| "scalar = poseidon_hash(nk, rho) + psi"),
-        &hash,
+    let nf = crate::circuit::gadget::derive_nullifier(
+        layouter,
+        poseidon_chip,
+        add_chip,
+        ecc_chip.clone(),
+        rho,
         psi,
+        cm,
+        nk,
     )?;
-
-    // Multiply scalar by NullifierK
-    // `product` = [poseidon_hash(nk, rho) + psi] NullifierK.
-    //
-    let product = {
-        let nullifier_k = FixedPointBaseField::from_inner(ecc_chip.clone(), NullifierK);
-        nullifier_k.mul(
-            layouter.namespace(|| "[poseidon_output + psi] NullifierK"),
-            scalar,
-        )?
-    };
-
-    // Add cm to multiplied fixed base
-    // nf = cm + [poseidon_output + psi] NullifierK
-    let nf = cm.add(layouter.namespace(|| "nf"), &product)?;
 
     // Add NullifierL to nf
     // split_note_nf = NullifierL + nf
