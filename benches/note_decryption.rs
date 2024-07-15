@@ -28,8 +28,6 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let recipient = valid_ivk.address_at(0u32);
     let valid_ivk = PreparedIncomingViewingKey::new(&valid_ivk);
 
-    // FIXME: should we add to the following comment that now for ZSA flavor the early
-    // rejection also happens when the asset is invalid?
     // Compact actions don't have the full AEAD ciphertext, so ZIP 307 trial-decryption
     // relies on an invalid ivk resulting in random noise for which the note commitment
     // is invalid. However, in practice we still get early rejection:

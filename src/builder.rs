@@ -584,8 +584,6 @@ impl Builder {
     }
 
     /// Add an instruction to burn a given amount of a specific asset.
-    // FIXME: Should we add `add_burn` into the `into_bundle` function in this testing module
-    // (like `add_spend` and `add_output` are used there)?
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
         use std::collections::hash_map::Entry;
 
