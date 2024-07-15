@@ -23,7 +23,6 @@ use halo2_gadgets::{
     },
     utilities::{
         bool_check,
-        cond_swap::{CondSwapChip, CondSwapConfig},
         lookup_range_check::{LookupRangeCheck45BConfig, PallasLookupRangeCheck45BConfig},
     },
 };
@@ -95,7 +94,6 @@ pub struct Config {
     commit_ivk_config: CommitIvkConfig,
     old_note_commit_config: NoteCommitConfig,
     new_note_commit_config: NoteCommitConfig,
-    cond_swap_config: CondSwapConfig,
 }
 
 impl OrchardCircuit for OrchardZSA {
@@ -353,8 +351,6 @@ impl OrchardCircuit for OrchardZSA {
         let new_note_commit_config =
             NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone());
 
-        let cond_swap_config = CondSwapChip::configure(meta, advices[0..5].try_into().unwrap());
-
         Config {
             primary,
             q_orchard,
@@ -369,7 +365,6 @@ impl OrchardCircuit for OrchardZSA {
             commit_ivk_config,
             old_note_commit_config,
             new_note_commit_config,
-            cond_swap_config,
         }
     }
 

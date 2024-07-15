@@ -90,7 +90,7 @@ impl super::Config {
     }
 
     pub(super) fn cond_swap_chip(&self) -> CondSwapChip<pallas::Base> {
-        CondSwapChip::construct(self.cond_swap_config.clone())
+        CondSwapChip::construct(self.merkle_config_1.cond_swap_config.clone())
     }
 }
 
