@@ -2380,10 +2380,8 @@ pub(in crate::circuit) mod gadgets {
 mod tests {
     use super::NoteCommitConfig;
     use crate::{
-        circuit::circuit_zsa::{
-            gadget::{assign_free_advice, assign_is_native_asset},
-            note_commit::{gadgets, NoteCommitChip},
-        },
+        circuit::circuit_zsa::note_commit::{gadgets, NoteCommitChip},
+        circuit::gadget::{assign_free_advice, assign_is_native_asset},
         constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_Q},
         note::{commitment::NoteCommitTrapdoor, AssetBase, NoteCommitment},
         value::NoteValue,

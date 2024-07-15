@@ -39,16 +39,13 @@ use super::{
     commit_ivk::{self, CommitIvkChip, CommitIvkConfig},
     gadget::{
         add_chip::{self, AddChip, AddConfig},
-        AddInstruction,
+        assign_free_advice, AddInstruction,
     },
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD,
     RK_X, RK_Y,
 };
 
-use self::{
-    gadget::assign_free_advice,
-    note_commit::{NoteCommitChip, NoteCommitConfig},
-};
+use self::note_commit::{NoteCommitChip, NoteCommitConfig};
 
 mod gadget;
 mod note_commit;

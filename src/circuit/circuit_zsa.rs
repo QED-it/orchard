@@ -47,16 +47,13 @@ use super::{
     },
     gadget::{
         add_chip::{self, AddChip, AddConfig},
-        AddInstruction,
+        assign_free_advice, assign_is_native_asset, assign_split_flag, AddInstruction,
     },
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
     ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
 
-use self::{
-    gadget::{assign_free_advice, assign_is_native_asset, assign_split_flag},
-    note_commit::{NoteCommitChip, NoteCommitConfig},
-};
+use self::note_commit::{NoteCommitChip, NoteCommitConfig};
 
 pub mod gadget;
 mod note_commit;

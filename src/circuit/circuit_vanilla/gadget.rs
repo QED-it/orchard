@@ -1,6 +1,5 @@
 //! Gadgets used in the Orchard circuit (Vanilla variation).
 
-use ff::Field;
 use pasta_curves::pallas;
 
 use super::{add_chip, commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, AddInstruction};
@@ -20,8 +19,8 @@ use halo2_gadgets::{
     sinsemilla::{chip::SinsemillaChip, merkle::chip::MerkleChip},
 };
 use halo2_proofs::{
-    circuit::{AssignedCell, Layouter, Value},
-    plonk::{self, Advice, Assigned, Column},
+    circuit::{AssignedCell, Layouter},
+    plonk,
 };
 
 impl super::Config {
@@ -72,25 +71,6 @@ impl super::Config {
     pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip {
         NoteCommitChip::construct(self.old_note_commit_config.clone())
     }
-}
-
-/// Witnesses the given value in a standalone region.
-///
-/// Usages of this helper are technically superfluous, as the single-cell region is only
-/// ever used in equality constraints. We could eliminate them with a
-/// [write-on-copy abstraction](https://github.com/zcash/halo2/issues/334).
-pub(in crate::circuit) fn assign_free_advice<F: Field, V: Copy>(
-    mut layouter: impl Layouter<F>,
-    column: Column<Advice>,
-    value: Value<V>,
-) -> Result<AssignedCell<V, F>, plonk::Error>
-where
-    for<'v> Assigned<F>: From<&'v V>,
-{
-    layouter.assign_region(
-        || "load private",
-        |mut region| region.assign_advice(|| "load private", column, 0, || value),
-    )
 }
 
 /// `ValueCommit^Orchard` from [Section 5.4.8.3 Homomorphic Pedersen commitments (Sapling and Orchard)].

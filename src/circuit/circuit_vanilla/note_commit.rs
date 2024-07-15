@@ -2021,10 +2021,8 @@ mod tests {
 
     use super::NoteCommitConfig;
     use crate::{
-        circuit::circuit_vanilla::{
-            gadget::assign_free_advice,
-            note_commit::{gadgets, NoteCommitChip},
-        },
+        circuit::circuit_vanilla::note_commit::{gadgets, NoteCommitChip},
+        circuit::gadget::assign_free_advice,
         constants::{
             fixed_bases::NOTE_COMMITMENT_PERSONALIZATION, OrchardCommitDomains, OrchardFixedBases,
             OrchardHashDomains, L_ORCHARD_BASE, L_VALUE, T_Q,

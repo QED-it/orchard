@@ -1,13 +1,11 @@
 //! Gadgets used in the Orchard circuit (ZSA variation).
 
-use ff::Field;
 use group::Curve;
 use pasta_curves::arithmetic::CurveExt;
 use pasta_curves::pallas;
 
 use super::{add_chip, commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, AddInstruction};
 use crate::constants::{NullifierK, OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains};
-use crate::note::AssetBase;
 use halo2_gadgets::{
     ecc::{chip::EccChip, chip::EccPoint, EccInstructions, FixedPointBaseField, Point, X},
     poseidon::{
@@ -18,8 +16,8 @@ use halo2_gadgets::{
     utilities::{cond_swap::CondSwapChip, lookup_range_check::PallasLookupRangeCheck45BConfig},
 };
 use halo2_proofs::{
-    circuit::{AssignedCell, Layouter, Value},
-    plonk::{self, Advice, Assigned, Column},
+    circuit::{AssignedCell, Layouter},
+    plonk,
 };
 
 impl super::Config {
@@ -94,69 +92,6 @@ impl super::Config {
     pub(super) fn cond_swap_chip(&self) -> CondSwapChip<pallas::Base> {
         CondSwapChip::construct(self.cond_swap_config.clone())
     }
-}
-
-/// Witnesses the given value in a standalone region.
-///
-/// Usages of this helper are technically superfluous, as the single-cell region is only
-/// ever used in equality constraints. We could eliminate them with a
-/// [write-on-copy abstraction](https://github.com/zcash/halo2/issues/334).
-pub(in crate::circuit) fn assign_free_advice<F: Field, V: Copy>(
-    mut layouter: impl Layouter<F>,
-    column: Column<Advice>,
-    value: Value<V>,
-) -> Result<AssignedCell<V, F>, plonk::Error>
-where
-    for<'v> Assigned<F>: From<&'v V>,
-{
-    layouter.assign_region(
-        || "load private",
-        |mut region| region.assign_advice(|| "load private", column, 0, || value),
-    )
-}
-
-/// Witnesses is_native_asset.
-pub(in crate::circuit) fn assign_is_native_asset<F: Field>(
-    layouter: impl Layouter<F>,
-    column: Column<Advice>,
-    asset: Value<AssetBase>,
-) -> Result<AssignedCell<pasta_curves::Fp, F>, plonk::Error>
-where
-    Assigned<F>: for<'v> From<&'v pasta_curves::Fp>,
-{
-    assign_free_advice(
-        layouter,
-        column,
-        asset.map(|asset| {
-            if bool::from(asset.is_native()) {
-                pallas::Base::one()
-            } else {
-                pallas::Base::zero()
-            }
-        }),
-    )
-}
-
-/// Witnesses split_flag.
-pub(in crate::circuit) fn assign_split_flag<F: Field>(
-    layouter: impl Layouter<F>,
-    column: Column<Advice>,
-    split_flag: Value<bool>,
-) -> Result<AssignedCell<pasta_curves::Fp, F>, plonk::Error>
-where
-    Assigned<F>: for<'v> From<&'v pasta_curves::Fp>,
-{
-    assign_free_advice(
-        layouter,
-        column,
-        split_flag.map(|split_flag| {
-            if split_flag {
-                pallas::Base::one()
-            } else {
-                pallas::Base::zero()
-            }
-        }),
-    )
 }
 
 /// `DeriveNullifier` from [Section 4.16: Note Commitments and Nullifiers].
