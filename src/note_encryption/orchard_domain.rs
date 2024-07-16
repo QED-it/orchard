@@ -66,9 +66,6 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
     /// The size of an encrypted note ciphertext, accounting for additional AEAD tag space.
     const ENC_CIPHERTEXT_SIZE: usize = Self::NOTE_PLAINTEXT_SIZE + AEAD_TAG_SIZE;
 
-    /// The note version byte.
-    const NOTE_VERSION_BYTE: u8;
-
     /// The raw bytes of a note plaintext.
     type NotePlaintextBytes: NoteBytes;
     /// The raw bytes of an encrypted note plaintext.

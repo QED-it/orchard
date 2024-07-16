@@ -45,6 +45,12 @@ const ZSA_ASSET_SIZE: usize = 32;
 /// The size of a ZSA compact note.
 pub(super) const COMPACT_NOTE_SIZE_ZSA: usize = COMPACT_NOTE_SIZE_VANILLA + ZSA_ASSET_SIZE;
 
+/// The version byte for Vanilla.
+pub(super) const NOTE_VERSION_BYTE_V2: u8 = 0x02;
+
+/// The version byte for ZSA.
+pub(super) const NOTE_VERSION_BYTE_V3: u8 = 0x03;
+
 pub(super) type Memo = [u8; MEMO_SIZE];
 
 /// Defined in [Zcash Protocol Spec § 5.4.2: Pseudo Random Functions][concreteprfs].
@@ -72,14 +78,13 @@ pub(super) fn prf_ock_orchard(
     )
 }
 
-/// Checks if the version of the note plaintext matches the expected version for the domain.
-pub(super) fn validate_note_version<D: OrchardDomainCommon>(
-    plaintext: &D::CompactNotePlaintextBytes,
-) -> bool {
-    plaintext
-        .as_ref()
-        .first()
-        .map_or(false, |version| *version == D::NOTE_VERSION_BYTE)
+/// Retrieves the version of the note plaintext.
+/// Returns `Some(u8)` if the version is recognized, otherwise `None`.
+pub(super) fn parse_note_version(plaintext: &[u8]) -> Option<u8> {
+    plaintext.first().and_then(|version| match *version {
+        NOTE_VERSION_BYTE_V2 | NOTE_VERSION_BYTE_V3 => Some(*version),
+        _ => None,
+    })
 }
 
 /// Parses the note plaintext (excluding the memo) and extracts the note and address if valid.
@@ -93,9 +98,7 @@ pub(super) fn parse_note_plaintext_without_memo<D: OrchardDomainCommon, F>(
 where
     F: FnOnce(&Diversifier) -> Option<DiversifiedTransmissionKey>,
 {
-    if !validate_note_version::<D>(plaintext) {
-        return None;
-    }
+    parse_note_version(plaintext.as_ref())?;
 
     // The unwraps below are guaranteed to succeed
     let diversifier = Diversifier::from_bytes(

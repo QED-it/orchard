@@ -8,6 +8,7 @@ use crate::{
 use super::{
     domain::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
+        NOTE_VERSION_BYTE_V3,
     },
     orchard_domain::{NoteBytesData, OrchardDomainCommon},
 };
@@ -20,10 +21,8 @@ impl OrchardDomainCommon for OrchardZSA {
     type CompactNotePlaintextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
     type CompactNoteCiphertextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
 
-    const NOTE_VERSION_BYTE: u8 = 0x03;
-
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes {
-        let mut np = build_base_note_plaintext_bytes(Self::NOTE_VERSION_BYTE, note);
+        let mut np = build_base_note_plaintext_bytes(NOTE_VERSION_BYTE_V3, note);
 
         np[COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA]
             .copy_from_slice(&note.asset().to_bytes());
@@ -70,7 +69,7 @@ mod tests {
 
     use super::super::{
         compact_action::CompactAction,
-        domain::{parse_note_plaintext_without_memo, prf_ock_orchard, validate_note_version},
+        domain::{parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard},
         orchard_domain::{NoteBytesData, OrchardDomain},
     };
 
@@ -95,7 +94,7 @@ mod tests {
             let domain = OrchardDomainZSA::for_rho(rho);
             let (compact, parsed_memo) = domain.extract_memo(&plaintext);
 
-            assert!(validate_note_version::<OrchardZSA>(&compact));
+            assert!(parse_note_version(compact.as_ref()).is_some());
 
             let (parsed_note, parsed_recipient) = parse_note_plaintext_without_memo::<OrchardZSA, _>(rho, &compact,
                 |diversifier| {
