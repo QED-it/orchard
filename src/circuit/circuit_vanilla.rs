@@ -34,12 +34,13 @@ use crate::{
 
 use super::{
     commit_ivk::{self, CommitIvkChip},
-    gadget::{add_chip::AddChip, assign_free_advice, AddInstruction},
+    gadget::{add_chip::AddChip, assign_free_advice},
     note_commit::NoteCommitChip,
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD,
     RK_X, RK_Y,
 };
 
+mod derive_nullifier;
 mod gadget;
 mod note_commit;
 mod value_commit_orchard;
