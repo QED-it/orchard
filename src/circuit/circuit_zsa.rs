@@ -48,11 +48,10 @@ use super::{
         add_chip::{self, AddChip, AddConfig},
         assign_free_advice, assign_is_native_asset, assign_split_flag, AddInstruction,
     },
+    note_commit::{NoteCommitChip, NoteCommitConfig},
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
     ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
-
-use self::note_commit::{NoteCommitChip, NoteCommitConfig};
 
 pub mod gadget;
 mod note_commit;
@@ -344,12 +343,12 @@ impl OrchardCircuit for OrchardZSA {
         // Configuration to handle decomposition and canonicity checking
         // for NoteCommit_old.
         let old_note_commit_config =
-            NoteCommitChip::configure(meta, advices, sinsemilla_config_1.clone());
+            NoteCommitChip::configure(meta, advices, sinsemilla_config_1.clone(), true);
 
         // Configuration to handle decomposition and canonicity checking
         // for NoteCommit_new.
         let new_note_commit_config =
-            NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone());
+            NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone(), true);
 
         Config {
             primary,

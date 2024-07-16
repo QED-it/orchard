@@ -1,18 +1,16 @@
 //! Note commitment logic for the Orchard circuit (ZSA variation).
 
-use group::ff::PrimeField;
 use halo2_proofs::{
     circuit::{AssignedCell, Chip, Layouter, Value},
-    plonk::{Advice, Column, ConstraintSystem, Error, Expression},
+    plonk::Error,
 };
 use pasta_curves::pallas;
 
 use crate::{
     circuit::note_commit::{
-        DecomposeB, DecomposeD, DecomposeE, DecomposeG, DecomposeHZsa, DecomposeJ, GdCanonicity,
-        PkdAssetCanonicity, PsiCanonicity, RhoCanonicity, ValueCanonicity, YCanonicity,
+        DecomposeB, DecomposeD, DecomposeE, DecomposeG, DecomposeHZsa, DecomposeJ,
     },
-    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P},
+    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
     value::NoteValue,
 };
 use halo2_gadgets::{
@@ -20,13 +18,9 @@ use halo2_gadgets::{
         chip::{EccChip, NonIdentityEccPoint},
         NonIdentityPoint, Point, ScalarFixed,
     },
-    sinsemilla::{
-        chip::{SinsemillaChip, SinsemillaConfig},
-        CommitDomain, Message, MessagePiece,
-    },
+    sinsemilla::{chip::SinsemillaChip, CommitDomain, Message, MessagePiece},
     utilities::{
-        cond_swap::CondSwapChip,
-        lookup_range_check::{PallasLookupRangeCheck, PallasLookupRangeCheck45BConfig},
+        cond_swap::CondSwapChip, lookup_range_check::PallasLookupRangeCheck45BConfig,
         RangeConstrained,
     },
 };
@@ -46,167 +40,12 @@ use halo2_gadgets::{
           x-coordinate and 1 bit used for the y-coordinate.
 */
 
-#[allow(non_snake_case)]
-#[derive(Clone, Debug)]
-pub struct NoteCommitConfig<Lookup: PallasLookupRangeCheck> {
-    b: DecomposeB<Lookup>,
-    d: DecomposeD<Lookup>,
-    e: DecomposeE<Lookup>,
-    g: DecomposeG<Lookup>,
-    h: DecomposeHZsa<Lookup>,
-    j: DecomposeJ<Lookup>,
-    g_d: GdCanonicity<Lookup>,
-    pk_d_asset: PkdAssetCanonicity<Lookup>,
-    value: ValueCanonicity,
-    rho: RhoCanonicity<Lookup>,
-    psi: PsiCanonicity,
-    y_canon: YCanonicity,
-    advices: [Column<Advice>; 10],
-    sinsemilla_config:
-        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup>,
-}
-
-#[derive(Clone, Debug)]
-pub struct NoteCommitChip<Lookup: PallasLookupRangeCheck> {
-    config: NoteCommitConfig<Lookup>,
-}
-
-impl<Lookup: PallasLookupRangeCheck> NoteCommitChip<Lookup> {
-    #[allow(non_snake_case)]
-    #[allow(clippy::many_single_char_names)]
-    pub(in crate::circuit) fn configure(
-        meta: &mut ConstraintSystem<pallas::Base>,
-        advices: [Column<Advice>; 10],
-        sinsemilla_config: SinsemillaConfig<
-            OrchardHashDomains,
-            OrchardCommitDomains,
-            OrchardFixedBases,
-            Lookup,
-        >,
-    ) -> NoteCommitConfig<Lookup> {
-        // Useful constants
-        let two = pallas::Base::from(2);
-        let two_pow_2 = pallas::Base::from(1 << 2);
-        let two_pow_4 = two_pow_2.square();
-        let two_pow_5 = two_pow_4 * two;
-        let two_pow_6 = two_pow_5 * two;
-        let two_pow_8 = two_pow_4.square();
-        let two_pow_9 = two_pow_8 * two;
-        let two_pow_10 = two_pow_9 * two;
-        let two_pow_58 = pallas::Base::from(1 << 58);
-        let two_pow_130 = Expression::Constant(pallas::Base::from_u128(1 << 65).square());
-        let two_pow_140 = Expression::Constant(pallas::Base::from_u128(1 << 70).square());
-        let two_pow_249 = pallas::Base::from_u128(1 << 124).square() * two;
-        let two_pow_250 = two_pow_249 * two;
-        let two_pow_254 = pallas::Base::from_u128(1 << 127).square();
-
-        let t_p = Expression::Constant(pallas::Base::from_u128(T_P));
-
-        // Columns used for MessagePiece and message input gates.
-        let col_l = advices[6];
-        let col_m = advices[7];
-        let col_r = advices[8];
-        let col_z = advices[9];
-
-        let b = DecomposeB::configure(meta, col_l, col_m, col_r, two_pow_4, two_pow_5, two_pow_6);
-        let d = DecomposeD::configure(meta, col_l, col_m, col_r, two, two_pow_2, two_pow_10);
-        let e = DecomposeE::configure(meta, col_l, col_m, col_r, two_pow_6);
-        let g = DecomposeG::configure(meta, col_l, col_m, two, two_pow_10);
-        let h = DecomposeHZsa::configure(meta, col_l, col_m, col_r, two_pow_5, two_pow_6);
-        let j = DecomposeJ::configure(meta, col_l, col_m, col_r, two);
-
-        let g_d = GdCanonicity::configure(
-            meta,
-            col_l,
-            col_m,
-            col_r,
-            col_z,
-            two_pow_130.clone(),
-            two_pow_250,
-            two_pow_254,
-            t_p.clone(),
-        );
-
-        let pk_d_asset = PkdAssetCanonicity::configure(
-            meta,
-            col_l,
-            col_m,
-            col_r,
-            col_z,
-            two_pow_4,
-            two_pow_140.clone(),
-            two_pow_254,
-            t_p.clone(),
-        );
-
-        let value =
-            ValueCanonicity::configure(meta, col_l, col_m, col_r, col_z, two_pow_8, two_pow_58);
-
-        let rho = RhoCanonicity::configure(
-            meta,
-            col_l,
-            col_m,
-            col_r,
-            col_z,
-            two_pow_4,
-            two_pow_140,
-            two_pow_254,
-            t_p.clone(),
-        );
-
-        let psi = PsiCanonicity::configure(
-            meta,
-            col_l,
-            col_m,
-            col_r,
-            col_z,
-            two_pow_9,
-            two_pow_130.clone(),
-            two_pow_249,
-            two_pow_254,
-            t_p.clone(),
-        );
-
-        let y_canon = YCanonicity::configure(
-            meta,
-            advices,
-            two,
-            two_pow_10,
-            two_pow_130,
-            two_pow_250,
-            two_pow_254,
-            t_p,
-        );
-
-        NoteCommitConfig {
-            b,
-            d,
-            e,
-            g,
-            h,
-            j,
-            g_d,
-            pk_d_asset,
-            value,
-            rho,
-            psi,
-            y_canon,
-            advices,
-            sinsemilla_config,
-        }
-    }
-
-    pub(in crate::circuit) fn construct(config: NoteCommitConfig<Lookup>) -> Self {
-        Self { config }
-    }
-}
-
 pub(in crate::circuit) mod gadgets {
+    use super::*;
     use crate::circuit::note_commit::gadgets::{
         canon_bitshift_130, pkd_asset_x_canonicity, psi_canonicity, rho_canonicity, y_canonicity,
     };
-
-    use super::*;
+    use crate::circuit::note_commit::{NoteCommitChip, SpecificConfigForCircuit};
 
     #[allow(clippy::many_single_char_names)]
     #[allow(clippy::type_complexity)]
@@ -237,6 +76,13 @@ pub(in crate::circuit) mod gadgets {
         Point<pallas::Affine, EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>>,
         Error,
     > {
+        let zsa_config = match &note_commit_chip.config.specific_config_for_circuit {
+            SpecificConfigForCircuit::Vanilla(_) => {
+                panic!("Incorrect NoteCommitChip")
+            }
+            SpecificConfigForCircuit::Zsa(specific_config) => specific_config.clone(),
+        };
+
         let lookup_config = chip.config().lookup_config();
 
         // `a` = bits 0..=249 of `x(g_d)`
@@ -500,7 +346,7 @@ pub(in crate::circuit) mod gadgets {
             .g
             .assign(&mut layouter, g, g_0, g_1.clone(), z1_g.clone())?;
 
-        let h_1 = cfg.h.assign(
+        let h_1 = zsa_config.h_zsa.assign(
             &mut layouter,
             h_zec,
             h_zsa,
@@ -509,7 +355,7 @@ pub(in crate::circuit) mod gadgets {
             h_2_zsa.clone(),
         )?;
 
-        let j_0 = cfg.j.assign(&mut layouter, j, j_0, j_1)?;
+        let j_0 = zsa_config.j.assign(&mut layouter, j, j_0, j_1)?;
 
         cfg.g_d
             .assign(&mut layouter, g_d, a, b_0, b_1, a_prime, z13_a, z13_a_prime)?;
@@ -567,10 +413,10 @@ pub(in crate::circuit) mod gadgets {
 
 #[cfg(test)]
 mod tests {
-    use super::NoteCommitConfig;
     use crate::{
-        circuit::circuit_zsa::note_commit::{gadgets, NoteCommitChip},
+        circuit::circuit_zsa::note_commit::gadgets,
         circuit::gadget::{assign_free_advice, assign_is_native_asset},
+        circuit::note_commit::{NoteCommitChip, NoteCommitConfig},
         constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_Q},
         note::{commitment::NoteCommitTrapdoor, AssetBase, NoteCommitment},
         value::NoteValue,
@@ -682,7 +528,7 @@ mod tests {
                     true,
                 );
                 let note_commit_config =
-                    NoteCommitChip::configure(meta, advices, sinsemilla_config);
+                    NoteCommitChip::configure(meta, advices, sinsemilla_config, true);
 
                 let ecc_config =
                     EccChip::<OrchardFixedBases, PallasLookupRangeCheck45BConfig>::configure(

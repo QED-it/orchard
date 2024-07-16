@@ -4,8 +4,11 @@ use group::Curve;
 use pasta_curves::arithmetic::CurveExt;
 use pasta_curves::pallas;
 
-use super::{add_chip, commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, AddInstruction};
-use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains};
+use super::{add_chip, commit_ivk::CommitIvkChip, AddInstruction};
+use crate::{
+    circuit::note_commit::NoteCommitChip,
+    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
+};
 use halo2_gadgets::{
     ecc::{chip::EccChip, chip::EccPoint, EccInstructions, Point, X},
     poseidon::{

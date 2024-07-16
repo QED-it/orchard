@@ -5,6 +5,7 @@ use crate::{
     value::NoteValue,
 };
 use group::ff::PrimeField;
+use halo2_gadgets::sinsemilla::chip::SinsemillaConfig;
 use halo2_gadgets::{
     ecc::chip::NonIdentityEccPoint,
     sinsemilla::{chip::SinsemillaChip, MessagePiece},
@@ -1938,5 +1939,182 @@ pub(in crate::circuit) mod gadgets {
             j_prime,
             z13_j_prime,
         )
+    }
+}
+
+#[allow(non_snake_case)]
+#[derive(Clone, Debug)]
+pub struct NoteCommitConfig<Lookup: PallasLookupRangeCheck> {
+    pub(in crate::circuit) b: DecomposeB<Lookup>,
+    pub(in crate::circuit) d: DecomposeD<Lookup>,
+    pub(in crate::circuit) e: DecomposeE<Lookup>,
+    pub(in crate::circuit) g: DecomposeG<Lookup>,
+    pub(in crate::circuit) g_d: GdCanonicity<Lookup>,
+    pub(in crate::circuit) pk_d_asset: PkdAssetCanonicity<Lookup>,
+    pub(in crate::circuit) value: ValueCanonicity,
+    pub(in crate::circuit) rho: RhoCanonicity<Lookup>,
+    pub(in crate::circuit) psi: PsiCanonicity,
+    pub(in crate::circuit) y_canon: YCanonicity,
+    pub(in crate::circuit) advices: [Column<Advice>; 10],
+    pub(in crate::circuit) sinsemilla_config:
+        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup>,
+    pub(in crate::circuit) specific_config_for_circuit: SpecificConfigForCircuit<Lookup>,
+}
+
+#[derive(Clone, Debug)]
+pub enum SpecificConfigForCircuit<Lookup: PallasLookupRangeCheck> {
+    Vanilla(NoteCommitConfigForVanillaCircuit<Lookup>),
+    Zsa(NoteCommitConfigForZsaCircuit<Lookup>),
+}
+
+#[derive(Clone, Debug)]
+pub struct NoteCommitConfigForVanillaCircuit<Lookup: PallasLookupRangeCheck> {
+    pub(in crate::circuit) h_vanilla: DecomposeHVanilla<Lookup>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NoteCommitConfigForZsaCircuit<Lookup: PallasLookupRangeCheck> {
+    pub(in crate::circuit) h_zsa: DecomposeHZsa<Lookup>,
+    pub(in crate::circuit) j: DecomposeJ<Lookup>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NoteCommitChip<Lookup: PallasLookupRangeCheck> {
+    pub config: NoteCommitConfig<Lookup>,
+}
+
+impl<Lookup: PallasLookupRangeCheck> NoteCommitChip<Lookup> {
+    #[allow(non_snake_case)]
+    #[allow(clippy::many_single_char_names)]
+    pub(in crate::circuit) fn configure(
+        meta: &mut ConstraintSystem<pallas::Base>,
+        advices: [Column<Advice>; 10],
+        sinsemilla_config: SinsemillaConfig<
+            OrchardHashDomains,
+            OrchardCommitDomains,
+            OrchardFixedBases,
+            Lookup,
+        >,
+        is_zsa_circuit: bool,
+    ) -> NoteCommitConfig<Lookup> {
+        // Useful constants
+        let two = pallas::Base::from(2);
+        let two_pow_2 = pallas::Base::from(1 << 2);
+        let two_pow_4 = two_pow_2.square();
+        let two_pow_5 = two_pow_4 * two;
+        let two_pow_6 = two_pow_5 * two;
+        let two_pow_8 = two_pow_4.square();
+        let two_pow_9 = two_pow_8 * two;
+        let two_pow_10 = two_pow_9 * two;
+        let two_pow_58 = pallas::Base::from(1 << 58);
+        let two_pow_130 = Expression::Constant(pallas::Base::from_u128(1 << 65).square());
+        let two_pow_140 = Expression::Constant(pallas::Base::from_u128(1 << 70).square());
+        let two_pow_249 = pallas::Base::from_u128(1 << 124).square() * two;
+        let two_pow_250 = two_pow_249 * two;
+        let two_pow_254 = pallas::Base::from_u128(1 << 127).square();
+
+        let t_p = Expression::Constant(pallas::Base::from_u128(T_P));
+
+        // Columns used for MessagePiece and message input gates.
+        let col_l = advices[6];
+        let col_m = advices[7];
+        let col_r = advices[8];
+        let col_z = advices[9];
+
+        let b = DecomposeB::configure(meta, col_l, col_m, col_r, two_pow_4, two_pow_5, two_pow_6);
+        let d = DecomposeD::configure(meta, col_l, col_m, col_r, two, two_pow_2, two_pow_10);
+        let e = DecomposeE::configure(meta, col_l, col_m, col_r, two_pow_6);
+        let g = DecomposeG::configure(meta, col_l, col_m, two, two_pow_10);
+        let specific_config_for_circuit = if is_zsa_circuit {
+            let h = DecomposeHZsa::configure(meta, col_l, col_m, col_r, two_pow_5, two_pow_6);
+            let j = DecomposeJ::configure(meta, col_l, col_m, col_r, two);
+            SpecificConfigForCircuit::Zsa(NoteCommitConfigForZsaCircuit { h_zsa: h, j })
+        } else {
+            let h = DecomposeHVanilla::configure(meta, col_l, col_m, col_r, two_pow_5);
+            SpecificConfigForCircuit::Vanilla(NoteCommitConfigForVanillaCircuit { h_vanilla: h })
+        };
+
+        let g_d = GdCanonicity::configure(
+            meta,
+            col_l,
+            col_m,
+            col_r,
+            col_z,
+            two_pow_130.clone(),
+            two_pow_250,
+            two_pow_254,
+            t_p.clone(),
+        );
+
+        let pk_d_asset = PkdAssetCanonicity::configure(
+            meta,
+            col_l,
+            col_m,
+            col_r,
+            col_z,
+            two_pow_4,
+            two_pow_140.clone(),
+            two_pow_254,
+            t_p.clone(),
+        );
+
+        let value =
+            ValueCanonicity::configure(meta, col_l, col_m, col_r, col_z, two_pow_8, two_pow_58);
+
+        let rho = RhoCanonicity::configure(
+            meta,
+            col_l,
+            col_m,
+            col_r,
+            col_z,
+            two_pow_4,
+            two_pow_140,
+            two_pow_254,
+            t_p.clone(),
+        );
+
+        let psi = PsiCanonicity::configure(
+            meta,
+            col_l,
+            col_m,
+            col_r,
+            col_z,
+            two_pow_9,
+            two_pow_130.clone(),
+            two_pow_249,
+            two_pow_254,
+            t_p.clone(),
+        );
+
+        let y_canon = YCanonicity::configure(
+            meta,
+            advices,
+            two,
+            two_pow_10,
+            two_pow_130,
+            two_pow_250,
+            two_pow_254,
+            t_p,
+        );
+
+        NoteCommitConfig {
+            b,
+            d,
+            e,
+            g,
+            g_d,
+            pk_d_asset,
+            value,
+            rho,
+            psi,
+            y_canon,
+            advices,
+            sinsemilla_config,
+            specific_config_for_circuit,
+        }
+    }
+
+    pub(in crate::circuit) fn construct(config: NoteCommitConfig<Lookup>) -> Self {
+        Self { config }
     }
 }
