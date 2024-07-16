@@ -2,16 +2,21 @@
 
 use ff::Field;
 use halo2_gadgets::{
-    ecc::{chip::EccPoint, EccInstructions, FixedPointBaseField, Point},
+    ecc::{chip::EccChip, chip::EccPoint, EccInstructions, FixedPointBaseField, Point},
     poseidon::{
         primitives::{self as poseidon, ConstantLength},
-        Hash as PoseidonHash, PoseidonSpongeInstructions,
+        Hash as PoseidonHash, PoseidonSpongeInstructions, Pow5Chip as PoseidonChip,
     },
+    sinsemilla::{chip::SinsemillaChip, merkle::chip::MerkleChip},
+    utilities::{cond_swap::CondSwapChip, lookup_range_check::PallasLookupRangeCheck},
 };
 use pasta_curves::pallas;
 
-use crate::constants::{NullifierK, OrchardFixedBases};
-use crate::note::AssetBase;
+use crate::{
+    circuit::{commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, Config},
+    constants::{NullifierK, OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
+    note::AssetBase,
+};
 use halo2_proofs::{
     circuit::Value,
     circuit::{AssignedCell, Chip, Layouter},
@@ -30,6 +35,61 @@ pub(in crate::circuit) trait AddInstruction<F: Field>: Chip<F> {
         b: &AssignedCell<F, F>,
     ) -> Result<AssignedCell<F, F>, plonk::Error>;
 }
+
+impl<Lookup: PallasLookupRangeCheck> Config<Lookup> {
+    pub(super) fn add_chip(&self) -> add_chip::AddChip {
+        add_chip::AddChip::construct(self.add_config.clone())
+    }
+
+    pub(super) fn commit_ivk_chip(&self) -> CommitIvkChip {
+        CommitIvkChip::construct(self.commit_ivk_config.clone())
+    }
+
+    pub(super) fn ecc_chip(&self) -> EccChip<OrchardFixedBases, Lookup> {
+        EccChip::construct(self.ecc_config.clone())
+    }
+
+    pub(super) fn sinsemilla_chip_1(
+        &self,
+    ) -> SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup> {
+        SinsemillaChip::construct(self.sinsemilla_config_1.clone())
+    }
+
+    pub(super) fn sinsemilla_chip_2(
+        &self,
+    ) -> SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup> {
+        SinsemillaChip::construct(self.sinsemilla_config_2.clone())
+    }
+
+    pub(super) fn merkle_chip_1(
+        &self,
+    ) -> MerkleChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup> {
+        MerkleChip::construct(self.merkle_config_1.clone())
+    }
+
+    pub(super) fn merkle_chip_2(
+        &self,
+    ) -> MerkleChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup> {
+        MerkleChip::construct(self.merkle_config_2.clone())
+    }
+
+    pub(super) fn poseidon_chip(&self) -> PoseidonChip<pallas::Base, 3, 2> {
+        PoseidonChip::construct(self.poseidon_config.clone())
+    }
+
+    pub(super) fn note_commit_chip_new(&self) -> NoteCommitChip<Lookup> {
+        NoteCommitChip::construct(self.new_note_commit_config.clone())
+    }
+
+    pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip<Lookup> {
+        NoteCommitChip::construct(self.old_note_commit_config.clone())
+    }
+
+    pub(super) fn cond_swap_chip(&self) -> CondSwapChip<pallas::Base> {
+        CondSwapChip::construct(self.merkle_config_1.cond_swap_config.clone())
+    }
+}
+
 /// Witnesses the given value in a standalone region.
 ///
 /// Usages of this helper are technically superfluous, as the single-cell region is only

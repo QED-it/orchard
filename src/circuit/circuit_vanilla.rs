@@ -8,16 +8,13 @@ use pasta_curves::pallas;
 
 use halo2_gadgets::{
     ecc::{
-        chip::{EccChip, EccConfig},
-        FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarFixedShort, ScalarVar,
+        chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarFixedShort,
+        ScalarVar,
     },
-    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
+    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
     sinsemilla::{
-        chip::{SinsemillaChip, SinsemillaConfig},
-        merkle::{
-            chip::{MerkleChip, MerkleConfig},
-            MerklePath,
-        },
+        chip::SinsemillaChip,
+        merkle::{chip::MerkleChip, MerklePath},
     },
     utilities::lookup_range_check::{
         LookupRangeCheck, LookupRangeCheckConfig, PallasLookupRangeCheckConfig,
@@ -25,24 +22,20 @@ use halo2_gadgets::{
 };
 use halo2_proofs::{
     circuit::{Layouter, Value},
-    plonk::{self, Advice, Column, Constraints, Expression, Instance as InstanceColumn, Selector},
+    plonk::{self, Constraints, Expression},
     poly::Rotation,
 };
 
 use crate::{
-    constants::{
-        OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
-    },
+    circuit::Config,
+    constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
     orchard_flavor::OrchardVanilla,
 };
 
 use super::{
-    commit_ivk::{self, CommitIvkChip, CommitIvkConfig},
-    gadget::{
-        add_chip::{self, AddChip, AddConfig},
-        assign_free_advice, AddInstruction,
-    },
-    note_commit::{NoteCommitChip, NoteCommitConfig},
+    commit_ivk::{self, CommitIvkChip},
+    gadget::{add_chip::AddChip, assign_free_advice, AddInstruction},
+    note_commit::NoteCommitChip,
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD,
     RK_X, RK_Y,
 };
@@ -51,28 +44,8 @@ mod gadget;
 mod note_commit;
 mod value_commit_orchard;
 
-/// Configuration needed to use the Orchard Action circuit.
-#[derive(Clone, Debug)]
-pub struct Config {
-    primary: Column<InstanceColumn>,
-    q_orchard: Selector,
-    advices: [Column<Advice>; 10],
-    add_config: AddConfig,
-    ecc_config: EccConfig<OrchardFixedBases>,
-    poseidon_config: PoseidonConfig<pallas::Base, 3, 2>,
-    merkle_config_1: MerkleConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    merkle_config_2: MerkleConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    sinsemilla_config_1:
-        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    sinsemilla_config_2:
-        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases>,
-    commit_ivk_config: CommitIvkConfig,
-    old_note_commit_config: NoteCommitConfig<PallasLookupRangeCheckConfig>,
-    new_note_commit_config: NoteCommitConfig<PallasLookupRangeCheckConfig>,
-}
-
 impl OrchardCircuit for OrchardVanilla {
-    type Config = Config;
+    type Config = Config<PallasLookupRangeCheckConfig>;
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
         // Advice columns used in the Orchard circuit.

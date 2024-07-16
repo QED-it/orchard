@@ -2,77 +2,19 @@
 
 use pasta_curves::pallas;
 
-use super::{add_chip, commit_ivk::CommitIvkChip, AddInstruction};
-use crate::{
-    circuit::note_commit::NoteCommitChip,
-    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
-};
+use super::AddInstruction;
+use crate::constants::OrchardFixedBases;
 use halo2_gadgets::{
-    ecc::{
-        chip::{EccChip, EccPoint},
-        EccInstructions, Point, X,
-    },
+    ecc::{chip::EccPoint, EccInstructions, Point, X},
     poseidon::{
         primitives::{self as poseidon, ConstantLength},
-        PoseidonSpongeInstructions, Pow5Chip as PoseidonChip,
+        PoseidonSpongeInstructions,
     },
-    sinsemilla::{chip::SinsemillaChip, merkle::chip::MerkleChip},
-    utilities::lookup_range_check::PallasLookupRangeCheckConfig,
 };
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter},
     plonk,
 };
-
-impl super::Config {
-    pub(super) fn add_chip(&self) -> add_chip::AddChip {
-        add_chip::AddChip::construct(self.add_config.clone())
-    }
-
-    pub(super) fn commit_ivk_chip(&self) -> CommitIvkChip {
-        CommitIvkChip::construct(self.commit_ivk_config.clone())
-    }
-
-    pub(super) fn ecc_chip(&self) -> EccChip<OrchardFixedBases> {
-        EccChip::construct(self.ecc_config.clone())
-    }
-
-    pub(super) fn sinsemilla_chip_1(
-        &self,
-    ) -> SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        SinsemillaChip::construct(self.sinsemilla_config_1.clone())
-    }
-
-    pub(super) fn sinsemilla_chip_2(
-        &self,
-    ) -> SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        SinsemillaChip::construct(self.sinsemilla_config_2.clone())
-    }
-
-    pub(super) fn merkle_chip_1(
-        &self,
-    ) -> MerkleChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        MerkleChip::construct(self.merkle_config_1.clone())
-    }
-
-    pub(super) fn merkle_chip_2(
-        &self,
-    ) -> MerkleChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases> {
-        MerkleChip::construct(self.merkle_config_2.clone())
-    }
-
-    pub(super) fn poseidon_chip(&self) -> PoseidonChip<pallas::Base, 3, 2> {
-        PoseidonChip::construct(self.poseidon_config.clone())
-    }
-
-    pub(super) fn note_commit_chip_new(&self) -> NoteCommitChip<PallasLookupRangeCheckConfig> {
-        NoteCommitChip::construct(self.new_note_commit_config.clone())
-    }
-
-    pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip<PallasLookupRangeCheckConfig> {
-        NoteCommitChip::construct(self.old_note_commit_config.clone())
-    }
-}
 
 /// `DeriveNullifier` from [Section 4.16: Note Commitments and Nullifiers].
 ///

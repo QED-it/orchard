@@ -9,17 +9,11 @@ use group::Curve;
 use pasta_curves::{arithmetic::CurveAffine, pallas};
 
 use halo2_gadgets::{
-    ecc::{
-        chip::{EccChip, EccConfig},
-        FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar,
-    },
-    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
+    ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
+    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
     sinsemilla::{
-        chip::{SinsemillaChip, SinsemillaConfig},
-        merkle::{
-            chip::{MerkleChip, MerkleConfig},
-            MerklePath,
-        },
+        chip::SinsemillaChip,
+        merkle::{chip::MerkleChip, MerklePath},
     },
     utilities::{
         bool_check,
@@ -29,26 +23,25 @@ use halo2_gadgets::{
 
 use halo2_proofs::{
     circuit::{Layouter, Value},
-    plonk::{self, Advice, Column, Constraints, Expression, Instance as InstanceColumn, Selector},
+    plonk::{self, Constraints, Expression},
     poly::Rotation,
 };
 
 use crate::{
+    circuit::Config,
     constants::OrchardFixedBasesFull,
-    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
+    constants::{OrchardFixedBases, OrchardHashDomains},
     note::AssetBase,
     orchard_flavor::OrchardZSA,
 };
 
 use super::{
-    commit_ivk::{
-        self, {CommitIvkChip, CommitIvkConfig},
-    },
+    commit_ivk::{self, CommitIvkChip},
     gadget::{
-        add_chip::{self, AddChip, AddConfig},
-        assign_free_advice, assign_is_native_asset, assign_split_flag, AddInstruction,
+        add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag,
+        AddInstruction,
     },
-    note_commit::{NoteCommitChip, NoteCommitConfig},
+    note_commit::NoteCommitChip,
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
     ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
@@ -57,46 +50,8 @@ pub mod gadget;
 mod note_commit;
 mod value_commit_orchard;
 
-/// Configuration needed to use the Orchard Action circuit.
-#[derive(Clone, Debug)]
-pub struct Config {
-    primary: Column<InstanceColumn>,
-    q_orchard: Selector,
-    advices: [Column<Advice>; 10],
-    add_config: AddConfig,
-    ecc_config: EccConfig<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
-    poseidon_config: PoseidonConfig<pallas::Base, 3, 2>,
-    merkle_config_1: MerkleConfig<
-        OrchardHashDomains,
-        OrchardCommitDomains,
-        OrchardFixedBases,
-        PallasLookupRangeCheck45BConfig,
-    >,
-    merkle_config_2: MerkleConfig<
-        OrchardHashDomains,
-        OrchardCommitDomains,
-        OrchardFixedBases,
-        PallasLookupRangeCheck45BConfig,
-    >,
-    sinsemilla_config_1: SinsemillaConfig<
-        OrchardHashDomains,
-        OrchardCommitDomains,
-        OrchardFixedBases,
-        PallasLookupRangeCheck45BConfig,
-    >,
-    sinsemilla_config_2: SinsemillaConfig<
-        OrchardHashDomains,
-        OrchardCommitDomains,
-        OrchardFixedBases,
-        PallasLookupRangeCheck45BConfig,
-    >,
-    commit_ivk_config: CommitIvkConfig,
-    old_note_commit_config: NoteCommitConfig<PallasLookupRangeCheck45BConfig>,
-    new_note_commit_config: NoteCommitConfig<PallasLookupRangeCheck45BConfig>,
-}
-
 impl OrchardCircuit for OrchardZSA {
-    type Config = Config;
+    type Config = Config<PallasLookupRangeCheck45BConfig>;
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
         // Advice columns used in the Orchard circuit.
