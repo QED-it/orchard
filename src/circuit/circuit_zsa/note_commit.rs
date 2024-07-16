@@ -33,15 +33,17 @@ use halo2_gadgets::{
 
 /*
     <https://zips.z.cash/protocol/nu5.pdf#concretesinsemillacommit>
-    We need to hash g★_d || pk★_d || i2lebsp_{64}(v) || rho || psi,
+    We need to hash g★_d || pk★_d || i2lebsp_{64}(v) || rho || psi || asset,
     where
         - g★_d is the representation of the point g_d, with 255 bits used for the
           x-coordinate and 1 bit used for the y-coordinate;
         - pk★_d is the representation of the point pk_d, with 255 bits used for the
           x-coordinate and 1 bit used for the y-coordinate;
         - v is a 64-bit value;
-        - rho is a base field element (255 bits); and
-        - psi is a base field element (255 bits).
+        - rho is a base field element (255 bits);
+        - psi is a base field element (255 bits); and
+        - asset is the representation of the asset point, with 255 bits used for the
+          x-coordinate and 1 bit used for the y-coordinate.
 */
 
 #[allow(non_snake_case)]
