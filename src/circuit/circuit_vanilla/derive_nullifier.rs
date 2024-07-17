@@ -39,7 +39,7 @@ pub(in crate::circuit) mod gadgets {
         cm: &Point<pallas::Affine, EccChip>,
         nk: AssignedCell<pallas::Base, pallas::Base>,
     ) -> Result<X<pallas::Affine, EccChip>, plonk::Error> {
-        crate::circuit::gadget::derive_nullifier(
+        crate::circuit::derive_nullifier::derive_nullifier(
             layouter,
             poseidon_chip,
             add_chip,
