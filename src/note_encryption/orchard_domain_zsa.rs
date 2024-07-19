@@ -1,5 +1,6 @@
 //! This module implements the note encryption logic specific for the `OrchardZSA` flavor.
 
+use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
 use crate::{
     note::{AssetBase, Note},
     orchard_flavor::OrchardZSA,
@@ -10,7 +11,7 @@ use super::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
         NOTE_VERSION_BYTE_V3,
     },
-    orchard_domain::{NoteBytesData, OrchardDomainCommon},
+    orchard_domain::OrchardDomainCommon,
 };
 
 impl OrchardDomainCommon for OrchardZSA {
@@ -50,7 +51,7 @@ mod tests {
         try_compact_note_decryption, try_note_decryption, try_output_recovery_with_ovk, Domain,
         EphemeralKeyBytes,
     };
-
+    use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
     use crate::{
         action::Action,
         address::Address,
@@ -70,7 +71,7 @@ mod tests {
     use super::super::{
         compact_action::CompactAction,
         domain::{parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard},
-        orchard_domain::{NoteBytesData, OrchardDomain},
+        orchard_domain::OrchardDomain,
     };
 
     type OrchardDomainZSA = OrchardDomain<OrchardZSA>;
