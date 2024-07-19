@@ -1,10 +1,10 @@
 //! This module implements the note encryption logic specific for the `OrchardZSA` flavor.
 
-use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
 use crate::{
     note::{AssetBase, Note},
     orchard_flavor::OrchardZSA,
 };
+use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
 
 use super::{
     domain::{
@@ -47,11 +47,6 @@ mod tests {
 
     use rand::rngs::OsRng;
 
-    use zcash_note_encryption_zsa::{
-        try_compact_note_decryption, try_note_decryption, try_output_recovery_with_ovk, Domain,
-        EphemeralKeyBytes,
-    };
-    use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
     use crate::{
         action::Action,
         address::Address,
@@ -66,6 +61,11 @@ mod tests {
         orchard_flavor::OrchardZSA,
         primitives::redpallas,
         value::{NoteValue, ValueCommitment},
+    };
+    use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
+    use zcash_note_encryption_zsa::{
+        try_compact_note_decryption, try_note_decryption, try_output_recovery_with_ovk, Domain,
+        EphemeralKeyBytes,
     };
 
     use super::super::{

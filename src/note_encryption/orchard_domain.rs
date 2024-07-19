@@ -3,8 +3,8 @@
 
 use core::fmt;
 
-use zcash_note_encryption_zsa::{AEAD_TAG_SIZE, MEMO_SIZE};
 use zcash_note_encryption_zsa::note_bytes::NoteBytes;
+use zcash_note_encryption_zsa::{AEAD_TAG_SIZE, MEMO_SIZE};
 
 use crate::{
     action::Action,
