@@ -3,7 +3,7 @@
 
 use core::fmt;
 
-use zcash_note_encryption_zsa::{AEAD_TAG_SIZE, MEMO_SIZE};
+use zcash_note_encryption_zsa::{NoteBytes, NoteBytesData, AEAD_TAG_SIZE, MEMO_SIZE};
 
 use crate::{
     action::Action,
@@ -13,47 +13,15 @@ use crate::{
 
 use super::{compact_action::CompactAction, domain::Memo};
 
-/// Represents a fixed-size array of bytes for note components.
-#[derive(Clone, Copy, Debug)]
-pub struct NoteBytesData<const N: usize>(pub [u8; N]);
+pub trait NoteBytesArray: NoteBytes {
+    fn parse(bytes: &[u8]) -> Option<Self>;
+}
 
-impl<const N: usize> AsRef<[u8]> for NoteBytesData<N> {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
+impl<const N: usize> NoteBytesArray for NoteBytesData<N> {
+    fn parse(bytes: &[u8]) -> Option<Self> {
+        Some(Self(bytes.try_into().ok()?))
     }
 }
-
-impl<const N: usize> AsMut<[u8]> for NoteBytesData<N> {
-    fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.0
-    }
-}
-
-impl<const N: usize> From<&[u8]> for NoteBytesData<N> {
-    fn from(s: &[u8]) -> Self {
-        Self(s.try_into().unwrap())
-    }
-}
-
-impl<const N: usize> From<(&[u8], &[u8])> for NoteBytesData<N> {
-    fn from(s: (&[u8], &[u8])) -> Self {
-        Self([s.0, s.1].concat().try_into().unwrap())
-    }
-}
-
-/// Provides a unified interface for handling fixed-size byte arrays used in Orchard note encryption.
-pub trait NoteBytes:
-    AsRef<[u8]>
-    + AsMut<[u8]>
-    + for<'a> From<&'a [u8]>
-    + for<'a> From<(&'a [u8], &'a [u8])>
-    + Clone
-    + Copy
-    + Send
-{
-}
-
-impl<const N: usize> NoteBytes for NoteBytesData<N> {}
 
 /// Represents the Orchard protocol domain specifics required for note encryption and decryption.
 pub trait OrchardDomainCommon: fmt::Debug + Clone {
@@ -67,13 +35,11 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
     const ENC_CIPHERTEXT_SIZE: usize = Self::NOTE_PLAINTEXT_SIZE + AEAD_TAG_SIZE;
 
     /// The raw bytes of a note plaintext.
-    type NotePlaintextBytes: NoteBytes;
+    type NotePlaintextBytes: NoteBytesArray;
     /// The raw bytes of an encrypted note plaintext.
-    type NoteCiphertextBytes: NoteBytes;
+    type NoteCiphertextBytes: NoteBytesArray;
     /// The raw bytes of a compact note.
-    type CompactNotePlaintextBytes: NoteBytes;
-    /// The raw bytes of an encrypted compact note.
-    type CompactNoteCiphertextBytes: NoteBytes;
+    type CompactNotePlaintextBytes: NoteBytesArray;
 
     /// Builds NotePlaintextBytes from Note and Memo.
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes;
@@ -100,7 +66,7 @@ impl<D: OrchardDomainCommon> OrchardDomain<D> {
     }
 
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
-    pub fn for_compact_action(act: &CompactAction<D>) -> Self {
+    pub fn for_compact_action(act: &CompactAction) -> Self {
         Self {
             rho: act.rho(),
             phantom: Default::default(),

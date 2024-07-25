@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use zcash_note_encryption_zsa::{EphemeralKeyBytes, ShieldedOutput};
+use zcash_note_encryption_zsa::{CompactNoteCiphertextBytes, EphemeralKeyBytes, ShieldedOutput};
 
 use crate::{
     action::Action,
@@ -24,30 +24,30 @@ impl<A, D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for Action<A, D
         Some(self.encrypted_note().enc_ciphertext)
     }
 
-    fn enc_ciphertext_compact(&self) -> D::CompactNoteCiphertextBytes {
+    fn enc_ciphertext_compact(&self) -> CompactNoteCiphertextBytes {
         self.encrypted_note().enc_ciphertext.as_ref()[..D::COMPACT_NOTE_SIZE].into()
     }
 }
 
 /// A compact Action for light clients.
-pub struct CompactAction<D: OrchardDomainCommon> {
+pub struct CompactAction<'a> {
     nullifier: Nullifier,
     cmx: ExtractedNoteCommitment,
     ephemeral_key: EphemeralKeyBytes,
-    enc_ciphertext: D::CompactNoteCiphertextBytes,
+    enc_ciphertext: CompactNoteCiphertextBytes<'a>,
 }
 
-impl<D: OrchardDomainCommon> fmt::Debug for CompactAction<D> {
+impl<'a> fmt::Debug for CompactAction<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CompactAction")
     }
 }
 
-impl<A, D: OrchardDomainCommon> From<&Action<A, D>> for CompactAction<D>
+impl<'a, A, D: OrchardDomainCommon> From<&'a Action<A, D>> for CompactAction<'a>
 where
     Action<A, D>: ShieldedOutput<OrchardDomain<D>>,
 {
-    fn from(action: &Action<A, D>) -> Self {
+    fn from(action: &'a Action<A, D>) -> Self {
         CompactAction {
             nullifier: *action.nullifier(),
             cmx: *action.cmx(),
@@ -57,7 +57,7 @@ where
     }
 }
 
-impl<D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for CompactAction<D> {
+impl<'a, D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for CompactAction<'a> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.ephemeral_key.0)
     }
@@ -70,18 +70,18 @@ impl<D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for CompactAction<
         None
     }
 
-    fn enc_ciphertext_compact(&self) -> D::CompactNoteCiphertextBytes {
-        self.enc_ciphertext
+    fn enc_ciphertext_compact(&self) -> CompactNoteCiphertextBytes<'_> {
+        self.enc_ciphertext.as_ref().into()
     }
 }
 
-impl<D: OrchardDomainCommon> CompactAction<D> {
+impl<'a> CompactAction<'a> {
     /// Create a CompactAction from its constituent parts
     pub fn from_parts(
         nullifier: Nullifier,
         cmx: ExtractedNoteCommitment,
         ephemeral_key: EphemeralKeyBytes,
-        enc_ciphertext: D::CompactNoteCiphertextBytes,
+        enc_ciphertext: CompactNoteCiphertextBytes<'a>,
     ) -> Self {
         Self {
             nullifier,
