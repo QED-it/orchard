@@ -40,6 +40,8 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
     type NoteCiphertextBytes: NoteBytesArray;
     /// The raw bytes of a compact note.
     type CompactNotePlaintextBytes: NoteBytesArray;
+    /// The raw bytes of an encrypted compact note.
+    type CompactNoteCiphertextBytes<'a>: From<&'a [u8]> + AsRef<[u8]>;
 
     /// Builds NotePlaintextBytes from Note and Memo.
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes;
@@ -66,7 +68,7 @@ impl<D: OrchardDomainCommon> OrchardDomain<D> {
     }
 
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
-    pub fn for_compact_action(act: &CompactAction) -> Self {
+    pub fn for_compact_action(act: &CompactAction<D>) -> Self {
         Self {
             rho: act.rho(),
             phantom: Default::default(),

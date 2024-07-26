@@ -15,12 +15,29 @@ use super::{
     orchard_domain::OrchardDomainCommon,
 };
 
+#[derive(Debug)]
+pub struct CompactNoteCiphertextBytes<'a>(&'a [u8; COMPACT_NOTE_SIZE_VANILLA]);
+
+impl<'a> AsRef<[u8]> for CompactNoteCiphertextBytes<'a> {
+    fn as_ref(&self) -> &[u8] {
+        self.0
+    }
+}
+
+impl<'a> From<&'a [u8]> for CompactNoteCiphertextBytes<'a> {
+    fn from(bytes: &'a [u8]) -> Self {
+        // FIXME: avoid unwrap - return Option?
+        CompactNoteCiphertextBytes(bytes.try_into().unwrap())
+    }
+}
+
 impl OrchardDomainCommon for OrchardZSA {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_ZSA;
 
     type NotePlaintextBytes = NoteBytesData<{ Self::NOTE_PLAINTEXT_SIZE }>;
     type NoteCiphertextBytes = NoteBytesData<{ Self::ENC_CIPHERTEXT_SIZE }>;
     type CompactNotePlaintextBytes = NoteBytesData<{ Self::COMPACT_NOTE_SIZE }>;
+    type CompactNoteCiphertextBytes<'a> = CompactNoteCiphertextBytes<'a>;
 
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes {
         let mut np = build_base_note_plaintext_bytes(NOTE_VERSION_BYTE_V3, note);
