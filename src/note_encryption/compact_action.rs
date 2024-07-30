@@ -118,7 +118,7 @@ impl<D: OrchardDomainCommon> CompactAction<D> {
 pub mod testing {
     use rand::RngCore;
 
-    use zcash_note_encryption_zsa::{Domain, NoteEncryption, MEMO_SIZE};
+    use zcash_note_encryption_zsa::{note_bytes::NoteBytes, Domain, NoteEncryption, MEMO_SIZE};
 
     use crate::{
         address::Address,
