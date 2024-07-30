@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use zcash_note_encryption_zsa::{EphemeralKeyBytes, ShieldedOutput};
+use zcash_note_encryption_zsa::{note_bytes::NoteBytes, EphemeralKeyBytes, ShieldedOutput};
 
 use crate::{
     action::Action,
@@ -25,7 +25,11 @@ impl<A, D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for Action<A, D
     }
 
     fn enc_ciphertext_compact(&self) -> D::CompactNoteCiphertextBytes {
-        self.encrypted_note().enc_ciphertext.as_ref()[..D::COMPACT_NOTE_SIZE].into()
+        // FIXME: can use unwrap here?
+        D::CompactNoteCiphertextBytes::from_slice(
+            &self.encrypted_note().enc_ciphertext.as_ref()[..D::COMPACT_NOTE_SIZE],
+        )
+        .unwrap()
     }
 }
 
@@ -70,8 +74,10 @@ impl<D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for CompactAction<
         None
     }
 
+    // FIXME: shouldn't it return None like enc_ciphertext does?
     fn enc_ciphertext_compact(&self) -> D::CompactNoteCiphertextBytes {
-        self.enc_ciphertext
+        // FIXME: can use unwrap here?
+        D::CompactNoteCiphertextBytes::from_slice(self.enc_ciphertext.as_ref()).unwrap()
     }
 }
 

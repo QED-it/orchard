@@ -1,5 +1,7 @@
 //! This module implements the note encryption logic specific for the `OrchardVanilla` flavor.
 
+use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
+
 use crate::{
     note::{AssetBase, Note},
     orchard_flavor::OrchardVanilla,
@@ -9,7 +11,7 @@ use super::{
     domain::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_V2,
     },
-    orchard_domain::{NoteBytesData, OrchardDomainCommon},
+    orchard_domain::OrchardDomainCommon,
 };
 
 impl OrchardDomainCommon for OrchardVanilla {
