@@ -118,7 +118,7 @@ impl<D: OrchardDomainCommon> CompactAction<D> {
 pub mod testing {
     use rand::RngCore;
 
-    use zcash_note_encryption_zsa::{Domain, NoteEncryption};
+    use zcash_note_encryption_zsa::{Domain, NoteEncryption, MEMO_SIZE};
 
     use crate::{
         address::Address,
@@ -151,7 +151,7 @@ pub mod testing {
             }
         };
         let note = Note::from_parts(recipient, value, AssetBase::native(), rho, rseed).unwrap();
-        let encryptor = NoteEncryption::<OrchardDomain<D>>::new(ovk, note, [0u8; 512]);
+        let encryptor = NoteEncryption::<OrchardDomain<D>>::new(ovk, note, [0u8; MEMO_SIZE]);
         let cmx = ExtractedNoteCommitment::from(note.commitment());
         let ephemeral_key = OrchardDomain::<D>::epk_bytes(encryptor.epk());
         let enc_ciphertext = encryptor.encrypt_note_plaintext();
@@ -161,7 +161,10 @@ pub mod testing {
                 nullifier: nf_old,
                 cmx,
                 ephemeral_key,
-                enc_ciphertext: enc_ciphertext.as_ref()[..52].try_into().unwrap(),
+                enc_ciphertext: D::CompactNoteCiphertextBytes::from_slice(
+                    &enc_ciphertext.as_ref()[..D::COMPACT_NOTE_SIZE],
+                )
+                .unwrap(),
             },
             note,
         )

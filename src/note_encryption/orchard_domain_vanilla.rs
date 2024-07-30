@@ -42,8 +42,8 @@ mod tests {
     use rand::rngs::OsRng;
 
     use zcash_note_encryption_zsa::{
-        try_compact_note_decryption, try_note_decryption, try_output_recovery_with_ovk, Domain,
-        EphemeralKeyBytes,
+        note_bytes::NoteBytesData, try_compact_note_decryption, try_note_decryption,
+        try_output_recovery_with_ovk, Domain, EphemeralKeyBytes,
     };
 
     use crate::{
@@ -65,7 +65,7 @@ mod tests {
     use super::super::{
         compact_action::CompactAction,
         domain::{parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard},
-        orchard_domain::{NoteBytesData, OrchardDomain},
+        orchard_domain::OrchardDomain,
     };
 
     type OrchardDomainVanilla = OrchardDomain<OrchardVanilla>;
@@ -87,7 +87,7 @@ mod tests {
 
             // Decode.
             let domain = OrchardDomainVanilla::for_rho(rho);
-            let (compact, parsed_memo) = domain.extract_memo(&plaintext);
+            let (compact, parsed_memo) = domain.split_plaintext_at_memo(&plaintext).unwrap();
 
             assert!(parse_note_version(compact.as_ref()).is_some());
 
