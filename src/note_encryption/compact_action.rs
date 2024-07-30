@@ -25,7 +25,6 @@ impl<A, D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for Action<A, D
     }
 
     fn enc_ciphertext_compact(&self) -> D::CompactNoteCiphertextBytes {
-        // FIXME: can use unwrap here?
         D::CompactNoteCiphertextBytes::from_slice(
             &self.encrypted_note().enc_ciphertext.as_ref()[..D::COMPACT_NOTE_SIZE],
         )
@@ -74,9 +73,7 @@ impl<D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for CompactAction<
         None
     }
 
-    // FIXME: shouldn't it return None like enc_ciphertext does?
     fn enc_ciphertext_compact(&self) -> D::CompactNoteCiphertextBytes {
-        // FIXME: can use unwrap here?
         D::CompactNoteCiphertextBytes::from_slice(self.enc_ciphertext.as_ref()).unwrap()
     }
 }
