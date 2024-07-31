@@ -8,7 +8,7 @@ use blake2b_simd::Params;
 
 use zcash_note_encryption_zsa::{
     note_bytes::NoteBytes, BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes,
-    OutgoingCipherKey, AEAD_TAG_SIZE, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
+    OutgoingCipherKey, MEMO_SIZE, OUT_PLAINTEXT_SIZE,
 };
 
 use crate::{
@@ -273,23 +273,6 @@ impl<D: OrchardDomainCommon> Domain for OrchardDomain<D> {
     fn extract_esk(out_plaintext: &OutPlaintextBytes) -> Option<Self::EphemeralSecretKey> {
         EphemeralSecretKey::from_bytes(out_plaintext.0[32..OUT_PLAINTEXT_SIZE].try_into().unwrap())
             .into()
-    }
-
-    fn parse_note_plaintext_bytes(plaintext: &[u8]) -> Option<Self::NotePlaintextBytes> {
-        Self::NotePlaintextBytes::from_slice(plaintext)
-    }
-
-    fn parse_note_ciphertext_bytes(
-        output: &[u8],
-        tag: [u8; AEAD_TAG_SIZE],
-    ) -> Option<Self::NoteCiphertextBytes> {
-        Self::NoteCiphertextBytes::from_slice_with_tag(output, tag)
-    }
-
-    fn parse_compact_note_plaintext_bytes(
-        plaintext: &[u8],
-    ) -> Option<Self::CompactNotePlaintextBytes> {
-        Self::CompactNotePlaintextBytes::from_slice(plaintext)
     }
 }
 
