@@ -17,7 +17,7 @@ use halo2_gadgets::{
     },
     utilities::{
         bool_check,
-        lookup_range_check::{LookupRangeCheck45BConfig, PallasLookupRangeCheck45BConfig},
+        lookup_range_check::{LookupRangeCheck4_5BConfig, PallasLookupRangeCheck4_5BConfig},
     },
 };
 
@@ -49,7 +49,7 @@ mod note_commit;
 mod value_commit_orchard;
 
 impl OrchardCircuit for OrchardZSA {
-    type Config = Config<PallasLookupRangeCheck45BConfig>;
+    type Config = Config<PallasLookupRangeCheck4_5BConfig>;
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
         // Advice columns used in the Orchard circuit.
@@ -224,7 +224,7 @@ impl OrchardCircuit for OrchardZSA {
 
         // We have a lot of free space in the right-most advice columns; use one of them
         // for all of our range checks.
-        let range_check = LookupRangeCheck45BConfig::configure_with_tag(
+        let range_check = LookupRangeCheck4_5BConfig::configure_with_tag(
             meta,
             advices[9],
             table_idx,
@@ -233,7 +233,7 @@ impl OrchardCircuit for OrchardZSA {
 
         // Configuration for curve point operations.
         // This uses 10 advice columns and spans the whole circuit.
-        let ecc_config = EccChip::<OrchardFixedBases, PallasLookupRangeCheck45BConfig>::configure(
+        let ecc_config = EccChip::<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>::configure(
             meta,
             advices,
             lagrange_coeffs,

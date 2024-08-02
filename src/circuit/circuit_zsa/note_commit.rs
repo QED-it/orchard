@@ -20,7 +20,7 @@ use halo2_gadgets::{
     },
     sinsemilla::{chip::SinsemillaChip, CommitDomain, Message, MessagePiece},
     utilities::{
-        cond_swap::CondSwapChip, lookup_range_check::PallasLookupRangeCheck45BConfig,
+        cond_swap::CondSwapChip, lookup_range_check::PallasLookupRangeCheck4_5BConfig,
         RangeConstrained,
     },
 };
@@ -56,10 +56,10 @@ pub(in crate::circuit) mod gadgets {
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
-            PallasLookupRangeCheck45BConfig,
+            PallasLookupRangeCheck4_5BConfig,
         >,
-        ecc_chip: EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
-        note_commit_chip: NoteCommitChip<PallasLookupRangeCheck45BConfig>,
+        ecc_chip: EccChip<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>,
+        note_commit_chip: NoteCommitChip<PallasLookupRangeCheck4_5BConfig>,
         cond_swap_chip: CondSwapChip<pallas::Base>,
         g_d: &NonIdentityEccPoint,
         pk_d: &NonIdentityEccPoint,
@@ -69,11 +69,11 @@ pub(in crate::circuit) mod gadgets {
         asset: &NonIdentityEccPoint,
         rcm: ScalarFixed<
             pallas::Affine,
-            EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
+            EccChip<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>,
         >,
         is_native_asset: AssignedCell<pallas::Base, pallas::Base>,
     ) -> Result<
-        Point<pallas::Affine, EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>>,
+        Point<pallas::Affine, EccChip<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>>,
         Error,
     > {
         let zsa_config = match &note_commit_chip.config.specific_config_for_circuit {
@@ -429,7 +429,7 @@ mod tests {
         sinsemilla::chip::SinsemillaChip,
         utilities::{
             cond_swap::{CondSwapChip, CondSwapConfig},
-            lookup_range_check::PallasLookupRangeCheck45BConfig,
+            lookup_range_check::PallasLookupRangeCheck4_5BConfig,
         },
     };
 
@@ -457,8 +457,8 @@ mod tests {
 
         impl Circuit<pallas::Base> for MyCircuit {
             type Config = (
-                NoteCommitConfig<PallasLookupRangeCheck45BConfig>,
-                EccConfig<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
+                NoteCommitConfig<PallasLookupRangeCheck4_5BConfig>,
+                EccConfig<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>,
                 CondSwapConfig,
             );
             type FloorPlanner = SimpleFloorPlanner;
@@ -507,7 +507,7 @@ mod tests {
                     meta.fixed_column(),
                 ];
 
-                let range_check = PallasLookupRangeCheck45BConfig::configure_with_tag(
+                let range_check = PallasLookupRangeCheck4_5BConfig::configure_with_tag(
                     meta,
                     advices[9],
                     table_idx,
@@ -517,7 +517,7 @@ mod tests {
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
-                    PallasLookupRangeCheck45BConfig,
+                    PallasLookupRangeCheck4_5BConfig,
                 >::configure(
                     meta,
                     advices[..5].try_into().unwrap(),
@@ -531,7 +531,7 @@ mod tests {
                     NoteCommitChip::configure(meta, advices, sinsemilla_config, true);
 
                 let ecc_config =
-                    EccChip::<OrchardFixedBases, PallasLookupRangeCheck45BConfig>::configure(
+                    EccChip::<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>::configure(
                         meta,
                         advices,
                         lagrange_coeffs,
@@ -556,7 +556,7 @@ mod tests {
                     OrchardHashDomains,
                     OrchardCommitDomains,
                     OrchardFixedBases,
-                    PallasLookupRangeCheck45BConfig,
+                    PallasLookupRangeCheck4_5BConfig,
                 >::load(
                     note_commit_config.sinsemilla_config.clone(), &mut layouter
                 )?;

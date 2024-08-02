@@ -9,7 +9,7 @@ pub(in crate::circuit) mod gadgets {
     use halo2_gadgets::{
         ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
         sinsemilla::{self, chip::SinsemillaChip},
-        utilities::lookup_range_check::{LookupRangeCheck, PallasLookupRangeCheck45BConfig},
+        utilities::lookup_range_check::{LookupRangeCheck, PallasLookupRangeCheck4_5BConfig},
     };
     use halo2_proofs::{
         circuit::{AssignedCell, Chip, Layouter},
@@ -25,23 +25,23 @@ pub(in crate::circuit) mod gadgets {
             OrchardHashDomains,
             OrchardCommitDomains,
             OrchardFixedBases,
-            PallasLookupRangeCheck45BConfig,
+            PallasLookupRangeCheck4_5BConfig,
         >,
-        ecc_chip: EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
+        ecc_chip: EccChip<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>,
         v_net_magnitude_sign: (
             AssignedCell<pallas::Base, pallas::Base>,
             AssignedCell<pallas::Base, pallas::Base>,
         ),
         rcv: ScalarFixed<
             pallas::Affine,
-            EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
+            EccChip<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>,
         >,
         asset: NonIdentityPoint<
             pallas::Affine,
-            EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
+            EccChip<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>,
         >,
     ) -> Result<
-        Point<pallas::Affine, EccChip<OrchardFixedBases, PallasLookupRangeCheck45BConfig>>,
+        Point<pallas::Affine, EccChip<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>>,
         plonk::Error,
     > {
         // Check that magnitude is 64 bits.
@@ -119,7 +119,7 @@ mod tests {
         },
         sinsemilla::chip::{SinsemillaChip, SinsemillaConfig},
         utilities::lookup_range_check::{
-            LookupRangeCheck45BConfig, PallasLookupRangeCheck45BConfig,
+            LookupRangeCheck4_5BConfig, PallasLookupRangeCheck4_5BConfig,
         },
     };
 
@@ -139,14 +139,14 @@ mod tests {
         pub struct MyConfig {
             primary: Column<Instance>,
             advices: [Column<Advice>; 10],
-            ecc_config: EccConfig<OrchardFixedBases, PallasLookupRangeCheck45BConfig>,
+            ecc_config: EccConfig<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>,
             // Sinsemilla  config is only used to initialize the table_idx lookup table in the same
             // way as in the Orchard circuit
             sinsemilla_config: SinsemillaConfig<
                 OrchardHashDomains,
                 OrchardCommitDomains,
                 OrchardFixedBases,
-                PallasLookupRangeCheck45BConfig,
+                PallasLookupRangeCheck4_5BConfig,
             >,
         }
         #[derive(Default)]
@@ -208,7 +208,7 @@ mod tests {
                 ];
                 meta.enable_constant(lagrange_coeffs[0]);
 
-                let range_check = LookupRangeCheck45BConfig::configure_with_tag(
+                let range_check = LookupRangeCheck4_5BConfig::configure_with_tag(
                     meta,
                     advices[9],
                     table_idx,
@@ -229,7 +229,7 @@ mod tests {
                     primary,
                     advices,
                     ecc_config:
-                        EccChip::<OrchardFixedBases, PallasLookupRangeCheck45BConfig>::configure(
+                        EccChip::<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>::configure(
                             meta,
                             advices,
                             lagrange_coeffs,
