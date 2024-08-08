@@ -20,8 +20,8 @@ impl<A, D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for Action<A, D
         self.cmx().to_bytes()
     }
 
-    fn enc_ciphertext(&self) -> Option<D::NoteCiphertextBytes> {
-        Some(self.encrypted_note().enc_ciphertext)
+    fn enc_ciphertext(&self) -> Option<&D::NoteCiphertextBytes> {
+        Some(&self.encrypted_note().enc_ciphertext)
     }
 
     fn enc_ciphertext_compact(&self) -> D::CompactNoteCiphertextBytes {
@@ -69,7 +69,7 @@ impl<D: OrchardDomainCommon> ShieldedOutput<OrchardDomain<D>> for CompactAction<
         self.cmx.to_bytes()
     }
 
-    fn enc_ciphertext(&self) -> Option<D::NoteCiphertextBytes> {
+    fn enc_ciphertext(&self) -> Option<&D::NoteCiphertextBytes> {
         None
     }
 
