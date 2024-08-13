@@ -121,10 +121,11 @@ pub mod testing {
         address::Address,
         keys::OutgoingViewingKey,
         note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, RandomSeed, Rho},
+        note_encryption::MEMO_SIZE,
         value::NoteValue,
     };
 
-    use super::{CompactAction, OrchardDomain, OrchardDomainCommon, MEMO_SIZE};
+    use super::{CompactAction, OrchardDomain, OrchardDomainCommon};
 
     /// Creates a fake `CompactAction` paying the given recipient the specified value.
     ///
