@@ -115,7 +115,7 @@ impl<D: OrchardDomainCommon> CompactAction<D> {
 pub mod testing {
     use rand::RngCore;
 
-    use zcash_note_encryption_zsa::{note_bytes::NoteBytes, Domain, NoteEncryption, MEMO_SIZE};
+    use zcash_note_encryption_zsa::{note_bytes::NoteBytes, Domain, NoteEncryption};
 
     use crate::{
         address::Address,
@@ -124,7 +124,7 @@ pub mod testing {
         value::NoteValue,
     };
 
-    use super::{CompactAction, OrchardDomain, OrchardDomainCommon};
+    use super::{CompactAction, OrchardDomain, OrchardDomainCommon, MEMO_SIZE};
 
     /// Creates a fake `CompactAction` paying the given recipient the specified value.
     ///
