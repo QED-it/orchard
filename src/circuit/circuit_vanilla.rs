@@ -34,13 +34,13 @@ use crate::{
 
 use super::{
     commit_ivk::{self, CommitIvkChip},
+    derive_nullifier,
     gadget::{add_chip::AddChip, assign_free_advice},
     note_commit::NoteCommitChip,
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD,
     RK_X, RK_Y,
 };
 
-mod derive_nullifier;
 mod gadget;
 mod note_commit;
 mod value_commit_orchard;
@@ -395,6 +395,7 @@ impl OrchardCircuit for OrchardVanilla {
                 &psi_old,
                 &cm_old,
                 nk.clone(),
+                None,
             )?;
 
             // Constrain nf_old to equal public input

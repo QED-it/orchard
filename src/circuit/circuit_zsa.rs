@@ -37,13 +37,13 @@ use crate::{
 
 use super::{
     commit_ivk::{self, CommitIvkChip},
+    derive_nullifier::{self, ZsaNullifierParams},
     gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
     note_commit::NoteCommitChip,
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
     ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
 
-mod derive_nullifier;
 pub mod gadget;
 mod note_commit;
 mod value_commit_orchard;
@@ -513,12 +513,14 @@ impl OrchardCircuit for OrchardZSA {
                 config.poseidon_chip(),
                 config.add_chip(),
                 ecc_chip.clone(),
-                config.cond_swap_chip(),
                 rho_old.clone(),
                 &psi_nf,
                 &cm_old,
                 nk.clone(),
-                split_flag.clone(),
+                Some(ZsaNullifierParams {
+                    cond_swap_chip: config.cond_swap_chip(),
+                    split_flag: split_flag.clone(),
+                }),
             )?;
 
             // Constrain nf_old to equal public input
