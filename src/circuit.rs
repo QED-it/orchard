@@ -54,6 +54,7 @@ pub(in crate::circuit) mod derive_nullifier;
 pub(in crate::circuit) mod gadget;
 pub(in crate::circuit) mod note_commit;
 pub(in crate::circuit) mod orchard_sinsemilla_chip;
+pub(in crate::circuit) mod value_commit_orchard;
 
 /// Size of the Orchard circuit.
 const K: u32 = 11;

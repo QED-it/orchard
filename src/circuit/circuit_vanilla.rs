@@ -7,10 +7,7 @@ use group::Curve;
 use pasta_curves::pallas;
 
 use halo2_gadgets::{
-    ecc::{
-        chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarFixedShort,
-        ScalarVar,
-    },
+    ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
     poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
     sinsemilla::{
         chip::SinsemillaChip,
@@ -37,13 +34,12 @@ use super::{
     derive_nullifier,
     gadget::{add_chip::AddChip, assign_free_advice},
     note_commit::NoteCommitChip,
-    Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD,
-    RK_X, RK_Y,
+    value_commit_orchard, Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
+    ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
 };
 
 mod gadget;
 mod note_commit;
-mod value_commit_orchard;
 
 impl OrchardCircuit for OrchardVanilla {
     type Config = Config<PallasLookupRangeCheckConfig>;
@@ -358,11 +354,6 @@ impl OrchardCircuit for OrchardVanilla {
                 (magnitude, sign)
             };
 
-            let v_net = ScalarFixedShort::new(
-                ecc_chip.clone(),
-                layouter.namespace(|| "v_net"),
-                v_net_magnitude_sign.clone(),
-            )?;
             let rcv = ScalarFixed::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "rcv"),
@@ -372,8 +363,9 @@ impl OrchardCircuit for OrchardVanilla {
             let cv_net = gadget::value_commit_orchard(
                 layouter.namespace(|| "cv_net = ValueCommit^Orchard_rcv(v_net)"),
                 ecc_chip.clone(),
-                v_net,
+                v_net_magnitude_sign.clone(),
                 rcv,
+                None,
             )?;
 
             // Constrain cv_net to equal public input

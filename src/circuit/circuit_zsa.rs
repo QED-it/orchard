@@ -40,13 +40,13 @@ use super::{
     derive_nullifier::{self, ZsaNullifierParams},
     gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
     note_commit::NoteCommitChip,
+    value_commit_orchard::{self, ZsaValueCommitParams},
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
     ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
 
 pub mod gadget;
 mod note_commit;
-mod value_commit_orchard;
 
 impl OrchardCircuit for OrchardZSA {
     type Config = Config<PallasLookupRangeCheck4_5BConfig>;
@@ -491,11 +491,13 @@ impl OrchardCircuit for OrchardZSA {
 
             let cv_net = gadget::value_commit_orchard(
                 layouter.namespace(|| "cv_net = ValueCommit^Orchard_rcv(v_net_magnitude_sign)"),
-                config.sinsemilla_chip_1(),
                 ecc_chip.clone(),
                 v_net_magnitude_sign.clone(),
                 rcv,
-                asset.clone(),
+                Some(ZsaValueCommitParams {
+                    sinsemilla_chip: config.sinsemilla_chip_1(),
+                    asset: asset.clone(),
+                }),
             )?;
 
             // Constrain cv_net to equal public input
