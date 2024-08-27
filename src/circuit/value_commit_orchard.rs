@@ -130,8 +130,8 @@ pub(in crate::circuit) mod gadgets {
 #[cfg(test)]
 mod tests {
     use crate::{
-        circuit::circuit_zsa::gadget::value_commit_orchard,
         circuit::gadget::assign_free_advice,
+        circuit::value_commit_orchard::gadgets::value_commit_orchard,
         circuit::K,
         constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
         note::AssetBase,

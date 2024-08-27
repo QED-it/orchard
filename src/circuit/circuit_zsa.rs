@@ -28,6 +28,10 @@ use halo2_proofs::{
 };
 
 use crate::{
+    circuit::circuit_zsa::note_commit::gadgets::note_commit,
+    circuit::commit_ivk::gadgets::commit_ivk,
+    circuit::derive_nullifier::gadgets::derive_nullifier,
+    circuit::value_commit_orchard::gadgets::value_commit_orchard,
     circuit::Config,
     constants::OrchardFixedBasesFull,
     constants::{OrchardFixedBases, OrchardHashDomains},
@@ -36,17 +40,16 @@ use crate::{
 };
 
 use super::{
-    commit_ivk::{self, CommitIvkChip},
-    derive_nullifier::{self, ZsaNullifierParams},
+    commit_ivk::CommitIvkChip,
+    derive_nullifier::ZsaNullifierParams,
     gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
     note_commit::NoteCommitChip,
-    value_commit_orchard::{self, ZsaValueCommitParams},
+    value_commit_orchard::ZsaValueCommitParams,
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
     ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
 
-pub mod gadget;
-mod note_commit;
+pub mod note_commit;
 
 impl OrchardCircuit for OrchardZSA {
     type Config = Config<PallasLookupRangeCheck4_5BConfig>;
@@ -489,7 +492,7 @@ impl OrchardCircuit for OrchardZSA {
                 circuit.rcv.as_ref().map(|rcv| rcv.inner()),
             )?;
 
-            let cv_net = gadget::value_commit_orchard(
+            let cv_net = value_commit_orchard(
                 layouter.namespace(|| "cv_net = ValueCommit^Orchard_rcv(v_net_magnitude_sign)"),
                 ecc_chip.clone(),
                 v_net_magnitude_sign.clone(),
@@ -510,7 +513,7 @@ impl OrchardCircuit for OrchardZSA {
 
         // Nullifier integrity (https://p.z.cash/ZKS:action-nullifier-integrity).
         let nf_old = {
-            let nf_old = gadget::derive_nullifier(
+            let nf_old = derive_nullifier(
                 &mut layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_nf, cm_old)"),
                 config.poseidon_chip(),
                 config.add_chip(),
@@ -564,7 +567,7 @@ impl OrchardCircuit for OrchardZSA {
                     circuit.rivk.map(|rivk| rivk.inner()),
                 )?;
 
-                gadget::commit_ivk(
+                commit_ivk(
                     config.sinsemilla_chip_1(),
                     ecc_chip.clone(),
                     config.commit_ivk_chip(),
@@ -611,7 +614,7 @@ impl OrchardCircuit for OrchardZSA {
             )?;
 
             // g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)
-            let derived_cm_old = gadget::note_commit(
+            let derived_cm_old = note_commit(
                 layouter.namespace(|| {
                     "g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)"
                 }),
@@ -674,7 +677,7 @@ impl OrchardCircuit for OrchardZSA {
             )?;
 
             // g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)
-            let cm_new = gadget::note_commit(
+            let cm_new = note_commit(
                 layouter.namespace(|| {
                     "g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)"
                 }),
