@@ -27,18 +27,6 @@ use halo2_proofs::{
     poly::Rotation,
 };
 
-use crate::{
-    circuit::circuit_zsa::note_commit::gadgets::note_commit,
-    circuit::commit_ivk::gadgets::commit_ivk,
-    circuit::derive_nullifier::gadgets::derive_nullifier,
-    circuit::value_commit_orchard::gadgets::value_commit_orchard,
-    circuit::Config,
-    constants::OrchardFixedBasesFull,
-    constants::{OrchardFixedBases, OrchardHashDomains},
-    note::AssetBase,
-    orchard_flavor::OrchardZSA,
-};
-
 use super::{
     commit_ivk::CommitIvkChip,
     derive_nullifier::ZsaNullifierParams,
@@ -48,8 +36,17 @@ use super::{
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
     ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
-
-pub mod note_commit;
+use crate::{
+    circuit::commit_ivk::gadgets::commit_ivk,
+    circuit::derive_nullifier::gadgets::derive_nullifier,
+    circuit::note_commit::{gadgets::note_commit, ZsaNoteCommitParams},
+    circuit::value_commit_orchard::gadgets::value_commit_orchard,
+    circuit::Config,
+    constants::OrchardFixedBasesFull,
+    constants::{OrchardFixedBases, OrchardHashDomains},
+    note::AssetBase,
+    orchard_flavor::OrchardZSA,
+};
 
 impl OrchardCircuit for OrchardZSA {
     type Config = Config<PallasLookupRangeCheck4_5BConfig>;
@@ -621,15 +618,17 @@ impl OrchardCircuit for OrchardZSA {
                 config.sinsemilla_chip_1(),
                 config.ecc_chip(),
                 config.note_commit_chip_old(),
-                config.cond_swap_chip(),
                 g_d_old.inner(),
                 pk_d_old.inner(),
                 v_old.clone(),
                 rho_old,
                 psi_old.clone(),
-                asset.inner(),
                 rcm_old,
-                is_native_asset.clone(),
+                Some(ZsaNoteCommitParams {
+                    cond_swap_chip: config.cond_swap_chip(),
+                    asset: asset.inner().clone(),
+                    is_native_asset: is_native_asset.clone(),
+                }),
             )?;
 
             // Constrain derived cm_old to equal witnessed cm_old
@@ -684,15 +683,17 @@ impl OrchardCircuit for OrchardZSA {
                 config.sinsemilla_chip_2(),
                 config.ecc_chip(),
                 config.note_commit_chip_new(),
-                config.cond_swap_chip(),
                 g_d_new.inner(),
                 pk_d_new.inner(),
                 v_new.clone(),
                 rho_new,
                 psi_new,
-                asset.inner(),
                 rcm_new,
-                is_native_asset.clone(),
+                Some(ZsaNoteCommitParams {
+                    cond_swap_chip: config.cond_swap_chip(),
+                    asset: asset.inner().clone(),
+                    is_native_asset: is_native_asset.clone(),
+                }),
             )?;
 
             let cmx = cm_new.extract_p();

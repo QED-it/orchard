@@ -24,9 +24,9 @@ use halo2_proofs::{
 };
 
 use crate::{
-    circuit::circuit_vanilla::note_commit::gadgets::note_commit,
     circuit::commit_ivk::gadgets::commit_ivk,
     circuit::derive_nullifier::gadgets::derive_nullifier,
+    circuit::note_commit::gadgets::note_commit,
     circuit::value_commit_orchard::gadgets::value_commit_orchard,
     circuit::Config,
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
@@ -40,8 +40,6 @@ use super::{
     Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD,
     RK_X, RK_Y,
 };
-
-pub mod note_commit;
 
 impl OrchardCircuit for OrchardVanilla {
     type Config = Config<PallasLookupRangeCheckConfig>;
@@ -491,6 +489,7 @@ impl OrchardCircuit for OrchardVanilla {
                 rho_old,
                 psi_old,
                 rcm_old,
+                None,
             )?;
 
             // Constrain derived cm_old to equal witnessed cm_old
@@ -551,6 +550,7 @@ impl OrchardCircuit for OrchardVanilla {
                 rho_new,
                 psi_new,
                 rcm_new,
+                None,
             )?;
 
             let cmx = cm_new.extract_p();
