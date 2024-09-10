@@ -763,8 +763,13 @@ mod tests {
 
     #[test]
     fn verify_supply_incorrect_asset_base() {
-        let (ik, _, action) =
-            setup_verify_supply_test_params(10, 20, "Asset 1".into(), Some("Asset 2".into()), false);
+        let (ik, _, action) = setup_verify_supply_test_params(
+            10,
+            20,
+            "Asset 1".into(),
+            Some("Asset 2".into()),
+            false,
+        );
 
         assert_eq!(
             action.verify_supply(&ik),
@@ -830,12 +835,22 @@ mod tests {
         .unwrap();
 
         let another_asset = bundle
-            .add_recipient(str.as_bytes().into(), recipient, NoteValue::from_raw(10), rng)
+            .add_recipient(
+                str.as_bytes().into(),
+                recipient,
+                NoteValue::from_raw(10),
+                rng,
+            )
             .unwrap();
         assert_eq!(asset, another_asset);
 
         let third_asset = bundle
-            .add_recipient(str2.as_bytes().into(), recipient, NoteValue::from_raw(15), rng)
+            .add_recipient(
+                str2.as_bytes().into(),
+                recipient,
+                NoteValue::from_raw(15),
+                rng,
+            )
             .unwrap();
         assert_ne!(asset, third_asset);
 
@@ -878,16 +893,12 @@ mod tests {
             .expect("Should finalize properly");
 
         assert_eq!(
-            bundle
-                .finalize_action("Another NFT".into())
-                .unwrap_err(),
+            bundle.finalize_action("Another NFT".into()).unwrap_err(),
             IssueActionNotFound
         );
 
         assert_eq!(
-            bundle
-                .finalize_action(vec![b'X'; 513])
-                .unwrap_err(),
+            bundle.finalize_action(vec![b'X'; 513]).unwrap_err(),
             WrongAssetDescSize
         );
 
@@ -1075,34 +1086,19 @@ mod tests {
         .unwrap();
 
         bundle
-            .add_recipient(
-                asset1_desc.clone(),
-                recipient,
-                NoteValue::from_raw(8),
-                rng,
-            )
+            .add_recipient(asset1_desc.clone(), recipient, NoteValue::from_raw(8), rng)
             .unwrap();
 
         bundle.finalize_action(asset1_desc).unwrap();
 
         bundle
-            .add_recipient(
-                asset2_desc.clone(),
-                recipient,
-                NoteValue::from_raw(10),
-                rng,
-            )
+            .add_recipient(asset2_desc.clone(), recipient, NoteValue::from_raw(10), rng)
             .unwrap();
 
         bundle.finalize_action(asset2_desc).unwrap();
 
         bundle
-            .add_recipient(
-                asset3_desc,
-                recipient,
-                NoteValue::from_raw(5),
-                rng,
-            )
+            .add_recipient(asset3_desc, recipient, NoteValue::from_raw(5), rng)
             .unwrap();
 
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
@@ -1327,10 +1323,7 @@ mod tests {
         let prev_finalized = HashSet::new();
 
         // 1. Try too long description
-        signed
-            .actions
-            .first_mut()
-            .modify_descr(vec![b'X'; 513]);
+        signed.actions.first_mut().modify_descr(vec![b'X'; 513]);
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
@@ -1380,17 +1373,14 @@ mod tests {
         let (_, _, note) = Note::dummy(&mut rng, None, AssetBase::native());
 
         let action =
-            IssueAction::new_with_flags("Asset description".into(), vec![note], 0u8)
-                .unwrap();
+            IssueAction::new_with_flags("Asset description".into(), vec![note], 0u8).unwrap();
         assert_eq!(action.flags(), 0b0000_0000);
 
         let action =
-            IssueAction::new_with_flags("Asset description".into(), vec![note], 1u8)
-                .unwrap();
+            IssueAction::new_with_flags("Asset description".into(), vec![note], 1u8).unwrap();
         assert_eq!(action.flags(), 0b0000_0001);
 
-        let action =
-            IssueAction::new_with_flags("Asset description".into(), vec![note], 2u8);
+        let action = IssueAction::new_with_flags("Asset description".into(), vec![note], 2u8);
         assert!(action.is_none());
     }
 }

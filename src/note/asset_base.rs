@@ -63,7 +63,7 @@ impl AssetBase {
 
         // EncodeAssetId(ik, asset_desc) = version_byte || ik || asset_desc
         let version_byte = [0x00];
-        let encode_asset_id = [&version_byte[..], &ik.to_bytes(), &asset_desc].concat();
+        let encode_asset_id = [&version_byte[..], &ik.to_bytes(), asset_desc].concat();
 
         let asset_digest = asset_digest(encode_asset_id);
 
