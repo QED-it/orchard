@@ -55,7 +55,7 @@ impl AssetBase {
     ///
     /// Panics if `asset_desc` is empty or greater than `MAX_ASSET_DESCRIPTION_SIZE` or if the derived Asset Base is the identity point.
     #[allow(non_snake_case)]
-    pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &str) -> Self {
+    pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &Vec<u8>) -> Self {
         assert!(
             is_asset_desc_of_valid_size(asset_desc),
             "The asset_desc string is not of valid size"
@@ -63,7 +63,7 @@ impl AssetBase {
 
         // EncodeAssetId(ik, asset_desc) = version_byte || ik || asset_desc
         let version_byte = [0x00];
-        let encode_asset_id = [&version_byte[..], &ik.to_bytes(), asset_desc.as_bytes()].concat();
+        let encode_asset_id = [&version_byte[..], &ik.to_bytes(), &asset_desc].concat();
 
         let asset_digest = asset_digest(encode_asset_id);
 
@@ -103,8 +103,8 @@ impl AssetBase {
     pub(crate) fn random() -> Self {
         let isk = IssuanceAuthorizingKey::random();
         let ik = IssuanceValidatingKey::from(&isk);
-        let asset_descr = "zsa_asset";
-        AssetBase::derive(&ik, asset_descr)
+        let asset_descr: Vec<u8> = "zsa_asset".as_bytes().into();
+        AssetBase::derive(&ik, &asset_descr)
     }
 }
 
@@ -116,8 +116,8 @@ impl Hash for AssetBase {
 }
 
 /// Check that `asset_desc` is of valid size.
-pub fn is_asset_desc_of_valid_size(asset_desc: &str) -> bool {
-    !asset_desc.is_empty() && asset_desc.bytes().len() <= MAX_ASSET_DESCRIPTION_SIZE
+pub fn is_asset_desc_of_valid_size(asset_desc: &Vec<u8>) -> bool {
+    !asset_desc.is_empty() && asset_desc.len() <= MAX_ASSET_DESCRIPTION_SIZE
 }
 
 impl PartialEq for AssetBase {
@@ -146,7 +146,7 @@ pub mod testing {
             if is_native {
                 AssetBase::native()
             } else {
-                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str)
+                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str.as_bytes().into())
             }
         }
     }
@@ -165,13 +165,13 @@ pub mod testing {
             isk in arb_issuance_authorizing_key(),
             str in "[A-Za-z]{255}"
         ) -> AssetBase {
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str)
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str.as_bytes().into())
         }
     }
 
     prop_compose! {
         /// Generate an asset ID using a specific description
-        pub fn zsa_asset_base(asset_desc: String)(
+        pub fn zsa_asset_base(asset_desc: Vec<u8>)(
             isk in arb_issuance_authorizing_key(),
         ) -> AssetBase {
             assert!(super::is_asset_desc_of_valid_size(&asset_desc));
@@ -184,11 +184,9 @@ pub mod testing {
         let test_vectors = crate::test_vectors::asset_base::test_vectors();
 
         for tv in test_vectors {
-            let description = std::str::from_utf8(&tv.description).unwrap();
-
             let calculated_asset_base = AssetBase::derive(
                 &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
-                description,
+                &tv.description.into(),
             );
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();
 

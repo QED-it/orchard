@@ -39,7 +39,7 @@ pub struct IssueBundle<T: IssueAuth> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IssueAction {
     /// Asset description for verification.
-    asset_desc: String,
+    asset_desc: Vec<u8>,
     /// The newly issued notes.
     notes: Vec<Note>,
     /// `finalize` will prevent further issuance of the same asset type.
@@ -57,7 +57,7 @@ pub struct IssueInfo {
 
 impl IssueAction {
     /// Constructs a new `IssueAction`.
-    pub fn new_with_flags(asset_desc: String, notes: Vec<Note>, flags: u8) -> Option<Self> {
+    pub fn new_with_flags(asset_desc: Vec<u8>, notes: Vec<Note>, flags: u8) -> Option<Self> {
         let finalize = match flags {
             0b0000_0000 => false,
             0b0000_0001 => true,
@@ -71,7 +71,7 @@ impl IssueAction {
     }
 
     /// Constructs an `IssueAction` from its constituent parts.
-    pub fn from_parts(asset_desc: String, notes: Vec<Note>, finalize: bool) -> Self {
+    pub fn from_parts(asset_desc: Vec<u8>, notes: Vec<Note>, finalize: bool) -> Self {
         IssueAction {
             asset_desc,
             notes,
@@ -80,7 +80,7 @@ impl IssueAction {
     }
 
     /// Returns the asset description for the note being created.
-    pub fn asset_desc(&self) -> &str {
+    pub fn asset_desc(&self) -> &Vec<u8> {
         &self.asset_desc
     }
 
@@ -224,7 +224,7 @@ impl<T: IssueAuth> IssueBundle<T> {
     }
 
     /// Find an action by `ik` and `asset_desc` for a given `IssueBundle`.
-    pub fn get_action(&self, asset_desc: String) -> Option<&IssueAction> {
+    pub fn get_action(&self, asset_desc: Vec<u8>) -> Option<&IssueAction> {
         self.actions.iter().find(|a| a.asset_desc.eq(&asset_desc))
     }
 
@@ -286,7 +286,7 @@ impl IssueBundle<Unauthorized> {
     /// * `WrongAssetDescSize`: If `asset_desc` is empty or longer than 512 bytes.
     pub fn new(
         ik: IssuanceValidatingKey,
-        asset_desc: String,
+        asset_desc: Vec<u8>,
         issue_info: Option<IssueInfo>,
         mut rng: impl RngCore,
     ) -> Result<(IssueBundle<Unauthorized>, AssetBase), Error> {
@@ -340,7 +340,7 @@ impl IssueBundle<Unauthorized> {
     /// * `WrongAssetDescSize`: If `asset_desc` is empty or longer than 512 bytes.
     pub fn add_recipient(
         &mut self,
-        asset_desc: String,
+        asset_desc: Vec<u8>,
         recipient: Address,
         value: NoteValue,
         mut rng: impl RngCore,
@@ -387,7 +387,7 @@ impl IssueBundle<Unauthorized> {
     /// # Panics
     ///
     /// Panics if `asset_desc` is empty or longer than 512 bytes.
-    pub fn finalize_action(&mut self, asset_desc: String) -> Result<(), Error> {
+    pub fn finalize_action(&mut self, asset_desc: Vec<u8>) -> Result<(), Error> {
         if !is_asset_desc_of_valid_size(&asset_desc) {
             return Err(WrongAssetDescSize);
         }
@@ -422,7 +422,7 @@ impl IssueBundle<Prepared> {
     /// Sign the `IssueBundle`.
     /// The call makes sure that the provided `isk` matches the `ik` and the derived `asset` for each note in the bundle.
     pub fn sign(self, isk: &IssuanceAuthorizingKey) -> Result<IssueBundle<Signed>, Error> {
-        let expected_ik: IssuanceValidatingKey = (isk).into();
+        let expected_ik: IssuanceValidatingKey = isk.into();
 
         // Make sure the `expected_ik` matches the `asset` for all notes.
         self.actions.iter().try_for_each(|action| {
@@ -651,14 +651,14 @@ mod tests {
     fn setup_verify_supply_test_params(
         note1_value: u64,
         note2_value: u64,
-        note1_asset_desc: &str,
-        note2_asset_desc: Option<&str>, // if None, both notes use the same asset
+        note1_asset_desc: Vec<u8>,
+        note2_asset_desc: Option<Vec<u8>>, // if None, both notes use the same asset
         finalize: bool,
     ) -> (IssuanceValidatingKey, AssetBase, IssueAction) {
         let (mut rng, _, ik, recipient, _) = setup_params();
 
-        let asset = AssetBase::derive(&ik, note1_asset_desc);
-        let note2_asset = note2_asset_desc.map_or(asset, |desc| AssetBase::derive(&ik, desc));
+        let asset = AssetBase::derive(&ik, &note1_asset_desc);
+        let note2_asset = note2_asset_desc.map_or(asset, |desc| AssetBase::derive(&ik, &desc));
 
         let note1 = Note::new(
             recipient,
@@ -679,7 +679,7 @@ mod tests {
         (
             ik,
             asset,
-            IssueAction::from_parts(note1_asset_desc.into(), vec![note1, note2], finalize),
+            IssueAction::from_parts(note1_asset_desc, vec![note1, note2], finalize),
         )
     }
 
@@ -722,7 +722,7 @@ mod tests {
     #[test]
     fn verify_supply_valid() {
         let (ik, test_asset, action) =
-            setup_verify_supply_test_params(10, 20, "Asset 1", None, false);
+            setup_verify_supply_test_params(10, 20, "Asset 1".into(), None, false);
 
         let result = action.verify_supply(&ik);
 
@@ -748,7 +748,7 @@ mod tests {
     #[test]
     fn verify_supply_finalized() {
         let (ik, test_asset, action) =
-            setup_verify_supply_test_params(10, 20, "Asset 1", None, true);
+            setup_verify_supply_test_params(10, 20, "Asset 1".into(), None, true);
 
         let result = action.verify_supply(&ik);
 
@@ -764,7 +764,7 @@ mod tests {
     #[test]
     fn verify_supply_incorrect_asset_base() {
         let (ik, _, action) =
-            setup_verify_supply_test_params(10, 20, "Asset 1", Some("Asset 2"), false);
+            setup_verify_supply_test_params(10, 20, "Asset 1".into(), Some("Asset 2".into()), false);
 
         assert_eq!(
             action.verify_supply(&ik),
@@ -774,7 +774,7 @@ mod tests {
 
     #[test]
     fn verify_supply_ik_mismatch_asset_base() {
-        let (_, _, action) = setup_verify_supply_test_params(10, 20, "Asset 1", None, false);
+        let (_, _, action) = setup_verify_supply_test_params(10, 20, "Asset 1".into(), None, false);
         let (_, _, ik, _, _) = setup_params();
 
         assert_eq!(
@@ -793,7 +793,7 @@ mod tests {
         assert_eq!(
             IssueBundle::new(
                 ik.clone(),
-                String::from_utf8(vec![b'X'; 513]).unwrap(),
+                vec![b'X'; 513],
                 Some(IssueInfo {
                     recipient,
                     value: NoteValue::unsplittable()
@@ -807,7 +807,7 @@ mod tests {
         assert_eq!(
             IssueBundle::new(
                 ik.clone(),
-                "".to_string(),
+                "".into(),
                 Some(IssueInfo {
                     recipient,
                     value: NoteValue::unsplittable()
@@ -820,7 +820,7 @@ mod tests {
 
         let (mut bundle, asset) = IssueBundle::new(
             ik,
-            str.clone(),
+            str.as_bytes().into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -830,12 +830,12 @@ mod tests {
         .unwrap();
 
         let another_asset = bundle
-            .add_recipient(str, recipient, NoteValue::from_raw(10), rng)
+            .add_recipient(str.as_bytes().into(), recipient, NoteValue::from_raw(10), rng)
             .unwrap();
         assert_eq!(asset, another_asset);
 
         let third_asset = bundle
-            .add_recipient(str2.clone(), recipient, NoteValue::from_raw(15), rng)
+            .add_recipient(str2.as_bytes().into(), recipient, NoteValue::from_raw(15), rng)
             .unwrap();
         assert_ne!(asset, third_asset);
 
@@ -852,7 +852,7 @@ mod tests {
         assert_eq!(action.notes.get(1).unwrap().asset(), asset);
         assert_eq!(action.notes.get(1).unwrap().recipient(), recipient);
 
-        let action2 = bundle.get_action(str2).unwrap();
+        let action2 = bundle.get_action(str2.as_bytes().into()).unwrap();
         assert_eq!(action2.notes.len(), 1);
         assert_eq!(action2.notes().first().unwrap().value().inner(), 15);
         assert_eq!(action2.notes().first().unwrap().asset(), third_asset);
@@ -864,7 +864,7 @@ mod tests {
 
         let (mut bundle, _) = IssueBundle::new(
             ik,
-            String::from("NFT"),
+            "NFT".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(u64::MIN),
@@ -874,25 +874,25 @@ mod tests {
         .expect("Should properly add recipient");
 
         bundle
-            .finalize_action(String::from("NFT"))
+            .finalize_action("NFT".into())
             .expect("Should finalize properly");
 
         assert_eq!(
             bundle
-                .finalize_action(String::from("Another NFT"))
+                .finalize_action("Another NFT".into())
                 .unwrap_err(),
             IssueActionNotFound
         );
 
         assert_eq!(
             bundle
-                .finalize_action(String::from_utf8(vec![b'X'; 513]).unwrap())
+                .finalize_action(vec![b'X'; 513])
                 .unwrap_err(),
             WrongAssetDescSize
         );
 
         assert_eq!(
-            bundle.finalize_action("".to_string()).unwrap_err(),
+            bundle.finalize_action("".into()).unwrap_err(),
             WrongAssetDescSize
         );
     }
@@ -903,7 +903,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            String::from("Frost"),
+            "Frost".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -922,7 +922,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
-            String::from("Sign"),
+            "Sign".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -943,7 +943,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            String::from("IssueBundle"),
+            "IssueBundle".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -969,7 +969,7 @@ mod tests {
         // Create a bundle with "normal" note
         let (mut bundle, _) = IssueBundle::new(
             ik,
-            String::from("IssueBundle"),
+            "IssueBundle".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -982,7 +982,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            AssetBase::derive(bundle.ik(), "zsa_asset"),
+            AssetBase::derive(bundle.ik(), &"zsa_asset".into()),
             Rho::from_nf_old(Nullifier::dummy(&mut rng)),
             &mut rng,
         );
@@ -1002,7 +1002,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            String::from("Verify"),
+            "Verify".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1027,7 +1027,7 @@ mod tests {
 
         let (mut bundle, _) = IssueBundle::new(
             ik.clone(),
-            String::from("Verify with finalize"),
+            "Verify with finalize".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(7),
@@ -1037,7 +1037,7 @@ mod tests {
         .unwrap();
 
         bundle
-            .finalize_action(String::from("Verify with finalize"))
+            .finalize_action("Verify with finalize".into())
             .unwrap();
 
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
@@ -1048,24 +1048,24 @@ mod tests {
         supply_info.update_finalization_set(prev_finalized);
 
         assert_eq!(prev_finalized.len(), 1);
-        assert!(prev_finalized.contains(&AssetBase::derive(&ik, "Verify with finalize")));
+        assert!(prev_finalized.contains(&AssetBase::derive(&ik, &"Verify with finalize".into())));
     }
 
     #[test]
     fn issue_bundle_verify_with_supply_info() {
         let (rng, isk, ik, recipient, sighash) = setup_params();
 
-        let asset1_desc = "Verify with supply info 1";
-        let asset2_desc = "Verify with supply info 2";
-        let asset3_desc = "Verify with supply info 3";
+        let asset1_desc: Vec<u8> = "Verify with supply info 1".into();
+        let asset2_desc: Vec<u8> = "Verify with supply info 2".into();
+        let asset3_desc: Vec<u8> = "Verify with supply info 3".into();
 
-        let asset1_base = AssetBase::derive(&ik, &String::from(asset1_desc));
-        let asset2_base = AssetBase::derive(&ik, &String::from(asset2_desc));
-        let asset3_base = AssetBase::derive(&ik, &String::from(asset3_desc));
+        let asset1_base = AssetBase::derive(&ik, &asset1_desc);
+        let asset2_base = AssetBase::derive(&ik, &asset2_desc);
+        let asset3_base = AssetBase::derive(&ik, &asset3_desc);
 
         let (mut bundle, _) = IssueBundle::new(
             ik,
-            String::from(asset1_desc),
+            asset1_desc.clone(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(7),
@@ -1076,29 +1076,29 @@ mod tests {
 
         bundle
             .add_recipient(
-                String::from(asset1_desc),
+                asset1_desc.clone(),
                 recipient,
                 NoteValue::from_raw(8),
                 rng,
             )
             .unwrap();
 
-        bundle.finalize_action(String::from(asset1_desc)).unwrap();
+        bundle.finalize_action(asset1_desc).unwrap();
 
         bundle
             .add_recipient(
-                String::from(asset2_desc),
+                asset2_desc.clone(),
                 recipient,
                 NoteValue::from_raw(10),
                 rng,
             )
             .unwrap();
 
-        bundle.finalize_action(String::from(asset2_desc)).unwrap();
+        bundle.finalize_action(asset2_desc).unwrap();
 
         bundle
             .add_recipient(
-                String::from(asset3_desc),
+                asset3_desc,
                 recipient,
                 NoteValue::from_raw(5),
                 rng,
@@ -1140,7 +1140,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
-            String::from("already final"),
+            "already final".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1152,7 +1152,7 @@ mod tests {
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
         let prev_finalized = &mut HashSet::new();
 
-        let final_type = AssetBase::derive(&ik, &String::from("already final"));
+        let final_type = AssetBase::derive(&ik, &"already final".into());
 
         prev_finalized.insert(final_type);
 
@@ -1175,7 +1175,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            String::from("bad sig"),
+            "bad sig".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1205,7 +1205,7 @@ mod tests {
         let (rng, isk, ik, recipient, random_sighash) = setup_params();
         let (bundle, _) = IssueBundle::new(
             ik,
-            String::from("Asset description"),
+            "Asset description".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1230,7 +1230,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            String::from("Asset description"),
+            "Asset description".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1245,7 +1245,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            AssetBase::derive(signed.ik(), "zsa_asset"),
+            AssetBase::derive(signed.ik(), &"zsa_asset".into()),
             Rho::from_nf_old(Nullifier::dummy(&mut rng)),
             &mut rng,
         );
@@ -1262,13 +1262,13 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_incorrect_ik() {
-        let asset_description = "Asset";
+        let asset_description: Vec<u8> = "Asset".into();
 
         let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            String::from(asset_description),
+            asset_description.clone(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1286,7 +1286,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(55),
-            AssetBase::derive(&incorrect_ik, asset_description),
+            AssetBase::derive(&incorrect_ik, &asset_description),
             Rho::from_nf_old(Nullifier::dummy(&mut rng)),
             &mut rng,
         );
@@ -1305,7 +1305,7 @@ mod tests {
     fn issue_bundle_verify_fail_wrong_asset_descr_size() {
         // we want to inject "bad" description for test purposes.
         impl IssueAction {
-            pub fn modify_descr(&mut self, new_descr: String) {
+            pub fn modify_descr(&mut self, new_descr: Vec<u8>) {
                 self.asset_desc = new_descr;
             }
         }
@@ -1314,7 +1314,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            String::from("Asset description"),
+            "Asset description".into(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1330,7 +1330,7 @@ mod tests {
         signed
             .actions
             .first_mut()
-            .modify_descr(String::from_utf8(vec![b'X'; 513]).unwrap());
+            .modify_descr(vec![b'X'; 513]);
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
@@ -1338,7 +1338,7 @@ mod tests {
         );
 
         // 2. Try empty description
-        signed.actions.first_mut().modify_descr("".to_string());
+        signed.actions.first_mut().modify_descr("".into());
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
@@ -1380,17 +1380,17 @@ mod tests {
         let (_, _, note) = Note::dummy(&mut rng, None, AssetBase::native());
 
         let action =
-            IssueAction::new_with_flags(String::from("Asset description"), vec![note], 0u8)
+            IssueAction::new_with_flags("Asset description".into(), vec![note], 0u8)
                 .unwrap();
         assert_eq!(action.flags(), 0b0000_0000);
 
         let action =
-            IssueAction::new_with_flags(String::from("Asset description"), vec![note], 1u8)
+            IssueAction::new_with_flags("Asset description".into(), vec![note], 1u8)
                 .unwrap();
         assert_eq!(action.flags(), 0b0000_0001);
 
         let action =
-            IssueAction::new_with_flags(String::from("Asset description"), vec![note], 2u8);
+            IssueAction::new_with_flags("Asset description".into(), vec![note], 2u8);
         assert!(action.is_none());
     }
 }
@@ -1420,7 +1420,7 @@ pub mod testing {
 
     prop_compose! {
         /// Generate an issue action
-        pub fn arb_issue_action(asset_desc: String)
+        pub fn arb_issue_action(asset_desc: Vec<u8>)
         (
             asset in zsa_asset_base(asset_desc.clone()),
         )
@@ -1439,7 +1439,7 @@ pub mod testing {
         /// Generate an arbitrary issue bundle with fake authorization data.
         pub fn arb_unathorized_issue_bundle(n_actions: usize)
         (
-            actions in vec(arb_issue_action("asset_desc".to_string()), n_actions),
+            actions in vec(arb_issue_action("asset_desc".into()), n_actions),
             ik in arb_issuance_validating_key()
         ) -> IssueBundle<Unauthorized> {
             let actions = NonEmpty::from_vec(actions).unwrap();
@@ -1456,7 +1456,7 @@ pub mod testing {
         /// necessarily respect consensus rules
         pub fn arb_prepared_issue_bundle(n_actions: usize)
         (
-            actions in vec(arb_issue_action("asset_desc".to_string()), n_actions),
+            actions in vec(arb_issue_action("asset_desc".into()), n_actions),
             ik in arb_issuance_validating_key(),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY)
         ) -> IssueBundle<Prepared> {
@@ -1474,7 +1474,7 @@ pub mod testing {
         /// necessarily respect consensus rules
         pub fn arb_signed_issue_bundle(n_actions: usize)
         (
-            actions in vec(arb_issue_action("asset_desc".to_string()), n_actions),
+            actions in vec(arb_issue_action("asset_desc".into()), n_actions),
             ik in arb_issuance_validating_key(),
             fake_sig in arb_signature(),
         ) -> IssueBundle<Signed> {

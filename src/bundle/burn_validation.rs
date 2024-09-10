@@ -86,7 +86,7 @@ mod tests {
         let isk = IssuanceAuthorizingKey::from_bytes([1u8; 32]).unwrap();
 
         (
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc),
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc.into()),
             value,
         )
     }
