@@ -47,6 +47,22 @@ pub(in crate::circuit) mod gadgets {
     ) -> Result<Point<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>, plonk::Error> {
         // Evaluate commitment = [v_net_magnitude_sign] asset
         let commitment = match zsa_params {
+            None => {
+                let v_net = ScalarFixedShort::new(
+                    ecc_chip.clone(),
+                    layouter.namespace(|| "v_net"),
+                    v_net_magnitude_sign,
+                )?;
+
+                // commitment = [v_net] ValueCommitV
+                let (commitment, _) = {
+                    let value_commit_v = ValueCommitV;
+                    let value_commit_v =
+                        FixedPointShort::from_inner(ecc_chip.clone(), value_commit_v);
+                    value_commit_v.mul(layouter.namespace(|| "[v] ValueCommitV"), v_net)?
+                };
+                commitment
+            }
             Some(params) => {
                 // Check that magnitude is 64 bits
                 // Note: if zsa_params is not provided, this check will be performed inside the
@@ -94,22 +110,6 @@ pub(in crate::circuit) mod gadgets {
                     layouter.namespace(|| "[sign] commitment"),
                     &v_net_magnitude_sign.1,
                 )?
-            }
-            None => {
-                let v_net = ScalarFixedShort::new(
-                    ecc_chip.clone(),
-                    layouter.namespace(|| "v_net"),
-                    v_net_magnitude_sign,
-                )?;
-
-                // commitment = [v_net] ValueCommitV
-                let (commitment, _) = {
-                    let value_commit_v = ValueCommitV;
-                    let value_commit_v =
-                        FixedPointShort::from_inner(ecc_chip.clone(), value_commit_v);
-                    value_commit_v.mul(layouter.namespace(|| "[v] ValueCommitV"), v_net)?
-                };
-                commitment
             }
         };
 

@@ -85,6 +85,7 @@ pub(in crate::circuit) mod gadgets {
         let nf = cm.add(layouter.namespace(|| "nf"), &product)?;
 
         match zsa_params {
+            None => Ok(nf.extract_p()),
             Some(zsa_params) => {
                 // Add NullifierL to nf
                 // split_note_nf = NullifierL + nf
@@ -107,7 +108,6 @@ pub(in crate::circuit) mod gadgets {
                 )
                 .extract_p())
             }
-            None => Ok(nf.extract_p()),
         }
     }
 }

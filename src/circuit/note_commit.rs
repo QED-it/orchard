@@ -1980,6 +1980,17 @@ pub(in crate::circuit) mod gadgets {
             DecomposeG::decompose(&lookup_config, chip.clone(), &mut layouter, &rho, &psi)?;
 
         let (h_zec, h_0, h_1, zsa_decomposition) = match &zsa_params {
+            None => {
+                // h_zec = h_0 || h_1 || h_2
+                //       = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
+                let (h_zec, h_0, h_1) = DecomposeHVanilla::decompose(
+                    &lookup_config,
+                    chip.clone(),
+                    &mut layouter,
+                    &psi,
+                )?;
+                (h_zec, h_0, h_1, None)
+            }
             Some(zsa_params) => {
                 // h_zec = h_0 || h_1 || h_2_zec
                 //   = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
@@ -2030,17 +2041,6 @@ pub(in crate::circuit) mod gadgets {
                     }),
                 )
             }
-            None => {
-                // h_zec = h_0 || h_1 || h_2
-                //       = (bits 249..=253 of psi) || (bit 254 of psi) || 4 zero bits
-                let (h_zec, h_0, h_1) = DecomposeHVanilla::decompose(
-                    &lookup_config,
-                    chip.clone(),
-                    &mut layouter,
-                    &psi,
-                )?;
-                (h_zec, h_0, h_1, None)
-            }
         };
 
         // Check decomposition of `y(g_d)`.
@@ -2062,6 +2062,36 @@ pub(in crate::circuit) mod gadgets {
         )?;
 
         let (cm, zs_common, zs_zsa_suffix) = match (&zsa_params, &zsa_decomposition) {
+            (None, None) => {
+                // cm = NoteCommit^Orchard_rcm(g★_d || pk★_d || i2lebsp_{64}(v) || rho || psi)
+                //
+                // `cm = ⊥` is handled internally to `CommitDomain::commit`: incomplete addition
+                // constraints allows ⊥ to occur, and then during synthesis it detects these edge
+                // cases and raises an error (aborting proof creation).
+                //
+                // https://p.z.cash/ZKS:action-cm-old-integrity?partial
+                // https://p.z.cash/ZKS:action-cmx-new-integrity?partial
+                let message = Message::from_pieces(
+                    chip.clone(),
+                    vec![
+                        a.clone(),
+                        b.clone(),
+                        c.clone(),
+                        d.clone(),
+                        e.clone(),
+                        f.clone(),
+                        g.clone(),
+                        h_zec.clone(),
+                    ],
+                );
+                let domain = CommitDomain::new(chip, ecc_chip, &OrchardCommitDomains::NoteCommit);
+                let (cm, zs) = domain.commit(
+                    layouter.namespace(|| "Process NoteCommit inputs"),
+                    message,
+                    rcm,
+                )?;
+                (cm, zs, vec![])
+            }
             (Some(zsa_params), Some(zsa_decomposition)) => {
                 // cm = NoteCommit^Orchard_rcm(g★_d || pk★_d || i2lebsp_{64}(v) || rho || psi || asset)
                 //
@@ -2183,36 +2213,6 @@ pub(in crate::circuit) mod gadgets {
 
                 (commitment, zs_common, zs_zsa)
             }
-            (None, None) => {
-                // cm = NoteCommit^Orchard_rcm(g★_d || pk★_d || i2lebsp_{64}(v) || rho || psi)
-                //
-                // `cm = ⊥` is handled internally to `CommitDomain::commit`: incomplete addition
-                // constraints allows ⊥ to occur, and then during synthesis it detects these edge
-                // cases and raises an error (aborting proof creation).
-                //
-                // https://p.z.cash/ZKS:action-cm-old-integrity?partial
-                // https://p.z.cash/ZKS:action-cmx-new-integrity?partial
-                let message = Message::from_pieces(
-                    chip.clone(),
-                    vec![
-                        a.clone(),
-                        b.clone(),
-                        c.clone(),
-                        d.clone(),
-                        e.clone(),
-                        f.clone(),
-                        g.clone(),
-                        h_zec.clone(),
-                    ],
-                );
-                let domain = CommitDomain::new(chip, ecc_chip, &OrchardCommitDomains::NoteCommit);
-                let (cm, zs) = domain.commit(
-                    layouter.namespace(|| "Process NoteCommit inputs"),
-                    message,
-                    rcm,
-                )?;
-                (cm, zs, vec![])
-            }
             _ => {
                 panic!("Either both zsa_params and zsa_decomposition must be provided, or neither.")
             }
@@ -2277,6 +2277,9 @@ pub(in crate::circuit) mod gadgets {
             &zsa_decomposition,
             &note_commit_chip.config.specific_config_for_circuit,
         ) {
+            (None, SpecificConfigForCircuit::Vanilla(specific_config)) => specific_config
+                .h_vanilla
+                .assign(&mut layouter, h_zec, h_0.clone(), h_1)?,
             (Some(zsa_decomposition), SpecificConfigForCircuit::Zsa(specific_config)) => {
                 specific_config.h_zsa.assign(
                     &mut layouter,
@@ -2287,9 +2290,6 @@ pub(in crate::circuit) mod gadgets {
                     zsa_decomposition.h_2_zsa.clone(),
                 )?
             }
-            (None, SpecificConfigForCircuit::Vanilla(specific_config)) => specific_config
-                .h_vanilla
-                .assign(&mut layouter, h_zec, h_0.clone(), h_1)?,
             _ => panic!("zsa_decomposition is required with a ZSA configuration but must be omitted with a Vanilla configuration."),
         };
 
