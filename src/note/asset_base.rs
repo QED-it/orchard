@@ -103,7 +103,7 @@ impl AssetBase {
     pub(crate) fn random() -> Self {
         let isk = IssuanceAuthorizingKey::random();
         let ik = IssuanceValidatingKey::from(&isk);
-        let asset_descr: Vec<u8> = "zsa_asset".as_bytes().into();
+        let asset_descr = b"zsa_asset".to_vec();
         AssetBase::derive(&ik, &asset_descr)
     }
 }
