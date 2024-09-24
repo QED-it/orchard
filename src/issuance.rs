@@ -387,15 +387,15 @@ impl IssueBundle<Unauthorized> {
     /// # Panics
     ///
     /// Panics if `asset_desc` is empty or longer than 512 bytes.
-    pub fn finalize_action(&mut self, asset_desc: Vec<u8>) -> Result<(), Error> {
-        if !is_asset_desc_of_valid_size(&asset_desc) {
+    pub fn finalize_action(&mut self, asset_desc: &Vec<u8>) -> Result<(), Error> {
+        if !is_asset_desc_of_valid_size(asset_desc) {
             return Err(WrongAssetDescSize);
         }
 
         match self
             .actions
             .iter_mut()
-            .find(|issue_action| issue_action.asset_desc.eq(&asset_desc))
+            .find(|issue_action| issue_action.asset_desc.eq(asset_desc))
         {
             Some(issue_action) => {
                 issue_action.finalize = true;
@@ -890,21 +890,23 @@ mod tests {
         .expect("Should properly add recipient");
 
         bundle
-            .finalize_action(b"NFT".to_vec())
+            .finalize_action(&b"NFT".to_vec())
             .expect("Should finalize properly");
 
         assert_eq!(
-            bundle.finalize_action(b"Another NFT".to_vec()).unwrap_err(),
+            bundle
+                .finalize_action(&b"Another NFT".to_vec())
+                .unwrap_err(),
             IssueActionNotFound
         );
 
         assert_eq!(
-            bundle.finalize_action(vec![b'X'; 513]).unwrap_err(),
+            bundle.finalize_action(&vec![b'X'; 513]).unwrap_err(),
             WrongAssetDescSize
         );
 
         assert_eq!(
-            bundle.finalize_action(b"".to_vec()).unwrap_err(),
+            bundle.finalize_action(&b"".to_vec()).unwrap_err(),
             WrongAssetDescSize
         );
     }
@@ -1049,7 +1051,7 @@ mod tests {
         .unwrap();
 
         bundle
-            .finalize_action(b"Verify with finalize".to_vec())
+            .finalize_action(&b"Verify with finalize".to_vec())
             .unwrap();
 
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
@@ -1090,13 +1092,13 @@ mod tests {
             .add_recipient(&asset1_desc, recipient, NoteValue::from_raw(8), rng)
             .unwrap();
 
-        bundle.finalize_action(asset1_desc).unwrap();
+        bundle.finalize_action(&asset1_desc).unwrap();
 
         bundle
             .add_recipient(&asset2_desc, recipient, NoteValue::from_raw(10), rng)
             .unwrap();
 
-        bundle.finalize_action(asset2_desc).unwrap();
+        bundle.finalize_action(&asset2_desc).unwrap();
 
         bundle
             .add_recipient(&asset3_desc, recipient, NoteValue::from_raw(5), rng)
