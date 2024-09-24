@@ -651,14 +651,14 @@ mod tests {
     fn setup_verify_supply_test_params(
         note1_value: u64,
         note2_value: u64,
-        note1_asset_desc: Vec<u8>,
-        note2_asset_desc: Option<Vec<u8>>, // if None, both notes use the same asset
+        note1_asset_desc: &Vec<u8>,
+        note2_asset_desc: Option<&Vec<u8>>, // if None, both notes use the same asset
         finalize: bool,
     ) -> (IssuanceValidatingKey, AssetBase, IssueAction) {
         let (mut rng, _, ik, recipient, _) = setup_params();
 
-        let asset = AssetBase::derive(&ik, &note1_asset_desc);
-        let note2_asset = note2_asset_desc.map_or(asset, |desc| AssetBase::derive(&ik, &desc));
+        let asset = AssetBase::derive(&ik, note1_asset_desc);
+        let note2_asset = note2_asset_desc.map_or(asset, |desc| AssetBase::derive(&ik, desc));
 
         let note1 = Note::new(
             recipient,
@@ -679,7 +679,7 @@ mod tests {
         (
             ik,
             asset,
-            IssueAction::from_parts(note1_asset_desc, vec![note1, note2], finalize),
+            IssueAction::from_parts(note1_asset_desc.clone(), vec![note1, note2], finalize),
         )
     }
 
@@ -722,7 +722,7 @@ mod tests {
     #[test]
     fn verify_supply_valid() {
         let (ik, test_asset, action) =
-            setup_verify_supply_test_params(10, 20, b"Asset 1".to_vec(), None, false);
+            setup_verify_supply_test_params(10, 20, &b"Asset 1".to_vec(), None, false);
 
         let result = action.verify_supply(&ik);
 
@@ -748,7 +748,7 @@ mod tests {
     #[test]
     fn verify_supply_finalized() {
         let (ik, test_asset, action) =
-            setup_verify_supply_test_params(10, 20, b"Asset 1".to_vec(), None, true);
+            setup_verify_supply_test_params(10, 20, &b"Asset 1".to_vec(), None, true);
 
         let result = action.verify_supply(&ik);
 
@@ -766,8 +766,8 @@ mod tests {
         let (ik, _, action) = setup_verify_supply_test_params(
             10,
             20,
-            b"Asset 1".to_vec(),
-            Some(b"Asset 2".to_vec()),
+            &b"Asset 1".to_vec(),
+            Some(&b"Asset 2".to_vec()),
             false,
         );
 
@@ -780,7 +780,7 @@ mod tests {
     #[test]
     fn verify_supply_ik_mismatch_asset_base() {
         let (_, _, action) =
-            setup_verify_supply_test_params(10, 20, b"Asset 1".to_vec(), None, false);
+            setup_verify_supply_test_params(10, 20, &b"Asset 1".to_vec(), None, false);
         let (_, _, ik, _, _) = setup_params();
 
         assert_eq!(
