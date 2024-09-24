@@ -136,7 +136,7 @@ pub fn build_merkle_path_with_two_leaves(
     (merkle_path1, merkle_path2, anchor)
 }
 
-fn issue_zsa_notes(asset_descr: Vec<u8>, keys: &Keychain) -> (Note, Note) {
+fn issue_zsa_notes(asset_descr: &Vec<u8>, keys: &Keychain) -> (Note, Note) {
     let mut rng = OsRng;
     // Create a issuance bundle
     let unauthorized_asset = IssueBundle::new(
@@ -155,7 +155,7 @@ fn issue_zsa_notes(asset_descr: Vec<u8>, keys: &Keychain) -> (Note, Note) {
 
     assert!(unauthorized
         .add_recipient(
-            &asset_descr,
+            asset_descr,
             keys.recipient,
             NoteValue::from_raw(2),
             &mut rng,
@@ -293,7 +293,7 @@ fn zsa_issue_and_transfer() {
     let asset_descr = b"zsa_asset".to_vec();
 
     // Prepare ZSA
-    let (zsa_note_1, zsa_note_2) = issue_zsa_notes(asset_descr, &keys);
+    let (zsa_note_1, zsa_note_2) = issue_zsa_notes(&asset_descr, &keys);
 
     let (merkle_path1, merkle_path2, anchor) =
         build_merkle_path_with_two_leaves(&zsa_note_1, &zsa_note_2);
@@ -446,7 +446,7 @@ fn zsa_issue_and_transfer() {
     .unwrap();
 
     // 7. Spend ZSA notes of different asset types
-    let (zsa_note_t7, _) = issue_zsa_notes(b"zsa_asset2".to_vec(), &keys);
+    let (zsa_note_t7, _) = issue_zsa_notes(&b"zsa_asset2".to_vec(), &keys);
     let (merkle_path_t7_1, merkle_path_t7_2, anchor_t7) =
         build_merkle_path_with_two_leaves(&zsa_note_t7, &zsa_note_2);
     let zsa_spend_t7_1: TestSpendInfo = TestSpendInfo {
