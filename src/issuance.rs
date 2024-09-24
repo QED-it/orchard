@@ -1300,7 +1300,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_wrong_asset_descr_size() {
-        // we want to inject "bad" description for test purposes.
+        // we want to inject a "malformed" description for test purposes.
         impl IssueAction {
             pub fn modify_descr(&mut self, new_descr: Vec<u8>) {
                 self.asset_desc = new_descr;
@@ -1323,7 +1323,7 @@ mod tests {
         let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
         let prev_finalized = HashSet::new();
 
-        // 1. Try too long description
+        // 1. Try a description that is too long
         signed.actions.first_mut().modify_descr(vec![b'X'; 513]);
 
         assert_eq!(
@@ -1331,7 +1331,7 @@ mod tests {
             WrongAssetDescSize
         );
 
-        // 2. Try empty description
+        // 2. Try a description that is empty
         signed.actions.first_mut().modify_descr(b"".to_vec());
 
         assert_eq!(
