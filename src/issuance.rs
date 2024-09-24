@@ -224,8 +224,8 @@ impl<T: IssueAuth> IssueBundle<T> {
     }
 
     /// Find an action by `ik` and `asset_desc` for a given `IssueBundle`.
-    pub fn get_action(&self, asset_desc: Vec<u8>) -> Option<&IssueAction> {
-        self.actions.iter().find(|a| a.asset_desc.eq(&asset_desc))
+    pub fn get_action(&self, asset_desc: &Vec<u8>) -> Option<&IssueAction> {
+        self.actions.iter().find(|a| a.asset_desc.eq(asset_desc))
     }
 
     /// Find an action by `asset` for a given `IssueBundle`.
@@ -868,7 +868,7 @@ mod tests {
         assert_eq!(action.notes.get(1).unwrap().asset(), asset);
         assert_eq!(action.notes.get(1).unwrap().recipient(), recipient);
 
-        let action2 = bundle.get_action(str2.as_bytes().to_vec()).unwrap();
+        let action2 = bundle.get_action(&str2.as_bytes().to_vec()).unwrap();
         assert_eq!(action2.notes.len(), 1);
         assert_eq!(action2.notes().first().unwrap().value().inner(), 15);
         assert_eq!(action2.notes().first().unwrap().asset(), third_asset);
