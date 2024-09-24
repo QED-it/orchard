@@ -340,16 +340,16 @@ impl IssueBundle<Unauthorized> {
     /// * `WrongAssetDescSize`: If `asset_desc` is empty or longer than 512 bytes.
     pub fn add_recipient(
         &mut self,
-        asset_desc: Vec<u8>,
+        asset_desc: &Vec<u8>,
         recipient: Address,
         value: NoteValue,
         mut rng: impl RngCore,
     ) -> Result<AssetBase, Error> {
-        if !is_asset_desc_of_valid_size(&asset_desc) {
+        if !is_asset_desc_of_valid_size(asset_desc) {
             return Err(WrongAssetDescSize);
         }
 
-        let asset = AssetBase::derive(&self.ik, &asset_desc);
+        let asset = AssetBase::derive(&self.ik, asset_desc);
 
         let note = Note::new(
             recipient,
@@ -362,7 +362,7 @@ impl IssueBundle<Unauthorized> {
         let action = self
             .actions
             .iter_mut()
-            .find(|issue_action| issue_action.asset_desc.eq(&asset_desc));
+            .find(|issue_action| issue_action.asset_desc.eq(asset_desc));
 
         match action {
             Some(action) => {
@@ -372,7 +372,7 @@ impl IssueBundle<Unauthorized> {
             None => {
                 // Insert a new IssueAction.
                 self.actions.push(IssueAction {
-                    asset_desc,
+                    asset_desc: asset_desc.clone(),
                     notes: vec![note],
                     finalize: false,
                 });
@@ -837,7 +837,7 @@ mod tests {
 
         let another_asset = bundle
             .add_recipient(
-                str.as_bytes().to_vec(),
+                &str.as_bytes().to_vec(),
                 recipient,
                 NoteValue::from_raw(10),
                 rng,
@@ -847,7 +847,7 @@ mod tests {
 
         let third_asset = bundle
             .add_recipient(
-                str2.as_bytes().to_vec(),
+                &str2.as_bytes().to_vec(),
                 recipient,
                 NoteValue::from_raw(15),
                 rng,
@@ -1087,19 +1087,19 @@ mod tests {
         .unwrap();
 
         bundle
-            .add_recipient(asset1_desc.clone(), recipient, NoteValue::from_raw(8), rng)
+            .add_recipient(&asset1_desc, recipient, NoteValue::from_raw(8), rng)
             .unwrap();
 
         bundle.finalize_action(asset1_desc).unwrap();
 
         bundle
-            .add_recipient(asset2_desc.clone(), recipient, NoteValue::from_raw(10), rng)
+            .add_recipient(&asset2_desc, recipient, NoteValue::from_raw(10), rng)
             .unwrap();
 
         bundle.finalize_action(asset2_desc).unwrap();
 
         bundle
-            .add_recipient(asset3_desc, recipient, NoteValue::from_raw(5), rng)
+            .add_recipient(&asset3_desc, recipient, NoteValue::from_raw(5), rng)
             .unwrap();
 
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();

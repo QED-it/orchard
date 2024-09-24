@@ -155,7 +155,7 @@ fn issue_zsa_notes(asset_descr: Vec<u8>, keys: &Keychain) -> (Note, Note) {
 
     assert!(unauthorized
         .add_recipient(
-            asset_descr,
+            &asset_descr,
             keys.recipient,
             NoteValue::from_raw(2),
             &mut rng,
