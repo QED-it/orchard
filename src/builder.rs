@@ -623,6 +623,7 @@ pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, Bun
 pub struct Builder {
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
+    split_notes: BTreeMap<AssetBase, SpendInfo>,
     burn: BTreeMap<AssetBase, NoteValue>,
     bundle_type: BundleType,
     anchor: Anchor,
@@ -634,6 +635,7 @@ impl Builder {
         Builder {
             spends: vec![],
             outputs: vec![],
+            split_notes: BTreeMap::new(),
             burn: BTreeMap::new(),
             bundle_type,
             anchor,
@@ -691,6 +693,25 @@ impl Builder {
 
         self.outputs
             .push(OutputInfo::new(ovk, recipient, value, asset, memo));
+
+        Ok(())
+    }
+
+    /// Add a reference split note which could be used to create Actions.
+    pub fn add_split_note(
+        &mut self,
+        fvk: FullViewingKey,
+        note: Note,
+        merkle_path: MerklePath,
+    ) -> Result<(), SpendError> {
+        let spend = SpendInfo::new(fvk, note, merkle_path, false).ok_or(SpendError::FvkMismatch)?;
+
+        // Consistency check: all anchors must be equal.
+        if !spend.has_matching_anchor(&self.anchor) {
+            return Err(SpendError::AnchorMismatch);
+        }
+
+        self.split_notes.entry(note.asset()).or_insert(spend);
 
         Ok(())
     }
@@ -770,6 +791,7 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
+            self.split_notes,
             self.burn,
         )
     }
@@ -976,6 +998,7 @@ fn build_bundle<B, R: RngCore>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
+    split_notes: BTreeMap<AssetBase, SpendInfo>,
     burn: BTreeMap<AssetBase, NoteValue>,
     finisher: impl FnOnce(
         Vec<ActionInfo>,             // pre-actions
@@ -1017,7 +1040,10 @@ fn build_bundle<B, R: RngCore>(
             |(asset, (spends, outputs))| {
                 let num_asset_pre_actions = spends.len().max(outputs.len());
 
-                let first_spend = spends.first().map(|(s, _)| s.clone());
+                    let mut first_spend = spends.first().map(|(s, _)| s.clone());
+                    if first_spend.is_none() {
+                        first_spend = split_notes.get(&asset).cloned();
+                    }
 
                 let mut indexed_spends = spends
                     .into_iter()
