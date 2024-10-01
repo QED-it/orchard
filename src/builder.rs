@@ -2,7 +2,7 @@
 
 use core::fmt;
 use core::iter;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::fmt::Display;
 
 use ff::Field;
@@ -514,6 +514,7 @@ pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, Bun
 pub struct Builder {
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
+    split_notes: HashMap<AssetBase, SpendInfo>,
     burn: HashMap<AssetBase, NoteValue>,
     bundle_type: BundleType,
     anchor: Anchor,
@@ -525,6 +526,7 @@ impl Builder {
         Builder {
             spends: vec![],
             outputs: vec![],
+            split_notes: HashMap::new(),
             burn: HashMap::new(),
             bundle_type,
             anchor,
@@ -586,10 +588,27 @@ impl Builder {
         Ok(())
     }
 
+    /// Add a reference split note which could be used to create Actions.
+    pub fn add_split_note(
+        &mut self,
+        fvk: FullViewingKey,
+        note: Note,
+        merkle_path: MerklePath,
+    ) -> Result<(), SpendError> {
+        let spend = SpendInfo::new(fvk, note, merkle_path, false).ok_or(SpendError::FvkMismatch)?;
+
+        // Consistency check: all anchors must be equal.
+        if !spend.has_matching_anchor(&self.anchor) {
+            return Err(SpendError::AnchorMismatch);
+        }
+
+        self.split_notes.entry(note.asset()).or_insert(spend);
+
+        Ok(())
+    }
+
     /// Add an instruction to burn a given amount of a specific asset.
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
-        use std::collections::hash_map::Entry;
-
         if asset.is_native().into() {
             return Err(BurnNative);
         }
@@ -658,6 +677,7 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
+            self.split_notes,
             self.burn,
         )
     }
@@ -741,6 +761,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
+    split_notes: HashMap<AssetBase, SpendInfo>,
     burn: HashMap<AssetBase, NoteValue>,
 ) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
     let flags = bundle_type.flags();
@@ -774,7 +795,10 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                 .flat_map(|(asset, (spends, outputs))| {
                     let num_asset_pre_actions = spends.len().max(outputs.len());
 
-                    let first_spend = spends.first().map(|(s, _)| s.clone());
+                    let mut first_spend = spends.first().map(|(s, _)| s.clone());
+                    if first_spend.is_none() {
+                        first_spend = split_notes.get(&asset).cloned();
+                    }
 
                     let mut indexed_spends = spends
                         .into_iter()
