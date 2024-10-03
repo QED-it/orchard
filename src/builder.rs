@@ -524,12 +524,12 @@ pub struct Builder {
     bundle_type: BundleType,
     anchor: Anchor,
     // When timelimit is set, the Builder will build an ActionGroup (burn must be empty)
-    timelimit: Option<u64>,
+    timelimit: Option<u32>,
 }
 
 impl Builder {
     /// Constructs a new empty builder for an Orchard bundle.
-    pub fn new(bundle_type: BundleType, anchor: Anchor, timelimit: Option<u64>) -> Self {
+    pub fn new(bundle_type: BundleType, anchor: Anchor, timelimit: Option<u32>) -> Self {
         Builder {
             spends: vec![],
             outputs: vec![],
@@ -768,7 +768,7 @@ fn pad_spend(
 pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     mut rng: impl RngCore,
     anchor: Anchor,
-    timelimit: Option<u64>,
+    timelimit: Option<u32>,
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,

@@ -210,7 +210,7 @@ pub struct Bundle<A: Authorization, V, D: OrchardDomainCommon> {
     /// The timelimit for this Bundle (which is an ActionGroup).
     ///
     /// Burn must be empty when timelimit is set.
-    timelimit: Option<u64>,
+    timelimit: Option<u32>,
     /// The authorization for this bundle.
     authorization: A,
 }
@@ -243,7 +243,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
         value_balance: V,
         burn: Vec<(AssetBase, NoteValue)>,
         anchor: Anchor,
-        timelimit: Option<u64>,
+        timelimit: Option<u32>,
         authorization: A,
     ) -> Self {
         Bundle {
@@ -282,6 +282,11 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
     /// Returns the root of the Orchard commitment tree that this bundle commits to.
     pub fn anchor(&self) -> &Anchor {
         &self.anchor
+    }
+
+    /// Returns the root of the Orchard commitment tree that this bundle commits to.
+    pub fn timelimit(&self) -> Option<u32> {
+        self.timelimit
     }
 
     /// Returns the authorization for this bundle.
