@@ -16,7 +16,9 @@ use zcash_note_encryption_zsa::{try_note_decryption, try_output_recovery_with_ov
 use crate::{
     action::Action,
     address::Address,
-    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
+    bundle::commitments::{
+        hash_action_groups_txid_data, hash_bundle_auth_data, hash_bundle_txid_data,
+    },
     circuit::{Instance, Proof, VerifyingKey},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
@@ -481,7 +483,12 @@ impl<A: Authorization, V: Copy + Into<i64>, FL: OrchardFlavor> Bundle<A, V, FL> 
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
     pub fn commitment(&self) -> BundleCommitment {
-        BundleCommitment(hash_bundle_txid_data(self))
+        match self.timelimit {
+            Some(_) => {
+                BundleCommitment(hash_action_groups_txid_data(vec![self], self.value_balance))
+            }
+            None => BundleCommitment(hash_bundle_txid_data(self)),
+        }
     }
 
     /// Returns the transaction binding validating key for this bundle.
