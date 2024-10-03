@@ -253,7 +253,7 @@ impl<A: Authorization, V, P: OrchardPrimitives> Bundle<A, V, P> {
         value_balance: V,
         burn: Vec<(AssetBase, NoteValue)>,
         anchor: Anchor,
-        timelimit: Option<u64>,
+        timelimit: Option<u32>,
         authorization: A,
     ) -> Self {
         Bundle {
