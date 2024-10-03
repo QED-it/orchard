@@ -207,6 +207,10 @@ pub struct Bundle<A: Authorization, V, D: OrchardDomainCommon> {
     burn: Vec<(AssetBase, NoteValue)>,
     /// The root of the Orchard commitment tree that this bundle commits to.
     anchor: Anchor,
+    /// The timelimit for this Bundle (which is an ActionGroup).
+    ///
+    /// Burn must be empty when timelimit is set.
+    timelimit: Option<u64>,
     /// The authorization for this bundle.
     authorization: A,
 }
@@ -239,6 +243,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
         value_balance: V,
         burn: Vec<(AssetBase, NoteValue)>,
         anchor: Anchor,
+        timelimit: Option<u64>,
         authorization: A,
     ) -> Self {
         Bundle {
@@ -247,6 +252,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
             value_balance,
             burn,
             anchor,
+            timelimit,
             authorization,
         }
     }
@@ -297,6 +303,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
             value_balance: f(self.value_balance)?,
             burn: self.burn,
             anchor: self.anchor,
+            timelimit: self.timelimit,
             authorization: self.authorization,
         })
     }
@@ -316,6 +323,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
             flags: self.flags,
             value_balance: self.value_balance,
             anchor: self.anchor,
+            timelimit: self.timelimit,
             authorization: step(context, authorization),
             burn: self.burn,
         }
@@ -340,6 +348,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
             flags: self.flags,
             value_balance: self.value_balance,
             anchor: self.anchor,
+            timelimit: self.timelimit,
             authorization: step(context, authorization)?,
             burn: self.burn,
         })
@@ -712,6 +721,7 @@ pub mod testing {
                     balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
                     burn,
                     anchor,
+                    None,
                     Unauthorized,
                 )
             }
@@ -744,6 +754,7 @@ pub mod testing {
                     balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
                     burn,
                     anchor,
+                    None,
                     Authorized {
                         proof: Proof::new(fake_proof),
                         binding_signature: sk.sign(rng, &fake_sighash),
