@@ -34,6 +34,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
         let mut builder = Builder::new(
             BundleType::DEFAULT_VANILLA,
             Anchor::from_bytes([0; 32]).unwrap(),
+            None,
         );
         for _ in 0..num_recipients {
             builder

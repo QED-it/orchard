@@ -102,6 +102,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
                 bundle_required: false,
             },
             anchor,
+            None,
         );
         let note_value = NoteValue::from_raw(5000);
         assert_eq!(
@@ -160,6 +161,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
                 bundle_required: false,
             },
             anchor,
+            None,
         );
 
         assert!(builder.add_spend(fvk.clone(), note, merkle_path).is_err());
@@ -169,7 +171,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     let (shielded_bundle, orchard_digest_2): (Bundle<_, i64, FL>, [u8; 32]) = {
         let (merkle_path, anchor) = build_merkle_path(&note);
 
-        let mut builder = Builder::new(FL::DEFAULT_BUNDLE_TYPE, anchor);
+        let mut builder = Builder::new(FL::DEFAULT_BUNDLE_TYPE, anchor, None);
         assert_eq!(builder.add_spend(fvk, note, merkle_path), Ok(()));
         assert_eq!(
             builder.add_output(

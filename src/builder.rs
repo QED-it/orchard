@@ -159,6 +159,8 @@ pub enum BuildError {
     BurnDuplicateAsset,
     /// There is no available split note for this asset.
     NoSplitNoteAvailable,
+    /// Timelimit is set (thus it is an ActionGroup builder) but burn is not empty.
+    TimelimitSetAndBurnNotEmpty,
 }
 
 impl fmt::Display for BuildError {
@@ -183,6 +185,9 @@ impl fmt::Display for BuildError {
             BurnZero => f.write_str("Burning is not possible for zero values"),
             BurnDuplicateAsset => f.write_str("Duplicate assets are not allowed when burning"),
             NoSplitNoteAvailable => f.write_str("No split note has been provided for this asset"),
+            TimelimitSetAndBurnNotEmpty => f.write_str(
+                "Timelimit is set (thus it is an ActionGroup builder) but burn is not empty",
+            ),
         }
     }
 }
@@ -627,11 +632,13 @@ pub struct Builder {
     burn: BTreeMap<AssetBase, NoteValue>,
     bundle_type: BundleType,
     anchor: Anchor,
+    // When timelimit is set, the Builder will build an ActionGroup (burn must be empty)
+    timelimit: Option<u64>,
 }
 
 impl Builder {
     /// Constructs a new empty builder for an Orchard bundle.
-    pub fn new(bundle_type: BundleType, anchor: Anchor) -> Self {
+    pub fn new(bundle_type: BundleType, anchor: Anchor, timelimit: Option<u64>) -> Self {
         Builder {
             spends: vec![],
             outputs: vec![],
@@ -639,6 +646,7 @@ impl Builder {
             burn: BTreeMap::new(),
             bundle_type,
             anchor,
+            timelimit,
         }
     }
 
@@ -788,6 +796,7 @@ impl Builder {
         bundle(
             rng,
             self.anchor,
+            self.timelimit,
             self.bundle_type,
             self.spends,
             self.outputs,
@@ -933,6 +942,8 @@ fn pad_spend(
 ///
 /// The returned bundle will have no proof or signatures; these can be applied with
 /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
+#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 #[cfg(feature = "circuit")]
 pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     rng: impl RngCore,
@@ -995,6 +1006,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
 fn build_bundle<B, R: RngCore>(
     mut rng: R,
     anchor: Anchor,
+    timelimit: Option<u64>,
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
@@ -1134,6 +1146,7 @@ fn build_bundle<B, R: RngCore>(
         flags,
         native_value_balance,
         burn_vec,
+        timelimit,
         bundle_meta,
         rng,
     )
@@ -1503,7 +1516,7 @@ pub mod testing {
             mut self,
         ) -> Bundle<Authorized, V, FL> {
             let fvk = FullViewingKey::from(&self.sk);
-            let mut builder = Builder::new(BundleType::DEFAULT_ZSA, self.anchor);
+            let mut builder = Builder::new(BundleType::DEFAULT_ZSA, self.anchor, None);
 
             for (note, path) in self.notes.into_iter() {
                 builder.add_spend(fvk.clone(), note, path).unwrap();
@@ -1635,6 +1648,7 @@ mod tests {
         let mut builder = Builder::new(
             BundleType::DEFAULT_VANILLA,
             EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
+            None,
         );
 
         builder

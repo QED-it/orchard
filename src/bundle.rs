@@ -253,6 +253,7 @@ impl<A: Authorization, V, P: OrchardPrimitives> Bundle<A, V, P> {
         value_balance: V,
         burn: Vec<(AssetBase, NoteValue)>,
         anchor: Anchor,
+        timelimit: Option<u64>,
         authorization: A,
     ) -> Self {
         Bundle {
@@ -755,6 +756,7 @@ pub mod testing {
                     balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
                     burn,
                     anchor,
+                    None,
                     super::EffectsOnly,
                 )
             }
@@ -787,6 +789,7 @@ pub mod testing {
                     balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
                     burn,
                     anchor,
+                    None,
                     Authorized {
                         proof: Proof::new(fake_proof),
                         binding_signature: VerBindingSig::new(P::default_sighash_version(), sk.sign(rng, &fake_sighash)),
