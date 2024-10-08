@@ -223,18 +223,20 @@ impl<T: IssueAuth> IssueBundle<T> {
         &self.authorization
     }
 
-    /// Find an action by `ik` and `asset_desc` for a given `IssueBundle`.
-    pub fn get_action(&self, asset_desc: &Vec<u8>) -> Option<&IssueAction> {
-        self.actions.iter().find(|a| a.asset_desc.eq(asset_desc))
+    /// Find the actions corresponding to `ik` and `asset_desc` in a given `IssueBundle`.
+    pub fn get_actions_by_desc(&self, asset_desc: &Vec<u8>) -> Vec<&IssueAction> {
+        self.actions
+            .iter()
+            .filter(|a| a.asset_desc.eq(asset_desc))
+            .collect()
     }
 
-    /// Find an action by `asset` for a given `IssueBundle`.
-    pub fn get_action_by_type(&self, asset: AssetBase) -> Option<&IssueAction> {
-        let action = self
-            .actions
+    /// Find the actions corresponding to an Asset Base `asset` for a given `IssueBundle`.
+    pub fn get_actions_by_base(&self, asset: AssetBase) -> Vec<&IssueAction> {
+        self.actions
             .iter()
-            .find(|a| AssetBase::derive(&self.ik, &a.asset_desc).eq(&asset));
-        action
+            .filter(|a| AssetBase::derive(&self.ik, &a.asset_desc).eq(&asset))
+            .collect()
     }
 
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
@@ -858,7 +860,9 @@ mod tests {
         let actions = bundle.actions();
         assert_eq!(actions.len(), 2);
 
-        let action = bundle.get_action_by_type(asset).unwrap();
+        let actions_vec = bundle.get_actions_by_base(asset);
+        assert_eq!(actions_vec.len(), 1);
+        let action = actions_vec[0];
         assert_eq!(action.notes.len(), 2);
         assert_eq!(action.notes.first().unwrap().value().inner(), 5);
         assert_eq!(action.notes.first().unwrap().asset(), asset);
@@ -868,7 +872,9 @@ mod tests {
         assert_eq!(action.notes.get(1).unwrap().asset(), asset);
         assert_eq!(action.notes.get(1).unwrap().recipient(), recipient);
 
-        let action2 = bundle.get_action(&str2.as_bytes().to_vec()).unwrap();
+        let action2_vec = bundle.get_actions_by_desc(&str2.as_bytes().to_vec());
+        assert_eq!(action2_vec.len(), 1);
+        let action2 = action2_vec[0];
         assert_eq!(action2.notes.len(), 1);
         assert_eq!(action2.notes().first().unwrap().value().inner(), 15);
         assert_eq!(action2.notes().first().unwrap().asset(), third_asset);
@@ -1385,6 +1391,56 @@ mod tests {
 
         let action = IssueAction::new_with_flags(b"Asset description".to_vec(), vec![note], 2u8);
         assert!(action.is_none());
+    }
+
+    #[test]
+    fn issue_bundle_asset_desc_roundtrip() {
+        let (rng, _, ik, recipient, _) = setup_params();
+
+        // Generated using https://onlinetools.com/utf8/generate-random-utf8
+        let asset_desc_1 = "󅞞 򬪗YV8𱈇m0{둛򙎠[㷊V֤]9Ծ̖l󾓨2닯򗏟iȰ䣄˃Oߺ񗗼🦄"
+            .to_string()
+            .as_bytes()
+            .to_vec();
+
+        // Not well-formed as per Unicode 15.0 specification, Section 3.9, D92
+        let asset_desc_2: Vec<u8> = vec![0xc0, 0xaf];
+
+        // Confirm not valid UTF-8
+        assert!(String::from_utf8(asset_desc_2.clone()).is_err());
+
+        let (mut bundle, asset_base_1) = IssueBundle::new(
+            ik,
+            asset_desc_1.clone(),
+            Some(IssueInfo {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
+            rng,
+        )
+        .unwrap();
+
+        let asset_base_2 = bundle
+            .add_recipient(&asset_desc_2, recipient, NoteValue::from_raw(10), rng)
+            .unwrap();
+
+        // Checks for the case of UTF-8 encoded asset description.
+        let actions_vec = bundle.get_actions_by_base(asset_base_1);
+        assert_eq!(actions_vec.len(), 1);
+
+        let action = actions_vec[0];
+        assert_eq!(action.asset_desc(), &asset_desc_1);
+        assert_eq!(action.notes.first().unwrap().value().inner(), 5);
+        assert_eq!(bundle.get_actions_by_desc(&asset_desc_1), actions_vec);
+
+        // Checks for the case on non-UTF-8 encoded asset description.
+        let action2_vec = bundle.get_actions_by_base(asset_base_2);
+        assert_eq!(action2_vec.len(), 1);
+
+        let action2 = action2_vec[0];
+        assert_eq!(action2.asset_desc(), &asset_desc_2);
+        assert_eq!(action2.notes.first().unwrap().value().inner(), 10);
+        assert_eq!(bundle.get_actions_by_desc(&asset_desc_2), action2_vec);
     }
 }
 
