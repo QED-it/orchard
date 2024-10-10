@@ -34,6 +34,24 @@ pub fn verify_bundle<FL: OrchardFlavor>(
     );
 }
 
+// Verify an action group
+// - verify the proof
+// - verify the signature on each action
+// - do not verify the binding signature because for some asset, the value balance could be not zero
+pub fn verify_action_group<FL: OrchardFlavor>(
+    bundle: &Bundle<Authorized, i64, FL>,
+    vk: &VerifyingKey,
+    verify_proof: bool,
+) {
+    if verify_proof {
+        assert!(matches!(bundle.verify_proof(vk), Ok(())));
+    }
+    let sighash: [u8; 32] = bundle.commitment().into();
+    for action in bundle.actions() {
+        assert_eq!(action.rk().verify(&sighash, action.authorization()), Ok(()));
+    }
+}
+
 pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
     // Use the tree with a single leaf.
     let cmx: ExtractedNoteCommitment = note.commitment().into();

@@ -915,9 +915,11 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
         })
         .collect::<Result<Vec<(AssetBase, NoteValue)>, BuildError>>()?;
 
-    // Verify that bsk and bvk are consistent.
-    let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
-    assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+    // Verify that bsk and bvk are consistent except for ActionGroup (when timelimit is set)
+    if timelimit.is_none() {
+        let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
+        assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+    }
 
     Ok(NonEmpty::from_vec(actions).map(|actions| {
         (
