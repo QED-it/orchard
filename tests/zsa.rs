@@ -656,6 +656,9 @@ fn swap_order_and_swap_bundle() {
     let user2_native_note1 = create_native_note(&keys2);
     let user2_native_note2 = create_native_note(&keys2);
 
+    // Create matcher keys
+    let matcher_keys = prepare_keys();
+
     // Create Merkle tree with all notes
     let (merkle_paths, anchor) = build_merkle_paths(vec![
         &asset1_note1,
@@ -774,5 +777,20 @@ fn swap_order_and_swap_bundle() {
     )
     .unwrap();
 
-    // 3. Create a SwapBundle from the two previous ActionGroups
+    // 3. Matcher fees action group
+    let action_group_matcher = build_and_verify_action_group(
+        vec![],
+        vec![TestOutputInfo {
+            value: NoteValue::from_raw(10),
+            asset: AssetBase::native(),
+        }],
+        vec![],
+        anchor,
+        0,
+        2,
+        &matcher_keys,
+    )
+    .unwrap();
+
+    // 4. Create a SwapBundle from the three previous ActionGroups
 }
