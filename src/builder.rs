@@ -724,10 +724,9 @@ fn pad_spend(
     } else {
         // For ZSA asset, extends with split_notes.
         // If SpendInfo is none, return an error (no split note are available for this asset)
-        spend.map_or_else(
-            || Err(BuildError::NoSplitNoteAvailable),
-            |s| Ok(s.create_split_spend(&mut rng)),
-        )
+        spend
+            .map(|s| s.create_split_spend(&mut rng))
+            .ok_or(BuildError::NoSplitNoteAvailable)
     }
 }
 
