@@ -171,7 +171,7 @@ impl Display for BuildError {
             BurnNative => f.write_str("Burning is only possible for non-native assets"),
             BurnZero => f.write_str("Burning is not possible for zero values"),
             BurnDuplicateAsset => f.write_str("Duplicate assets are not allowed when burning"),
-            NoSplitNoteAvailable => f.write_str("No split note available for this asset"),
+            NoSplitNoteAvailable => f.write_str("No split note has been provided for this asset"),
         }
     }
 }
@@ -781,7 +781,8 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                         .into_iter()
                         .chain(iter::repeat_with(|| {
                             (
-                                pad_spend(first_spend.as_ref(), asset, &mut rng).unwrap(),
+                                pad_spend(first_spend.as_ref(), asset, &mut rng)
+                                    .unwrap_or_else(|err| panic!("{:?}", err)),
                                 None,
                             )
                         }))
