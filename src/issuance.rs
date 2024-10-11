@@ -647,7 +647,11 @@ mod tests {
         (rng, isk, ik, recipient, sighash)
     }
 
-    fn setup_verify_supply_test_params(
+    /// Sets up test parameters for supply tests.
+    ///
+    /// This function generates two notes with the specified values and asset descriptions,
+    /// and returns the issuance validating key, the asset base, and the issue action.
+    fn supply_test_params(
         note1_value: u64,
         note2_value: u64,
         note1_asset_desc: &[u8],
@@ -682,12 +686,17 @@ mod tests {
         )
     }
 
-    // This function computes the identity point on the Pallas curve and returns an Asset Base with that value.
+    /// This function computes the identity point on the Pallas curve and returns an Asset Base with that value.
     fn identity_point() -> AssetBase {
         let identity_point = (Point::generator() * -Scalar::one()) + Point::generator();
         AssetBase::from_bytes(&identity_point.to_bytes()).unwrap()
     }
 
+    /// Sets up test parameters for identity point tests.
+    ///
+    /// This function generates two notes with the identity point as their asset base,
+    /// and returns the issuance authorizing key, an unauthorized issue bundle containing
+    /// the notes, and a sighash
     fn identity_point_test_params(
         note1_value: u64,
         note2_value: u64,
@@ -720,8 +729,7 @@ mod tests {
 
     #[test]
     fn verify_supply_valid() {
-        let (ik, test_asset, action) =
-            setup_verify_supply_test_params(10, 20, b"Asset 1", None, false);
+        let (ik, test_asset, action) = supply_test_params(10, 20, b"Asset 1", None, false);
 
         let result = action.verify_supply(&ik);
 
@@ -746,8 +754,7 @@ mod tests {
 
     #[test]
     fn verify_supply_finalized() {
-        let (ik, test_asset, action) =
-            setup_verify_supply_test_params(10, 20, b"Asset 1", None, true);
+        let (ik, test_asset, action) = supply_test_params(10, 20, b"Asset 1", None, true);
 
         let result = action.verify_supply(&ik);
 
@@ -762,8 +769,7 @@ mod tests {
 
     #[test]
     fn verify_supply_incorrect_asset_base() {
-        let (ik, _, action) =
-            setup_verify_supply_test_params(10, 20, b"Asset 1", Some(b"Asset 2"), false);
+        let (ik, _, action) = supply_test_params(10, 20, b"Asset 1", Some(b"Asset 2"), false);
 
         assert_eq!(
             action.verify_supply(&ik),
@@ -773,7 +779,7 @@ mod tests {
 
     #[test]
     fn verify_supply_ik_mismatch_asset_base() {
-        let (_, _, action) = setup_verify_supply_test_params(10, 20, b"Asset 1", None, false);
+        let (_, _, action) = supply_test_params(10, 20, b"Asset 1", None, false);
         let (_, _, ik, _, _) = setup_params();
 
         assert_eq!(
