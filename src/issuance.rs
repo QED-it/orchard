@@ -220,7 +220,7 @@ impl<T: IssueAuth> IssueBundle<T> {
         &self.authorization
     }
 
-    /// Find the actions corresponding to `ik` and `asset_desc` in a given `IssueBundle`.
+    /// Find the actions corresponding to the `asset_desc` for a given `IssueBundle`.
     pub fn get_actions_by_desc(&self, asset_desc: &[u8]) -> Vec<&IssueAction> {
         self.actions
             .iter()
