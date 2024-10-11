@@ -80,12 +80,12 @@ impl IssueAction {
     }
 
     /// Returns the asset description for the note being created.
-    pub fn asset_desc(&self) -> &Vec<u8> {
+    pub fn asset_desc(&self) -> &[u8] {
         &self.asset_desc
     }
 
     /// Returns the issued notes.
-    pub fn notes(&self) -> &Vec<Note> {
+    pub fn notes(&self) -> &[Note] {
         &self.notes
     }
 
@@ -211,11 +211,8 @@ impl<T: IssueAuth> IssueBundle<T> {
         &self.actions
     }
     /// Return the notes from all actions for a given `IssueBundle`.
-    pub fn get_all_notes(&self) -> Vec<Note> {
-        self.actions
-            .iter()
-            .flat_map(|action| action.notes.clone().into_iter())
-            .collect()
+    pub fn get_all_notes(&self) -> Vec<&Note> {
+        self.actions.iter().flat_map(|a| a.notes.iter()).collect()
     }
 
     /// Returns the authorization for this action.
@@ -224,18 +221,18 @@ impl<T: IssueAuth> IssueBundle<T> {
     }
 
     /// Find the actions corresponding to `ik` and `asset_desc` in a given `IssueBundle`.
-    pub fn get_actions_by_desc(&self, asset_desc: &Vec<u8>) -> Vec<&IssueAction> {
+    pub fn get_actions_by_desc(&self, asset_desc: &[u8]) -> Vec<&IssueAction> {
         self.actions
             .iter()
-            .filter(|a| a.asset_desc.eq(asset_desc))
+            .filter(|a| a.asset_desc == asset_desc)
             .collect()
     }
 
     /// Find the actions corresponding to an Asset Base `asset` for a given `IssueBundle`.
-    pub fn get_actions_by_base(&self, asset: AssetBase) -> Vec<&IssueAction> {
+    pub fn get_actions_by_asset(&self, asset: &AssetBase) -> Vec<&IssueAction> {
         self.actions
             .iter()
-            .filter(|a| AssetBase::derive(&self.ik, &a.asset_desc).eq(&asset))
+            .filter(|a| AssetBase::derive(&self.ik, &a.asset_desc).eq(asset))
             .collect()
     }
 
@@ -342,7 +339,7 @@ impl IssueBundle<Unauthorized> {
     /// * `WrongAssetDescSize`: If `asset_desc` is empty or longer than 512 bytes.
     pub fn add_recipient(
         &mut self,
-        asset_desc: &Vec<u8>,
+        asset_desc: &[u8],
         recipient: Address,
         value: NoteValue,
         mut rng: impl RngCore,
@@ -374,7 +371,7 @@ impl IssueBundle<Unauthorized> {
             None => {
                 // Insert a new IssueAction.
                 self.actions.push(IssueAction {
-                    asset_desc: asset_desc.clone(),
+                    asset_desc: Vec::from(asset_desc),
                     notes: vec![note],
                     finalize: false,
                 });
@@ -389,7 +386,7 @@ impl IssueBundle<Unauthorized> {
     /// # Panics
     ///
     /// Panics if `asset_desc` is empty or longer than 512 bytes.
-    pub fn finalize_action(&mut self, asset_desc: &Vec<u8>) -> Result<(), Error> {
+    pub fn finalize_action(&mut self, asset_desc: &[u8]) -> Result<(), Error> {
         if !is_asset_desc_of_valid_size(asset_desc) {
             return Err(WrongAssetDescSize);
         }
@@ -653,8 +650,8 @@ mod tests {
     fn setup_verify_supply_test_params(
         note1_value: u64,
         note2_value: u64,
-        note1_asset_desc: &Vec<u8>,
-        note2_asset_desc: Option<&Vec<u8>>, // if None, both notes use the same asset
+        note1_asset_desc: &[u8],
+        note2_asset_desc: Option<&[u8]>, // if None, both notes use the same asset
         finalize: bool,
     ) -> (IssuanceValidatingKey, AssetBase, IssueAction) {
         let (mut rng, _, ik, recipient, _) = setup_params();
@@ -681,7 +678,7 @@ mod tests {
         (
             ik,
             asset,
-            IssueAction::from_parts(note1_asset_desc.clone(), vec![note1, note2], finalize),
+            IssueAction::from_parts(note1_asset_desc.to_vec(), vec![note1, note2], finalize),
         )
     }
 
@@ -724,7 +721,7 @@ mod tests {
     #[test]
     fn verify_supply_valid() {
         let (ik, test_asset, action) =
-            setup_verify_supply_test_params(10, 20, &b"Asset 1".to_vec(), None, false);
+            setup_verify_supply_test_params(10, 20, b"Asset 1", None, false);
 
         let result = action.verify_supply(&ik);
 
@@ -750,7 +747,7 @@ mod tests {
     #[test]
     fn verify_supply_finalized() {
         let (ik, test_asset, action) =
-            setup_verify_supply_test_params(10, 20, &b"Asset 1".to_vec(), None, true);
+            setup_verify_supply_test_params(10, 20, b"Asset 1", None, true);
 
         let result = action.verify_supply(&ik);
 
@@ -765,13 +762,8 @@ mod tests {
 
     #[test]
     fn verify_supply_incorrect_asset_base() {
-        let (ik, _, action) = setup_verify_supply_test_params(
-            10,
-            20,
-            &b"Asset 1".to_vec(),
-            Some(&b"Asset 2".to_vec()),
-            false,
-        );
+        let (ik, _, action) =
+            setup_verify_supply_test_params(10, 20, b"Asset 1", Some(b"Asset 2"), false);
 
         assert_eq!(
             action.verify_supply(&ik),
@@ -781,8 +773,7 @@ mod tests {
 
     #[test]
     fn verify_supply_ik_mismatch_asset_base() {
-        let (_, _, action) =
-            setup_verify_supply_test_params(10, 20, &b"Asset 1".to_vec(), None, false);
+        let (_, _, action) = setup_verify_supply_test_params(10, 20, b"Asset 1", None, false);
         let (_, _, ik, _, _) = setup_params();
 
         assert_eq!(
@@ -795,8 +786,8 @@ mod tests {
     fn issue_bundle_basic() {
         let (rng, _, ik, recipient, _) = setup_params();
 
-        let str = String::from("Halo");
-        let str2 = String::from("Halo2");
+        let str = "Halo".to_string();
+        let str2 = "Halo2".to_string();
 
         assert_eq!(
             IssueBundle::new(
@@ -828,7 +819,7 @@ mod tests {
 
         let (mut bundle, asset) = IssueBundle::new(
             ik,
-            str.as_bytes().to_vec(),
+            str.clone().into_bytes(),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -838,29 +829,19 @@ mod tests {
         .unwrap();
 
         let another_asset = bundle
-            .add_recipient(
-                &str.as_bytes().to_vec(),
-                recipient,
-                NoteValue::from_raw(10),
-                rng,
-            )
+            .add_recipient(&str.into_bytes(), recipient, NoteValue::from_raw(10), rng)
             .unwrap();
         assert_eq!(asset, another_asset);
 
         let third_asset = bundle
-            .add_recipient(
-                &str2.as_bytes().to_vec(),
-                recipient,
-                NoteValue::from_raw(15),
-                rng,
-            )
+            .add_recipient(str2.as_bytes(), recipient, NoteValue::from_raw(15), rng)
             .unwrap();
         assert_ne!(asset, third_asset);
 
         let actions = bundle.actions();
         assert_eq!(actions.len(), 2);
 
-        let actions_vec = bundle.get_actions_by_base(asset);
+        let actions_vec = bundle.get_actions_by_asset(&asset);
         assert_eq!(actions_vec.len(), 1);
         let action = actions_vec[0];
         assert_eq!(action.notes.len(), 2);
@@ -872,7 +853,7 @@ mod tests {
         assert_eq!(action.notes.get(1).unwrap().asset(), asset);
         assert_eq!(action.notes.get(1).unwrap().recipient(), recipient);
 
-        let action2_vec = bundle.get_actions_by_desc(&str2.as_bytes().to_vec());
+        let action2_vec = bundle.get_actions_by_desc(str2.as_bytes());
         assert_eq!(action2_vec.len(), 1);
         let action2 = action2_vec[0];
         assert_eq!(action2.notes.len(), 1);
@@ -896,13 +877,11 @@ mod tests {
         .expect("Should properly add recipient");
 
         bundle
-            .finalize_action(&b"NFT".to_vec())
+            .finalize_action(b"NFT")
             .expect("Should finalize properly");
 
         assert_eq!(
-            bundle
-                .finalize_action(&b"Another NFT".to_vec())
-                .unwrap_err(),
+            bundle.finalize_action(b"Another NFT").unwrap_err(),
             IssueActionNotFound
         );
 
@@ -911,10 +890,7 @@ mod tests {
             WrongAssetDescSize
         );
 
-        assert_eq!(
-            bundle.finalize_action(&b"".to_vec()).unwrap_err(),
-            WrongAssetDescSize
-        );
+        assert_eq!(bundle.finalize_action(b"").unwrap_err(), WrongAssetDescSize);
     }
 
     #[test]
@@ -1002,7 +978,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            AssetBase::derive(bundle.ik(), &b"zsa_asset".to_vec()),
+            AssetBase::derive(bundle.ik(), b"zsa_asset"),
             Rho::from_nf_old(Nullifier::dummy(&mut rng)),
             &mut rng,
         );
@@ -1056,9 +1032,7 @@ mod tests {
         )
         .unwrap();
 
-        bundle
-            .finalize_action(&b"Verify with finalize".to_vec())
-            .unwrap();
+        bundle.finalize_action(b"Verify with finalize").unwrap();
 
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
         let prev_finalized = &mut HashSet::new();
@@ -1068,7 +1042,7 @@ mod tests {
         supply_info.update_finalization_set(prev_finalized);
 
         assert_eq!(prev_finalized.len(), 1);
-        assert!(prev_finalized.contains(&AssetBase::derive(&ik, &b"Verify with finalize".to_vec())));
+        assert!(prev_finalized.contains(&AssetBase::derive(&ik, b"Verify with finalize")));
     }
 
     #[test]
@@ -1157,7 +1131,7 @@ mod tests {
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
         let prev_finalized = &mut HashSet::new();
 
-        let final_type = AssetBase::derive(&ik, &b"already final".to_vec());
+        let final_type = AssetBase::derive(&ik, b"already final");
 
         prev_finalized.insert(final_type);
 
@@ -1250,7 +1224,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            AssetBase::derive(signed.ik(), &b"zsa_asset".to_vec()),
+            AssetBase::derive(signed.ik(), b"zsa_asset"),
             Rho::from_nf_old(Nullifier::dummy(&mut rng)),
             &mut rng,
         );
@@ -1425,7 +1399,7 @@ mod tests {
             .unwrap();
 
         // Checks for the case of UTF-8 encoded asset description.
-        let actions_vec = bundle.get_actions_by_base(asset_base_1);
+        let actions_vec = bundle.get_actions_by_asset(&asset_base_1);
         assert_eq!(actions_vec.len(), 1);
 
         let action = actions_vec[0];
@@ -1434,7 +1408,7 @@ mod tests {
         assert_eq!(bundle.get_actions_by_desc(&asset_desc_1), actions_vec);
 
         // Checks for the case on non-UTF-8 encoded asset description.
-        let action2_vec = bundle.get_actions_by_base(asset_base_2);
+        let action2_vec = bundle.get_actions_by_asset(&asset_base_2);
         assert_eq!(action2_vec.len(), 1);
 
         let action2 = action2_vec[0];

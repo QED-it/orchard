@@ -55,7 +55,7 @@ impl AssetBase {
     ///
     /// Panics if `asset_desc` is empty or greater than `MAX_ASSET_DESCRIPTION_SIZE` or if the derived Asset Base is the identity point.
     #[allow(non_snake_case)]
-    pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &Vec<u8>) -> Self {
+    pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &[u8]) -> Self {
         assert!(
             is_asset_desc_of_valid_size(asset_desc),
             "The asset_desc string is not of valid size"
@@ -116,7 +116,7 @@ impl Hash for AssetBase {
 }
 
 /// Check that `asset_desc` is of valid size.
-pub fn is_asset_desc_of_valid_size(asset_desc: &Vec<u8>) -> bool {
+pub fn is_asset_desc_of_valid_size(asset_desc: &[u8]) -> bool {
     !asset_desc.is_empty() && asset_desc.len() <= MAX_ASSET_DESCRIPTION_SIZE
 }
 
@@ -141,19 +141,19 @@ pub mod testing {
         pub fn arb_asset_base()(
             is_native in prop::bool::ANY,
             isk in arb_issuance_authorizing_key(),
-            str in "[A-Za-z]{255}",
+            asset_desc in prop::collection::vec(any::<u8>(), 1..=511),
         ) -> AssetBase {
             if is_native {
                 AssetBase::native()
             } else {
-                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str.as_bytes().into())
+                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc)
             }
         }
     }
 
     prop_compose! {
         /// Generate the native note type
-        pub fn native_asset_base()(_i in 0..10) -> AssetBase {
+        pub fn native_asset_base()(_i in 0..1) -> AssetBase {
             // TODO: remove _i
             AssetBase::native()
         }
@@ -163,9 +163,9 @@ pub mod testing {
         /// Generate an asset ID
         pub fn arb_zsa_asset_base()(
             isk in arb_issuance_authorizing_key(),
-            str in "[A-Za-z]{255}"
+            asset_desc in prop::collection::vec(any::<u8>(), 1..=511),
         ) -> AssetBase {
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &str.as_bytes().into())
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc)
         }
     }
 
@@ -186,7 +186,7 @@ pub mod testing {
         for tv in test_vectors {
             let calculated_asset_base = AssetBase::derive(
                 &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
-                &tv.description.into(),
+                &tv.description,
             );
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();
 
