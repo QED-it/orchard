@@ -917,6 +917,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
 
     // Verify that bsk and bvk are consistent except for ActionGroup (when timelimit is set)
     if timelimit.is_none() {
+        // TODO update the check to also do it for swap order by adding value balance for each asset
         let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
         assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
     }
