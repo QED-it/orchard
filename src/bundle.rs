@@ -24,6 +24,7 @@ use crate::{
     note::{AssetBase, Note},
     note_encryption::{OrchardDomain, OrchardDomainCommon},
     orchard_flavor::OrchardFlavor,
+    orchard_flavor::OrchardZSA,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -454,6 +455,21 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
             )
         })
     }
+}
+
+/// A swap bundle to be applied to the ledger.
+#[derive(Clone, Debug)]
+pub struct SwapBundle<V> {
+    /// The list of action groups that make up this swap bundle.
+    action_groups: Vec<Bundle<Authorized, V, OrchardZSA>>,
+    /// Orchard-specific transaction-level flags for this swap.
+    flags: Flags,
+    /// The net value moved out of this swap.
+    ///
+    /// This is the sum of Orchard spends minus the sum of Orchard outputs.
+    value_balance: V,
+    /// The binding signature for this swap.
+    binding_signature: redpallas::Signature<Binding>,
 }
 
 pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, FL: 'a + OrchardFlavor>(
