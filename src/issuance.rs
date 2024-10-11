@@ -224,7 +224,7 @@ impl<T: IssueAuth> IssueBundle<T> {
     pub fn get_actions_by_desc(&self, asset_desc: &[u8]) -> Vec<&IssueAction> {
         self.actions
             .iter()
-            .filter(|a| a.asset_desc == asset_desc)
+            .filter(|a| a.asset_desc.eq(asset_desc))
             .collect()
     }
 
