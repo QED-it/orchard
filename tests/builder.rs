@@ -2,7 +2,7 @@ use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
 use orchard::{
     builder::{Builder, BundleType},
-    bundle::{Authorized, Flags},
+    bundle::{ActionGroupAuthorized, Authorized, Flags, SwapBundle},
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
@@ -34,12 +34,35 @@ pub fn verify_bundle<FL: OrchardFlavor>(
     );
 }
 
+pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>) {
+    assert_eq!(vks.len(), swap_bundle.action_groups().len());
+    for (action_group, vk) in swap_bundle.action_groups().iter().zip(vks.iter()) {
+        assert!(matches!(action_group.verify_proof(vk), Ok(())));
+        let action_group_sighash: [u8; 32] = action_group.commitment().into();
+        for action in action_group.actions() {
+            assert_eq!(
+                action
+                    .rk()
+                    .verify(&action_group_sighash, action.authorization()),
+                Ok(())
+            );
+        }
+    }
+
+    let sighash = swap_bundle.commitment().into();
+    let bvk = swap_bundle.binding_validating_key();
+    assert_eq!(
+        bvk.verify(&sighash, swap_bundle.binding_signature()),
+        Ok(())
+    );
+}
+
 // Verify an action group
 // - verify the proof
 // - verify the signature on each action
 // - do not verify the binding signature because for some asset, the value balance could be not zero
 pub fn verify_action_group<FL: OrchardFlavor>(
-    bundle: &Bundle<Authorized, i64, FL>,
+    bundle: &Bundle<ActionGroupAuthorized, i64, FL>,
     vk: &VerifyingKey,
     verify_proof: bool,
 ) {

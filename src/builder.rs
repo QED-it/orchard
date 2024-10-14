@@ -13,6 +13,7 @@ use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 use zcash_note_encryption_zsa::NoteEncryption;
 
 use crate::builder::BuildError::{BurnNative, BurnZero};
+use crate::bundle::ActionGroupAuthorized;
 use crate::{
     action::Action,
     address::Address,
@@ -1060,6 +1061,17 @@ impl InProgressSignatures for PartiallyAuthorized {
     type SpendAuth = MaybeSigned;
 }
 
+/// Marker for a partially-authorized bundle, in the process of being signed.
+#[derive(Debug)]
+pub struct ActionGroupPartiallyAuthorized {
+    bsk: redpallas::SigningKey<Binding>,
+    sighash: [u8; 32],
+}
+
+impl InProgressSignatures for ActionGroupPartiallyAuthorized {
+    type SpendAuth = MaybeSigned;
+}
+
 /// A heisen[`Signature`] for a particular [`Action`].
 ///
 /// [`Signature`]: redpallas::Signature
@@ -1109,6 +1121,35 @@ impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized
     }
 }
 
+impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized>, V, D> {
+    /// Loads the sighash into this bundle, preparing it for signing.
+    ///
+    /// This API ensures that all signatures are created over the same sighash.
+    pub fn prepare_for_action_group<R: RngCore + CryptoRng>(
+        self,
+        mut rng: R,
+        sighash: [u8; 32],
+    ) -> Bundle<InProgress<P, ActionGroupPartiallyAuthorized>, V, D> {
+        self.map_authorization(
+            &mut rng,
+            |rng, _, SigningMetadata { dummy_ask, parts }| {
+                // We can create signatures for dummy spends immediately.
+                dummy_ask
+                    .map(|ask| ask.randomize(&parts.alpha).sign(rng, &sighash))
+                    .map(MaybeSigned::Signature)
+                    .unwrap_or(MaybeSigned::SigningMetadata(parts))
+            },
+            |_rng, auth| InProgress {
+                proof: auth.proof,
+                sigs: ActionGroupPartiallyAuthorized {
+                    bsk: auth.sigs.bsk,
+                    sighash,
+                },
+            },
+        )
+    }
+}
+
 impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
     /// Applies signatures to this bundle, in order to authorize it.
     ///
@@ -1126,6 +1167,47 @@ impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
                 partial.sign(&mut rng, ask)
             })
             .finalize()
+    }
+}
+
+impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
+    /// Applies signatures to this action group, in order to authorize it.
+    pub fn apply_signatures_for_action_group<R: RngCore + CryptoRng>(
+        self,
+        mut rng: R,
+        sighash: [u8; 32],
+        signing_keys: &[SpendAuthorizingKey],
+    ) -> Result<Bundle<ActionGroupAuthorized, V, D>, BuildError> {
+        signing_keys
+            .iter()
+            .fold(
+                self.prepare_for_action_group(&mut rng, sighash),
+                |partial, ask| partial.sign(&mut rng, ask),
+            )
+            .finalize()
+    }
+}
+
+impl<P: fmt::Debug, V, D: OrchardDomainCommon>
+    Bundle<InProgress<P, ActionGroupPartiallyAuthorized>, V, D>
+{
+    /// Signs this action group with the given [`SpendAuthorizingKey`].
+    ///
+    /// This will apply signatures for all notes controlled by this spending key.
+    pub fn sign<R: RngCore + CryptoRng>(self, mut rng: R, ask: &SpendAuthorizingKey) -> Self {
+        let expected_ak = ask.into();
+        self.map_authorization(
+            &mut rng,
+            |rng, partial, maybe| match maybe {
+                MaybeSigned::SigningMetadata(parts) if parts.ak == expected_ak => {
+                    MaybeSigned::Signature(
+                        ask.randomize(&parts.alpha).sign(rng, &partial.sigs.sighash),
+                    )
+                }
+                s => s,
+            },
+            |_, partial| partial,
+        )
     }
 }
 
@@ -1204,6 +1286,24 @@ impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, PartiallyAuthorized>, V
                 Ok(Authorized::from_parts(
                     partial.proof,
                     partial.sigs.binding_signature,
+                ))
+            },
+        )
+    }
+}
+
+impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, D> {
+    /// Finalizes this bundle, enabling it to be included in a transaction.
+    ///
+    /// Returns an error if any signatures are missing.
+    pub fn finalize(self) -> Result<Bundle<ActionGroupAuthorized, V, D>, BuildError> {
+        self.try_map_authorization(
+            &mut (),
+            |_, _, maybe| maybe.finalize(),
+            |_, partial| {
+                Ok(ActionGroupAuthorized::from_parts(
+                    partial.proof,
+                    partial.sigs.bsk,
                 ))
             },
         )
