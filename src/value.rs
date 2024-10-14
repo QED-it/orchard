@@ -328,6 +328,12 @@ impl Add<&ValueCommitTrapdoor> for ValueCommitTrapdoor {
     }
 }
 
+impl Sum for ValueCommitTrapdoor {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(ValueCommitTrapdoor::zero(), |acc, cv| acc + &cv)
+    }
+}
+
 impl<'a> Sum<&'a ValueCommitTrapdoor> for ValueCommitTrapdoor {
     fn sum<I: Iterator<Item = &'a ValueCommitTrapdoor>>(iter: I) -> Self {
         iter.fold(ValueCommitTrapdoor::zero(), |acc, cv| acc + cv)
@@ -348,6 +354,10 @@ impl ValueCommitTrapdoor {
     pub(crate) fn into_bsk(self) -> redpallas::SigningKey<Binding> {
         // TODO: impl From<pallas::Scalar> for redpallas::SigningKey.
         self.0.to_repr().try_into().unwrap()
+    }
+
+    pub(crate) fn from_bsk(bsk: redpallas::SigningKey<Binding>) -> Self {
+        ValueCommitTrapdoor(pallas::Scalar::from_repr(bsk.into()).unwrap())
     }
 }
 
