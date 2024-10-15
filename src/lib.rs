@@ -20,12 +20,14 @@ mod action;
 mod address;
 pub mod builder;
 pub mod bundle;
+
 pub mod circuit;
 mod constants;
 pub mod issuance;
 pub mod keys;
 pub mod note;
 pub mod supply_info;
+pub mod swap_bundle;
 
 pub mod note_encryption;
 

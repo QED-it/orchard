@@ -2,12 +2,13 @@ use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
 use orchard::{
     builder::{Builder, BundleType},
-    bundle::{ActionGroupAuthorized, Authorized, Flags, SwapBundle},
+    bundle::{ActionGroupAuthorized, Authorized, Flags},
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
     note_encryption::OrchardDomain,
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+    swap_bundle::SwapBundle,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
