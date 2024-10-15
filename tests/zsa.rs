@@ -756,7 +756,7 @@ fn swap_order_and_swap_bundle() {
                 asset: asset2_note1.asset(),
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(95),
+                value: NoteValue::from_raw(195),
                 asset: AssetBase::native(),
             },
         ],
@@ -786,7 +786,7 @@ fn swap_order_and_swap_bundle() {
                 asset: asset1_note1.asset(),
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(95),
+                value: NoteValue::from_raw(195),
                 asset: AssetBase::native(),
             },
         ],

@@ -542,7 +542,7 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
 }
 
 impl<V> SwapBundle<V> {
-    /// Returns the list of action groups that make up this swapbundle.
+    /// Returns the list of action groups that make up this swap bundle.
     pub fn action_groups(&self) -> &Vec<Bundle<ActionGroupAuthorized, V, OrchardZSA>> {
         &self.action_groups
     }
