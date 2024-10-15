@@ -655,8 +655,8 @@ fn swap_order_and_swap_bundle() {
     // Create notes for user1
     let keys1 = prepare_keys();
 
-    let asset_descr1 = "zsa_asset1";
-    let (asset1_note1, asset1_note2) = issue_zsa_notes(asset_descr1, &keys1);
+    let asset_descr1 = b"zsa_asset1".to_vec();
+    let (asset1_note1, asset1_note2) = issue_zsa_notes(&asset_descr1, &keys1);
 
     let user1_native_note1 = create_native_note(&keys1);
     let user1_native_note2 = create_native_note(&keys1);
@@ -664,8 +664,8 @@ fn swap_order_and_swap_bundle() {
     // Create notes for user2
     let keys2 = prepare_keys();
 
-    let asset_descr2 = "zsa_asset2";
-    let (asset2_note1, asset2_note2) = issue_zsa_notes(asset_descr2, &keys2);
+    let asset_descr2 = b"zsa_asset2".to_vec();
+    let (asset2_note1, asset2_note2) = issue_zsa_notes(&asset_descr2, &keys2);
 
     let user2_native_note1 = create_native_note(&keys2);
     let user2_native_note2 = create_native_note(&keys2);
