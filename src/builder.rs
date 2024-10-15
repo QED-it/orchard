@@ -807,6 +807,30 @@ impl Builder {
         )
     }
 
+    /// Builds an action group containing the given spent notes and outputs.
+    ///
+    /// The returned action group will have no proof or signatures; these can be applied with
+    /// [`ActionGroup::create_proof`] and [`ActionGroup::apply_signatures`] respectively.
+    pub fn build_action_group<V: TryFrom<i64>>(
+        self,
+        rng: impl RngCore,
+        timelimit: u32,
+    ) -> Result<ActionGroup<InProgress<Unproven<OrchardZSA>, Unauthorized>, V>, BuildError> {
+        let action_group = bundle(
+            rng,
+            self.anchor,
+            self.timelimit,
+            self.bundle_type,
+            self.spends,
+            self.outputs,
+            self.split_notes,
+            self.burn,
+        )?
+        .unwrap()
+        .0;
+        Ok(ActionGroup::from_parts(action_group, timelimit, None))
+    }
+
     /// Builds a bundle containing the given spent notes and outputs along with their
     /// metadata, for inclusion in a PCZT.
     pub fn build_for_pczt<P: OrchardPrimitives>(
@@ -1395,12 +1419,19 @@ impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, P> {
 
 impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
     /// Applies signatures to this action group, in order to authorize it.
+    #[allow(clippy::type_complexity)]
     pub fn apply_signatures_for_action_group<R: RngCore + CryptoRng>(
         self,
         mut rng: R,
         sighash: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
-    ) -> Result<Bundle<ActionGroupAuthorized, V, D>, BuildError> {
+    ) -> Result<
+        (
+            redpallas::SigningKey<Binding>,
+            Bundle<ActionGroupAuthorized, V, D>,
+        ),
+        BuildError,
+    > {
         signing_keys
             .iter()
             .fold(
@@ -1519,17 +1550,23 @@ impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, ActionGroupPartiallyAut
     /// Finalizes this bundle, enabling it to be included in a transaction.
     ///
     /// Returns an error if any signatures are missing.
-    pub fn finalize(self) -> Result<Bundle<ActionGroupAuthorized, V, D>, BuildError> {
+    #[allow(clippy::type_complexity)]
+    pub fn finalize(
+        self,
+    ) -> Result<
+        (
+            redpallas::SigningKey<Binding>,
+            Bundle<ActionGroupAuthorized, V, D>,
+        ),
+        BuildError,
+    > {
+        let bsk = self.authorization().sigs.bsk;
         self.try_map_authorization(
             &mut (),
             |_, _, maybe| maybe.finalize(),
-            |_, partial| {
-                Ok(ActionGroupAuthorized::from_parts(
-                    partial.proof,
-                    partial.sigs.bsk,
-                ))
-            },
+            |_, partial| Ok(ActionGroupAuthorized::from_parts(partial.proof)),
         )
+        .map(|bundle| (bsk, bundle))
     }
 }
 
