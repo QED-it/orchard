@@ -350,7 +350,7 @@ fn build_and_verify_action_group(
         build_and_sign_action_group(builder, rng, keys.pk(), keys.sk())
     };
 
-    verify_action_group(&shielded_bundle, &keys.vk, true);
+    verify_action_group(&shielded_bundle, &keys.vk);
     assert_eq!(shielded_bundle.actions().len(), expected_num_actions);
     // TODO
     // assert!(verify_unique_spent_nullifiers(&shielded_bundle));
@@ -729,8 +729,15 @@ fn swap_order_and_swap_bundle() {
         merkle_path: merkle_path_user2_native_note2,
     };
 
-    // --------------------------- Tests -----------------------------------------
+    // --------------------------- Swap description--------------------------------
+    // User1:
+    // - spends 10 asset1
+    // - receives 20 asset2
+    // User2:
+    // - spends 20 asset2
+    // - receives 10 asset1
 
+    // --------------------------- Tests -----------------------------------------
     // 1. Create and verify ActionGroup for user1
     let action_group1 = build_and_verify_action_group(
         vec![
@@ -741,11 +748,11 @@ fn swap_order_and_swap_bundle() {
         ],
         vec![
             TestOutputInfo {
-                value: NoteValue::from_raw(10),
+                value: NoteValue::from_raw(32),
                 asset: asset1_note1.asset(),
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(5),
+                value: NoteValue::from_raw(20),
                 asset: asset2_note1.asset(),
             },
             TestOutputInfo {
@@ -771,11 +778,11 @@ fn swap_order_and_swap_bundle() {
         ],
         vec![
             TestOutputInfo {
-                value: NoteValue::from_raw(10),
+                value: NoteValue::from_raw(22),
                 asset: asset2_note1.asset(),
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(5),
+                value: NoteValue::from_raw(10),
                 asset: asset1_note1.asset(),
             },
             TestOutputInfo {

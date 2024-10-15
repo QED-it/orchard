@@ -527,7 +527,7 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
             .map(|a| ValueCommitTrapdoor::from_bsk(a.authorization().bsk))
             .sum::<ValueCommitTrapdoor>()
             .into_bsk();
-        let sighash = BundleCommitment(hash_action_groups_txid_data(
+        let sighash: [u8; 32] = BundleCommitment(hash_action_groups_txid_data(
             action_groups.iter().collect(),
             value_balance,
         ))

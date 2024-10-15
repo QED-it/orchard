@@ -34,22 +34,16 @@ pub fn verify_bundle<FL: OrchardFlavor>(
     );
 }
 
+// Verify a swap bundle
+// - verify each action group (its proof and for each action, the spend authorization signature)
+// - verify the binding signature
 pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>) {
     assert_eq!(vks.len(), swap_bundle.action_groups().len());
     for (action_group, vk) in swap_bundle.action_groups().iter().zip(vks.iter()) {
-        assert!(matches!(action_group.verify_proof(vk), Ok(())));
-        let action_group_sighash: [u8; 32] = action_group.commitment().into();
-        for action in action_group.actions() {
-            assert_eq!(
-                action
-                    .rk()
-                    .verify(&action_group_sighash, action.authorization()),
-                Ok(())
-            );
-        }
+        verify_action_group(action_group, vk);
     }
 
-    let sighash = swap_bundle.commitment().into();
+    let sighash: [u8; 32] = swap_bundle.commitment().into();
     let bvk = swap_bundle.binding_validating_key();
     assert_eq!(
         bvk.verify(&sighash, swap_bundle.binding_signature()),
@@ -60,15 +54,12 @@ pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>
 // Verify an action group
 // - verify the proof
 // - verify the signature on each action
-// - do not verify the binding signature because for some asset, the value balance could be not zero
 pub fn verify_action_group<FL: OrchardFlavor>(
     bundle: &Bundle<ActionGroupAuthorized, i64, FL>,
     vk: &VerifyingKey,
-    verify_proof: bool,
 ) {
-    if verify_proof {
-        assert!(matches!(bundle.verify_proof(vk), Ok(())));
-    }
+    assert!(matches!(bundle.verify_proof(vk), Ok(())));
+
     let sighash: [u8; 32] = bundle.commitment().into();
     for action in bundle.actions() {
         assert_eq!(action.rk().verify(&sighash, action.authorization()), Ok(()));
