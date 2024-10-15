@@ -12,7 +12,7 @@ use orchard::{
     note::{AssetBase, ExtractedNoteCommitment},
     note_encryption::OrchardDomain,
     orchard_flavor::OrchardZSA,
-    swap_bundle::SwapBundle,
+    swap_bundle::{ActionGroup, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Address, Anchor, Bundle, Note,
@@ -100,15 +100,16 @@ fn build_and_sign_bundle(
 
 fn build_and_sign_action_group(
     builder: Builder,
+    timelimit: u32,
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
-) -> Bundle<ActionGroupAuthorized, i64, OrchardZSA> {
-    let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
+) -> ActionGroup<ActionGroupAuthorized, i64> {
+    let unauthorized = builder.build_action_group(&mut rng, timelimit).unwrap();
     let sighash = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
     proven
-        .apply_signatures_for_action_group(rng, sighash, &[SpendAuthorizingKey::from(sk)])
+        .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(sk)])
         .unwrap()
 }
 
@@ -326,9 +327,9 @@ fn build_and_verify_action_group(
     timelimit: u32,
     expected_num_actions: usize,
     keys: &Keychain,
-) -> Result<Bundle<ActionGroupAuthorized, i64, OrchardZSA>, String> {
+) -> Result<ActionGroup<ActionGroupAuthorized, i64>, String> {
     let rng = OsRng;
-    let shielded_bundle: Bundle<_, i64, OrchardZSA> = {
+    let shielded_bundle: ActionGroup<_, i64> = {
         let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor, Some(timelimit));
 
         spends
@@ -349,11 +350,14 @@ fn build_and_verify_action_group(
                 builder.add_split_note(keys.fvk().clone(), spend.note, spend.merkle_path().clone())
             })
             .map_err(|err| err.to_string())?;
-        build_and_sign_action_group(builder, rng, keys.pk(), keys.sk())
+        build_and_sign_action_group(builder, timelimit, rng, keys.pk(), keys.sk())
     };
 
     verify_action_group(&shielded_bundle, &keys.vk);
-    assert_eq!(shielded_bundle.actions().len(), expected_num_actions);
+    assert_eq!(
+        shielded_bundle.action_group().actions().len(),
+        expected_num_actions
+    );
     // TODO
     // assert!(verify_unique_spent_nullifiers(&shielded_bundle));
     Ok(shielded_bundle)

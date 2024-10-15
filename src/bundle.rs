@@ -16,9 +16,7 @@ use zcash_note_encryption_zsa::{try_note_decryption, try_output_recovery_with_ov
 use crate::{
     action::Action,
     address::Address,
-    bundle::commitments::{
-        hash_action_groups_txid_data, hash_bundle_auth_data, hash_bundle_txid_data,
-    },
+    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     circuit::{Instance, Proof, VerifyingKey},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
@@ -483,12 +481,7 @@ impl<A: Authorization, V: Copy + Into<i64>, FL: OrchardFlavor> Bundle<A, V, FL> 
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
     pub fn commitment(&self) -> BundleCommitment {
-        match self.timelimit {
-            Some(_) => {
-                BundleCommitment(hash_action_groups_txid_data(vec![self], self.value_balance))
-            }
-            None => BundleCommitment(hash_bundle_txid_data(self)),
-        }
+        BundleCommitment(hash_bundle_txid_data(self))
     }
 
     /// Returns the transaction binding validating key for this bundle.
@@ -551,7 +544,6 @@ impl<V, D: OrchardDomainCommon> Bundle<Authorized, V, D> {
 #[derive(Debug, Clone)]
 pub struct ActionGroupAuthorized {
     proof: Proof,
-    bsk: redpallas::SigningKey<Binding>,
 }
 
 impl Authorization for ActionGroupAuthorized {
@@ -560,18 +552,13 @@ impl Authorization for ActionGroupAuthorized {
 
 impl ActionGroupAuthorized {
     /// Constructs the authorizing data for a bundle of actions from its constituent parts.
-    pub fn from_parts(proof: Proof, bsk: redpallas::SigningKey<Binding>) -> Self {
-        ActionGroupAuthorized { proof, bsk }
+    pub fn from_parts(proof: Proof) -> Self {
+        ActionGroupAuthorized { proof }
     }
 
     /// Return the proof component of the authorizing data.
     pub fn proof(&self) -> &Proof {
         &self.proof
-    }
-
-    /// Return the binding signature key of the authorizing data.
-    pub fn bsk(&self) -> redpallas::SigningKey<Binding> {
-        self.bsk
     }
 }
 

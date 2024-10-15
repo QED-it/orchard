@@ -8,7 +8,7 @@ use orchard::{
     note::{AssetBase, ExtractedNoteCommitment},
     note_encryption::OrchardDomain,
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
-    swap_bundle::SwapBundle,
+    swap_bundle::{ActionGroup, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
@@ -55,14 +55,15 @@ pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>
 // Verify an action group
 // - verify the proof
 // - verify the signature on each action
-pub fn verify_action_group<FL: OrchardFlavor>(
-    bundle: &Bundle<ActionGroupAuthorized, i64, FL>,
+pub fn verify_action_group(
+    action_group: &ActionGroup<ActionGroupAuthorized, i64>,
     vk: &VerifyingKey,
 ) {
-    assert!(matches!(bundle.verify_proof(vk), Ok(())));
+    let action_group_bundle = action_group.action_group();
+    assert!(matches!(action_group_bundle.verify_proof(vk), Ok(())));
 
-    let sighash: [u8; 32] = bundle.commitment().into();
-    for action in bundle.actions() {
+    let sighash: [u8; 32] = action_group.commitment().into();
+    for action in action_group_bundle.actions() {
         assert_eq!(action.rk().verify(&sighash, action.authorization()), Ok(()));
     }
 }
