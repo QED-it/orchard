@@ -151,8 +151,8 @@ pub enum BuildError {
     BurnDuplicateAsset,
     /// There is no available split note for this asset.
     NoSplitNoteAvailable,
-    /// Timelimit is set (thus it is an ActionGroup builder) but burn is not empty.
-    TimelimitSetAndBurnNotEmpty,
+    /// Burn is not empty, but we are building an action group.
+    BurnNotEmptyInActionGroup,
 }
 
 impl Display for BuildError {
@@ -176,9 +176,9 @@ impl Display for BuildError {
             BurnZero => f.write_str("Burning is not possible for zero values"),
             BurnDuplicateAsset => f.write_str("Duplicate assets are not allowed when burning"),
             NoSplitNoteAvailable => f.write_str("No split note has been provided for this asset"),
-            TimelimitSetAndBurnNotEmpty => f.write_str(
-                "Timelimit is set (thus it is an ActionGroup builder) but burn is not empty",
-            ),
+            BurnNotEmptyInActionGroup => {
+                f.write_str("Burn is not empty, but we are building an action group")
+            }
         }
     }
 }
@@ -525,13 +525,11 @@ pub struct Builder {
     burn: HashMap<AssetBase, NoteValue>,
     bundle_type: BundleType,
     anchor: Anchor,
-    // When timelimit is set, the Builder will build an ActionGroup (burn must be empty)
-    timelimit: Option<u32>,
 }
 
 impl Builder {
     /// Constructs a new empty builder for an Orchard bundle.
-    pub fn new(bundle_type: BundleType, anchor: Anchor, timelimit: Option<u32>) -> Self {
+    pub fn new(bundle_type: BundleType, anchor: Anchor) -> Self {
         Builder {
             spends: vec![],
             outputs: vec![],
@@ -539,7 +537,6 @@ impl Builder {
             burn: HashMap::new(),
             bundle_type,
             anchor,
-            timelimit,
         }
     }
 
@@ -684,12 +681,12 @@ impl Builder {
         bundle(
             rng,
             self.anchor,
-            self.timelimit,
             self.bundle_type,
             self.spends,
             self.outputs,
             self.split_notes,
             self.burn,
+            true,
         )
     }
 
@@ -702,15 +699,18 @@ impl Builder {
         rng: impl RngCore,
         timelimit: u32,
     ) -> Result<ActionGroup<InProgress<Unproven<OrchardZSA>, Unauthorized>, V>, BuildError> {
+        if !self.burn.is_empty() {
+            return Err(BuildError::BurnNotEmptyInActionGroup);
+        }
         let action_group = bundle(
             rng,
             self.anchor,
-            self.timelimit,
             self.bundle_type,
             self.spends,
             self.outputs,
             self.split_notes,
             self.burn,
+            false,
         )?
         .unwrap()
         .0;
@@ -794,16 +794,13 @@ fn pad_spend(
 pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     mut rng: impl RngCore,
     anchor: Anchor,
-    timelimit: Option<u32>,
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
     split_notes: HashMap<AssetBase, SpendInfo>,
     burn: HashMap<AssetBase, NoteValue>,
+    check_bsk_bvk: bool,
 ) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
-    if timelimit.is_some() && !burn.is_empty() {
-        return Err(BuildError::TimelimitSetAndBurnNotEmpty);
-    }
     let flags = bundle_type.flags();
 
     let num_requested_spends = spends.len();
@@ -941,9 +938,9 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
         })
         .collect::<Result<Vec<(AssetBase, NoteValue)>, BuildError>>()?;
 
-    // Verify that bsk and bvk are consistent except for ActionGroup (when timelimit is set)
-    if timelimit.is_none() {
-        // TODO update the check to also do it for swap order by adding value balance for each asset
+    if check_bsk_bvk {
+        // Verify that bsk and bvk are consistent
+        // (they are not consistent in ActionGroup creation)
         let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
         assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
     }
@@ -956,7 +953,6 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                 result_value_balance,
                 burn,
                 anchor,
-                timelimit,
                 InProgress {
                     proof: Unproven { circuits },
                     sigs: Unauthorized { bsk },
@@ -1431,7 +1427,7 @@ pub mod testing {
             mut self,
         ) -> Bundle<Authorized, V, FL> {
             let fvk = FullViewingKey::from(&self.sk);
-            let mut builder = Builder::new(BundleType::DEFAULT_ZSA, self.anchor, None);
+            let mut builder = Builder::new(BundleType::DEFAULT_ZSA, self.anchor);
 
             for (note, path) in self.notes.into_iter() {
                 builder.add_spend(fvk.clone(), note, path).unwrap();
@@ -1565,7 +1561,6 @@ mod tests {
         let mut builder = Builder::new(
             BundleType::DEFAULT_VANILLA,
             EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
-            None,
         );
 
         builder

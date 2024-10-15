@@ -236,7 +236,7 @@ fn create_native_note(keys: &Keychain) -> Note {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
-        let mut builder = Builder::new(BundleType::Coinbase, anchor, None);
+        let mut builder = Builder::new(BundleType::Coinbase, anchor);
         assert_eq!(
             builder.add_output(
                 None,
@@ -291,7 +291,7 @@ fn build_and_verify_bundle(
 ) -> Result<(), String> {
     let rng = OsRng;
     let shielded_bundle: Bundle<_, i64, OrchardZSA> = {
-        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor, None);
+        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
 
         spends
             .iter()
@@ -330,7 +330,7 @@ fn build_and_verify_action_group(
 ) -> Result<ActionGroup<ActionGroupAuthorized, i64>, String> {
     let rng = OsRng;
     let shielded_bundle: ActionGroup<_, i64> = {
-        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor, Some(timelimit));
+        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
 
         spends
             .iter()
