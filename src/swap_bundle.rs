@@ -1,21 +1,21 @@
 //! Structs related to swap bundles.
 
 use crate::{
-    bundle::commitments::hash_action_groups_txid_data,
-    bundle::{derive_bvk, Bundle, BundleCommitment},
+    builder::{BuildError, InProgress, InProgressSignatures, Unauthorized, Unproven},
+    bundle::{
+        commitments::hash_action_groups_txid_data, derive_bvk, Authorization, Bundle,
+        BundleCommitment,
+    },
+    circuit::{ProvingKey, VerifyingKey},
+    keys::SpendAuthorizingKey,
     note::AssetBase,
+    note_encryption::OrchardDomainCommon,
     orchard_flavor::OrchardZSA,
-    primitives::redpallas::{self, Binding},
+    primitives::redpallas::{self, Binding, SpendAuth},
     value::{NoteValue, ValueCommitTrapdoor},
     Proof,
 };
 
-use crate::builder::{BuildError, InProgress, InProgressSignatures, Unauthorized, Unproven};
-use crate::bundle::Authorization;
-use crate::circuit::{ProvingKey, VerifyingKey};
-use crate::keys::SpendAuthorizingKey;
-use crate::note_encryption::OrchardDomainCommon;
-use crate::primitives::redpallas::SpendAuth;
 use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
 
 /// An action group.
@@ -57,8 +57,13 @@ impl<A: Authorization, V> ActionGroup<A, V> {
         self.timelimit
     }
 
-    /// TODO
-    pub fn remove_bsk(&mut self) {
+    /// Returns the action group's binding signature key.
+    pub fn bsk(&self) -> Option<&redpallas::SigningKey<Binding>> {
+        self.bsk.as_ref()
+    }
+
+    /// Remove bsk from this action group
+    fn remove_bsk(&mut self) {
         self.bsk = None;
     }
 }
@@ -104,7 +109,7 @@ impl<V> ActionGroup<InProgress<Proof, Unauthorized>, V> {
 }
 
 impl<A: Authorization, V: Copy + Into<i64>> ActionGroup<A, V> {
-    /// Computes a commitment to the effects of this bundle, suitable for inclusion within
+    /// Computes a commitment to the effects of this action group, suitable for inclusion within
     /// a transaction ID.
     pub fn commitment(&self) -> BundleCommitment {
         BundleCommitment(hash_action_groups_txid_data(
@@ -128,10 +133,10 @@ pub struct SwapBundle<V> {
 }
 
 impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
-    /// Constructs a `Bundle` from its constituent parts.
+    /// Constructs a `SwapBundle` from its action groups.
     pub fn new<R: RngCore + CryptoRng>(
         rng: R,
-        action_groups: Vec<ActionGroup<ActionGroupAuthorized, V>>,
+        mut action_groups: Vec<ActionGroup<ActionGroupAuthorized, V>>,
     ) -> Self {
         let value_balance = action_groups
             .iter()
@@ -148,7 +153,7 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
         ))
         .into();
         let binding_signature = bsk.sign(rng, &sighash);
-        // TODO Remove bsk for each action_group
+        action_groups.iter_mut().for_each(|ag| ag.remove_bsk());
         SwapBundle {
             action_groups,
             value_balance,

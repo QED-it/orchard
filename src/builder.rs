@@ -161,7 +161,7 @@ pub enum BuildError {
     BurnDuplicateAsset,
     /// There is no available split note for this asset.
     NoSplitNoteAvailable,
-    /// Burn is not empty, but we are building an action group.
+    /// Burning is not allowed in an ActionGroup.
     BurnNotEmptyInActionGroup,
 }
 
@@ -187,9 +187,7 @@ impl fmt::Display for BuildError {
             BurnZero => f.write_str("Burning is not possible for zero values"),
             BurnDuplicateAsset => f.write_str("Duplicate assets are not allowed when burning"),
             NoSplitNoteAvailable => f.write_str("No split note has been provided for this asset"),
-            BurnNotEmptyInActionGroup => {
-                f.write_str("Burn is not empty, but we are building an action group")
-            }
+            BurnNotEmptyInActionGroup => f.write_str("Burning is not possible for action group"),
         }
     }
 }
@@ -1298,7 +1296,7 @@ impl InProgressSignatures for PartiallyAuthorized {
     type SpendAuth = MaybeSigned;
 }
 
-/// Marker for a partially-authorized bundle, in the process of being signed.
+/// Marker for a partially-authorized action group, in the process of being signed.
 #[derive(Debug)]
 pub struct ActionGroupPartiallyAuthorized {
     bsk: redpallas::SigningKey<Binding>,
@@ -1368,7 +1366,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
 }
 
 impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized>, V, D> {
-    /// Loads the sighash into this bundle, preparing it for signing.
+    /// Loads the sighash into this action group, preparing it for signing.
     ///
     /// This API ensures that all signatures are created over the same sighash.
     pub fn prepare_for_action_group<R: RngCore + CryptoRng>(
@@ -1546,7 +1544,7 @@ impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, PartiallyAuthorized>, V, 
 }
 
 impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, D> {
-    /// Finalizes this bundle, enabling it to be included in a transaction.
+    /// Finalizes this action group.
     ///
     /// Returns an error if any signatures are missing.
     #[allow(clippy::type_complexity)]
