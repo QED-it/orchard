@@ -1,13 +1,14 @@
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use orchard::{
     builder::{Builder, BundleType},
-    bundle::{ActionGroupAuthorized, Authorized, Flags},
+    bundle::{Authorized, Flags},
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     swap_bundle::SwapBundle,
     primitives::{OrchardDomain, OrchardPrimitives},
+    swap_bundle::{ActionGroup, ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,

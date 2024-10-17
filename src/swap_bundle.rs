@@ -2,7 +2,7 @@
 
 use crate::{
     bundle::commitments::hash_action_groups_txid_data,
-    bundle::{derive_bvk, ActionGroupAuthorized, Bundle, BundleCommitment},
+    bundle::{derive_bvk, Bundle, BundleCommitment},
     note::AssetBase,
     orchard_flavor::OrchardZSA,
     primitives::redpallas::{self, Binding},
@@ -12,8 +12,10 @@ use crate::{
 
 use crate::builder::{BuildError, InProgress, InProgressSignatures, Unauthorized, Unproven};
 use crate::bundle::Authorization;
-use crate::circuit::ProvingKey;
+use crate::circuit::{ProvingKey, VerifyingKey};
 use crate::keys::SpendAuthorizingKey;
+use crate::note_encryption::OrchardDomainCommon;
+use crate::primitives::redpallas::SpendAuth;
 use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
 
 /// An action group.
@@ -152,6 +154,37 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
             value_balance,
             binding_signature,
         }
+    }
+}
+
+/// Authorizing data for an action group, ready to be sent to the matcher.
+#[derive(Debug, Clone)]
+pub struct ActionGroupAuthorized {
+    proof: Proof,
+}
+
+impl Authorization for ActionGroupAuthorized {
+    type SpendAuth = redpallas::Signature<SpendAuth>;
+}
+
+impl ActionGroupAuthorized {
+    /// Constructs the authorizing data for a bundle of actions from its constituent parts.
+    pub fn from_parts(proof: Proof) -> Self {
+        ActionGroupAuthorized { proof }
+    }
+
+    /// Return the proof component of the authorizing data.
+    pub fn proof(&self) -> &Proof {
+        &self.proof
+    }
+}
+
+impl<V, D: OrchardDomainCommon> Bundle<ActionGroupAuthorized, V, D> {
+    /// Verifies the proof for this bundle.
+    pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
+        self.authorization()
+            .proof()
+            .verify(vk, &self.to_instances())
     }
 }
 
