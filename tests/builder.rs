@@ -1,5 +1,3 @@
-use bridgetree::BridgeTree;
-use incrementalmerkletree::Hashable;
 use orchard::{
     builder::{Builder, BundleType},
     bundle::{Authorized, Flags},
@@ -8,10 +6,14 @@ use orchard::{
     note::{AssetBase, ExtractedNoteCommitment},
     note_encryption::OrchardDomain,
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+    swap_bundle::{ActionGroup, ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
 };
+
+use bridgetree::BridgeTree;
+use incrementalmerkletree::Hashable;
 use rand::rngs::OsRng;
 use zcash_note_encryption_zsa::try_note_decryption;
 
@@ -32,6 +34,41 @@ pub fn verify_bundle<FL: OrchardFlavor>(
         bvk.verify(&sighash, bundle.authorization().binding_signature()),
         Ok(())
     );
+}
+
+// Verify a swap bundle
+// - verify each action group (its proof and for each action, the spend authorization signature)
+// - verify the binding signature
+pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>) {
+    assert_eq!(vks.len(), swap_bundle.action_groups().len());
+    for (action_group, vk) in swap_bundle.action_groups().iter().zip(vks.iter()) {
+        verify_action_group(action_group, vk);
+        // Verify that bsk is None
+        assert!(action_group.bsk().is_none());
+    }
+
+    let sighash: [u8; 32] = swap_bundle.commitment().into();
+    let bvk = swap_bundle.binding_validating_key();
+    assert_eq!(
+        bvk.verify(&sighash, swap_bundle.binding_signature()),
+        Ok(())
+    );
+}
+
+// Verify an action group
+// - verify the proof
+// - verify the signature on each action
+pub fn verify_action_group(
+    action_group: &ActionGroup<ActionGroupAuthorized, i64>,
+    vk: &VerifyingKey,
+) {
+    let action_group_bundle = action_group.action_group();
+    assert!(matches!(action_group_bundle.verify_proof(vk), Ok(())));
+
+    let sighash: [u8; 32] = action_group.commitment().into();
+    for action in action_group_bundle.actions() {
+        assert_eq!(action.rk().verify(&sighash, action.authorization()), Ok(()));
+    }
 }
 
 pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
