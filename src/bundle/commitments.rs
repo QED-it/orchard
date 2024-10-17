@@ -108,22 +108,7 @@ pub(crate) fn hash_bundle_txid_data<
     h.finalize()
 }
 
-/// TODO update description
-/// Write disjoint parts of each ActionGroup as 3 separate hashes:
-/// * \[(nullifier, cmx, ephemeral_key, enc_ciphertext\[..52\])*\] personalized
-///   with ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION
-/// * \[enc_ciphertext\[52..564\]*\] (memo ciphertexts) personalized
-///   with ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION
-/// * \[(cv, rk, enc_ciphertext\[564..\], out_ciphertext)*\] personalized
-///   with ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION
-/// as defined in [ZIP-244: Transaction Identifier Non-Malleability][zip244]
-///
-/// Then, hash these together along with (flags, anchor_orchard, timelimit).
-///
-/// The final hash is personalized with ZCASH_ORCHARD_HASH_PERSONALIZATION.
-///
-/// [zip244]: https://zips.z.cash/zip-0244
-/// [zip226]: https://zips.z.cash/zip-0226 (for ZSA burn field hashing)
+/// Evaluate sighash for the given action groups
 pub(crate) fn hash_action_groups_txid_data<A: Authorization, V: Copy + Into<i64>>(
     action_groups: Vec<&ActionGroup<A, V>>,
     value_balance: V,

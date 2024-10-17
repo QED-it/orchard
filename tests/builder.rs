@@ -43,6 +43,8 @@ pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>
     assert_eq!(vks.len(), swap_bundle.action_groups().len());
     for (action_group, vk) in swap_bundle.action_groups().iter().zip(vks.iter()) {
         verify_action_group(action_group, vk);
+        // Verify that bsk is None
+        assert!(action_group.bsk().is_none());
     }
 
     let sighash: [u8; 32] = swap_bundle.commitment().into();

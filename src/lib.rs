@@ -20,7 +20,6 @@ mod action;
 mod address;
 pub mod builder;
 pub mod bundle;
-
 pub mod circuit;
 mod constants;
 pub mod issuance;

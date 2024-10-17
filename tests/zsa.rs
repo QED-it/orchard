@@ -20,6 +20,7 @@ use orchard::{
 
 use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
+use orchard::bundle::Authorization;
 use rand::rngs::OsRng;
 use std::collections::HashSet;
 use zcash_note_encryption_zsa::try_note_decryption;
@@ -329,7 +330,7 @@ fn build_and_verify_action_group(
     keys: &Keychain,
 ) -> Result<ActionGroup<ActionGroupAuthorized, i64>, String> {
     let rng = OsRng;
-    let shielded_bundle: ActionGroup<_, i64> = {
+    let shielded_action_group: ActionGroup<_, i64> = {
         let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
 
         spends
@@ -353,17 +354,18 @@ fn build_and_verify_action_group(
         build_and_sign_action_group(builder, timelimit, rng, keys.pk(), keys.sk())
     };
 
-    verify_action_group(&shielded_bundle, &keys.vk);
+    verify_action_group(&shielded_action_group, &keys.vk);
     assert_eq!(
-        shielded_bundle.action_group().actions().len(),
+        shielded_action_group.action_group().actions().len(),
         expected_num_actions
     );
-    // TODO
-    // assert!(verify_unique_spent_nullifiers(&shielded_bundle));
-    Ok(shielded_bundle)
+    assert!(verify_unique_spent_nullifiers(
+        shielded_action_group.action_group()
+    ));
+    Ok(shielded_action_group)
 }
 
-fn verify_unique_spent_nullifiers(bundle: &Bundle<Authorized, i64, OrchardZSA>) -> bool {
+fn verify_unique_spent_nullifiers<A: Authorization>(bundle: &Bundle<A, i64, OrchardZSA>) -> bool {
     let mut unique_nulifiers = Vec::new();
     let spent_nullifiers = bundle
         .actions()
