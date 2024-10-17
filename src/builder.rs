@@ -12,11 +12,10 @@ use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
 use zcash_note_encryption_zsa::NoteEncryption;
 
-use crate::builder::BuildError::{BurnNative, BurnZero};
-use crate::bundle::ActionGroupAuthorized;
 use crate::{
     action::Action,
     address::Address,
+    builder::BuildError::{BurnNative, BurnZero},
     bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags},
     circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey},
     keys::{
@@ -27,7 +26,7 @@ use crate::{
     note_encryption::{OrchardDomain, OrchardDomainCommon},
     orchard_flavor::{OrchardFlavor, OrchardZSA},
     primitives::redpallas::{self, Binding, SpendAuth},
-    swap_bundle::ActionGroup,
+    swap_bundle::{ActionGroup, ActionGroupAuthorized},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };

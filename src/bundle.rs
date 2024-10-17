@@ -526,37 +526,6 @@ impl<V, D: OrchardDomainCommon> Bundle<Authorized, V, D> {
     }
 }
 
-/// Authorizing data for an action group, ready to be sent to the matcher.
-#[derive(Debug, Clone)]
-pub struct ActionGroupAuthorized {
-    proof: Proof,
-}
-
-impl Authorization for ActionGroupAuthorized {
-    type SpendAuth = redpallas::Signature<SpendAuth>;
-}
-
-impl ActionGroupAuthorized {
-    /// Constructs the authorizing data for a bundle of actions from its constituent parts.
-    pub fn from_parts(proof: Proof) -> Self {
-        ActionGroupAuthorized { proof }
-    }
-
-    /// Return the proof component of the authorizing data.
-    pub fn proof(&self) -> &Proof {
-        &self.proof
-    }
-}
-
-impl<V, D: OrchardDomainCommon> Bundle<ActionGroupAuthorized, V, D> {
-    /// Verifies the proof for this bundle.
-    pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
-        self.authorization()
-            .proof()
-            .verify(vk, &self.to_instances())
-    }
-}
-
 impl<V: DynamicUsage, D: OrchardDomainCommon> DynamicUsage for Bundle<Authorized, V, D> {
     fn dynamic_usage(&self) -> usize {
         self.actions.dynamic_usage()

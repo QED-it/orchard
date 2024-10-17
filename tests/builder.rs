@@ -1,18 +1,19 @@
-use bridgetree::BridgeTree;
-use incrementalmerkletree::Hashable;
 use orchard::{
     builder::{Builder, BundleType},
-    bundle::{ActionGroupAuthorized, Authorized, Flags},
+    bundle::{Authorized, Flags},
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
     note_encryption::OrchardDomain,
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
-    swap_bundle::{ActionGroup, SwapBundle},
+    swap_bundle::{ActionGroup, ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
 };
+
+use bridgetree::BridgeTree;
+use incrementalmerkletree::Hashable;
 use rand::rngs::OsRng;
 use zcash_note_encryption_zsa::try_note_decryption;
 

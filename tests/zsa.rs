@@ -4,7 +4,7 @@ use crate::builder::{verify_action_group, verify_bundle, verify_swap_bundle};
 
 use orchard::{
     builder::{Builder, BundleType},
-    bundle::{ActionGroupAuthorized, Authorized},
+    bundle::Authorized,
     circuit::{ProvingKey, VerifyingKey},
     issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
@@ -12,7 +12,7 @@ use orchard::{
     note::{AssetBase, ExtractedNoteCommitment},
     note_encryption::OrchardDomain,
     orchard_flavor::OrchardZSA,
-    swap_bundle::{ActionGroup, SwapBundle},
+    swap_bundle::{ActionGroup, ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Address, Anchor, Bundle, Note,
