@@ -1,3 +1,5 @@
+use bridgetree::BridgeTree;
+use incrementalmerkletree::Hashable;
 use orchard::{
     builder::{Builder, BundleType},
     bundle::{Authorized, Flags},
@@ -11,9 +13,6 @@ use orchard::{
     value::NoteValue,
     Anchor, Bundle, Note,
 };
-
-use bridgetree::BridgeTree;
-use incrementalmerkletree::Hashable;
 use rand::rngs::OsRng;
 use zcash_note_encryption_zsa::try_note_decryption;
 
@@ -38,7 +37,8 @@ pub fn verify_bundle<FL: OrchardFlavor>(
 
 // Verify a swap bundle
 // - verify each action group (its proof and for each action, the spend authorization signature)
-// - verify the binding signature
+// - verify that bsk is None  for each action group
+// - verify the swap binding signature
 pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>) {
     assert_eq!(vks.len(), swap_bundle.action_groups().len());
     for (action_group, vk) in swap_bundle.action_groups().iter().zip(vks.iter()) {

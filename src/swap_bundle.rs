@@ -28,8 +28,8 @@ pub struct ActionGroup<A: Authorization, V> {
     /// The binding signature key for the action group.
     ///
     /// During the building of the action group, this key is not set.
-    /// Once the action group is finalized (it contains a proof and for each action, a spend
-    /// authorizing signature), the key is set.
+    /// Once the action group is finalized (it contains a spend authorizing signature for each
+    /// action and a proof), the key is set.
     bsk: Option<redpallas::SigningKey<Binding>>,
 }
 
@@ -63,6 +63,10 @@ impl<A: Authorization, V> ActionGroup<A, V> {
     }
 
     /// Remove bsk from this action group
+    ///
+    /// When creating a SwapBundle from a list of action groups, we evaluate the binding signature
+    /// by signing the sighash with the summ of the bsk of each action group.
+    /// Then, we remove the bsk of each action group as it is no longer needed.
     fn remove_bsk(&mut self) {
         self.bsk = None;
     }
@@ -109,8 +113,7 @@ impl<V> ActionGroup<InProgress<Proof, Unauthorized>, V> {
 }
 
 impl<A: Authorization, V: Copy + Into<i64>> ActionGroup<A, V> {
-    /// Computes a commitment to the effects of this action group, suitable for inclusion within
-    /// a transaction ID.
+    /// Computes a commitment to the content of this action group.
     pub fn commitment(&self) -> BundleCommitment {
         BundleCommitment(hash_action_groups_txid_data(
             vec![self],
@@ -138,22 +141,29 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
         rng: R,
         mut action_groups: Vec<ActionGroup<ActionGroupAuthorized, V>>,
     ) -> Self {
+        // Evaluate the swap value balance by summing the value balance of each action group.
         let value_balance = action_groups
             .iter()
             .map(|a| *a.action_group().value_balance())
             .sum();
+        // Evaluate the swap bsk by summing the bsk of each action group.
         let bsk = action_groups
             .iter()
             .map(|a| ValueCommitTrapdoor::from_bsk(a.bsk.unwrap()))
             .sum::<ValueCommitTrapdoor>()
             .into_bsk();
+        // Evaluate the swap sighash
         let sighash: [u8; 32] = BundleCommitment(hash_action_groups_txid_data(
             action_groups.iter().collect(),
             value_balance,
         ))
         .into();
+        // Evaluate the swap binding signature which is equal to the signature of the swap sigash
+        // with the swap binding signature key bsk.
         let binding_signature = bsk.sign(rng, &sighash);
+        // Remove the bsk of each action group as it is no longer needed.
         action_groups.iter_mut().for_each(|ag| ag.remove_bsk());
+        // Create the swap bundle
         SwapBundle {
             action_groups,
             value_balance,
@@ -173,7 +183,7 @@ impl Authorization for ActionGroupAuthorized {
 }
 
 impl ActionGroupAuthorized {
-    /// Constructs the authorizing data for a bundle of actions from its constituent parts.
+    /// Constructs the authorizing data for an action group from its proof.
     pub fn from_parts(proof: Proof) -> Self {
         ActionGroupAuthorized { proof }
     }

@@ -1,7 +1,9 @@
 mod builder;
 
 use crate::builder::{verify_action_group, verify_bundle, verify_swap_bundle};
-
+use bridgetree::BridgeTree;
+use incrementalmerkletree::Hashable;
+use orchard::bundle::Authorization;
 use orchard::{
     builder::{Builder, BundleType},
     bundle::Authorized,
@@ -17,10 +19,6 @@ use orchard::{
     value::NoteValue,
     Address, Anchor, Bundle, Note,
 };
-
-use bridgetree::BridgeTree;
-use incrementalmerkletree::Hashable;
-use orchard::bundle::Authorization;
 use rand::rngs::OsRng;
 use std::collections::HashSet;
 use zcash_note_encryption_zsa::try_note_decryption;
@@ -656,9 +654,17 @@ fn zsa_issue_and_transfer() {
     }
 }
 
-/// Create several swap orders and combine them to create a SwapBundle
+/// Create several action groups and combine them to create a SwapBundle
 #[test]
 fn swap_order_and_swap_bundle() {
+    // --------------------------- Swap description--------------------------------
+    // User1:
+    // - spends 10 asset1
+    // - receives 20 asset2
+    // User2:
+    // - spends 20 asset2
+    // - receives 10 asset1
+
     // --------------------------- Setup -----------------------------------------
     // Create notes for user1
     let keys1 = prepare_keys();
@@ -737,37 +743,36 @@ fn swap_order_and_swap_bundle() {
         merkle_path: merkle_path_user2_native_note2,
     };
 
-    // --------------------------- Swap description--------------------------------
-    // User1:
-    // - spends 10 asset1
-    // - receives 20 asset2
-    // User2:
-    // - spends 20 asset2
-    // - receives 10 asset1
-
     // --------------------------- Tests -----------------------------------------
     // 1. Create and verify ActionGroup for user1
     let action_group1 = build_and_verify_action_group(
         vec![
-            &asset1_spend1,
-            &asset1_spend2,
-            &user1_native_note1_spend,
-            &user1_native_note2_spend,
+            &asset1_spend1,            // 40 asset1
+            &asset1_spend2,            // 2 asset1
+            &user1_native_note1_spend, // 100 ZEC
+            &user1_native_note2_spend, // 100 ZEC
         ],
         vec![
+            // User1 would like to spend 10 asset1.
+            // Thus, he would like to keep 40+2-10=32 asset1.
             TestOutputInfo {
                 value: NoteValue::from_raw(32),
                 asset: asset1_note1.asset(),
             },
+            // User1 would like to receive 20 asset2.
             TestOutputInfo {
                 value: NoteValue::from_raw(20),
                 asset: asset2_note1.asset(),
             },
+            // User1 would like to pay 5 ZEC as a fee.
+            // Thus, he would like to keep 100+100-5=195 ZEC.
             TestOutputInfo {
                 value: NoteValue::from_raw(195),
                 asset: AssetBase::native(),
             },
         ],
+        // We must provide a split note for asset2 because we have no spend note for this asset.
+        // This note will not be spent. It is only used to check the correctness of asset2.
         vec![&asset2_spend1],
         anchor,
         0,
@@ -779,25 +784,32 @@ fn swap_order_and_swap_bundle() {
     // 2. Create and verify ActionGroup for user2
     let action_group2 = build_and_verify_action_group(
         vec![
-            &asset2_spend1,
-            &asset2_spend2,
-            &user2_native_note1_spend,
-            &user2_native_note2_spend,
+            &asset2_spend1,            // 40 asset2
+            &asset2_spend2,            // 2 asset2
+            &user2_native_note1_spend, // 100 ZEC
+            &user2_native_note2_spend, // 100 ZEC
         ],
         vec![
+            // User2 would like to spend 20 asset2.
+            // Thus, he would like to keep 40+2-20=22 asset2.
             TestOutputInfo {
                 value: NoteValue::from_raw(22),
                 asset: asset2_note1.asset(),
             },
+            // User2 would like to receive 10 asset1.
             TestOutputInfo {
                 value: NoteValue::from_raw(10),
                 asset: asset1_note1.asset(),
             },
+            // User2 would like to pay 5 ZEC as a fee.
+            // Thus, he would like to keep 100+100-5=195 ZEC.
             TestOutputInfo {
                 value: NoteValue::from_raw(195),
                 asset: AssetBase::native(),
             },
         ],
+        // We must provide a split note for asset1 because we have no spend note for this asset.
+        // This note will not be spent. It is only used to check the correctness of asset1.
         vec![&asset1_spend1],
         anchor,
         0,
@@ -808,7 +820,9 @@ fn swap_order_and_swap_bundle() {
 
     // 3. Matcher fees action group
     let action_group_matcher = build_and_verify_action_group(
+        // The matcher spends nothing.
         vec![],
+        // The matcher receives 10 ZEC as a fee from user1 and user2.
         vec![TestOutputInfo {
             value: NoteValue::from_raw(10),
             asset: AssetBase::native(),
