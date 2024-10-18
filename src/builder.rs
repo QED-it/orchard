@@ -2,7 +2,7 @@
 
 use core::fmt;
 use core::iter;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::fmt::Display;
 
 use ff::Field;
@@ -12,10 +12,10 @@ use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
 use zcash_note_encryption_zsa::NoteEncryption;
 
-use crate::builder::BuildError::{BurnNative, BurnZero};
 use crate::{
     action::Action,
     address::Address,
+    builder::BuildError::{BurnNative, BurnZero},
     bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags},
     circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey},
     keys::{
@@ -24,8 +24,9 @@ use crate::{
     },
     note::{AssetBase, Note, Rho, TransmittedNoteCiphertext},
     note_encryption::{OrchardDomain, OrchardDomainCommon},
-    orchard_flavor::OrchardFlavor,
+    orchard_flavor::{OrchardFlavor, OrchardZSA},
     primitives::redpallas::{self, Binding, SpendAuth},
+    swap_bundle::{ActionGroup, ActionGroupAuthorized},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };
@@ -149,6 +150,8 @@ pub enum BuildError {
     BurnDuplicateAsset,
     /// There is no available split note for this asset.
     NoSplitNoteAvailable,
+    /// Burning is not allowed in an ActionGroup.
+    BurnNotEmptyInActionGroup,
 }
 
 impl Display for BuildError {
@@ -172,6 +175,7 @@ impl Display for BuildError {
             BurnZero => f.write_str("Burning is not possible for zero values"),
             BurnDuplicateAsset => f.write_str("Duplicate assets are not allowed when burning"),
             NoSplitNoteAvailable => f.write_str("No split note has been provided for this asset"),
+            BurnNotEmptyInActionGroup => f.write_str("Burning is not possible for action group"),
         }
     }
 }
@@ -514,6 +518,7 @@ pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, Bun
 pub struct Builder {
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
+    split_notes: HashMap<AssetBase, SpendInfo>,
     burn: HashMap<AssetBase, NoteValue>,
     bundle_type: BundleType,
     anchor: Anchor,
@@ -525,6 +530,7 @@ impl Builder {
         Builder {
             spends: vec![],
             outputs: vec![],
+            split_notes: HashMap::new(),
             burn: HashMap::new(),
             bundle_type,
             anchor,
@@ -586,10 +592,27 @@ impl Builder {
         Ok(())
     }
 
+    /// Add a reference split note which could be used to create Actions.
+    pub fn add_split_note(
+        &mut self,
+        fvk: FullViewingKey,
+        note: Note,
+        merkle_path: MerklePath,
+    ) -> Result<(), SpendError> {
+        let spend = SpendInfo::new(fvk, note, merkle_path, false).ok_or(SpendError::FvkMismatch)?;
+
+        // Consistency check: all anchors must be equal.
+        if !spend.has_matching_anchor(&self.anchor) {
+            return Err(SpendError::AnchorMismatch);
+        }
+
+        self.split_notes.entry(note.asset()).or_insert(spend);
+
+        Ok(())
+    }
+
     /// Add an instruction to burn a given amount of a specific asset.
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
-        use std::collections::hash_map::Entry;
-
         if asset.is_native().into() {
             return Err(BurnNative);
         }
@@ -658,8 +681,37 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
+            self.split_notes,
             self.burn,
+            true,
         )
+    }
+
+    /// Builds an action group containing the given spent notes and outputs.
+    ///
+    /// The returned action group will have no proof or signatures; these can be applied with
+    /// [`ActionGroup::create_proof`] and [`ActionGroup::apply_signatures`] respectively.
+    pub fn build_action_group<V: TryFrom<i64>>(
+        self,
+        rng: impl RngCore,
+        timelimit: u32,
+    ) -> Result<ActionGroup<InProgress<Unproven<OrchardZSA>, Unauthorized>, V>, BuildError> {
+        if !self.burn.is_empty() {
+            return Err(BuildError::BurnNotEmptyInActionGroup);
+        }
+        let action_group = bundle(
+            rng,
+            self.anchor,
+            self.bundle_type,
+            self.spends,
+            self.outputs,
+            self.split_notes,
+            self.burn,
+            false,
+        )?
+        .unwrap()
+        .0;
+        Ok(ActionGroup::from_parts(action_group, timelimit, None))
     }
 }
 
@@ -735,13 +787,16 @@ fn pad_spend(
 /// The returned bundle will have no proof or signatures; these can be applied with
 /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     mut rng: impl RngCore,
     anchor: Anchor,
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
+    split_notes: HashMap<AssetBase, SpendInfo>,
     burn: HashMap<AssetBase, NoteValue>,
+    check_bsk_bvk: bool,
 ) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
     let flags = bundle_type.flags();
 
@@ -774,7 +829,10 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                 .flat_map(|(asset, (spends, outputs))| {
                     let num_asset_pre_actions = spends.len().max(outputs.len());
 
-                    let first_spend = spends.first().map(|(s, _)| s.clone());
+                    let mut first_spend = spends.first().map(|(s, _)| s.clone());
+                    if first_spend.is_none() {
+                        first_spend = split_notes.get(&asset).cloned();
+                    }
 
                     let mut indexed_spends = spends
                         .into_iter()
@@ -877,9 +935,12 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
         })
         .collect::<Result<Vec<(AssetBase, NoteValue)>, BuildError>>()?;
 
-    // Verify that bsk and bvk are consistent.
-    let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
-    assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+    if check_bsk_bvk {
+        // Verify that bsk and bvk are consistent
+        // (they could not be consistent for action group)
+        let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
+        assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+    }
 
     Ok(NonEmpty::from_vec(actions).map(|actions| {
         (
@@ -1018,6 +1079,17 @@ impl InProgressSignatures for PartiallyAuthorized {
     type SpendAuth = MaybeSigned;
 }
 
+/// Marker for a partially-authorized action group, in the process of being signed.
+#[derive(Debug)]
+pub struct ActionGroupPartiallyAuthorized {
+    bsk: redpallas::SigningKey<Binding>,
+    sighash: [u8; 32],
+}
+
+impl InProgressSignatures for ActionGroupPartiallyAuthorized {
+    type SpendAuth = MaybeSigned;
+}
+
 /// A heisen[`Signature`] for a particular [`Action`].
 ///
 /// [`Signature`]: redpallas::Signature
@@ -1067,6 +1139,35 @@ impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized
     }
 }
 
+impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized>, V, D> {
+    /// Loads the sighash into this action group, preparing it for signing.
+    ///
+    /// This API ensures that all signatures are created over the same sighash.
+    pub fn prepare_for_action_group<R: RngCore + CryptoRng>(
+        self,
+        mut rng: R,
+        sighash: [u8; 32],
+    ) -> Bundle<InProgress<P, ActionGroupPartiallyAuthorized>, V, D> {
+        self.map_authorization(
+            &mut rng,
+            |rng, _, SigningMetadata { dummy_ask, parts }| {
+                // We can create signatures for dummy spends immediately.
+                dummy_ask
+                    .map(|ask| ask.randomize(&parts.alpha).sign(rng, &sighash))
+                    .map(MaybeSigned::Signature)
+                    .unwrap_or(MaybeSigned::SigningMetadata(parts))
+            },
+            |_rng, auth| InProgress {
+                proof: auth.proof,
+                sigs: ActionGroupPartiallyAuthorized {
+                    bsk: auth.sigs.bsk,
+                    sighash,
+                },
+            },
+        )
+    }
+}
+
 impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
     /// Applies signatures to this bundle, in order to authorize it.
     ///
@@ -1084,6 +1185,54 @@ impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
                 partial.sign(&mut rng, ask)
             })
             .finalize()
+    }
+}
+
+impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
+    /// Applies signatures to this action group, in order to authorize it.
+    #[allow(clippy::type_complexity)]
+    pub fn apply_signatures_for_action_group<R: RngCore + CryptoRng>(
+        self,
+        mut rng: R,
+        sighash: [u8; 32],
+        signing_keys: &[SpendAuthorizingKey],
+    ) -> Result<
+        (
+            redpallas::SigningKey<Binding>,
+            Bundle<ActionGroupAuthorized, V, D>,
+        ),
+        BuildError,
+    > {
+        signing_keys
+            .iter()
+            .fold(
+                self.prepare_for_action_group(&mut rng, sighash),
+                |partial, ask| partial.sign(&mut rng, ask),
+            )
+            .finalize()
+    }
+}
+
+impl<P: fmt::Debug, V, D: OrchardDomainCommon>
+    Bundle<InProgress<P, ActionGroupPartiallyAuthorized>, V, D>
+{
+    /// Signs this action group with the given [`SpendAuthorizingKey`].
+    ///
+    /// This will apply signatures for all notes controlled by this spending key.
+    pub fn sign<R: RngCore + CryptoRng>(self, mut rng: R, ask: &SpendAuthorizingKey) -> Self {
+        let expected_ak = ask.into();
+        self.map_authorization(
+            &mut rng,
+            |rng, partial, maybe| match maybe {
+                MaybeSigned::SigningMetadata(parts) if parts.ak == expected_ak => {
+                    MaybeSigned::Signature(
+                        ask.randomize(&parts.alpha).sign(rng, &partial.sigs.sighash),
+                    )
+                }
+                s => s,
+            },
+            |_, partial| partial,
+        )
     }
 }
 
@@ -1165,6 +1314,30 @@ impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, PartiallyAuthorized>, V
                 ))
             },
         )
+    }
+}
+
+impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, D> {
+    /// Finalizes this action group.
+    ///
+    /// Returns an error if any signatures are missing.
+    #[allow(clippy::type_complexity)]
+    pub fn finalize(
+        self,
+    ) -> Result<
+        (
+            redpallas::SigningKey<Binding>,
+            Bundle<ActionGroupAuthorized, V, D>,
+        ),
+        BuildError,
+    > {
+        let bsk = self.authorization().sigs.bsk;
+        self.try_map_authorization(
+            &mut (),
+            |_, _, maybe| maybe.finalize(),
+            |_, partial| Ok(ActionGroupAuthorized::from_parts(partial.proof)),
+        )
+        .map(|bundle| (bsk, bundle))
     }
 }
 

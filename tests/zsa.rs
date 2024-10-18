@@ -1,20 +1,21 @@
 mod builder;
 
-use crate::builder::verify_bundle;
+use crate::builder::{verify_action_group, verify_bundle, verify_swap_bundle};
 use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
-use orchard::bundle::Authorized;
-use orchard::issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized};
-use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
-use orchard::note::{AssetBase, ExtractedNoteCommitment};
-
-use orchard::tree::{MerkleHashOrchard, MerklePath};
+use orchard::bundle::Authorization;
 use orchard::{
     builder::{Builder, BundleType},
+    bundle::Authorized,
     circuit::{ProvingKey, VerifyingKey},
+    issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
+    keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    note::{AssetBase, ExtractedNoteCommitment},
     note_encryption::OrchardDomain,
     orchard_flavor::OrchardZSA,
+    swap_bundle::{ActionGroup, ActionGroupAuthorized, SwapBundle},
+    tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Address, Anchor, Bundle, Note,
 };
@@ -96,6 +97,21 @@ fn build_and_sign_bundle(
         .unwrap()
 }
 
+fn build_and_sign_action_group(
+    builder: Builder,
+    timelimit: u32,
+    mut rng: OsRng,
+    pk: &ProvingKey,
+    sk: &SpendingKey,
+) -> ActionGroup<ActionGroupAuthorized, i64> {
+    let unauthorized = builder.build_action_group(&mut rng, timelimit).unwrap();
+    let sighash = unauthorized.commitment().into();
+    let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
+    proven
+        .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(sk)])
+        .unwrap()
+}
+
 pub fn build_merkle_path_with_two_leaves(
     note1: &Note,
     note2: &Note,
@@ -134,6 +150,39 @@ pub fn build_merkle_path_with_two_leaves(
     assert_eq!(anchor, merkle_path1.root(cmx1));
     assert_eq!(anchor, merkle_path2.root(cmx2));
     (merkle_path1, merkle_path2, anchor)
+}
+
+fn build_merkle_paths(notes: Vec<&Note>) -> (Vec<MerklePath>, Anchor) {
+    let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
+
+    let mut commitments = vec![];
+    let mut positions = vec![];
+
+    // Add leaves
+    for note in notes {
+        let cmx: ExtractedNoteCommitment = note.commitment().into();
+        commitments.push(cmx);
+        let leaf = MerkleHashOrchard::from_cmx(&cmx);
+        tree.append(leaf);
+        positions.push(tree.mark().unwrap());
+    }
+
+    let root = tree.root(0).unwrap();
+    let anchor = root.into();
+
+    // Calculate paths
+    let mut merkle_paths = vec![];
+    for (position, commitment) in positions.iter().zip(commitments.iter()) {
+        let auth_path = tree.witness(*position, 0).unwrap();
+        let merkle_path = MerklePath::from_parts(
+            u64::from(*position).try_into().unwrap(),
+            auth_path[..].try_into().unwrap(),
+        );
+        merkle_paths.push(merkle_path.clone());
+        assert_eq!(anchor, merkle_path.root(*commitment));
+    }
+
+    (merkle_paths, anchor)
 }
 
 fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note) {
@@ -269,7 +318,52 @@ fn build_and_verify_bundle(
     Ok(())
 }
 
-fn verify_unique_spent_nullifiers(bundle: &Bundle<Authorized, i64, OrchardZSA>) -> bool {
+fn build_and_verify_action_group(
+    spends: Vec<&TestSpendInfo>,
+    outputs: Vec<TestOutputInfo>,
+    split_notes: Vec<&TestSpendInfo>,
+    anchor: Anchor,
+    timelimit: u32,
+    expected_num_actions: usize,
+    keys: &Keychain,
+) -> Result<ActionGroup<ActionGroupAuthorized, i64>, String> {
+    let rng = OsRng;
+    let shielded_action_group: ActionGroup<_, i64> = {
+        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
+
+        spends
+            .iter()
+            .try_for_each(|spend| {
+                builder.add_spend(keys.fvk().clone(), spend.note, spend.merkle_path().clone())
+            })
+            .map_err(|err| err.to_string())?;
+        outputs
+            .iter()
+            .try_for_each(|output| {
+                builder.add_output(None, keys.recipient, output.value, output.asset, None)
+            })
+            .map_err(|err| err.to_string())?;
+        split_notes
+            .iter()
+            .try_for_each(|spend| {
+                builder.add_split_note(keys.fvk().clone(), spend.note, spend.merkle_path().clone())
+            })
+            .map_err(|err| err.to_string())?;
+        build_and_sign_action_group(builder, timelimit, rng, keys.pk(), keys.sk())
+    };
+
+    verify_action_group(&shielded_action_group, &keys.vk);
+    assert_eq!(
+        shielded_action_group.action_group().actions().len(),
+        expected_num_actions
+    );
+    assert!(verify_unique_spent_nullifiers(
+        shielded_action_group.action_group()
+    ));
+    Ok(shielded_action_group)
+}
+
+fn verify_unique_spent_nullifiers<A: Authorization>(bundle: &Bundle<A, i64, OrchardZSA>) -> bool {
     let mut unique_nulifiers = Vec::new();
     let spent_nullifiers = bundle
         .actions()
@@ -558,4 +652,193 @@ fn zsa_issue_and_transfer() {
         Ok(_) => panic!("Test should fail"),
         Err(error) => assert_eq!(error, "Burning is not possible for zero values"),
     }
+}
+
+/// Create several action groups and combine them to create a SwapBundle
+#[test]
+fn swap_order_and_swap_bundle() {
+    // --------------------------- Swap description--------------------------------
+    // User1:
+    // - spends 10 asset1
+    // - receives 20 asset2
+    // User2:
+    // - spends 20 asset2
+    // - receives 10 asset1
+
+    // --------------------------- Setup -----------------------------------------
+    // Create notes for user1
+    let keys1 = prepare_keys();
+
+    let asset_descr1 = b"zsa_asset1".to_vec();
+    let (asset1_note1, asset1_note2) = issue_zsa_notes(&asset_descr1, &keys1);
+
+    let user1_native_note1 = create_native_note(&keys1);
+    let user1_native_note2 = create_native_note(&keys1);
+
+    // Create notes for user2
+    let keys2 = prepare_keys();
+
+    let asset_descr2 = b"zsa_asset2".to_vec();
+    let (asset2_note1, asset2_note2) = issue_zsa_notes(&asset_descr2, &keys2);
+
+    let user2_native_note1 = create_native_note(&keys2);
+    let user2_native_note2 = create_native_note(&keys2);
+
+    // Create matcher keys
+    let matcher_keys = prepare_keys();
+
+    // Create Merkle tree with all notes
+    let (merkle_paths, anchor) = build_merkle_paths(vec![
+        &asset1_note1,
+        &asset1_note2,
+        &user1_native_note1,
+        &user1_native_note2,
+        &asset2_note1,
+        &asset2_note2,
+        &user2_native_note1,
+        &user2_native_note2,
+    ]);
+
+    assert_eq!(merkle_paths.len(), 8);
+    let merkle_path_asset1_note1 = merkle_paths[0].clone();
+    let merkle_path_asset1_note2 = merkle_paths[1].clone();
+    let merkle_path_user1_native_note1 = merkle_paths[2].clone();
+    let merkle_path_user1_native_note2 = merkle_paths[3].clone();
+    let merkle_path_asset2_note1 = merkle_paths[4].clone();
+    let merkle_path_asset2_note2 = merkle_paths[5].clone();
+    let merkle_path_user2_native_note1 = merkle_paths[6].clone();
+    let merkle_path_user2_native_note2 = merkle_paths[7].clone();
+
+    // Create TestSpendInfo
+    let asset1_spend1 = TestSpendInfo {
+        note: asset1_note1,
+        merkle_path: merkle_path_asset1_note1,
+    };
+    let asset1_spend2 = TestSpendInfo {
+        note: asset1_note2,
+        merkle_path: merkle_path_asset1_note2,
+    };
+    let user1_native_note1_spend = TestSpendInfo {
+        note: user1_native_note1,
+        merkle_path: merkle_path_user1_native_note1,
+    };
+    let user1_native_note2_spend = TestSpendInfo {
+        note: user1_native_note2,
+        merkle_path: merkle_path_user1_native_note2,
+    };
+    let asset2_spend1 = TestSpendInfo {
+        note: asset2_note1,
+        merkle_path: merkle_path_asset2_note1,
+    };
+    let asset2_spend2 = TestSpendInfo {
+        note: asset2_note2,
+        merkle_path: merkle_path_asset2_note2,
+    };
+    let user2_native_note1_spend = TestSpendInfo {
+        note: user2_native_note1,
+        merkle_path: merkle_path_user2_native_note1,
+    };
+    let user2_native_note2_spend = TestSpendInfo {
+        note: user2_native_note2,
+        merkle_path: merkle_path_user2_native_note2,
+    };
+
+    // --------------------------- Tests -----------------------------------------
+    // 1. Create and verify ActionGroup for user1
+    let action_group1 = build_and_verify_action_group(
+        vec![
+            &asset1_spend1,            // 40 asset1
+            &asset1_spend2,            // 2 asset1
+            &user1_native_note1_spend, // 100 ZEC
+            &user1_native_note2_spend, // 100 ZEC
+        ],
+        vec![
+            // User1 would like to spend 10 asset1.
+            // Thus, he would like to keep 40+2-10=32 asset1.
+            TestOutputInfo {
+                value: NoteValue::from_raw(32),
+                asset: asset1_note1.asset(),
+            },
+            // User1 would like to receive 20 asset2.
+            TestOutputInfo {
+                value: NoteValue::from_raw(20),
+                asset: asset2_note1.asset(),
+            },
+            // User1 would like to pay 5 ZEC as a fee.
+            // Thus, he would like to keep 100+100-5=195 ZEC.
+            TestOutputInfo {
+                value: NoteValue::from_raw(195),
+                asset: AssetBase::native(),
+            },
+        ],
+        // We must provide a split note for asset2 because we have no spend note for this asset.
+        // This note will not be spent. It is only used to check the correctness of asset2.
+        vec![&asset2_spend1],
+        anchor,
+        0,
+        5,
+        &keys1,
+    )
+    .unwrap();
+
+    // 2. Create and verify ActionGroup for user2
+    let action_group2 = build_and_verify_action_group(
+        vec![
+            &asset2_spend1,            // 40 asset2
+            &asset2_spend2,            // 2 asset2
+            &user2_native_note1_spend, // 100 ZEC
+            &user2_native_note2_spend, // 100 ZEC
+        ],
+        vec![
+            // User2 would like to spend 20 asset2.
+            // Thus, he would like to keep 40+2-20=22 asset2.
+            TestOutputInfo {
+                value: NoteValue::from_raw(22),
+                asset: asset2_note1.asset(),
+            },
+            // User2 would like to receive 10 asset1.
+            TestOutputInfo {
+                value: NoteValue::from_raw(10),
+                asset: asset1_note1.asset(),
+            },
+            // User2 would like to pay 5 ZEC as a fee.
+            // Thus, he would like to keep 100+100-5=195 ZEC.
+            TestOutputInfo {
+                value: NoteValue::from_raw(195),
+                asset: AssetBase::native(),
+            },
+        ],
+        // We must provide a split note for asset1 because we have no spend note for this asset.
+        // This note will not be spent. It is only used to check the correctness of asset1.
+        vec![&asset1_spend1],
+        anchor,
+        0,
+        5,
+        &keys2,
+    )
+    .unwrap();
+
+    // 3. Matcher fees action group
+    let action_group_matcher = build_and_verify_action_group(
+        // The matcher spends nothing.
+        vec![],
+        // The matcher receives 10 ZEC as a fee from user1 and user2.
+        vec![TestOutputInfo {
+            value: NoteValue::from_raw(10),
+            asset: AssetBase::native(),
+        }],
+        vec![],
+        anchor,
+        0,
+        2,
+        &matcher_keys,
+    )
+    .unwrap();
+
+    // 4. Create a SwapBundle from the three previous ActionGroups
+    let swap_bundle = SwapBundle::new(
+        OsRng,
+        vec![action_group1, action_group2, action_group_matcher],
+    );
+    verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
 }

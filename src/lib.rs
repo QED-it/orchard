@@ -26,6 +26,7 @@ pub mod issuance;
 pub mod keys;
 pub mod note;
 pub mod supply_info;
+pub mod swap_bundle;
 
 pub mod note_encryption;
 
