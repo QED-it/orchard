@@ -2,10 +2,8 @@
 
 use crate::{
     builder::{BuildError, InProgress, InProgressSignatures, Unauthorized, Unproven},
-    bundle::{
-        commitments::hash_action_groups_txid_data, derive_bvk, Authorization, Bundle,
-        BundleCommitment,
-    },
+    bundle::commitments::{hash_action_group, hash_swap_bundle},
+    bundle::{derive_bvk, Authorization, Bundle, BundleCommitment},
     circuit::{ProvingKey, VerifyingKey},
     keys::SpendAuthorizingKey,
     note::AssetBase,
@@ -115,10 +113,7 @@ impl<V> ActionGroup<InProgress<Proof, Unauthorized>, V> {
 impl<A: Authorization, V: Copy + Into<i64>> ActionGroup<A, V> {
     /// Computes a commitment to the content of this action group.
     pub fn commitment(&self) -> BundleCommitment {
-        BundleCommitment(hash_action_groups_txid_data(
-            vec![self],
-            *self.action_group.value_balance(),
-        ))
+        BundleCommitment(hash_action_group(self))
     }
 }
 
@@ -153,7 +148,7 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
             .sum::<ValueCommitTrapdoor>()
             .into_bsk();
         // Evaluate the swap sighash
-        let sighash: [u8; 32] = BundleCommitment(hash_action_groups_txid_data(
+        let sighash: [u8; 32] = BundleCommitment(hash_swap_bundle(
             action_groups.iter().collect(),
             value_balance,
         ))
@@ -219,7 +214,7 @@ impl<V: Copy + Into<i64>> SwapBundle<V> {
     /// Computes a commitment to the effects of this swap bundle, suitable for inclusion
     /// within a transaction ID.
     pub fn commitment(&self) -> BundleCommitment {
-        BundleCommitment(hash_action_groups_txid_data(
+        BundleCommitment(hash_swap_bundle(
             self.action_groups.iter().collect(),
             self.value_balance,
         ))
