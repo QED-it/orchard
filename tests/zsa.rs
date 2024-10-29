@@ -102,12 +102,20 @@ fn build_and_sign_action_group(
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
+    reference_sk: &SpendingKey,
 ) -> ActionGroup<ActionGroupAuthorized, i64> {
     let unauthorized = builder.build_action_group(&mut rng, timelimit).unwrap();
     let sighash = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
     proven
-        .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(sk)])
+        .apply_signatures(
+            rng,
+            sighash,
+            &[
+                SpendAuthorizingKey::from(sk),
+                SpendAuthorizingKey::from(reference_sk),
+            ],
+        )
         .unwrap()
 }
 
@@ -244,6 +252,63 @@ fn issue_zsa_notes(
     (*reference_note, *note1, *note2)
 }
 
+fn issue_zsa_notes_with_reference_note(
+    asset_descr: &[u8],
+    keys: &Keychain,
+    reference_address: Address,
+) -> (Note, Note, Note) {
+    let mut rng = OsRng;
+    // Create a issuance bundle
+    let unauthorized_asset = IssueBundle::new(
+        keys.ik().clone(),
+        asset_descr.to_owned(),
+        Some(IssueInfo {
+            recipient: keys.recipient,
+            value: NoteValue::from_raw(40),
+        }),
+        &mut rng,
+    );
+
+    assert!(unauthorized_asset.is_ok());
+
+    let (mut unauthorized, _) = unauthorized_asset.unwrap();
+
+    assert!(unauthorized
+        .add_recipient(
+            asset_descr,
+            keys.recipient,
+            NoteValue::from_raw(2),
+            &mut rng,
+        )
+        .is_ok());
+
+    assert!(unauthorized
+        .add_recipient(
+            asset_descr,
+            reference_address,
+            NoteValue::from_raw(0),
+            &mut rng,
+        )
+        .is_ok());
+
+    let issue_bundle = sign_issue_bundle(unauthorized, keys.isk());
+
+    // Take notes from first action
+    let notes = issue_bundle.get_all_notes();
+    let note1 = notes[0];
+    let note2 = notes[1];
+    let note3 = notes[2];
+
+    assert!(verify_issue_bundle(
+        &issue_bundle,
+        issue_bundle.commitment().into(),
+        &HashSet::new(),
+    )
+    .is_ok());
+
+    (*note1, *note2, *note3)
+}
+
 fn create_native_note(keys: &Keychain) -> Note {
     let mut rng = OsRng;
 
@@ -341,6 +406,7 @@ fn build_and_verify_bundle(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_and_verify_action_group(
     spends: Vec<&TestSpendInfo>,
     outputs: Vec<TestOutputInfo>,
@@ -349,6 +415,7 @@ fn build_and_verify_action_group(
     timelimit: u32,
     expected_num_actions: usize,
     keys: &Keychain,
+    reference_keys: &Keychain,
 ) -> Result<ActionGroup<ActionGroupAuthorized, i64>, String> {
     let rng = OsRng;
     let shielded_action_group: ActionGroup<_, i64> = {
@@ -370,13 +437,20 @@ fn build_and_verify_action_group(
             .iter()
             .try_for_each(|spend| {
                 builder.add_reference_note(
-                    keys.fvk().clone(),
+                    reference_keys.fvk().clone(),
                     spend.note,
                     spend.merkle_path().clone(),
                 )
             })
             .map_err(|err| err.to_string())?;
-        build_and_sign_action_group(builder, timelimit, rng, keys.pk(), keys.sk())
+        build_and_sign_action_group(
+            builder,
+            timelimit,
+            rng,
+            keys.pk(),
+            keys.sk(),
+            reference_keys.sk(),
+        )
     };
 
     verify_action_group(&shielded_action_group, &keys.vk);
@@ -729,26 +803,29 @@ fn swap_order_and_swap_bundle() {
     // - receives 10 asset1
 
     // --------------------------- Setup -----------------------------------------
+    let reference_keys = prepare_keys(0);
     // Create notes for user1
-    let keys1 = prepare_keys();
+    let keys1 = prepare_keys(5);
 
     let asset_descr1 = b"zsa_asset1".to_vec();
-    let (asset1_note1, asset1_note2) = issue_zsa_notes(&asset_descr1, &keys1);
+    let (asset1_note1, asset1_note2, asset1_reference_note) =
+        issue_zsa_notes_with_reference_note(&asset_descr1, &keys1, reference_keys.recipient);
 
     let user1_native_note1 = create_native_note(&keys1);
     let user1_native_note2 = create_native_note(&keys1);
 
     // Create notes for user2
-    let keys2 = prepare_keys();
+    let keys2 = prepare_keys(10);
 
     let asset_descr2 = b"zsa_asset2".to_vec();
-    let (asset2_note1, asset2_note2) = issue_zsa_notes(&asset_descr2, &keys2);
+    let (asset2_note1, asset2_note2, asset2_reference_note) =
+        issue_zsa_notes_with_reference_note(&asset_descr2, &keys2, reference_keys.recipient);
 
     let user2_native_note1 = create_native_note(&keys2);
     let user2_native_note2 = create_native_note(&keys2);
 
     // Create matcher keys
-    let matcher_keys = prepare_keys();
+    let matcher_keys = prepare_keys(15);
 
     // Create Merkle tree with all notes
     let (merkle_paths, anchor) = build_merkle_paths(vec![
@@ -760,9 +837,11 @@ fn swap_order_and_swap_bundle() {
         &asset2_note2,
         &user2_native_note1,
         &user2_native_note2,
+        &asset1_reference_note,
+        &asset2_reference_note,
     ]);
 
-    assert_eq!(merkle_paths.len(), 8);
+    assert_eq!(merkle_paths.len(), 10);
     let merkle_path_asset1_note1 = merkle_paths[0].clone();
     let merkle_path_asset1_note2 = merkle_paths[1].clone();
     let merkle_path_user1_native_note1 = merkle_paths[2].clone();
@@ -771,6 +850,8 @@ fn swap_order_and_swap_bundle() {
     let merkle_path_asset2_note2 = merkle_paths[5].clone();
     let merkle_path_user2_native_note1 = merkle_paths[6].clone();
     let merkle_path_user2_native_note2 = merkle_paths[7].clone();
+    let merkle_path_asset1_reference_note = merkle_paths[8].clone();
+    let merkle_path_asset2_reference_note = merkle_paths[9].clone();
 
     // Create TestSpendInfo
     let asset1_spend1 = TestSpendInfo {
@@ -805,6 +886,14 @@ fn swap_order_and_swap_bundle() {
         note: user2_native_note2,
         merkle_path: merkle_path_user2_native_note2,
     };
+    let asset1_reference_spend_note = TestSpendInfo {
+        note: asset1_reference_note,
+        merkle_path: merkle_path_asset1_reference_note,
+    };
+    let asset2_reference_spend_note = TestSpendInfo {
+        note: asset2_reference_note,
+        merkle_path: merkle_path_asset2_reference_note,
+    };
 
     // --------------------------- Tests -----------------------------------------
     // 1. Create and verify ActionGroup for user1
@@ -836,11 +925,12 @@ fn swap_order_and_swap_bundle() {
         ],
         // We must provide a reference note for asset2 because we have no spend note for this asset.
         // This note will not be spent. It is only used to check the correctness of asset2.
-        vec![&asset2_spend1],
+        vec![&asset2_reference_spend_note],
         anchor,
         0,
         5,
         &keys1,
+        &reference_keys,
     )
     .unwrap();
 
@@ -873,11 +963,12 @@ fn swap_order_and_swap_bundle() {
         ],
         // We must provide a reference note for asset1 because we have no spend note for this asset.
         // This note will not be spent. It is only used to check the correctness of asset1.
-        vec![&asset1_spend1],
+        vec![&asset1_reference_spend_note],
         anchor,
         0,
         5,
         &keys2,
+        &reference_keys,
     )
     .unwrap();
 
@@ -896,6 +987,7 @@ fn swap_order_and_swap_bundle() {
         0,
         2,
         &matcher_keys,
+        &reference_keys,
     )
     .unwrap();
 
