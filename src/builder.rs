@@ -681,9 +681,7 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
-            self.burn,
-            self.reference_notes,
-            true,
+            SpecificBuilderParams::BundleParams(self.burn),
         )
     }
 
@@ -705,9 +703,7 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
-            self.burn,
-            self.reference_notes,
-            false,
+            SpecificBuilderParams::ActionGroupParams(self.reference_notes),
         )?
         .unwrap()
         .0;
@@ -782,21 +778,31 @@ fn pad_spend(
     }
 }
 
+/// Specific parameters for the builder to build a bundle.
+///
+/// If it is a BundleParams, it contains burn info.
+/// If it is an ActionGroupParams, it contains reference notes.
+/// Checking that bsk and bvk are consistent will be only performed for BundleParams.
+#[derive(Debug)]
+pub enum SpecificBuilderParams {
+    /// BundleParams contains burn info
+    BundleParams(HashMap<AssetBase, NoteValue>),
+    /// ActionGroupParams contains reference notes
+    ActionGroupParams(HashMap<AssetBase, SpendInfo>),
+}
+
 /// Builds a bundle containing the given spent notes and outputs.
 ///
 /// The returned bundle will have no proof or signatures; these can be applied with
 /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
 #[allow(clippy::type_complexity)]
-#[allow(clippy::too_many_arguments)]
 pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     mut rng: impl RngCore,
     anchor: Anchor,
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    burn: HashMap<AssetBase, NoteValue>,
-    reference_notes: HashMap<AssetBase, SpendInfo>,
-    check_bsk_bvk: bool,
+    specific_params: SpecificBuilderParams,
 ) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
     let flags = bundle_type.flags();
 
@@ -830,8 +836,12 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                     let num_asset_pre_actions = spends.len().max(outputs.len());
 
                     let mut first_spend = spends.first().map(|(s, _)| s.clone());
-                    if first_spend.is_none() {
-                        first_spend = reference_notes.get(&asset).cloned();
+                    if let SpecificBuilderParams::ActionGroupParams(ref reference_notes) =
+                        specific_params
+                    {
+                        if first_spend.is_none() {
+                            first_spend = reference_notes.get(&asset).cloned();
+                        }
                     }
 
                     let mut indexed_spends = spends
@@ -922,24 +932,33 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     let (actions, circuits): (Vec<_>, Vec<_>) =
         pre_actions.into_iter().map(|a| a.build(&mut rng)).unzip();
 
-    let burn = burn
-        .into_iter()
-        .map(|(asset, value)| {
-            Ok((
-                asset,
-                NoteValue::from_raw(
-                    u64::try_from(i128::from(value))
-                        .map_err(|_| BuildError::ValueSum(OverflowError))?,
-                ),
-            ))
-        })
-        .collect::<Result<Vec<(AssetBase, NoteValue)>, BuildError>>()?;
+    let burn = if let SpecificBuilderParams::BundleParams(ref burn) = specific_params {
+        burn.iter()
+            .map(|(asset, value)| {
+                Ok((
+                    *asset,
+                    NoteValue::from_raw(
+                        u64::try_from(i128::from(*value))
+                            .map_err(|_| BuildError::ValueSum(OverflowError))?,
+                    ),
+                ))
+            })
+            .collect::<Result<Vec<(AssetBase, NoteValue)>, BuildError>>()?
+    } else {
+        vec![]
+    };
 
-    if check_bsk_bvk {
-        // Verify that bsk and bvk are consistent
-        // (they could not be consistent for action group)
-        let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
-        assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+    match specific_params {
+        SpecificBuilderParams::BundleParams(_) => {
+            // Verify that bsk and bvk are consistent
+            // (they could not be consistent for action group)
+            let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
+            assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+        }
+        SpecificBuilderParams::ActionGroupParams(_) => {
+            // Do nothing
+            // bsk and bvk could not be consistent for action group
+        }
     }
 
     Ok(NonEmpty::from_vec(actions).map(|actions| {
