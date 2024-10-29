@@ -735,15 +735,7 @@ fn zsa_issue_and_transfer() {
 /// Create several action groups and combine them to create a SwapBundle
 #[test]
 fn swap_order_and_swap_bundle() {
-    // --------------------------- Swap description--------------------------------
-    // User1:
-    // - spends 10 asset1
-    // - receives 20 asset2
-    // User2:
-    // - spends 20 asset2
-    // - receives 10 asset1
-
-    // --------------------------- Setup -----------------------------------------
+    // ----- Setup -----
     let reference_keys = prepare_keys(0);
     // Create notes for user1
     let keys1 = prepare_keys(5);
@@ -836,106 +828,238 @@ fn swap_order_and_swap_bundle() {
         merkle_path: merkle_path_asset2_reference_note,
     };
 
-    // --------------------------- Tests -----------------------------------------
-    // 1. Create and verify ActionGroup for user1
-    let action_group1 = build_and_verify_action_group(
-        vec![
-            &asset1_spend1,            // 40 asset1
-            &asset1_spend2,            // 2 asset1
-            &user1_native_note1_spend, // 100 ZEC
-            &user1_native_note2_spend, // 100 ZEC
-        ],
-        vec![
-            // User1 would like to spend 10 asset1.
-            // Thus, he would like to keep 40+2-10=32 asset1.
-            TestOutputInfo {
-                value: NoteValue::from_raw(32),
-                asset: asset1_note1.asset(),
-            },
-            // User1 would like to receive 20 asset2.
-            TestOutputInfo {
-                value: NoteValue::from_raw(20),
-                asset: asset2_note1.asset(),
-            },
-            // User1 would like to pay 5 ZEC as a fee.
-            // Thus, he would like to keep 100+100-5=195 ZEC.
-            TestOutputInfo {
-                value: NoteValue::from_raw(195),
-                asset: AssetBase::native(),
-            },
-        ],
-        // We must provide a reference note for asset2 because we have no spend note for this asset.
-        // This note will not be spent. It is only used to check the correctness of asset2.
-        vec![&asset2_reference_spend_note],
-        anchor,
-        0,
-        5,
-        &keys1,
-        &reference_keys,
-    )
-    .unwrap();
+    // ----- Test 1: custom assets swap -----
+    // User1:
+    // - spends 10 asset1
+    // - receives 20 asset2
+    // User2:
+    // - spends 20 asset2
+    // - receives 10 asset1
 
-    // 2. Create and verify ActionGroup for user2
-    let action_group2 = build_and_verify_action_group(
-        vec![
-            &asset2_spend1,            // 40 asset2
-            &asset2_spend2,            // 2 asset2
-            &user2_native_note1_spend, // 100 ZEC
-            &user2_native_note2_spend, // 100 ZEC
-        ],
-        vec![
-            // User2 would like to spend 20 asset2.
-            // Thus, he would like to keep 40+2-20=22 asset2.
-            TestOutputInfo {
-                value: NoteValue::from_raw(22),
-                asset: asset2_note1.asset(),
-            },
-            // User2 would like to receive 10 asset1.
-            TestOutputInfo {
+    {
+        // 1. Create and verify ActionGroup for user1
+        let action_group1 = build_and_verify_action_group(
+            vec![
+                &asset1_spend1,            // 40 asset1
+                &asset1_spend2,            // 2 asset1
+                &user1_native_note1_spend, // 100 ZEC
+                &user1_native_note2_spend, // 100 ZEC
+            ],
+            vec![
+                // User1 would like to spend 10 asset1.
+                // Thus, he would like to keep 40+2-10=32 asset1.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(32),
+                    asset: asset1_note1.asset(),
+                },
+                // User1 would like to receive 20 asset2.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(20),
+                    asset: asset2_note1.asset(),
+                },
+                // User1 would like to pay 5 ZEC as a fee.
+                // Thus, he would like to keep 100+100-5=195 ZEC.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(195),
+                    asset: AssetBase::native(),
+                },
+            ],
+            // We must provide a reference note for asset2 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset2.
+            vec![&asset2_reference_spend_note],
+            anchor,
+            0,
+            5,
+            &keys1,
+            &reference_keys,
+        )
+        .unwrap();
+
+        // 2. Create and verify ActionGroup for user2
+        let action_group2 = build_and_verify_action_group(
+            vec![
+                &asset2_spend1,            // 40 asset2
+                &asset2_spend2,            // 2 asset2
+                &user2_native_note1_spend, // 100 ZEC
+            ],
+            vec![
+                // User2 would like to spend 20 asset2.
+                // Thus, he would like to keep 40+2-20=22 asset2.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(22),
+                    asset: asset2_note1.asset(),
+                },
+                // User2 would like to receive 10 asset1.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(10),
+                    asset: asset1_note1.asset(),
+                },
+                // User2 would like to pay 5 ZEC as a fee.
+                // Thus, he would like to keep 100-5=95 ZEC.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(95),
+                    asset: AssetBase::native(),
+                },
+            ],
+            // We must provide a reference note for asset1 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset1.
+            vec![&asset1_reference_spend_note],
+            anchor,
+            0,
+            4,
+            &keys2,
+            &reference_keys,
+        )
+        .unwrap();
+
+        // 3. Matcher fees action group
+        let action_group_matcher = build_and_verify_action_group(
+            // The matcher spends nothing.
+            vec![],
+            // The matcher receives 5 ZEC as a fee from user1 and user2.
+            // The 5 ZEC remaining from user1 and user2 are miner fees.
+            vec![TestOutputInfo {
+                value: NoteValue::from_raw(5),
+                asset: AssetBase::native(),
+            }],
+            vec![],
+            anchor,
+            0,
+            2,
+            &matcher_keys,
+            &reference_keys,
+        )
+        .unwrap();
+
+        // 4. Create a SwapBundle from the three previous ActionGroups
+        let swap_bundle = SwapBundle::new(
+            OsRng,
+            vec![action_group1, action_group2, action_group_matcher],
+        );
+        verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
+    }
+
+    // ----- Test 2: custom asset / ZEC swap -----
+    // User1:
+    // - spends 10 asset1
+    // - receives 150 ZEC
+    // User2:
+    // - spends 150 ZEC
+    // - receives 10 asset1
+    // Only user2 pays the fees
+
+    {
+        // 1. Create and verify ActionGroup for user1
+        let action_group1 = build_and_verify_action_group(
+            vec![
+                &asset1_spend1, // 40 asset1
+                &asset1_spend2, // 2 asset1
+            ],
+            vec![
+                // User1 would like to spend 10 asset1.
+                // Thus, he would like to keep 40+2-10=32 asset1.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(32),
+                    asset: asset1_note1.asset(),
+                },
+                // User1 would like to receive 150 ZEC.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(150),
+                    asset: AssetBase::native(),
+                },
+            ],
+            // No need of reference note for receiving ZEC
+            vec![],
+            anchor,
+            0,
+            3,
+            &keys1,
+            &reference_keys,
+        )
+        .unwrap();
+
+        // 2. Create and verify ActionGroup for user2
+        let action_group2 = build_and_verify_action_group(
+            vec![
+                &user2_native_note1_spend, // 100 ZEC
+                &user2_native_note2_spend, // 100 ZEC
+            ],
+            vec![
+                // User2 would like to send 150 ZEC to user1 and pays 15 ZEC as fees .
+                // Thus, he would like to keep 100+100-150-15=35 ZEC.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(35),
+                    asset: AssetBase::native(),
+                },
+                // User2 would like to receive 10 asset1.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(10),
+                    asset: asset1_note1.asset(),
+                },
+            ],
+            // We must provide a reference note for asset1 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset1.
+            vec![&asset1_reference_spend_note],
+            anchor,
+            0,
+            3,
+            &keys2,
+            &reference_keys,
+        )
+        .unwrap();
+
+        // 3. Matcher fees action group
+        let action_group_matcher = build_and_verify_action_group(
+            // The matcher spends nothing.
+            vec![],
+            // The matcher receives 10 ZEC as a fee from user2.
+            // The 5 ZEC remaining from user2 are miner fees.
+            vec![TestOutputInfo {
                 value: NoteValue::from_raw(10),
-                asset: asset1_note1.asset(),
-            },
-            // User2 would like to pay 5 ZEC as a fee.
-            // Thus, he would like to keep 100+100-5=195 ZEC.
-            TestOutputInfo {
-                value: NoteValue::from_raw(195),
                 asset: AssetBase::native(),
-            },
-        ],
-        // We must provide a reference note for asset1 because we have no spend note for this asset.
-        // This note will not be spent. It is only used to check the correctness of asset1.
-        vec![&asset1_reference_spend_note],
-        anchor,
-        0,
-        5,
-        &keys2,
-        &reference_keys,
-    )
-    .unwrap();
+            }],
+            vec![],
+            anchor,
+            0,
+            2,
+            &matcher_keys,
+            &reference_keys,
+        )
+        .unwrap();
 
-    // 3. Matcher fees action group
-    let action_group_matcher = build_and_verify_action_group(
-        // The matcher spends nothing.
-        vec![],
-        // The matcher receives 5 ZEC as a fee from user1 and user2.
-        // The 5 ZEC remaining from user1 and user2 are miner fees.
-        vec![TestOutputInfo {
-            value: NoteValue::from_raw(5),
-            asset: AssetBase::native(),
-        }],
-        vec![],
-        anchor,
-        0,
-        2,
-        &matcher_keys,
-        &reference_keys,
-    )
-    .unwrap();
+        // 4. Create a SwapBundle from the three previous ActionGroups
+        let swap_bundle = SwapBundle::new(
+            OsRng,
+            vec![action_group1, action_group2, action_group_matcher],
+        );
+        verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
+    }
 
-    // 4. Create a SwapBundle from the three previous ActionGroups
-    let swap_bundle = SwapBundle::new(
-        OsRng,
-        vec![action_group1, action_group2, action_group_matcher],
-    );
-    verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
+    // ----- Test 3: ZSA transaction using Swap -----
+    // User1 would like to join his two asset1 notes
+    {
+        // 1. Create and verify ActionGroup
+        let action_group = build_and_verify_action_group(
+            vec![
+                &asset1_spend1, // 40 asset1
+                &asset1_spend2, // 2 asset1
+            ],
+            vec![TestOutputInfo {
+                value: NoteValue::from_raw(42),
+                asset: asset1_note1.asset(),
+            }],
+            // No need of reference note
+            vec![],
+            anchor,
+            0,
+            2,
+            &keys1,
+            &reference_keys,
+        )
+        .unwrap();
+
+        // 2. Create a SwapBundle from the previous ActionGroup
+        let swap_bundle = SwapBundle::new(OsRng, vec![action_group]);
+        verify_swap_bundle(&swap_bundle, vec![&keys1.vk]);
+    }
 }
