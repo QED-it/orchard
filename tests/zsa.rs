@@ -321,7 +321,7 @@ fn build_and_verify_bundle(
 fn build_and_verify_action_group(
     spends: Vec<&TestSpendInfo>,
     outputs: Vec<TestOutputInfo>,
-    split_notes: Vec<&TestSpendInfo>,
+    reference_notes: Vec<&TestSpendInfo>,
     anchor: Anchor,
     timelimit: u32,
     expected_num_actions: usize,
@@ -343,10 +343,14 @@ fn build_and_verify_action_group(
                 builder.add_output(None, keys.recipient, output.value, output.asset, None)
             })
             .map_err(|err| err.to_string())?;
-        split_notes
+        reference_notes
             .iter()
             .try_for_each(|spend| {
-                builder.add_split_note(keys.fvk().clone(), spend.note, spend.merkle_path().clone())
+                builder.add_reference_note(
+                    keys.fvk().clone(),
+                    spend.note,
+                    spend.merkle_path().clone(),
+                )
             })
             .map_err(|err| err.to_string())?;
         build_and_sign_action_group(builder, timelimit, rng, keys.pk(), keys.sk())
@@ -771,7 +775,7 @@ fn swap_order_and_swap_bundle() {
                 asset: AssetBase::native(),
             },
         ],
-        // We must provide a split note for asset2 because we have no spend note for this asset.
+        // We must provide a reference note for asset2 because we have no spend note for this asset.
         // This note will not be spent. It is only used to check the correctness of asset2.
         vec![&asset2_spend1],
         anchor,
@@ -808,7 +812,7 @@ fn swap_order_and_swap_bundle() {
                 asset: AssetBase::native(),
             },
         ],
-        // We must provide a split note for asset1 because we have no spend note for this asset.
+        // We must provide a reference note for asset1 because we have no spend note for this asset.
         // This note will not be spent. It is only used to check the correctness of asset1.
         vec![&asset1_spend1],
         anchor,
