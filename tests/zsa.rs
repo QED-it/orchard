@@ -826,9 +826,10 @@ fn swap_order_and_swap_bundle() {
     let action_group_matcher = build_and_verify_action_group(
         // The matcher spends nothing.
         vec![],
-        // The matcher receives 10 ZEC as a fee from user1 and user2.
+        // The matcher receives 5 ZEC as a fee from user1 and user2.
+        // The 5 ZEC remaining from user1 and user2 are miner fees.
         vec![TestOutputInfo {
-            value: NoteValue::from_raw(10),
+            value: NoteValue::from_raw(5),
             asset: AssetBase::native(),
         }],
         vec![],
