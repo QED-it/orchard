@@ -796,9 +796,7 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
-            self.burn,
-            self.reference_notes,
-            true,
+            SpecificBuilderParams::BundleParams(self.burn),
         )
     }
 
@@ -820,9 +818,7 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
-            self.burn,
-            self.reference_notes,
-            false,
+            SpecificBuilderParams::ActionGroupParams(self.reference_notes),
         )?
         .unwrap()
         .0;
@@ -962,6 +958,19 @@ fn pad_spend(
     }
 }
 
+/// Specific parameters for the builder to build a bundle.
+///
+/// If it is a BundleParams, it contains burn info.
+/// If it is an ActionGroupParams, it contains reference notes.
+/// Checking that bsk and bvk are consistent will be only performed for BundleParams.
+#[derive(Debug)]
+pub enum SpecificBuilderParams {
+    /// BundleParams contains burn info
+    BundleParams(HashMap<AssetBase, NoteValue>),
+    /// ActionGroupParams contains reference notes
+    ActionGroupParams(HashMap<AssetBase, SpendInfo>),
+}
+
 /// Builds a bundle containing the given spent notes, outputs and burns.
 ///
 /// The returned bundle will have no proof or signatures; these can be applied with
@@ -1035,6 +1044,7 @@ fn build_bundle<B, R: RngCore>(
     outputs: Vec<OutputInfo>,
     burn: BTreeMap<AssetBase, NoteValue>,
     reference_notes: BTreeMap<AssetBase, SpendInfo>,
+    specific_params: SpecificBuilderParams,
     finisher: impl FnOnce(
         Vec<ActionInfo>,             // pre-actions
         Flags,                       // flags
@@ -1076,8 +1086,12 @@ fn build_bundle<B, R: RngCore>(
                 let num_asset_pre_actions = spends.len().max(outputs.len());
 
                     let mut first_spend = spends.first().map(|(s, _)| s.clone());
-                    if first_spend.is_none() {
-                        first_spend = reference_notes.get(&asset).cloned();
+                    if let SpecificBuilderParams::ActionGroupParams(ref reference_notes) =
+                        specific_params
+                    {
+                        if first_spend.is_none() {
+                            first_spend = reference_notes.get(&asset).cloned();
+                        }
                     }
 
                 let mut indexed_spends = spends
