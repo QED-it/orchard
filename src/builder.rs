@@ -628,10 +628,10 @@ pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, Bun
 pub struct Builder {
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    split_notes: BTreeMap<AssetBase, SpendInfo>,
     burn: BTreeMap<AssetBase, NoteValue>,
     bundle_type: BundleType,
     anchor: Anchor,
+    reference_notes: HashMap<AssetBase, SpendInfo>,
 }
 
 impl Builder {
@@ -640,10 +640,10 @@ impl Builder {
         Builder {
             spends: vec![],
             outputs: vec![],
-            split_notes: BTreeMap::new(),
             burn: BTreeMap::new(),
             bundle_type,
             anchor,
+            reference_notes: HashMap::new(),
         }
     }
 
@@ -702,8 +702,8 @@ impl Builder {
         Ok(())
     }
 
-    /// Add a reference split note which could be used to create Actions.
-    pub fn add_split_note(
+    /// Add a reference note which could be used to create Actions.
+    pub fn add_reference_note(
         &mut self,
         fvk: FullViewingKey,
         note: Note,
@@ -716,7 +716,7 @@ impl Builder {
             return Err(SpendError::AnchorMismatch);
         }
 
-        self.split_notes.entry(note.asset()).or_insert(spend);
+        self.reference_notes.entry(note.asset()).or_insert(spend);
 
         Ok(())
     }
@@ -796,8 +796,8 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
-            self.split_notes,
             self.burn,
+            self.reference_notes,
             true,
         )
     }
@@ -820,8 +820,8 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
-            self.split_notes,
             self.burn,
+            self.reference_notes,
             false,
         )?
         .unwrap()
@@ -954,7 +954,7 @@ fn pad_spend(
         // For native asset, extends with dummy notes
         Ok(SpendInfo::dummy(AssetBase::native(), &mut rng))
     } else {
-        // For ZSA asset, extends with split_notes.
+        // For ZSA asset, extends with split note.
         // If SpendInfo is none, return an error (no split note are available for this asset)
         spend
             .map(|s| s.create_split_spend(&mut rng))
@@ -1033,8 +1033,8 @@ fn build_bundle<B, R: RngCore>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    split_notes: BTreeMap<AssetBase, SpendInfo>,
     burn: BTreeMap<AssetBase, NoteValue>,
+    reference_notes: BTreeMap<AssetBase, SpendInfo>,
     finisher: impl FnOnce(
         Vec<ActionInfo>,             // pre-actions
         Flags,                       // flags
@@ -1077,7 +1077,7 @@ fn build_bundle<B, R: RngCore>(
 
                     let mut first_spend = spends.first().map(|(s, _)| s.clone());
                     if first_spend.is_none() {
-                        first_spend = split_notes.get(&asset).cloned();
+                        first_spend = reference_notes.get(&asset).cloned();
                     }
 
                 let mut indexed_spends = spends
