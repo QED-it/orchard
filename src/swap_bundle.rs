@@ -143,8 +143,13 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
             .sum();
         // Evaluate the swap bsk by summing the bsk of each action group.
         let bsk = action_groups
-            .iter()
-            .map(|a| ValueCommitTrapdoor::from_bsk(a.bsk.unwrap()))
+            .iter_mut()
+            .map(|ag| {
+                let bsk = ValueCommitTrapdoor::from_bsk(ag.bsk.unwrap());
+                // Remove the bsk of each action group as it is no longer needed.
+                ag.remove_bsk();
+                bsk
+            })
             .sum::<ValueCommitTrapdoor>()
             .into_bsk();
         // Evaluate the swap sighash
@@ -156,8 +161,6 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
         // Evaluate the swap binding signature which is equal to the signature of the swap sigash
         // with the swap binding signature key bsk.
         let binding_signature = bsk.sign(rng, &sighash);
-        // Remove the bsk of each action group as it is no longer needed.
-        action_groups.iter_mut().for_each(|ag| ag.remove_bsk());
         // Create the swap bundle
         SwapBundle {
             action_groups,
