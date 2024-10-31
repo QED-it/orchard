@@ -63,7 +63,7 @@ impl<A: Authorization, V> ActionGroup<A, V> {
     /// Remove bsk from this action group
     ///
     /// When creating a SwapBundle from a list of action groups, we evaluate the binding signature
-    /// by signing the sighash with the summ of the bsk of each action group.
+    /// by signing the sighash with the sum of the bsk of each action group.
     /// Then, we remove the bsk of each action group as it is no longer needed.
     fn remove_bsk(&mut self) {
         self.bsk = None;
@@ -91,14 +91,14 @@ impl<V> ActionGroup<InProgress<Proof, Unauthorized>, V> {
     pub fn apply_signatures<R: RngCore + CryptoRng>(
         self,
         mut rng: R,
-        sighash: [u8; 32],
+        action_group_digest: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
     ) -> Result<ActionGroup<ActionGroupAuthorized, V>, BuildError> {
         let (bsk, action_group) = signing_keys
             .iter()
             .fold(
                 self.action_group
-                    .prepare_for_action_group(&mut rng, sighash),
+                    .prepare_for_action_group(&mut rng, action_group_digest),
                 |partial, ask| partial.sign(&mut rng, ask),
             )
             .finalize()?;

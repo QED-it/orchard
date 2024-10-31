@@ -800,7 +800,7 @@ impl Builder {
         )
     }
 
-    /// Builds an action group containing the given spent notes and outputs.
+    /// Builds an action group containing the given spent and output notes.
     ///
     /// The returned action group will have no proof or signatures; these can be applied with
     /// [`ActionGroup::create_proof`] and [`ActionGroup::apply_signatures`] respectively.
@@ -950,7 +950,7 @@ fn pad_spend(
         // For native asset, extends with dummy notes
         Ok(SpendInfo::dummy(AssetBase::native(), &mut rng))
     } else {
-        // For ZSA asset, extends with split note.
+        // For ZSA asset, extends with split_notes.
         // If SpendInfo is none, return an error (no split note are available for this asset)
         spend
             .map(|s| s.create_split_spend(&mut rng))
@@ -1314,7 +1314,7 @@ impl InProgressSignatures for PartiallyAuthorized {
 #[derive(Debug)]
 pub struct ActionGroupPartiallyAuthorized {
     bsk: redpallas::SigningKey<Binding>,
-    sighash: [u8; 32],
+    action_group_digest: [u8; 32],
 }
 
 impl InProgressSignatures for ActionGroupPartiallyAuthorized {
@@ -1380,20 +1380,20 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
 }
 
 impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized>, V, D> {
-    /// Loads the sighash into this action group, preparing it for signing.
+    /// Loads the action_group_digest into this action group, preparing it for signing.
     ///
-    /// This API ensures that all signatures are created over the same sighash.
+    /// This API ensures that all signatures are created over the same action_group_digest.
     pub fn prepare_for_action_group<R: RngCore + CryptoRng>(
         self,
         mut rng: R,
-        sighash: [u8; 32],
+        action_group_digest: [u8; 32],
     ) -> Bundle<InProgress<P, ActionGroupPartiallyAuthorized>, V, D> {
         self.map_authorization(
             &mut rng,
             |rng, _, SigningMetadata { dummy_ask, parts }| {
                 // We can create signatures for dummy spends immediately.
                 dummy_ask
-                    .map(|ask| ask.randomize(&parts.alpha).sign(rng, &sighash))
+                    .map(|ask| ask.randomize(&parts.alpha).sign(rng, &action_group_digest))
                     .map(MaybeSigned::Signature)
                     .unwrap_or(MaybeSigned::SigningMetadata(parts))
             },
@@ -1401,7 +1401,7 @@ impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized
                 proof: auth.proof,
                 sigs: ActionGroupPartiallyAuthorized {
                     bsk: auth.sigs.bsk,
-                    sighash,
+                    action_group_digest,
                 },
             },
         )
@@ -1434,7 +1434,7 @@ impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
     pub fn apply_signatures_for_action_group<R: RngCore + CryptoRng>(
         self,
         mut rng: R,
-        sighash: [u8; 32],
+        action_group_digest: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
     ) -> Result<
         (
@@ -1446,7 +1446,7 @@ impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
         signing_keys
             .iter()
             .fold(
-                self.prepare_for_action_group(&mut rng, sighash),
+                self.prepare_for_action_group(&mut rng, action_group_digest),
                 |partial, ask| partial.sign(&mut rng, ask),
             )
             .finalize()
@@ -1466,7 +1466,8 @@ impl<P: fmt::Debug, V, D: OrchardDomainCommon>
             |rng, partial, maybe| match maybe {
                 MaybeSigned::SigningMetadata(parts) if parts.ak == expected_ak => {
                     MaybeSigned::Signature(
-                        ask.randomize(&parts.alpha).sign(rng, &partial.sigs.sighash),
+                        ask.randomize(&parts.alpha)
+                            .sign(rng, &partial.sigs.action_group_digest),
                     )
                 }
                 s => s,
