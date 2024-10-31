@@ -65,9 +65,14 @@ pub fn verify_action_group(
     let action_group_bundle = action_group.action_group();
     assert!(matches!(action_group_bundle.verify_proof(vk), Ok(())));
 
-    let sighash: [u8; 32] = action_group.commitment().into();
+    let action_group_digest: [u8; 32] = action_group.commitment().into();
     for action in action_group_bundle.actions() {
-        assert_eq!(action.rk().verify(&sighash, action.authorization()), Ok(()));
+        assert_eq!(
+            action
+                .rk()
+                .verify(&action_group_digest, action.authorization()),
+            Ok(())
+        );
     }
 }
 

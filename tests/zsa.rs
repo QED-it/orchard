@@ -106,12 +106,12 @@ fn build_and_sign_action_group(
     reference_sk: &SpendingKey,
 ) -> ActionGroup<ActionGroupAuthorized, i64> {
     let unauthorized = builder.build_action_group(&mut rng, timelimit).unwrap();
-    let sighash = unauthorized.commitment().into();
+    let action_group_digest = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
     proven
         .apply_signatures(
             rng,
-            sighash,
+            action_group_digest,
             &[
                 SpendAuthorizingKey::from(sk),
                 SpendAuthorizingKey::from(reference_sk),
@@ -266,6 +266,7 @@ fn issue_zsa_notes_with_reference_note(
         )
         .is_ok());
 
+    // Create a reference note (with a note value equal to 0)
     assert!(unauthorized
         .add_recipient(
             asset_descr,
@@ -732,11 +733,12 @@ fn zsa_issue_and_transfer() {
     }
 }
 
-/// Create several action groups and combine them to create a SwapBundle
+/// Create several action groups and combine them to create some swap bundles.
 #[test]
 fn swap_order_and_swap_bundle() {
     // ----- Setup -----
     let reference_keys = prepare_keys(0);
+
     // Create notes for user1
     let keys1 = prepare_keys(5);
 
@@ -832,9 +834,14 @@ fn swap_order_and_swap_bundle() {
     // User1:
     // - spends 10 asset1
     // - receives 20 asset2
+    // - pays 5 ZEC as fees
     // User2:
     // - spends 20 asset2
     // - receives 10 asset1
+    // - pays 5 ZEC as fees
+    // Matcher:
+    // - receives 5 ZEC as fees from user1 and user2
+    // 5 ZEC are remaining for miner fees
 
     {
         // 1. Create and verify ActionGroup for user1
@@ -946,7 +953,10 @@ fn swap_order_and_swap_bundle() {
     // User2:
     // - spends 150 ZEC
     // - receives 10 asset1
-    // Only user2 pays the fees
+    // - pays 15 ZEC as fees
+    // Matcher:
+    // - receives 10 ZEC as fees from user2
+    // 5 ZEC are remaining for miner fees
 
     {
         // 1. Create and verify ActionGroup for user1
