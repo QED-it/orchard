@@ -103,20 +103,18 @@ fn build_and_sign_action_group(
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
-    reference_sk: &SpendingKey,
+    reference_sk: Option<&SpendingKey>,
 ) -> ActionGroup<ActionGroupAuthorized, i64> {
     let unauthorized = builder.build_action_group(&mut rng, timelimit).unwrap();
     let action_group_digest = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
+
+    let mut signing_keys = vec![SpendAuthorizingKey::from(sk)];
+    if let Some(reference_sk) = reference_sk {
+        signing_keys.push(SpendAuthorizingKey::from(reference_sk));
+    }
     proven
-        .apply_signatures(
-            rng,
-            action_group_digest,
-            &[
-                SpendAuthorizingKey::from(sk),
-                SpendAuthorizingKey::from(reference_sk),
-            ],
-        )
+        .apply_signatures(rng, action_group_digest, signing_keys.as_slice())
         .unwrap()
 }
 
@@ -388,12 +386,11 @@ fn build_and_verify_bundle(
 fn build_and_verify_action_group(
     spends: Vec<&TestSpendInfo>,
     outputs: Vec<TestOutputInfo>,
-    reference_notes: Vec<&TestSpendInfo>,
     anchor: Anchor,
     timelimit: u32,
     expected_num_actions: usize,
     keys: &Keychain,
-    reference_keys: &Keychain,
+    references: Option<ReferenceNotesAndKeys>,
 ) -> Result<ActionGroup<ActionGroupAuthorized, i64>, String> {
     let rng = OsRng;
     let shielded_action_group: ActionGroup<_, i64> = {
@@ -411,23 +408,28 @@ fn build_and_verify_action_group(
                 builder.add_output(None, keys.recipient, output.value, output.asset, None)
             })
             .map_err(|err| err.to_string())?;
-        reference_notes
-            .iter()
-            .try_for_each(|spend| {
-                builder.add_reference_note(
-                    reference_keys.fvk().clone(),
-                    spend.note,
-                    spend.merkle_path().clone(),
-                )
-            })
-            .map_err(|err| err.to_string())?;
+        if let Some(ref references) = references {
+            references
+                .reference_notes
+                .iter()
+                .try_for_each(|spend| {
+                    builder.add_reference_note(
+                        references.reference_keys.fvk().clone(),
+                        spend.note,
+                        spend.merkle_path().clone(),
+                    )
+                })
+                .map_err(|err| err.to_string())?;
+        }
         build_and_sign_action_group(
             builder,
             timelimit,
             rng,
             keys.pk(),
             keys.sk(),
-            reference_keys.sk(),
+            references
+                .as_ref()
+                .map(|notes_keys| notes_keys.reference_keys.sk()),
         )
     };
 
@@ -733,9 +735,14 @@ fn zsa_issue_and_transfer() {
     }
 }
 
+pub struct ReferenceNotesAndKeys<'a> {
+    reference_notes: Vec<&'a TestSpendInfo>,
+    reference_keys: &'a Keychain,
+}
+
 /// Create several action groups and combine them to create some swap bundles.
 #[test]
-fn swap_order_and_swap_bundle() {
+fn action_group_and_swap_bundle() {
     // ----- Setup -----
     let reference_keys = prepare_keys(0);
 
@@ -871,14 +878,16 @@ fn swap_order_and_swap_bundle() {
                     asset: AssetBase::native(),
                 },
             ],
-            // We must provide a reference note for asset2 because we have no spend note for this asset.
-            // This note will not be spent. It is only used to check the correctness of asset2.
-            vec![&asset2_reference_spend_note],
             anchor,
             0,
             5,
             &keys1,
-            &reference_keys,
+            // We must provide a reference note for asset2 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset2.
+            Some(ReferenceNotesAndKeys {
+                reference_notes: vec![&asset2_reference_spend_note],
+                reference_keys: &reference_keys,
+            }),
         )
         .unwrap();
 
@@ -908,14 +917,16 @@ fn swap_order_and_swap_bundle() {
                     asset: AssetBase::native(),
                 },
             ],
-            // We must provide a reference note for asset1 because we have no spend note for this asset.
-            // This note will not be spent. It is only used to check the correctness of asset1.
-            vec![&asset1_reference_spend_note],
             anchor,
             0,
             4,
             &keys2,
-            &reference_keys,
+            // We must provide a reference note for asset1 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset1.
+            Some(ReferenceNotesAndKeys {
+                reference_notes: vec![&asset1_reference_spend_note],
+                reference_keys: &reference_keys,
+            }),
         )
         .unwrap();
 
@@ -929,12 +940,11 @@ fn swap_order_and_swap_bundle() {
                 value: NoteValue::from_raw(5),
                 asset: AssetBase::native(),
             }],
-            vec![],
             anchor,
             0,
             2,
             &matcher_keys,
-            &reference_keys,
+            None,
         )
         .unwrap();
 
@@ -978,13 +988,12 @@ fn swap_order_and_swap_bundle() {
                     asset: AssetBase::native(),
                 },
             ],
-            // No need of reference note for receiving ZEC
-            vec![],
             anchor,
             0,
             3,
             &keys1,
-            &reference_keys,
+            // No need of reference note for receiving ZEC
+            None,
         )
         .unwrap();
 
@@ -1007,14 +1016,16 @@ fn swap_order_and_swap_bundle() {
                     asset: asset1_note1.asset(),
                 },
             ],
-            // We must provide a reference note for asset1 because we have no spend note for this asset.
-            // This note will not be spent. It is only used to check the correctness of asset1.
-            vec![&asset1_reference_spend_note],
             anchor,
             0,
             3,
             &keys2,
-            &reference_keys,
+            // We must provide a reference note for asset1 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset1.
+            Some(ReferenceNotesAndKeys {
+                reference_notes: vec![&asset1_reference_spend_note],
+                reference_keys: &reference_keys,
+            }),
         )
         .unwrap();
 
@@ -1028,12 +1039,11 @@ fn swap_order_and_swap_bundle() {
                 value: NoteValue::from_raw(10),
                 asset: AssetBase::native(),
             }],
-            vec![],
             anchor,
             0,
             2,
             &matcher_keys,
-            &reference_keys,
+            None,
         )
         .unwrap();
 
@@ -1058,13 +1068,12 @@ fn swap_order_and_swap_bundle() {
                 value: NoteValue::from_raw(42),
                 asset: asset1_note1.asset(),
             }],
-            // No need of reference note
-            vec![],
             anchor,
             0,
             2,
             &keys1,
-            &reference_keys,
+            // No need of reference note
+            None,
         )
         .unwrap();
 
