@@ -382,7 +382,6 @@ fn build_and_verify_bundle(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn build_and_verify_action_group(
     spends: Vec<&TestSpendInfo>,
     outputs: Vec<TestOutputInfo>,
