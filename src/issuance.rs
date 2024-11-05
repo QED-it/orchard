@@ -38,6 +38,11 @@ use Error::{
     MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
+use crate::constants::reference_keys::ReferenceKeys;
+use crate::supply_info::{AssetSupply, SupplyInfo};
+use crate::value::{NoteValue, ValueSum};
+use crate::{Address, Note};
+
 /// Checks if a given note is a reference note.
 ///
 /// A reference note satisfies the following conditions:
@@ -54,6 +59,8 @@ pub struct IssueBundle<T: IssueAuth> {
     ik: IssueValidatingKey<ZSASchnorr>,
     /// The list of issue actions that make up this bundle.
     actions: NonEmpty<IssueAction>,
+    /// The list of reference notes created in this bundle.
+    reference_notes: HashMap<AssetBase, Note>,
     /// The authorization for this action.
     authorization: T,
 }
@@ -335,11 +342,13 @@ impl<T: IssueAuth> IssueBundle<T> {
     pub fn from_parts(
         ik: IssueValidatingKey<ZSASchnorr>,
         actions: NonEmpty<IssueAction>,
+        reference_notes: HashMap<AssetBase, Note>,
         authorization: T,
     ) -> Self {
         IssueBundle {
             ik,
             actions,
+            reference_notes,
             authorization,
         }
     }
@@ -353,6 +362,7 @@ impl<T: IssueAuth> IssueBundle<T> {
         IssueBundle {
             ik: self.ik,
             actions: self.actions,
+            reference_notes: self.reference_notes,
             authorization: map_auth(authorization),
         }
     }
@@ -383,6 +393,19 @@ impl IssueBundle<AwaitingNullifier> {
             notes.push(create_reference_note(asset, &mut rng));
         };
 
+        let reference_note = Note::new(
+            ReferenceKeys::recipient(),
+            NoteValue::zero(),
+            asset,
+            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            &mut rng,
+        );
+
+        let mut notes = vec![];
+        if first_issuance {
+            notes.push(reference_note);
+        }
+
         let action = match issue_info {
             None => IssueAction {
                 asset_desc_hash,
@@ -409,6 +432,13 @@ impl IssueBundle<AwaitingNullifier> {
         };
 
         (
+        let reference_notes = if first_issuance {
+            HashMap::from([(asset, reference_note)])
+        } else {
+            HashMap::new()
+        };
+
+        Ok((
             IssueBundle {
                 ik,
                 actions: NonEmpty::new(action),
@@ -457,6 +487,11 @@ impl IssueBundle<AwaitingNullifier> {
             }
             None => {
                 // Insert a new IssueAction.
+                let notes = if first_issuance {
+                    vec![reference_note, note]
+                } else {
+                    vec![note]
+                };
                 self.actions.push(IssueAction {
                     asset_desc_hash,
                     notes,
@@ -464,6 +499,10 @@ impl IssueBundle<AwaitingNullifier> {
                 });
             }
         };
+
+        if first_issuance {
+            self.reference_notes.insert(asset, reference_note);
+        }
 
         Ok(asset)
     }
@@ -519,6 +558,7 @@ impl IssueBundle<AwaitingSighash> {
         IssueBundle {
             ik: self.ik,
             actions: self.actions,
+            reference_notes: self.reference_notes,
             authorization: Prepared { sighash },
         }
     }
@@ -962,11 +1002,6 @@ mod tests {
         )
     }
 
-    /// This function computes the identity point on the Pallas curve and returns an Asset Base with that value.
-    fn identity_point() -> AssetBase {
-        let identity_point = (Point::generator() * -Scalar::one()) + Point::generator();
-        AssetBase::from_bytes(&identity_point.to_bytes()).unwrap()
-    }
 
     #[test]
     fn action_verify_valid() {
@@ -1989,6 +2024,7 @@ pub mod testing {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
+    use std::collections::HashMap;
 
     prop_compose! {
         /// Generate a uniformly distributed ZSA Schnorr signature
@@ -2055,6 +2091,7 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
+                reference_notes: HashMap::new(),
                 authorization: Prepared { sighash: fake_sighash }
             }
         }
@@ -2076,6 +2113,7 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
+                reference_notes: HashMap::new(),
                 authorization: Signed { signature: fake_sig },
             }
         }
