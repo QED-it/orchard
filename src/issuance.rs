@@ -4,7 +4,7 @@ use group::Group;
 use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
@@ -17,10 +17,10 @@ use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
 use crate::note::{AssetBase, Nullifier, Rho};
 
+use crate::constants::reference_keys::ReferenceKeys;
+use crate::supply_info::{AssetSupply, SupplyInfo};
 use crate::value::{NoteValue, ValueSum};
 use crate::{Address, Note};
-
-use crate::supply_info::{AssetSupply, SupplyInfo};
 
 /// A bundle of actions to be applied to the ledger.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +29,8 @@ pub struct IssueBundle<T: IssueAuth> {
     ik: IssuanceValidatingKey,
     /// The list of issue actions that make up this bundle.
     actions: NonEmpty<IssueAction>,
+    /// The list of reference notes created in this bundle.
+    reference_notes: HashMap<AssetBase, Note>,
     /// The authorization for this action.
     authorization: T,
 }
@@ -246,11 +248,13 @@ impl<T: IssueAuth> IssueBundle<T> {
     pub fn from_parts(
         ik: IssuanceValidatingKey,
         actions: NonEmpty<IssueAction>,
+        reference_notes: HashMap<AssetBase, Note>,
         authorization: T,
     ) -> Self {
         IssueBundle {
             ik,
             actions,
+            reference_notes,
             authorization,
         }
     }
@@ -264,6 +268,7 @@ impl<T: IssueAuth> IssueBundle<T> {
         IssueBundle {
             ik: self.ik,
             actions: self.actions,
+            reference_notes: self.reference_notes,
             authorization: map_auth(authorization),
         }
     }
@@ -278,6 +283,9 @@ impl IssueBundle<Unauthorized> {
     /// issue_info values and with `finalize` set to false. In this created note, rho will be
     /// randomly sampled, similar to dummy note generation.
     ///
+    /// If `first_issuance` is true, the `IssueBundle` will contain a reference note for the asset
+    /// defined by (`asset_desc`, `ik`).
+    ///
     /// # Errors
     ///
     /// This function may return an error in any of the following cases:
@@ -287,6 +295,7 @@ impl IssueBundle<Unauthorized> {
         ik: IssuanceValidatingKey,
         asset_desc: Vec<u8>,
         issue_info: Option<IssueInfo>,
+        first_issuance: bool,
         mut rng: impl RngCore,
     ) -> Result<(IssueBundle<Unauthorized>, AssetBase), Error> {
         if !is_asset_desc_of_valid_size(&asset_desc) {
@@ -295,10 +304,23 @@ impl IssueBundle<Unauthorized> {
 
         let asset = AssetBase::derive(&ik, &asset_desc);
 
+        let reference_note = Note::new(
+            ReferenceKeys::recipient(),
+            NoteValue::zero(),
+            asset,
+            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            &mut rng,
+        );
+
+        let mut notes = vec![];
+        if first_issuance {
+            notes.push(reference_note);
+        }
+
         let action = match issue_info {
             None => IssueAction {
                 asset_desc,
-                notes: vec![],
+                notes,
                 finalize: true,
             },
             Some(issue_info) => {
@@ -310,18 +332,27 @@ impl IssueBundle<Unauthorized> {
                     &mut rng,
                 );
 
+                notes.push(note);
+
                 IssueAction {
                     asset_desc,
-                    notes: vec![note],
+                    notes,
                     finalize: false,
                 }
             }
+        };
+
+        let reference_notes = if first_issuance {
+            HashMap::from([(asset, reference_note)])
+        } else {
+            HashMap::new()
         };
 
         Ok((
             IssueBundle {
                 ik,
                 actions: NonEmpty::new(action),
+                reference_notes,
                 authorization: Unauthorized,
             },
             asset,
@@ -331,6 +362,8 @@ impl IssueBundle<Unauthorized> {
     /// Add a new note to the `IssueBundle`.
     ///
     /// Rho will be randomly sampled, similar to dummy note generation.
+    /// If `first_issuance` is true, we will also add a reference note for the asset defined by
+    /// (`asset_desc`, `ik`).
     ///
     /// # Errors
     ///
@@ -342,6 +375,7 @@ impl IssueBundle<Unauthorized> {
         asset_desc: &[u8],
         recipient: Address,
         value: NoteValue,
+        first_issuance: bool,
         mut rng: impl RngCore,
     ) -> Result<AssetBase, Error> {
         if !is_asset_desc_of_valid_size(asset_desc) {
@@ -349,6 +383,14 @@ impl IssueBundle<Unauthorized> {
         }
 
         let asset = AssetBase::derive(&self.ik, asset_desc);
+
+        let reference_note = Note::new(
+            ReferenceKeys::recipient(),
+            NoteValue::zero(),
+            asset,
+            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            &mut rng,
+        );
 
         let note = Note::new(
             recipient,
@@ -367,16 +409,28 @@ impl IssueBundle<Unauthorized> {
             Some(action) => {
                 // Append to an existing IssueAction.
                 action.notes.push(note);
+                if first_issuance {
+                    action.notes.push(reference_note);
+                }
             }
             None => {
                 // Insert a new IssueAction.
+                let notes = if first_issuance {
+                    vec![reference_note, note]
+                } else {
+                    vec![note]
+                };
                 self.actions.push(IssueAction {
                     asset_desc: Vec::from(asset_desc),
-                    notes: vec![note],
+                    notes,
                     finalize: false,
                 });
             }
         };
+
+        if first_issuance {
+            self.reference_notes.insert(asset, reference_note);
+        }
 
         Ok(asset)
     }
@@ -412,6 +466,7 @@ impl IssueBundle<Unauthorized> {
         IssueBundle {
             ik: self.ik,
             actions: self.actions,
+            reference_notes: self.reference_notes,
             authorization: Prepared { sighash },
         }
     }
@@ -437,6 +492,7 @@ impl IssueBundle<Prepared> {
         Ok(IssueBundle {
             ik: self.ik,
             actions: self.actions,
+            reference_notes: self.reference_notes,
             authorization: Signed { signature },
         })
     }
@@ -624,7 +680,7 @@ mod tests {
     use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     fn setup_params() -> (
         OsRng,
@@ -722,7 +778,8 @@ mod tests {
         let action =
             IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], false);
 
-        let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), Unauthorized);
+        let bundle =
+            IssueBundle::from_parts(ik, NonEmpty::new(action), HashMap::new(), Unauthorized);
 
         (isk, bundle, sighash)
     }
@@ -803,6 +860,7 @@ mod tests {
                     recipient,
                     value: NoteValue::unsplittable()
                 }),
+                true,
                 rng,
             )
             .unwrap_err(),
@@ -817,6 +875,7 @@ mod tests {
                     recipient,
                     value: NoteValue::unsplittable()
                 }),
+                true,
                 rng,
             )
             .unwrap_err(),
@@ -830,17 +889,30 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
 
         let another_asset = bundle
-            .add_recipient(&str.into_bytes(), recipient, NoteValue::from_raw(10), rng)
+            .add_recipient(
+                &str.into_bytes(),
+                recipient,
+                NoteValue::from_raw(10),
+                false,
+                rng,
+            )
             .unwrap();
         assert_eq!(asset, another_asset);
 
         let third_asset = bundle
-            .add_recipient(str2.as_bytes(), recipient, NoteValue::from_raw(15), rng)
+            .add_recipient(
+                str2.as_bytes(),
+                recipient,
+                NoteValue::from_raw(15),
+                true,
+                rng,
+            )
             .unwrap();
         assert_ne!(asset, third_asset);
 
@@ -850,21 +922,26 @@ mod tests {
         let actions_vec = bundle.get_actions_by_asset(&asset);
         assert_eq!(actions_vec.len(), 1);
         let action = actions_vec[0];
-        assert_eq!(action.notes.len(), 2);
-        assert_eq!(action.notes.first().unwrap().value().inner(), 5);
-        assert_eq!(action.notes.first().unwrap().asset(), asset);
-        assert_eq!(action.notes.first().unwrap().recipient(), recipient);
+        assert_eq!(action.notes.len(), 3);
+        // The note at index 0 is the reference note.
+        let first_note = action.notes.get(1).unwrap();
+        assert_eq!(first_note.value().inner(), 5);
+        assert_eq!(first_note.asset(), asset);
+        assert_eq!(first_note.recipient(), recipient);
 
-        assert_eq!(action.notes.get(1).unwrap().value().inner(), 10);
-        assert_eq!(action.notes.get(1).unwrap().asset(), asset);
-        assert_eq!(action.notes.get(1).unwrap().recipient(), recipient);
+        let second_note = action.notes.get(2).unwrap();
+        assert_eq!(second_note.value().inner(), 10);
+        assert_eq!(second_note.asset(), asset);
+        assert_eq!(second_note.recipient(), recipient);
 
         let action2_vec = bundle.get_actions_by_desc(str2.as_bytes());
         assert_eq!(action2_vec.len(), 1);
         let action2 = action2_vec[0];
-        assert_eq!(action2.notes.len(), 1);
-        assert_eq!(action2.notes().first().unwrap().value().inner(), 15);
-        assert_eq!(action2.notes().first().unwrap().asset(), third_asset);
+        assert_eq!(action2.notes.len(), 2);
+        // The note at index 0 is the reference note.
+        let first_note = action2.notes().get(1).unwrap();
+        assert_eq!(first_note.value().inner(), 15);
+        assert_eq!(first_note.asset(), third_asset);
     }
 
     #[test]
@@ -878,6 +955,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(u64::MIN),
             }),
+            true,
             rng,
         )
         .expect("Should properly add recipient");
@@ -910,6 +988,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -929,6 +1008,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -950,6 +1030,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -976,6 +1057,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -1009,6 +1091,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -1034,6 +1117,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(7),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -1070,24 +1154,25 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(7),
             }),
+            true,
             rng,
         )
         .unwrap();
 
         bundle
-            .add_recipient(&asset1_desc, recipient, NoteValue::from_raw(8), rng)
+            .add_recipient(&asset1_desc, recipient, NoteValue::from_raw(8), false, rng)
             .unwrap();
 
         bundle.finalize_action(&asset1_desc).unwrap();
 
         bundle
-            .add_recipient(&asset2_desc, recipient, NoteValue::from_raw(10), rng)
+            .add_recipient(&asset2_desc, recipient, NoteValue::from_raw(10), true, rng)
             .unwrap();
 
         bundle.finalize_action(&asset2_desc).unwrap();
 
         bundle
-            .add_recipient(&asset3_desc, recipient, NoteValue::from_raw(5), rng)
+            .add_recipient(&asset3_desc, recipient, NoteValue::from_raw(5), true, rng)
             .unwrap();
 
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
@@ -1130,6 +1215,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -1165,6 +1251,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -1195,6 +1282,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -1220,6 +1308,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -1258,6 +1347,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -1304,6 +1394,7 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
@@ -1345,6 +1436,7 @@ mod tests {
         let signed = IssueBundle {
             ik: bundle.ik,
             actions: bundle.actions,
+            reference_notes: bundle.reference_notes,
             authorization: Signed {
                 signature: isk.try_sign(&sighash).unwrap(),
             },
@@ -1396,12 +1488,13 @@ mod tests {
                 recipient,
                 value: NoteValue::from_raw(5),
             }),
+            true,
             rng,
         )
         .unwrap();
 
         let asset_base_2 = bundle
-            .add_recipient(&asset_desc_2, recipient, NoteValue::from_raw(10), rng)
+            .add_recipient(&asset_desc_2, recipient, NoteValue::from_raw(10), true, rng)
             .unwrap();
 
         // Checks for the case of UTF-8 encoded asset description.
@@ -1410,7 +1503,8 @@ mod tests {
 
         let action = actions_vec[0];
         assert_eq!(action.asset_desc(), &asset_desc_1);
-        assert_eq!(action.notes.first().unwrap().value().inner(), 5);
+        // The note at index 0 is the reference note.
+        assert_eq!(action.notes.get(1).unwrap().value().inner(), 5);
         assert_eq!(bundle.get_actions_by_desc(&asset_desc_1), actions_vec);
 
         // Checks for the case on non-UTF-8 encoded asset description.
@@ -1419,7 +1513,8 @@ mod tests {
 
         let action2 = action2_vec[0];
         assert_eq!(action2.asset_desc(), &asset_desc_2);
-        assert_eq!(action2.notes.first().unwrap().value().inner(), 10);
+        // The note at index 0 is the reference note.
+        assert_eq!(action2.notes.get(1).unwrap().value().inner(), 10);
         assert_eq!(bundle.get_actions_by_desc(&asset_desc_2), action2_vec);
     }
 }
@@ -1437,6 +1532,7 @@ pub mod testing {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
+    use std::collections::HashMap;
 
     prop_compose! {
         /// Generate a uniformly distributed signature
@@ -1475,6 +1571,7 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
+                reference_notes: HashMap::new(),
                 authorization: Unauthorized
             }
         }
@@ -1493,6 +1590,7 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
+                reference_notes: HashMap::new(),
                 authorization: Prepared { sighash: fake_sighash }
             }
         }
@@ -1511,6 +1609,7 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
+                reference_notes: HashMap::new(),
                 authorization: Signed { signature: fake_sig },
             }
         }
