@@ -18,6 +18,7 @@ use crate::{
     builder::BuildError::{BurnNative, BurnZero},
     bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags},
     circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey},
+    constants::reference_keys::ReferenceKeys,
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
@@ -1167,14 +1168,27 @@ impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized
         mut rng: R,
         action_group_digest: [u8; 32],
     ) -> Bundle<InProgress<P, ActionGroupPartiallyAuthorized>, V, D> {
+        let reference_ask = SpendAuthorizingKey::from(&ReferenceKeys::sk());
+        let reference_ak: SpendValidatingKey = (&reference_ask).into();
         self.map_authorization(
             &mut rng,
             |rng, _, SigningMetadata { dummy_ask, parts }| {
-                // We can create signatures for dummy spends immediately.
-                dummy_ask
-                    .map(|ask| ask.randomize(&parts.alpha).sign(rng, &action_group_digest))
-                    .map(MaybeSigned::Signature)
-                    .unwrap_or(MaybeSigned::SigningMetadata(parts))
+                if let Some(ask) = dummy_ask {
+                    // We can create signatures for dummy spends immediately.
+                    return MaybeSigned::Signature(
+                        ask.randomize(&parts.alpha).sign(rng, &action_group_digest),
+                    );
+                }
+                if parts.ak == reference_ak {
+                    // We can create signatures for reference notes immediately.
+                    MaybeSigned::Signature(
+                        reference_ask
+                            .randomize(&parts.alpha)
+                            .sign(rng, &action_group_digest),
+                    )
+                } else {
+                    MaybeSigned::SigningMetadata(parts)
+                }
             },
             |_rng, auth| InProgress {
                 proof: auth.proof,

@@ -17,7 +17,7 @@ use orchard::{
     swap_bundle::{ActionGroup, ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
-    Address, Anchor, Bundle, Note,
+    Address, Anchor, Bundle, Note, ReferenceKeys,
 };
 use rand::rngs::OsRng;
 use std::collections::HashSet;
@@ -103,59 +103,14 @@ fn build_and_sign_action_group(
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
-    reference_sk: Option<&SpendingKey>,
 ) -> ActionGroup<ActionGroupAuthorized, i64> {
     let unauthorized = builder.build_action_group(&mut rng, timelimit).unwrap();
     let action_group_digest = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
 
-    let mut signing_keys = vec![SpendAuthorizingKey::from(sk)];
-    if let Some(reference_sk) = reference_sk {
-        signing_keys.push(SpendAuthorizingKey::from(reference_sk));
-    }
     proven
-        .apply_signatures(rng, action_group_digest, signing_keys.as_slice())
+        .apply_signatures(rng, action_group_digest, &[SpendAuthorizingKey::from(sk)])
         .unwrap()
-}
-
-pub fn build_merkle_path_with_two_leaves(
-    note1: &Note,
-    note2: &Note,
-) -> (MerklePath, MerklePath, Anchor) {
-    let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
-
-    // Add first leaf
-    let cmx1: ExtractedNoteCommitment = note1.commitment().into();
-    let leaf1 = MerkleHashOrchard::from_cmx(&cmx1);
-    tree.append(leaf1);
-    let position1 = tree.mark().unwrap();
-
-    // Add second leaf
-    let cmx2: ExtractedNoteCommitment = note2.commitment().into();
-    let leaf2 = MerkleHashOrchard::from_cmx(&cmx2);
-    tree.append(leaf2);
-    let position2 = tree.mark().unwrap();
-
-    let root = tree.root(0).unwrap();
-    let anchor = root.into();
-
-    // Calculate first path
-    let auth_path1 = tree.witness(position1, 0).unwrap();
-    let merkle_path1 = MerklePath::from_parts(
-        u64::from(position1).try_into().unwrap(),
-        auth_path1[..].try_into().unwrap(),
-    );
-
-    // Calculate second path
-    let auth_path2 = tree.witness(position2, 0).unwrap();
-    let merkle_path2 = MerklePath::from_parts(
-        u64::from(position2).try_into().unwrap(),
-        auth_path2[..].try_into().unwrap(),
-    );
-
-    assert_eq!(anchor, merkle_path1.root(cmx1));
-    assert_eq!(anchor, merkle_path2.root(cmx2));
-    (merkle_path1, merkle_path2, anchor)
 }
 
 fn build_merkle_paths(notes: Vec<&Note>) -> (Vec<MerklePath>, Anchor) {
@@ -191,7 +146,7 @@ fn build_merkle_paths(notes: Vec<&Note>) -> (Vec<MerklePath>, Anchor) {
     (merkle_paths, anchor)
 }
 
-fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note) {
+fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note, Note) {
     let mut rng = OsRng;
     // Create a issuance bundle
     let unauthorized_asset = IssueBundle::new(
@@ -201,7 +156,7 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note) {
             recipient: keys.recipient,
             value: NoteValue::from_raw(40),
         }),
-        false,
+        true,
         &mut rng,
     );
 
@@ -223,8 +178,9 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note) {
 
     // Take notes from first action
     let notes = issue_bundle.get_all_notes();
-    let note1 = notes[0];
-    let note2 = notes[1];
+    let reference_note = notes[0];
+    let note1 = notes[1];
+    let note2 = notes[2];
 
     assert!(verify_issue_bundle(
         &issue_bundle,
@@ -233,65 +189,7 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note) {
     )
     .is_ok());
 
-    (*note1, *note2)
-}
-
-fn issue_zsa_notes_with_reference_note(
-    asset_descr: &[u8],
-    keys: &Keychain,
-    reference_address: Address,
-) -> (Note, Note, Note) {
-    let mut rng = OsRng;
-    // Create a issuance bundle
-    let unauthorized_asset = IssueBundle::new(
-        keys.ik().clone(),
-        asset_descr.to_owned(),
-        Some(IssueInfo {
-            recipient: keys.recipient,
-            value: NoteValue::from_raw(40),
-        }),
-        &mut rng,
-    );
-
-    assert!(unauthorized_asset.is_ok());
-
-    let (mut unauthorized, _) = unauthorized_asset.unwrap();
-
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr,
-            keys.recipient,
-            NoteValue::from_raw(2),
-            &mut rng,
-        )
-        .is_ok());
-
-    // Create a reference note (with a note value equal to 0)
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr,
-            reference_address,
-            NoteValue::from_raw(0),
-            &mut rng,
-        )
-        .is_ok());
-
-    let issue_bundle = sign_issue_bundle(unauthorized, keys.isk());
-
-    // Take notes from first action
-    let notes = issue_bundle.get_all_notes();
-    let note1 = notes[0];
-    let note2 = notes[1];
-    let note3 = notes[2];
-
-    assert!(verify_issue_bundle(
-        &issue_bundle,
-        issue_bundle.commitment().into(),
-        &HashSet::new(),
-    )
-    .is_ok());
-
-    (*note1, *note2, *note3)
+    (*reference_note, *note1, *note2)
 }
 
 fn create_native_note(keys: &Keychain) -> Note {
@@ -387,11 +285,11 @@ fn build_and_verify_bundle(
 fn build_and_verify_action_group(
     spends: Vec<&TestSpendInfo>,
     outputs: Vec<TestOutputInfo>,
+    reference_notes: Vec<&TestSpendInfo>,
     anchor: Anchor,
     timelimit: u32,
     expected_num_actions: usize,
     keys: &Keychain,
-    references: Option<ReferenceNotesAndKeys>,
 ) -> Result<ActionGroup<ActionGroupAuthorized, i64>, String> {
     let rng = OsRng;
     let shielded_action_group: ActionGroup<_, i64> = {
@@ -409,29 +307,18 @@ fn build_and_verify_action_group(
                 builder.add_output(None, keys.recipient, output.value, output.asset, None)
             })
             .map_err(|err| err.to_string())?;
-        if let Some(ref references) = references {
-            references
-                .reference_notes
-                .iter()
-                .try_for_each(|spend| {
-                    builder.add_reference_note(
-                        references.reference_keys.fvk().clone(),
-                        spend.note,
-                        spend.merkle_path().clone(),
-                    )
-                })
-                .map_err(|err| err.to_string())?;
-        }
-        build_and_sign_action_group(
-            builder,
-            timelimit,
-            rng,
-            keys.pk(),
-            keys.sk(),
-            references
-                .as_ref()
-                .map(|notes_keys| notes_keys.reference_keys.sk()),
-        )
+        reference_notes
+            .iter()
+            .try_for_each(|spend| {
+                builder.add_reference_note(
+                    ReferenceKeys::fvk(),
+                    spend.note,
+                    spend.merkle_path().clone(),
+                )
+            })
+            .map_err(|err| err.to_string())?;
+
+        build_and_sign_action_group(builder, timelimit, rng, keys.pk(), keys.sk())
     };
 
     verify_action_group(&shielded_action_group, &keys.vk);
@@ -465,14 +352,17 @@ fn verify_unique_spent_nullifiers<A: Authorization>(bundle: &Bundle<A, i64, Orch
 fn zsa_issue_and_transfer() {
     // --------------------------- Setup -----------------------------------------
 
-    let keys = prepare_keys(0);
+    let keys = prepare_keys(5);
     let asset_descr = b"zsa_asset".to_vec();
 
     // Prepare ZSA
-    let (zsa_note_1, zsa_note_2) = issue_zsa_notes(&asset_descr, &keys);
+    let (_, zsa_note_1, zsa_note_2) = issue_zsa_notes(&asset_descr, &keys);
 
-    let (merkle_path1, merkle_path2, anchor) =
-        build_merkle_path_with_two_leaves(&zsa_note_1, &zsa_note_2);
+    let (merkle_paths, anchor) = build_merkle_paths(vec![&zsa_note_1, &zsa_note_2]);
+
+    assert_eq!(merkle_paths.len(), 2);
+    let merkle_path1 = merkle_paths[0].clone();
+    let merkle_path2 = merkle_paths[1].clone();
 
     let zsa_spend_1 = TestSpendInfo {
         note: zsa_note_1,
@@ -484,8 +374,10 @@ fn zsa_issue_and_transfer() {
     };
 
     let native_note = create_native_note(&keys);
-    let (native_merkle_path_1, native_merkle_path_2, native_anchor) =
-        build_merkle_path_with_two_leaves(&native_note, &zsa_note_1);
+    let (native_merkle_paths, native_anchor) = build_merkle_paths(vec![&native_note, &zsa_note_1]);
+    assert_eq!(native_merkle_paths.len(), 2);
+    let native_merkle_path_1 = native_merkle_paths[0].clone();
+    let native_merkle_path_2 = native_merkle_paths[1].clone();
     let native_spend: TestSpendInfo = TestSpendInfo {
         note: native_note,
         merkle_path: native_merkle_path_1,
@@ -622,9 +514,11 @@ fn zsa_issue_and_transfer() {
     .unwrap();
 
     // 7. Spend ZSA notes of different asset types
-    let (zsa_note_t7, _) = issue_zsa_notes(b"zsa_asset2", &keys);
-    let (merkle_path_t7_1, merkle_path_t7_2, anchor_t7) =
-        build_merkle_path_with_two_leaves(&zsa_note_t7, &zsa_note_2);
+    let (_, zsa_note_t7, _) = issue_zsa_notes(b"zsa_asset2", &keys);
+    let (merkle_paths_t7, anchor_t7) = build_merkle_paths(vec![&zsa_note_t7, &zsa_note_2]);
+    assert_eq!(merkle_paths_t7.len(), 2);
+    let merkle_path_t7_1 = merkle_paths_t7[0].clone();
+    let merkle_path_t7_2 = merkle_paths_t7[1].clone();
     let zsa_spend_t7_1: TestSpendInfo = TestSpendInfo {
         note: zsa_note_t7,
         merkle_path: merkle_path_t7_1,
@@ -736,23 +630,16 @@ fn zsa_issue_and_transfer() {
     }
 }
 
-pub struct ReferenceNotesAndKeys<'a> {
-    reference_notes: Vec<&'a TestSpendInfo>,
-    reference_keys: &'a Keychain,
-}
-
 /// Create several action groups and combine them to create some swap bundles.
 #[test]
 fn action_group_and_swap_bundle() {
     // ----- Setup -----
-    let reference_keys = prepare_keys(0);
-
     // Create notes for user1
     let keys1 = prepare_keys(5);
 
     let asset_descr1 = b"zsa_asset1".to_vec();
-    let (asset1_note1, asset1_note2, asset1_reference_note) =
-        issue_zsa_notes_with_reference_note(&asset_descr1, &keys1, reference_keys.recipient);
+    let (asset1_reference_note, asset1_note1, asset1_note2) =
+        issue_zsa_notes(&asset_descr1, &keys1);
 
     let user1_native_note1 = create_native_note(&keys1);
     let user1_native_note2 = create_native_note(&keys1);
@@ -761,8 +648,8 @@ fn action_group_and_swap_bundle() {
     let keys2 = prepare_keys(10);
 
     let asset_descr2 = b"zsa_asset2".to_vec();
-    let (asset2_note1, asset2_note2, asset2_reference_note) =
-        issue_zsa_notes_with_reference_note(&asset_descr2, &keys2, reference_keys.recipient);
+    let (asset2_reference_note, asset2_note1, asset2_note2) =
+        issue_zsa_notes(&asset_descr2, &keys2);
 
     let user2_native_note1 = create_native_note(&keys2);
     let user2_native_note2 = create_native_note(&keys2);
@@ -879,16 +766,13 @@ fn action_group_and_swap_bundle() {
                     asset: AssetBase::native(),
                 },
             ],
+            // We must provide a reference note for asset2 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset2.
+            vec![&asset2_reference_spend_note],
             anchor,
             0,
             5,
             &keys1,
-            // We must provide a reference note for asset2 because we have no spend note for this asset.
-            // This note will not be spent. It is only used to check the correctness of asset2.
-            Some(ReferenceNotesAndKeys {
-                reference_notes: vec![&asset2_reference_spend_note],
-                reference_keys: &reference_keys,
-            }),
         )
         .unwrap();
 
@@ -918,16 +802,13 @@ fn action_group_and_swap_bundle() {
                     asset: AssetBase::native(),
                 },
             ],
+            // We must provide a reference note for asset1 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset1.
+            vec![&asset1_reference_spend_note],
             anchor,
             0,
             4,
             &keys2,
-            // We must provide a reference note for asset1 because we have no spend note for this asset.
-            // This note will not be spent. It is only used to check the correctness of asset1.
-            Some(ReferenceNotesAndKeys {
-                reference_notes: vec![&asset1_reference_spend_note],
-                reference_keys: &reference_keys,
-            }),
         )
         .unwrap();
 
@@ -941,11 +822,12 @@ fn action_group_and_swap_bundle() {
                 value: NoteValue::from_raw(5),
                 asset: AssetBase::native(),
             }],
+            // No reference note needed
+            vec![],
             anchor,
             0,
             2,
             &matcher_keys,
-            None,
         )
         .unwrap();
 
@@ -989,12 +871,12 @@ fn action_group_and_swap_bundle() {
                     asset: AssetBase::native(),
                 },
             ],
+            // No need of reference note for receiving ZEC
+            vec![],
             anchor,
             0,
             3,
             &keys1,
-            // No need of reference note for receiving ZEC
-            None,
         )
         .unwrap();
 
@@ -1017,16 +899,13 @@ fn action_group_and_swap_bundle() {
                     asset: asset1_note1.asset(),
                 },
             ],
+            // We must provide a reference note for asset1 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset1.
+            vec![&asset1_reference_spend_note],
             anchor,
             0,
             3,
             &keys2,
-            // We must provide a reference note for asset1 because we have no spend note for this asset.
-            // This note will not be spent. It is only used to check the correctness of asset1.
-            Some(ReferenceNotesAndKeys {
-                reference_notes: vec![&asset1_reference_spend_note],
-                reference_keys: &reference_keys,
-            }),
         )
         .unwrap();
 
@@ -1040,11 +919,12 @@ fn action_group_and_swap_bundle() {
                 value: NoteValue::from_raw(10),
                 asset: AssetBase::native(),
             }],
+            // No reference note needed
+            vec![],
             anchor,
             0,
             2,
             &matcher_keys,
-            None,
         )
         .unwrap();
 
@@ -1069,12 +949,12 @@ fn action_group_and_swap_bundle() {
                 value: NoteValue::from_raw(42),
                 asset: asset1_note1.asset(),
             }],
+            // No reference note needed
+            vec![],
             anchor,
             0,
             2,
             &keys1,
-            // No need of reference note
-            None,
         )
         .unwrap();
 

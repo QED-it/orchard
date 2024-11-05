@@ -1,5 +1,8 @@
 //! Orchard reference keys (spending key and recipient address) used for reference notes.
-use crate::{address::Address, keys::SpendingKey};
+use crate::{
+    address::Address,
+    keys::{FullViewingKey, SpendingKey},
+};
 
 /// Raw bytes representation of the reference recipient address.
 pub const RAW_REFERENCE_RECIPIENT: [u8; 43] = [
@@ -21,6 +24,11 @@ impl ReferenceKeys {
     /// Returns the recipient address for reference notes.
     pub fn recipient() -> Address {
         Address::from_raw_address_bytes(&RAW_REFERENCE_RECIPIENT).unwrap()
+    }
+
+    /// Returns the full viewing key for reference notes.
+    pub fn fvk() -> FullViewingKey {
+        FullViewingKey::from(&Self::sk())
     }
 }
 
