@@ -242,6 +242,7 @@ impl TestSpendInfo {
 struct TestOutputInfo {
     value: NoteValue,
     asset: AssetBase,
+    recipient: Address,
 }
 
 fn build_and_verify_bundle(
@@ -265,7 +266,7 @@ fn build_and_verify_bundle(
         outputs
             .iter()
             .try_for_each(|output| {
-                builder.add_output(None, keys.recipient, output.value, output.asset, None)
+                builder.add_output(None, output.recipient, output.value, output.asset, None)
             })
             .map_err(|err| err.to_string())?;
         assets_to_burn
@@ -304,7 +305,7 @@ fn build_and_verify_action_group(
         outputs
             .iter()
             .try_for_each(|output| {
-                builder.add_output(None, keys.recipient, output.value, output.asset, None)
+                builder.add_output(None, output.recipient, output.value, output.asset, None)
             })
             .map_err(|err| err.to_string())?;
         reference_notes
@@ -395,6 +396,7 @@ fn zsa_issue_and_transfer() {
         vec![TestOutputInfo {
             value: zsa_spend_1.note.value(),
             asset: zsa_spend_1.note.asset(),
+            recipient: keys.recipient,
         }],
         vec![],
         anchor,
@@ -412,14 +414,17 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta_1 - delta_2),
                 asset: zsa_spend_1.note.asset(),
+                recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_1),
                 asset: zsa_spend_1.note.asset(),
+                recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_2),
                 asset: zsa_spend_1.note.asset(),
+                recipient: keys.recipient,
             },
         ],
         vec![],
@@ -437,6 +442,7 @@ fn zsa_issue_and_transfer() {
                 zsa_spend_1.note.value().inner() + zsa_spend_2.note.value().inner(),
             ),
             asset: zsa_spend_1.note.asset(),
+            recipient: keys.recipient,
         }],
         vec![],
         anchor,
@@ -452,10 +458,12 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta_1),
                 asset: zsa_spend_1.note.asset(),
+                recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + delta_1),
                 asset: zsa_spend_2.note.asset(),
+                recipient: keys.recipient,
             },
         ],
         vec![],
@@ -472,10 +480,12 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: zsa_spend_1.note.value(),
                 asset: zsa_spend_1.note.asset(),
+                recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(100),
                 asset: AssetBase::native(),
+                recipient: keys.recipient,
             },
         ],
         vec![],
@@ -492,18 +502,22 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: zsa_spend_1.note.value(),
                 asset: zsa_spend_1.note.asset(),
+                recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(native_spend.note.value().inner() - delta_1 - delta_2),
                 asset: AssetBase::native(),
+                recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_1),
                 asset: AssetBase::native(),
+                recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_2),
                 asset: AssetBase::native(),
+                recipient: keys.recipient,
             },
         ],
         vec![],
@@ -534,10 +548,12 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: zsa_spend_t7_1.note.value(),
                 asset: zsa_spend_t7_1.note.asset(),
+                recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: zsa_spend_t7_2.note.value(),
                 asset: zsa_spend_t7_2.note.asset(),
+                recipient: keys.recipient,
             },
         ],
         vec![],
@@ -555,10 +571,12 @@ fn zsa_issue_and_transfer() {
                 TestOutputInfo {
                     value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + delta_1),
                     asset: zsa_spend_t7_1.note.asset(),
+                    recipient: keys.recipient,
                 },
                 TestOutputInfo {
                     value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - delta_1),
                     asset: zsa_spend_t7_2.note.asset(),
+                    recipient: keys.recipient,
                 },
             ],
             vec![],
@@ -590,6 +608,7 @@ fn zsa_issue_and_transfer() {
         vec![TestOutputInfo {
             value: NoteValue::from_raw(value_to_transfer),
             asset: zsa_spend_1.note.asset(),
+            recipient: keys.recipient,
         }],
         vec![(zsa_spend_1.note.asset(), NoteValue::from_raw(value_to_burn))],
         anchor,
@@ -618,6 +637,7 @@ fn zsa_issue_and_transfer() {
         vec![TestOutputInfo {
             value: zsa_spend_1.note.value(),
             asset: zsa_spend_1.note.asset(),
+            recipient: keys.recipient,
         }],
         vec![(zsa_spend_1.note.asset(), NoteValue::from_raw(0))],
         anchor,
@@ -753,17 +773,20 @@ fn action_group_and_swap_bundle() {
                 TestOutputInfo {
                     value: NoteValue::from_raw(32),
                     asset: asset1_note1.asset(),
+                    recipient: keys1.recipient,
                 },
                 // User1 would like to receive 20 asset2.
                 TestOutputInfo {
                     value: NoteValue::from_raw(20),
                     asset: asset2_note1.asset(),
+                    recipient: keys1.recipient,
                 },
                 // User1 would like to pay 5 ZEC as a fee.
                 // Thus, he would like to keep 100+100-5=195 ZEC.
                 TestOutputInfo {
                     value: NoteValue::from_raw(195),
                     asset: AssetBase::native(),
+                    recipient: keys1.recipient,
                 },
             ],
             // We must provide a reference note for asset2 because we have no spend note for this asset.
@@ -789,17 +812,20 @@ fn action_group_and_swap_bundle() {
                 TestOutputInfo {
                     value: NoteValue::from_raw(22),
                     asset: asset2_note1.asset(),
+                    recipient: keys2.recipient,
                 },
                 // User2 would like to receive 10 asset1.
                 TestOutputInfo {
                     value: NoteValue::from_raw(10),
                     asset: asset1_note1.asset(),
+                    recipient: keys2.recipient,
                 },
                 // User2 would like to pay 5 ZEC as a fee.
                 // Thus, he would like to keep 100-5=95 ZEC.
                 TestOutputInfo {
                     value: NoteValue::from_raw(95),
                     asset: AssetBase::native(),
+                    recipient: keys2.recipient,
                 },
             ],
             // We must provide a reference note for asset1 because we have no spend note for this asset.
@@ -821,6 +847,7 @@ fn action_group_and_swap_bundle() {
             vec![TestOutputInfo {
                 value: NoteValue::from_raw(5),
                 asset: AssetBase::native(),
+                recipient: matcher_keys.recipient,
             }],
             // No reference note needed
             vec![],
@@ -864,11 +891,13 @@ fn action_group_and_swap_bundle() {
                 TestOutputInfo {
                     value: NoteValue::from_raw(32),
                     asset: asset1_note1.asset(),
+                    recipient: keys1.recipient,
                 },
                 // User1 would like to receive 150 ZEC.
                 TestOutputInfo {
                     value: NoteValue::from_raw(150),
                     asset: AssetBase::native(),
+                    recipient: keys1.recipient,
                 },
             ],
             // No need of reference note for receiving ZEC
@@ -892,11 +921,13 @@ fn action_group_and_swap_bundle() {
                 TestOutputInfo {
                     value: NoteValue::from_raw(35),
                     asset: AssetBase::native(),
+                    recipient: keys2.recipient,
                 },
                 // User2 would like to receive 10 asset1.
                 TestOutputInfo {
                     value: NoteValue::from_raw(10),
                     asset: asset1_note1.asset(),
+                    recipient: keys2.recipient,
                 },
             ],
             // We must provide a reference note for asset1 because we have no spend note for this asset.
@@ -918,6 +949,7 @@ fn action_group_and_swap_bundle() {
             vec![TestOutputInfo {
                 value: NoteValue::from_raw(10),
                 asset: AssetBase::native(),
+                recipient: matcher_keys.recipient,
             }],
             // No reference note needed
             vec![],
@@ -937,7 +969,7 @@ fn action_group_and_swap_bundle() {
     }
 
     // ----- Test 3: ZSA transaction using Swap -----
-    // User1 would like to join his two asset1 notes
+    // User1 would like to send 30 asset1 to User2
     {
         // 1. Create and verify ActionGroup
         let action_group = build_and_verify_action_group(
@@ -945,10 +977,18 @@ fn action_group_and_swap_bundle() {
                 &asset1_spend1, // 40 asset1
                 &asset1_spend2, // 2 asset1
             ],
-            vec![TestOutputInfo {
-                value: NoteValue::from_raw(42),
-                asset: asset1_note1.asset(),
-            }],
+            vec![
+                TestOutputInfo {
+                    value: NoteValue::from_raw(30),
+                    asset: asset1_note1.asset(),
+                    recipient: keys2.recipient,
+                },
+                TestOutputInfo {
+                    value: NoteValue::from_raw(12),
+                    asset: asset1_note1.asset(),
+                    recipient: keys1.recipient,
+                },
+            ],
             // No reference note needed
             vec![],
             anchor,
