@@ -354,6 +354,8 @@ fn zsa_issue_and_transfer() {
     // --------------------------- Setup -----------------------------------------
 
     let keys = prepare_keys(5);
+    let keys2 = prepare_keys(10);
+    let keys3 = prepare_keys(15);
     let asset_descr = b"zsa_asset".to_vec();
 
     // Prepare ZSA
@@ -396,7 +398,7 @@ fn zsa_issue_and_transfer() {
         vec![TestOutputInfo {
             value: zsa_spend_1.note.value(),
             asset: zsa_spend_1.note.asset(),
-            recipient: keys.recipient,
+            recipient: keys2.recipient,
         }],
         vec![],
         anchor,
@@ -419,12 +421,12 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_1),
                 asset: zsa_spend_1.note.asset(),
-                recipient: keys.recipient,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_2),
                 asset: zsa_spend_1.note.asset(),
-                recipient: keys.recipient,
+                recipient: keys3.recipient,
             },
         ],
         vec![],
@@ -442,7 +444,7 @@ fn zsa_issue_and_transfer() {
                 zsa_spend_1.note.value().inner() + zsa_spend_2.note.value().inner(),
             ),
             asset: zsa_spend_1.note.asset(),
-            recipient: keys.recipient,
+            recipient: keys2.recipient,
         }],
         vec![],
         anchor,
@@ -458,7 +460,7 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta_1),
                 asset: zsa_spend_1.note.asset(),
-                recipient: keys.recipient,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + delta_1),
@@ -480,12 +482,12 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: zsa_spend_1.note.value(),
                 asset: zsa_spend_1.note.asset(),
-                recipient: keys.recipient,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(100),
                 asset: AssetBase::native(),
-                recipient: keys.recipient,
+                recipient: keys2.recipient,
             },
         ],
         vec![],
@@ -502,7 +504,7 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: zsa_spend_1.note.value(),
                 asset: zsa_spend_1.note.asset(),
-                recipient: keys.recipient,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(native_spend.note.value().inner() - delta_1 - delta_2),
@@ -512,12 +514,12 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_1),
                 asset: AssetBase::native(),
-                recipient: keys.recipient,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_2),
                 asset: AssetBase::native(),
-                recipient: keys.recipient,
+                recipient: keys3.recipient,
             },
         ],
         vec![],
@@ -548,12 +550,12 @@ fn zsa_issue_and_transfer() {
             TestOutputInfo {
                 value: zsa_spend_t7_1.note.value(),
                 asset: zsa_spend_t7_1.note.asset(),
-                recipient: keys.recipient,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: zsa_spend_t7_2.note.value(),
                 asset: zsa_spend_t7_2.note.asset(),
-                recipient: keys.recipient,
+                recipient: keys2.recipient,
             },
         ],
         vec![],
@@ -571,12 +573,12 @@ fn zsa_issue_and_transfer() {
                 TestOutputInfo {
                     value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + delta_1),
                     asset: zsa_spend_t7_1.note.asset(),
-                    recipient: keys.recipient,
+                    recipient: keys2.recipient,
                 },
                 TestOutputInfo {
                     value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - delta_1),
                     asset: zsa_spend_t7_2.note.asset(),
-                    recipient: keys.recipient,
+                    recipient: keys2.recipient,
                 },
             ],
             vec![],
