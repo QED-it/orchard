@@ -17,7 +17,7 @@ use crate::{
 use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
 
 /// An action group.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ActionGroup<A: Authorization, V> {
     /// The action group main content.
     action_group: Bundle<A, V, OrchardZSA>,
@@ -118,7 +118,7 @@ impl<A: Authorization, V: Copy + Into<i64>> ActionGroup<A, V> {
 }
 
 /// A swap bundle to be applied to the ledger.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SwapBundle<V> {
     /// The list of action groups that make up this swap bundle.
     action_groups: Vec<ActionGroup<ActionGroupAuthorized, V>>,
@@ -210,6 +210,13 @@ impl<V> SwapBundle<V> {
     /// Returns the binding signature of this swap bundle.
     pub fn binding_signature(&self) -> &redpallas::Signature<Binding> {
         &self.binding_signature
+    }
+
+    /// The net value moved out of this swap.
+    ///
+    /// This is the sum of Orchard spends minus the sum of Orchard outputs.
+    pub fn value_balance(&self) -> &V {
+        &self.value_balance
     }
 }
 
