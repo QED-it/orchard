@@ -17,7 +17,7 @@ use crate::{
     action::Action,
     address::Address,
     bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags},
-    circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey},
+    circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey, Witnesses},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
@@ -445,7 +445,12 @@ impl ActionInfo {
                     parts: SigningParts { ak, alpha },
                 },
             ),
-            Circuit::<D>::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
+            Circuit::<D> {
+                witnesses: Witnesses::from_action_context_unchecked(
+                    self.spend, note, alpha, self.rcv,
+                ),
+                phantom: std::marker::PhantomData,
+            },
         )
     }
 }
