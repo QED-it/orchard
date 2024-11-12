@@ -963,7 +963,6 @@ fn pad_spend(
 ///
 /// If it is a BundleParams, it contains burn info.
 /// If it is an ActionGroupParams, it contains reference notes.
-/// Checking that bsk and bvk are consistent will be only performed for BundleParams.
 #[derive(Debug)]
 pub enum SpecificBuilderParams {
     /// BundleParams contains burn info
