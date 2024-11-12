@@ -68,7 +68,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 b.iter(|| {
                     bundle
                         .authorization()
-                        .create_proof(&pk, &instances, rng)
+                        .create_proof::<FL>(&pk, &instances, rng)
                         .unwrap()
                 });
             });

@@ -458,7 +458,7 @@ impl ActionInfo {
 /// Type alias for an in-progress bundle that has no proofs or signatures.
 ///
 /// This is returned by [`Builder::build`].
-pub type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven<D>, Unauthorized>, V, D>;
+pub type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven, Unauthorized>, V, D>;
 
 /// Metadata about a bundle created by [`bundle`] or [`Builder::build`] that is not
 /// necessarily recoverable from the bundle itself.
@@ -888,6 +888,11 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
     assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
 
+    let witnesses: Vec<Witnesses> = circuits
+        .into_iter()
+        .map(|circuit| circuit.witnesses)
+        .collect();
+
     Ok(NonEmpty::from_vec(actions).map(|actions| {
         (
             Bundle::from_parts(
@@ -897,7 +902,9 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                 burn,
                 anchor,
                 InProgress {
-                    proof: Unproven { circuits },
+                    proof: Unproven {
+                        circuits: witnesses,
+                    },
                     sigs: Unauthorized { bsk },
                 },
             ),
@@ -940,23 +947,32 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 ///
 /// This struct contains the private data needed to create a [`Proof`] for a [`Bundle`].
 #[derive(Clone, Debug)]
-pub struct Unproven<C: OrchardCircuit> {
-    circuits: Vec<Circuit<C>>,
+pub struct Unproven {
+    circuits: Vec<Witnesses>,
 }
 
-impl<S: InProgressSignatures, C: OrchardCircuit> InProgress<Unproven<C>, S> {
+impl<S: InProgressSignatures> InProgress<Unproven, S> {
     /// Creates the proof for this bundle.
-    pub fn create_proof(
+    pub fn create_proof<C: OrchardCircuit>(
         &self,
         pk: &ProvingKey,
         instances: &[Instance],
         rng: impl RngCore,
     ) -> Result<Proof, halo2_proofs::plonk::Error> {
-        Proof::create(pk, &self.proof.circuits, instances, rng)
+        let circuits: Vec<Circuit<C>> = self
+            .proof
+            .circuits
+            .iter()
+            .map(|witnesses| Circuit::<C> {
+                witnesses: witnesses.clone(),
+                phantom: std::marker::PhantomData,
+            })
+            .collect();
+        Proof::create(pk, &circuits, instances, rng)
     }
 }
 
-impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven<FL>, S>, V, FL> {
+impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven, S>, V, FL> {
     /// Creates the proof for this bundle.
     pub fn create_proof(
         self,
@@ -972,7 +988,7 @@ impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven<F
             &mut (),
             |_, _, a| Ok(a),
             |_, auth| {
-                let proof = auth.create_proof(pk, &instances, &mut rng)?;
+                let proof = auth.create_proof::<FL>(pk, &instances, &mut rng)?;
                 Ok(InProgress {
                     proof,
                     sigs: auth.sigs,
