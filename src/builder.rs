@@ -783,7 +783,6 @@ fn pad_spend(
 ///
 /// If it is a BundleParams, it contains burn info.
 /// If it is an ActionGroupParams, it contains reference notes.
-/// Checking that bsk and bvk are consistent will be only performed for BundleParams.
 #[derive(Debug)]
 pub enum SpecificBuilderParams {
     /// BundleParams contains burn info
@@ -952,7 +951,6 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     match specific_params {
         SpecificBuilderParams::BundleParams(_) => {
             // Verify that bsk and bvk are consistent
-            // (they could not be consistent for action group)
             let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
             assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
         }
