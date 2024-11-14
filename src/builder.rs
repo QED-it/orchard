@@ -397,7 +397,7 @@ impl ActionInfo {
     fn build<D: OrchardDomainCommon>(
         self,
         mut rng: impl RngCore,
-    ) -> (Action<SigningMetadata, D>, Circuit<D>) {
+    ) -> (Action<SigningMetadata, D>, Witnesses) {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -445,12 +445,7 @@ impl ActionInfo {
                     parts: SigningParts { ak, alpha },
                 },
             ),
-            Circuit::<D> {
-                witnesses: Witnesses::from_action_context_unchecked(
-                    self.spend, note, alpha, self.rcv,
-                ),
-                phantom: std::marker::PhantomData,
-            },
+            Witnesses::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
         )
     }
 }
@@ -868,7 +863,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
         .into_bsk();
 
     // Create the actions.
-    let (actions, circuits): (Vec<_>, Vec<_>) =
+    let (actions, witnesses): (Vec<_>, Vec<_>) =
         pre_actions.into_iter().map(|a| a.build(&mut rng)).unzip();
 
     let burn = burn
@@ -888,11 +883,6 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
     assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
 
-    let witnesses: Vec<Witnesses> = circuits
-        .into_iter()
-        .map(|circuit| circuit.witnesses)
-        .collect();
-
     Ok(NonEmpty::from_vec(actions).map(|actions| {
         (
             Bundle::from_parts(
@@ -902,9 +892,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                 burn,
                 anchor,
                 InProgress {
-                    proof: Unproven {
-                        circuits: witnesses,
-                    },
+                    proof: Unproven { witnesses },
                     sigs: Unauthorized { bsk },
                 },
             ),
@@ -948,7 +936,7 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 /// This struct contains the private data needed to create a [`Proof`] for a [`Bundle`].
 #[derive(Clone, Debug)]
 pub struct Unproven {
-    circuits: Vec<Witnesses>,
+    witnesses: Vec<Witnesses>,
 }
 
 impl<S: InProgressSignatures> InProgress<Unproven, S> {
@@ -961,7 +949,7 @@ impl<S: InProgressSignatures> InProgress<Unproven, S> {
     ) -> Result<Proof, halo2_proofs::plonk::Error> {
         let circuits: Vec<Circuit<C>> = self
             .proof
-            .circuits
+            .witnesses
             .iter()
             .map(|witnesses| Circuit::<C> {
                 witnesses: witnesses.clone(),
