@@ -26,6 +26,7 @@ pub mod issuance;
 pub mod keys;
 pub mod note;
 pub mod supply_info;
+pub mod swap_bundle;
 
 pub mod note_encryption;
 
@@ -44,6 +45,7 @@ pub use action::Action;
 pub use address::Address;
 pub use bundle::Bundle;
 pub use circuit::Proof;
+pub use constants::reference_keys::ReferenceKeys;
 pub use constants::MERKLE_DEPTH_ORCHARD as NOTE_COMMITMENT_TREE_DEPTH;
 pub use note::Note;
 pub use tree::Anchor;
