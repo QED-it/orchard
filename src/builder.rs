@@ -513,6 +513,12 @@ impl BundleMetadata {
 /// A tuple containing an in-progress bundle with no proofs or signatures, and its associated metadata.
 pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, BundleMetadata);
 
+/// A tuple containing an in-progress action group with no proofs or signatures, and its associated metadata.
+pub type UnauthorizedActionGroupWithMetadata<V> = (
+    ActionGroup<InProgress<Unproven<OrchardZSA>, Unauthorized>, V>,
+    BundleMetadata,
+);
+
 /// A builder that constructs a [`Bundle`] from a set of notes to be spent, and outputs
 /// to receive funds.
 #[derive(Debug)]
@@ -694,11 +700,11 @@ impl Builder {
         self,
         rng: impl RngCore,
         timelimit: u32,
-    ) -> Result<ActionGroup<InProgress<Unproven<OrchardZSA>, Unauthorized>, V>, BuildError> {
+    ) -> Result<Option<UnauthorizedActionGroupWithMetadata<V>>, BuildError> {
         if !self.burn.is_empty() {
             return Err(BuildError::BurnNotEmptyInActionGroup);
         }
-        let action_group = bundle(
+        Ok(bundle(
             rng,
             self.anchor,
             self.bundle_type,
@@ -706,9 +712,12 @@ impl Builder {
             self.outputs,
             SpecificBuilderParams::ActionGroupParams(self.reference_notes),
         )?
-        .unwrap()
-        .0;
-        Ok(ActionGroup::from_parts(action_group, timelimit, None))
+        .map(|(action_group, metadata)| {
+            (
+                ActionGroup::from_parts(action_group, timelimit, None),
+                metadata,
+            )
+        }))
     }
 }
 

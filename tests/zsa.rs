@@ -104,7 +104,11 @@ fn build_and_sign_action_group(
     pk: &ProvingKey,
     sk: &SpendingKey,
 ) -> ActionGroup<ActionGroupAuthorized, i64> {
-    let unauthorized = builder.build_action_group(&mut rng, timelimit).unwrap();
+    let unauthorized = builder
+        .build_action_group(&mut rng, timelimit)
+        .unwrap()
+        .unwrap()
+        .0;
     let action_group_digest = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
 
