@@ -622,6 +622,12 @@ impl BundleMetadata {
 #[cfg(feature = "circuit")]
 pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, BundleMetadata);
 
+/// A tuple containing an in-progress action group with no proofs or signatures, and its associated metadata.
+pub type UnauthorizedActionGroupWithMetadata<V> = (
+    ActionGroup<InProgress<Unproven<OrchardZSA>, Unauthorized>, V>,
+    BundleMetadata,
+);
+
 /// A builder for constructing an Orchard [`Bundle`] by specifying notes to spend, outputs to
 /// receive, and assets to burn.
 /// This builder provides a structured way to incrementally assemble the components of a bundle.
@@ -809,11 +815,11 @@ impl Builder {
         self,
         rng: impl RngCore,
         timelimit: u32,
-    ) -> Result<ActionGroup<InProgress<Unproven<OrchardZSA>, Unauthorized>, V>, BuildError> {
+    ) -> Result<Option<UnauthorizedActionGroupWithMetadata<V>>, BuildError> {
         if !self.burn.is_empty() {
             return Err(BuildError::BurnNotEmptyInActionGroup);
         }
-        let action_group = bundle(
+        Ok(bundle(
             rng,
             self.anchor,
             self.bundle_type,
@@ -821,9 +827,12 @@ impl Builder {
             self.outputs,
             SpecificBuilderParams::ActionGroupParams(self.reference_notes),
         )?
-        .unwrap()
-        .0;
-        Ok(ActionGroup::from_parts(action_group, timelimit, None))
+        .map(|(action_group, metadata)| {
+            (
+                ActionGroup::from_parts(action_group, timelimit, None),
+                metadata,
+            )
+        }))
     }
 
     /// Builds a bundle containing the given spent notes and outputs along with their
