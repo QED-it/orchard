@@ -169,7 +169,7 @@ pub(crate) fn hash_bundle_txid_data<
     D::hash_bundle_txid_data(bundle)
 }
 
-/// Construct the commitment for the bundle as defined in
+/// Construct the commitment for the absent bundle as defined in
 /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
