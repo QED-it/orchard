@@ -31,8 +31,12 @@ pub trait OrchardHash {
     type OrchardDomain: OrchardDomainCommon;
 
     /// Evaluate `orchard_digest` for the bundle as defined in
+    /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+    /// for OrchardVanilla and as defined in
     /// [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226]
+    /// for OrchardZSA
     ///
+    /// [zip244]: https://zips.z.cash/zip-0244
     /// [zip226]: https://zips.z.cash/zip-0226
     fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         bundle: &Bundle<A, V, Self::OrchardDomain>,
@@ -42,6 +46,10 @@ pub trait OrchardHash {
 impl OrchardHash for OrchardVanilla {
     type OrchardDomain = OrchardVanilla;
 
+    /// Evaluate `orchard_digest` for the bundle as defined in
+    /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+    ///
+    /// [zip244]: https://zips.z.cash/zip-0244
     fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         bundle: &Bundle<A, V, Self::OrchardDomain>,
     ) -> Blake2bHash {
@@ -87,6 +95,10 @@ impl OrchardHash for OrchardVanilla {
 impl OrchardHash for OrchardZSA {
     type OrchardDomain = OrchardZSA;
 
+    /// Evaluate `orchard_digest` for the bundle as defined in
+    /// [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226]
+
+    /// [zip226]: https://zips.z.cash/zip-0226
     fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         bundle: &Bundle<A, V, Self::OrchardDomain>,
     ) -> Blake2bHash {
@@ -140,8 +152,12 @@ impl OrchardHash for OrchardZSA {
 }
 
 /// Evaluate `orchard_digest` for the bundle as defined in
+/// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+/// for OrchardVanilla and as defined in
 /// [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226]
+/// for OrchardZSA
 ///
+/// [zip244]: https://zips.z.cash/zip-0244
 /// [zip226]: https://zips.z.cash/zip-0226
 pub(crate) fn hash_bundle_txid_data<
     A: Authorization,
