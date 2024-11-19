@@ -11,7 +11,10 @@ pub struct OrchardVanilla;
 pub struct OrchardZSA;
 
 /// A trait binding the common functionality between different Orchard protocol flavors.
-pub trait OrchardFlavor: OrchardDomainCommon + OrchardCircuit + OrchardHash {}
+pub trait OrchardFlavor:
+    OrchardDomainCommon + OrchardCircuit + OrchardHash<OrchardDomain = Self>
+{
+}
 
 impl OrchardFlavor for OrchardVanilla {}
 impl OrchardFlavor for OrchardZSA {}
