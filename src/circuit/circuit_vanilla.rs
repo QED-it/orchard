@@ -861,30 +861,7 @@ mod tests {
             .unwrap();
 
         let circuit = OrchardCircuitVanilla {
-            witnesses: Witnesses {
-                path: Value::unknown(),
-                pos: Value::unknown(),
-                g_d_old: Value::unknown(),
-                pk_d_old: Value::unknown(),
-                v_old: Value::unknown(),
-                rho_old: Value::unknown(),
-                psi_old: Value::unknown(),
-                rcm_old: Value::unknown(),
-                cm_old: Value::unknown(),
-                psi_nf: Value::unknown(),
-                alpha: Value::unknown(),
-                ak: Value::unknown(),
-                nk: Value::unknown(),
-                rivk: Value::unknown(),
-                g_d_new: Value::unknown(),
-                pk_d_new: Value::unknown(),
-                v_new: Value::unknown(),
-                psi_new: Value::unknown(),
-                rcm_new: Value::unknown(),
-                rcv: Value::unknown(),
-                asset: Value::unknown(),
-                split_flag: Value::unknown(),
-            },
+            witnesses: Witnesses::default(),
             phantom: std::marker::PhantomData,
         };
         halo2_proofs::dev::CircuitLayout::default()
