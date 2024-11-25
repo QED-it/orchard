@@ -13,18 +13,19 @@ use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 use zcash_note_encryption_zsa::NoteEncryption;
 
 use crate::builder::BuildError::{BurnNative, BurnZero};
+use crate::orchard_flavor::{OrchardVanilla, OrchardZSA};
 use crate::{
     action::Action,
     address::Address,
     bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags},
-    circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey, Witnesses},
+    circuit::{Circuit, Instance, Proof, ProvingKey, Witnesses},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
     },
     note::{AssetBase, Note, Rho, TransmittedNoteCiphertext},
     note_encryption::{OrchardDomain, OrchardDomainCommon},
-    orchard_flavor::OrchardFlavor,
+    orchard_flavor::{Flavor, OrchardFlavor},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -892,7 +893,10 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                 burn,
                 anchor,
                 InProgress {
-                    proof: Unproven { witnesses },
+                    proof: Unproven {
+                        witnesses,
+                        circuit_flavor: FL::flavor(),
+                    },
                     sigs: Unauthorized { bsk },
                 },
             ),
@@ -937,26 +941,43 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 #[derive(Clone, Debug)]
 pub struct Unproven {
     witnesses: Vec<Witnesses>,
+    circuit_flavor: Flavor,
 }
 
 impl<S: InProgressSignatures> InProgress<Unproven, S> {
     /// Creates the proof for this bundle.
-    pub fn create_proof<C: OrchardCircuit>(
+    pub fn create_proof(
         &self,
         pk: &ProvingKey,
         instances: &[Instance],
         rng: impl RngCore,
     ) -> Result<Proof, halo2_proofs::plonk::Error> {
-        let circuits: Vec<Circuit<C>> = self
-            .proof
-            .witnesses
-            .iter()
-            .map(|witnesses| Circuit::<C> {
-                witnesses: witnesses.clone(),
-                phantom: std::marker::PhantomData,
-            })
-            .collect();
-        Proof::create(pk, &circuits, instances, rng)
+        match self.proof.circuit_flavor {
+            Flavor::OrchardVanillaFlavor => {
+                let circuits = self
+                    .proof
+                    .witnesses
+                    .iter()
+                    .map(|witnesses| Circuit::<OrchardVanilla> {
+                        witnesses: witnesses.clone(),
+                        phantom: std::marker::PhantomData,
+                    })
+                    .collect::<Vec<Circuit<OrchardVanilla>>>();
+                Proof::create(pk, &circuits, instances, rng)
+            }
+            Flavor::OrchardZSAFlavor => {
+                let circuits = self
+                    .proof
+                    .witnesses
+                    .iter()
+                    .map(|witnesses| Circuit::<OrchardZSA> {
+                        witnesses: witnesses.clone(),
+                        phantom: std::marker::PhantomData,
+                    })
+                    .collect::<Vec<Circuit<OrchardZSA>>>();
+                Proof::create(pk, &circuits, instances, rng)
+            }
+        }
     }
 }
 
@@ -976,7 +997,7 @@ impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven, 
             &mut (),
             |_, _, a| Ok(a),
             |_, auth| {
-                let proof = auth.create_proof::<FL>(pk, &instances, &mut rng)?;
+                let proof = auth.create_proof(pk, &instances, &mut rng)?;
                 Ok(InProgress {
                     proof,
                     sigs: auth.sigs,
