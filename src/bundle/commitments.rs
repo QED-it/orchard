@@ -41,19 +41,13 @@ pub trait OrchardHash {
     fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         bundle: &Bundle<A, V, Self::OrchardDomain>,
     ) -> Blake2bHash;
-}
 
-impl OrchardHash for OrchardVanilla {
-    type OrchardDomain = OrchardVanilla;
-
-    /// Evaluate `orchard_digest` for the bundle as defined in
-    /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
-    ///
-    /// [zip244]: https://zips.z.cash/zip-0244
-    fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
+    /// Incorporates the hash of actions (orchard_actions_compact_digest, orchard_actions_memos_digest,
+    /// orchard_actions_noncompact_digest) into the hasher.
+    fn update_hash_with_actions<A: Authorization, V: Copy + Into<i64>>(
+        main_hasher: &mut State,
         bundle: &Bundle<A, V, Self::OrchardDomain>,
-    ) -> Blake2bHash {
-        let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
+    ) {
         let mut ch = hasher(ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION);
         let mut mh = hasher(ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION);
         let mut nh = hasher(ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION);
@@ -64,26 +58,43 @@ impl OrchardHash for OrchardVanilla {
             ch.update(&action.encrypted_note().epk_bytes);
             ch.update(
                 &action.encrypted_note().enc_ciphertext.as_ref()
-                    [..OrchardVanilla::COMPACT_NOTE_SIZE],
+                    [..Self::OrchardDomain::COMPACT_NOTE_SIZE],
             );
 
             mh.update(
-                &action.encrypted_note().enc_ciphertext.as_ref()[OrchardVanilla::COMPACT_NOTE_SIZE
-                    ..OrchardVanilla::COMPACT_NOTE_SIZE + MEMO_SIZE],
+                &action.encrypted_note().enc_ciphertext.as_ref()
+                    [Self::OrchardDomain::COMPACT_NOTE_SIZE
+                        ..Self::OrchardDomain::COMPACT_NOTE_SIZE + MEMO_SIZE],
             );
 
             nh.update(&action.cv_net().to_bytes());
             nh.update(&<[u8; 32]>::from(action.rk()));
             nh.update(
                 &action.encrypted_note().enc_ciphertext.as_ref()
-                    [OrchardVanilla::COMPACT_NOTE_SIZE + MEMO_SIZE..],
+                    [Self::OrchardDomain::COMPACT_NOTE_SIZE + MEMO_SIZE..],
             );
             nh.update(&action.encrypted_note().out_ciphertext);
         }
 
-        h.update(ch.finalize().as_bytes());
-        h.update(mh.finalize().as_bytes());
-        h.update(nh.finalize().as_bytes());
+        main_hasher.update(ch.finalize().as_bytes());
+        main_hasher.update(mh.finalize().as_bytes());
+        main_hasher.update(nh.finalize().as_bytes());
+    }
+}
+
+impl OrchardHash for OrchardVanilla {
+    type OrchardDomain = OrchardVanilla;
+
+    /// Evaluate `orchard_digest` for the bundle as defined in
+    /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+    ///
+    /// [zip244]: https://zips.z.cash/zip-0244
+    fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
+        bundle: &Bundle<A, V, OrchardVanilla>,
+    ) -> Blake2bHash {
+        let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
+
+        Self::update_hash_with_actions(&mut h, bundle);
 
         h.update(&[bundle.flags().to_byte()]);
         h.update(&(*bundle.value_balance()).into().to_le_bytes());
@@ -100,44 +111,18 @@ impl OrchardHash for OrchardZSA {
     ///
     /// [zip226]: https://zips.z.cash/zip-0226
     fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
-        bundle: &Bundle<A, V, Self::OrchardDomain>,
+        bundle: &Bundle<A, V, OrchardZSA>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
-        let mut ag = hasher(ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION);
-        let mut ch = hasher(ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION);
-        let mut mh = hasher(ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION);
-        let mut nh = hasher(ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION);
+        let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION);
 
-        for action in bundle.actions().iter() {
-            ch.update(&action.nullifier().to_bytes());
-            ch.update(&action.cmx().to_bytes());
-            ch.update(&action.encrypted_note().epk_bytes);
-            ch.update(
-                &action.encrypted_note().enc_ciphertext.as_ref()[..OrchardZSA::COMPACT_NOTE_SIZE],
-            );
+        Self::update_hash_with_actions(&mut agh, bundle);
 
-            mh.update(
-                &action.encrypted_note().enc_ciphertext.as_ref()
-                    [OrchardZSA::COMPACT_NOTE_SIZE..OrchardZSA::COMPACT_NOTE_SIZE + MEMO_SIZE],
-            );
+        agh.update(&[bundle.flags().to_byte()]);
+        agh.update(&bundle.anchor().to_bytes());
+        agh.update(&[0, 0, 0, 0]); // timeLimit is always equal to 0
 
-            nh.update(&action.cv_net().to_bytes());
-            nh.update(&<[u8; 32]>::from(action.rk()));
-            nh.update(
-                &action.encrypted_note().enc_ciphertext.as_ref()
-                    [OrchardZSA::COMPACT_NOTE_SIZE + MEMO_SIZE..],
-            );
-            nh.update(&action.encrypted_note().out_ciphertext);
-        }
-
-        ag.update(ch.finalize().as_bytes());
-        ag.update(mh.finalize().as_bytes());
-        ag.update(nh.finalize().as_bytes());
-        ag.update(&[bundle.flags().to_byte()]);
-        ag.update(&bundle.anchor().to_bytes());
-        ag.update(&[0, 0, 0, 0]); // timeLimit is always equal to 0
-
-        h.update(ag.finalize().as_bytes());
+        h.update(agh.finalize().as_bytes());
 
         let mut burn_hasher = hasher(ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION);
         for burn_item in &bundle.burn {
