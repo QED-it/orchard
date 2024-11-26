@@ -255,3 +255,29 @@ design) does not achieve **Faerie Resistance** for an adversary that knows the r
 full viewing key ($\psi$ could be brute-forced to cancel out $F_{\mathsf{nk}}(\rho)$,
 causing a collision), and the other variants require assuming $\mathit{Coll}_F$ as
 mentioned above.
+
+## Nullifier for split notes
+
+For split note, we slightly updated the nullifier equation
+
+$$\mathsf{nf} = \mathsf{Extract}_{\mathbb{P}}\big([(F_{\mathsf{nk}}(\rho) + \psi^{nf}) \bmod{p}] \mathcal{G} + \mathsf{cm} + \mathcal{L}^{Orchard}\big),$$
+
+where:
+
+- $F$ is a keyed circuit-efficient PRF (such as Rescue or Poseidon).
+- $\rho$ is unique to this output. As with $\mathsf{h_{Sig}}$ in Sprout, $\rho$ includes
+  the nullifiers of any Orchard notes being spent in the same action. Given that an action
+  consists of a single spend and a single output, we set $\rho$ to be the nullifier of the
+  spent note.
+- $\psi^{nf}$ is sender-controlled randomness. It is not required to be unique, and in practice
+  is derived from both $\rho$ and a sender-selected random value $\mathsf{rseed\_split}$:
+  $$\psi^{nf} = \mathit{KDF}^\psi(\rho, \mathsf{rseed\_split}).$$
+- $\mathcal{G}$ is a fixed independent base.
+- $\mathsf{Extract}_{\mathbb{P}}$ extracts the $x$-coordinate of a Pallas curve point.
+- $\mathcal{L}^{Orchard}$ is a fixed independent base.
+
+Adding $\mathcal{L}^{Orchard} acts as a domain separator, that makes all split note nullifiers
+distinct from non-split note nullifiers.
+
+$\psi^{nf}$ can be varied (by taking a different $\mathsf{rseed\_split}$) to ensure that split
+note nullifiers derived from the same note are different from each other and appear random.
