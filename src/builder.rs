@@ -895,7 +895,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                 InProgress {
                     proof: Unproven {
                         witnesses,
-                        circuit_flavor: FL::flavor(),
+                        circuit_flavor: FL::FLAVOR,
                     },
                     sigs: Unauthorized { bsk },
                 },

@@ -11,6 +11,8 @@ pub struct OrchardVanilla;
 pub struct OrchardZSA;
 
 /// Represents the flavor of the Orchard protocol.
+///
+/// This enables conditional execution during runtime based on the flavor of the Orchard protocol.
 #[derive(Clone, Debug)]
 pub enum Flavor {
     /// The "Vanilla" flavor of the Orchard protocol.
@@ -21,17 +23,13 @@ pub enum Flavor {
 
 /// A trait binding the common functionality between different Orchard protocol flavors.
 pub trait OrchardFlavor: OrchardDomainCommon + OrchardCircuit + OrchardHash {
-    /// Returns the flavor of the Orchard protocol.
-    fn flavor() -> Flavor;
+    /// Flavor of the Orchard protocol.
+    const FLAVOR: Flavor;
 }
 
 impl OrchardFlavor for OrchardVanilla {
-    fn flavor() -> Flavor {
-        Flavor::OrchardVanillaFlavor
-    }
+    const FLAVOR: Flavor = Flavor::OrchardVanillaFlavor;
 }
 impl OrchardFlavor for OrchardZSA {
-    fn flavor() -> Flavor {
-        Flavor::OrchardZSAFlavor
-    }
+    const FLAVOR: Flavor = Flavor::OrchardZSAFlavor;
 }
