@@ -120,7 +120,7 @@ impl OrchardHash for OrchardZSA {
 
         agh.update(&[bundle.flags().to_byte()]);
         agh.update(&bundle.anchor().to_bytes());
-        agh.update(&[0, 0, 0, 0]); // timeLimit is always equal to 0
+        agh.update(&bundle.expiry_height().to_le_bytes());
 
         h.update(agh.finalize().as_bytes());
 

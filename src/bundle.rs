@@ -207,6 +207,11 @@ pub struct Bundle<A: Authorization, V, D: OrchardDomainCommon> {
     burn: Vec<(AssetBase, NoteValue)>,
     /// The root of the Orchard commitment tree that this bundle commits to.
     anchor: Anchor,
+    /// Block height after which this Bundle's Actions are invalid by consensus.
+    ///
+    /// For the Orchard ZSA procotol, `expiry_height` is set to 0, indicating no expiry.
+    /// This field will be used in ZSA Swaps.
+    expiry_height: u32,
     /// The authorization for this bundle.
     authorization: A,
 }
@@ -247,6 +252,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
             value_balance,
             burn,
             anchor,
+            expiry_height: 0,
             authorization,
         }
     }
@@ -278,6 +284,11 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
         &self.anchor
     }
 
+    /// Returns the expiry height for this bundle.
+    pub fn expiry_height(&self) -> u32 {
+        self.expiry_height
+    }
+
     /// Returns the authorization for this bundle.
     ///
     /// In the case of a `Bundle<Authorized>`, this is the proof and binding signature.
@@ -297,6 +308,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
             value_balance: f(self.value_balance)?,
             burn: self.burn,
             anchor: self.anchor,
+            expiry_height: self.expiry_height,
             authorization: self.authorization,
         })
     }
@@ -315,9 +327,10 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
                 .map(|a| a.map(|a_auth| spend_auth(context, &authorization, a_auth))),
             flags: self.flags,
             value_balance: self.value_balance,
-            anchor: self.anchor,
-            authorization: step(context, authorization),
             burn: self.burn,
+            anchor: self.anchor,
+            expiry_height: self.expiry_height,
+            authorization: step(context, authorization),
         }
     }
 
@@ -339,9 +352,10 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
             actions: NonEmpty::from_vec(new_actions).unwrap(),
             flags: self.flags,
             value_balance: self.value_balance,
-            anchor: self.anchor,
-            authorization: step(context, authorization)?,
             burn: self.burn,
+            anchor: self.anchor,
+            expiry_height: self.expiry_height,
+            authorization: step(context, authorization)?,
         })
     }
 
