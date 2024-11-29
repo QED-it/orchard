@@ -122,7 +122,7 @@ pub mod testing {
         address::Address,
         keys::OutgoingViewingKey,
         note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, RandomSeed, Rho},
-        note_encryption::MEMO_SIZE,
+        note_encryption::domain::MEMO_SIZE,
         value::NoteValue,
     };
 

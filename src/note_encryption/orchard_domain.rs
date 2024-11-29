@@ -3,18 +3,23 @@
 
 use core::fmt;
 
+use blake2b_simd::{Hash as Blake2bHash, State};
 use zcash_note_encryption_zsa::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
 
 use crate::{
     action::Action,
+    bundle::{commitments::hasher, Authorization},
     note::{AssetBase, Rho},
-    Note,
+    note_encryption::{
+        compact_action::CompactAction,
+        domain::{Memo, MEMO_SIZE},
+    },
+    Bundle, Note,
 };
 
-use super::{
-    compact_action::CompactAction,
-    domain::{Memo, MEMO_SIZE},
-};
+const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActCHash";
+const ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActMHash";
+const ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActNHash";
 
 /// Represents the Orchard protocol domain specifics required for note encryption and decryption.
 pub trait OrchardDomainCommon: fmt::Debug + Clone {
@@ -41,6 +46,53 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
 
     /// Extracts the asset from the note plaintext.
     fn extract_asset(plaintext: &Self::CompactNotePlaintextBytes) -> Option<AssetBase>;
+
+    /// Evaluate `orchard_digest` for the bundle as defined in
+    /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+    /// for OrchardVanilla and as defined in
+    /// [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226]
+    /// for OrchardZSA
+    ///
+    /// [zip244]: https://zips.z.cash/zip-0244
+    /// [zip226]: https://zips.z.cash/zip-0226
+    fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
+        bundle: &Bundle<A, V, Self>,
+    ) -> Blake2bHash;
+
+    /// Incorporates the hash of actions (orchard_actions_compact_digest, orchard_actions_memos_digest,
+    /// orchard_actions_noncompact_digest) into the hasher.
+    fn update_hash_with_actions<A: Authorization, V: Copy + Into<i64>>(
+        main_hasher: &mut State,
+        bundle: &Bundle<A, V, Self>,
+    ) {
+        let mut ch = hasher(ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION);
+        let mut mh = hasher(ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION);
+        let mut nh = hasher(ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION);
+
+        for action in bundle.actions().iter() {
+            ch.update(&action.nullifier().to_bytes());
+            ch.update(&action.cmx().to_bytes());
+            ch.update(&action.encrypted_note().epk_bytes);
+            ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..Self::COMPACT_NOTE_SIZE]);
+
+            mh.update(
+                &action.encrypted_note().enc_ciphertext.as_ref()
+                    [Self::COMPACT_NOTE_SIZE..Self::COMPACT_NOTE_SIZE + MEMO_SIZE],
+            );
+
+            nh.update(&action.cv_net().to_bytes());
+            nh.update(&<[u8; 32]>::from(action.rk()));
+            nh.update(
+                &action.encrypted_note().enc_ciphertext.as_ref()
+                    [Self::COMPACT_NOTE_SIZE + MEMO_SIZE..],
+            );
+            nh.update(&action.encrypted_note().out_ciphertext);
+        }
+
+        main_hasher.update(ch.finalize().as_bytes());
+        main_hasher.update(mh.finalize().as_bytes());
+        main_hasher.update(nh.finalize().as_bytes());
+    }
 }
 
 /// Orchard-specific note encryption logic.

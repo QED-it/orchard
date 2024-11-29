@@ -11,8 +11,6 @@ mod orchard_domain;
 mod orchard_domain_vanilla;
 mod orchard_domain_zsa;
 
-pub(crate) use domain::MEMO_SIZE;
-
 pub use {
     compact_action::CompactAction,
     orchard_domain::{OrchardDomain, OrchardDomainCommon},

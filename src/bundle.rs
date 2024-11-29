@@ -27,8 +27,6 @@ use crate::{
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };
 
-pub(crate) use commitments::OrchardHash;
-
 impl<A, D: OrchardDomainCommon> Action<A, D> {
     /// Prepares the public instance for this action, for creating and verifying the
     /// bundle proof.
