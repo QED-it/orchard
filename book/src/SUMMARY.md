@@ -18,4 +18,5 @@
   - [Circuit](design/circuit.md)
     - [Gadgets](design/circuit/gadgets.md)
     - [CommitIvk](design/circuit/commit-ivk.md)
-    - [NoteCommit](design/circuit/note-commit.md)
+    - [Orchard NoteCommit](design/circuit/note-commit.md)
+    - [ZSA Orchard NoteCommit](design/circuit/zsa-note-commit.md)
