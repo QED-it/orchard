@@ -5,7 +5,10 @@ use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
 
 use crate::{
     bundle::{
-        commitments::{hasher, ZCASH_ORCHARD_HASH_PERSONALIZATION},
+        commitments::{
+            hasher, ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION,
+            ZCASH_ORCHARD_HASH_PERSONALIZATION, ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION,
+        },
         Authorization,
     },
     note::{AssetBase, Note},
@@ -20,9 +23,6 @@ use super::{
     },
     orchard_domain::OrchardDomainCommon,
 };
-
-const ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActGHash";
-const ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcBurnHash";
 
 impl OrchardDomainCommon for OrchardZSA {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_ZSA;

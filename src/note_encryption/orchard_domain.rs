@@ -8,7 +8,14 @@ use zcash_note_encryption_zsa::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
 
 use crate::{
     action::Action,
-    bundle::{commitments::hasher, Authorization},
+    bundle::{
+        commitments::{
+            hasher, ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION,
+            ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION,
+            ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION,
+        },
+        Authorization,
+    },
     note::{AssetBase, Rho},
     note_encryption::{
         compact_action::CompactAction,
@@ -16,10 +23,6 @@ use crate::{
     },
     Bundle, Note,
 };
-
-const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActCHash";
-const ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActMHash";
-const ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActNHash";
 
 /// Represents the Orchard protocol domain specifics required for note encryption and decryption.
 pub trait OrchardDomainCommon: fmt::Debug + Clone {
