@@ -125,3 +125,62 @@ pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake
     h.update(&<[u8; 64]>::from(bundle.authorization().signature()));
     h.finalize()
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        builder::{Builder, BundleType},
+        bundle::commitments::hash_bundle_txid_data,
+        keys::{FullViewingKey, Scope, SpendingKey},
+        note::AssetBase,
+        orchard_flavor::OrchardVanilla,
+        value::NoteValue,
+        Anchor,
+    };
+    use rand::{rngs::StdRng, SeedableRng};
+
+    #[test]
+    fn test_hash_bundle_txid_data() {
+        let bundle = {
+            let rng = StdRng::seed_from_u64(5);
+
+            let sk = SpendingKey::from_bytes([7; 32]).unwrap();
+            let recipient = FullViewingKey::from(&sk).address_at(0u32, Scope::External);
+
+            let mut builder = Builder::new(
+                BundleType::DEFAULT_VANILLA,
+                Anchor::from_bytes([0; 32]).unwrap(),
+            );
+            builder
+                .add_output(
+                    None,
+                    recipient,
+                    NoteValue::from_raw(10),
+                    AssetBase::native(),
+                    None,
+                )
+                .unwrap();
+
+            builder
+                .add_output(
+                    None,
+                    recipient,
+                    NoteValue::from_raw(20),
+                    AssetBase::native(),
+                    None,
+                )
+                .unwrap();
+
+            builder
+                .build::<i64, OrchardVanilla>(rng)
+                .unwrap()
+                .unwrap()
+                .0
+        };
+        let sighash = hash_bundle_txid_data(&bundle);
+        assert_eq!(
+            sighash.to_hex().as_str(),
+            "cd6f8156a54473d411c738e781b4d601363990688a926a3335145575003bf4b8"
+        );
+    }
+}
