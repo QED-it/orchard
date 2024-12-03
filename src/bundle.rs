@@ -207,8 +207,8 @@ pub struct Bundle<A: Authorization, V, D: OrchardDomainCommon> {
     anchor: Anchor,
     /// Block height after which this Bundle's Actions are invalid by consensus.
     ///
-    /// For the Orchard ZSA procotol, `expiry_height` is set to 0, indicating no expiry.
-    /// This field will be used in ZSA Swaps.
+    /// For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
+    /// This field is reserved for future use.
     expiry_height: u32,
     /// The authorization for this bundle.
     authorization: A,
