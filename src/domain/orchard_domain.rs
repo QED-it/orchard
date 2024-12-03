@@ -1,5 +1,5 @@
-//! The OrchardDomain trait represents the difference between the `OrchardVanilla` and the `OrchardZSA`
-//! encryption and decryption procedures.
+//! The OrchardDomain trait represents the difference between the `OrchardVanilla` and the
+//! `OrchardZSA` commitment, encryption and decryption procedures.
 
 use core::fmt;
 
@@ -16,11 +16,11 @@ use crate::{
         },
         Authorization,
     },
-    note::{AssetBase, Rho},
-    note_encryption::{
+    domain::{
         compact_action::CompactAction,
-        domain::{Memo, MEMO_SIZE},
+        zcash_note_encryption_domain::{Memo, MEMO_SIZE},
     },
+    note::{AssetBase, Rho},
     Bundle, Note,
 };
 

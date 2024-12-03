@@ -18,9 +18,9 @@ use crate::{
     address::Address,
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     circuit::{Instance, Proof, VerifyingKey},
+    domain::{OrchardDomain, OrchardDomainCommon},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    note_encryption::{OrchardDomain, OrchardDomainCommon},
     orchard_flavor::OrchardFlavor,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
@@ -604,9 +604,9 @@ pub mod testing {
     use super::{Action, Authorization, Authorized, Bundle, Flags};
 
     pub use crate::action::testing::ActionArb;
+    use crate::domain::OrchardDomainCommon;
     use crate::note::asset_base::testing::arb_zsa_asset_base;
     use crate::note::AssetBase;
-    use crate::note_encryption::OrchardDomainCommon;
     use crate::value::testing::arb_note_value;
 
     /// Marker for an unauthorized bundle with no proofs or signatures.

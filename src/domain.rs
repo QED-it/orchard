@@ -6,10 +6,10 @@
 //! organized into separate submodules.
 
 mod compact_action;
-mod domain;
 mod orchard_domain;
 mod orchard_domain_vanilla;
 mod orchard_domain_zsa;
+mod zcash_note_encryption_domain;
 
 pub use {
     compact_action::CompactAction,

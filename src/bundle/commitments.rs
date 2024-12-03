@@ -4,8 +4,8 @@ use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::{
     bundle::{Authorization, Authorized, Bundle},
+    domain::OrchardDomainCommon,
     issuance::{IssueAuth, IssueBundle, Signed},
-    note_encryption::OrchardDomainCommon,
 };
 
 pub(crate) const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
