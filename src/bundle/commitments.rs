@@ -129,58 +129,69 @@ pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake
 #[cfg(test)]
 mod tests {
     use crate::{
-        builder::{Builder, BundleType},
+        builder::{Builder, BundleType, UnauthorizedBundle},
         bundle::commitments::hash_bundle_txid_data,
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
-        orchard_flavor::OrchardVanilla,
+        orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         value::NoteValue,
         Anchor,
     };
     use rand::{rngs::StdRng, SeedableRng};
 
+    fn generate_bundle<FL: OrchardFlavor>(bundle_type: BundleType) -> UnauthorizedBundle<i64, FL> {
+        let rng = StdRng::seed_from_u64(5);
+
+        let sk = SpendingKey::from_bytes([7; 32]).unwrap();
+        let recipient = FullViewingKey::from(&sk).address_at(0u32, Scope::External);
+
+        let mut builder = Builder::new(bundle_type, Anchor::from_bytes([0; 32]).unwrap());
+        builder
+            .add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(10),
+                AssetBase::native(),
+                None,
+            )
+            .unwrap();
+
+        builder
+            .add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(20),
+                AssetBase::native(),
+                None,
+            )
+            .unwrap();
+
+        builder.build::<i64, FL>(rng).unwrap().unwrap().0
+    }
+
+    /// Verify that the hash for an Orchard Vanilla bundle matches a fixed reference value
+    /// to ensure consistency.
     #[test]
-    fn test_hash_bundle_txid_data() {
-        let bundle = {
-            let rng = StdRng::seed_from_u64(5);
-
-            let sk = SpendingKey::from_bytes([7; 32]).unwrap();
-            let recipient = FullViewingKey::from(&sk).address_at(0u32, Scope::External);
-
-            let mut builder = Builder::new(
-                BundleType::DEFAULT_VANILLA,
-                Anchor::from_bytes([0; 32]).unwrap(),
-            );
-            builder
-                .add_output(
-                    None,
-                    recipient,
-                    NoteValue::from_raw(10),
-                    AssetBase::native(),
-                    None,
-                )
-                .unwrap();
-
-            builder
-                .add_output(
-                    None,
-                    recipient,
-                    NoteValue::from_raw(20),
-                    AssetBase::native(),
-                    None,
-                )
-                .unwrap();
-
-            builder
-                .build::<i64, OrchardVanilla>(rng)
-                .unwrap()
-                .unwrap()
-                .0
-        };
+    fn test_hash_bundle_txid_data_for_orchard_vanilla() {
+        let bundle = generate_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
         let sighash = hash_bundle_txid_data(&bundle);
         assert_eq!(
             sighash.to_hex().as_str(),
+            // Bundle hash for Orchard (vanilla) generated using
+            // Zcash/Orchard commit: 23a167e3972632586dc628ddbdd69d156dfd607b
             "cd6f8156a54473d411c738e781b4d601363990688a926a3335145575003bf4b8"
+        );
+    }
+
+    /// Verify that the hash for an OrchardZSA bundle matches a fixed reference value
+    /// to ensure consistency.
+    #[test]
+    fn test_hash_bundle_txid_data_for_orchard_zsa() {
+        let bundle = generate_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA);
+        let sighash = hash_bundle_txid_data(&bundle);
+        assert_eq!(
+            sighash.to_hex().as_str(),
+            "43cfaab1ffcd8d4752e5e7479fd619c769e3ab459b6f10bbba80533608f546b0"
         );
     }
 }
