@@ -1,6 +1,6 @@
-# ZSA Orchard NoteCommit
+# OrchardZSA NoteCommit
 
-For ZSA Orchard protocol, the $\NoteCommit$ is defined as follows
+In the OrchardZSA protocol, the $\NoteCommit$ function is defined as follows:
 $$
 \mathsf{NoteCommit^{OrchardZSA}_{rcm}}(
 \DiversifiedTransmitBaseRepr,
@@ -16,7 +16,7 @@ $$
 where
 $$
 \begin{align}
-\mathsf{h_{ZEC}} :=&\;\;\mathsf{SinsemillaHashToPoint}(\texttt{"z.cash:Orchard-NoteCommit-M"}, \\
+\mathsf{h_{ZEC}} =&\;\;\mathsf{SinsemillaHashToPoint}(\texttt{"z.cash:Orchard-NoteCommit-M"}, \\
 &\;\;\;\;\;
 \DiversifiedTransmitBaseRepr \bconcat
 \DiversifiedTransmitPublicRepr \bconcat
@@ -28,7 +28,7 @@ $$
 and
 $$
 \begin{align}
-\mathsf{h_{ZSA}} :=&\;\;\mathsf{SinsemillaHashToPoint}(\texttt{"z.cash:ZSA-NoteCommit-M"}, \\
+\mathsf{h_{ZSA}} =&\;\;\mathsf{SinsemillaHashToPoint}(\texttt{"z.cash:ZSA-NoteCommit-M"}, \\
 &\;\;\;\;\;
 \DiversifiedTransmitBaseRepr \bconcat
 \DiversifiedTransmitPublicRepr \bconcat
@@ -46,8 +46,8 @@ where:
 - $\mathsf{v}$ is a $64$-bit value.
 - $\BaseLength{Orchard} = 255.$
 
-We will only present the updates and additions compared to the circuit which supports
-only [ZEC $\NoteCommit$](./note-commit.md)
+We will only present the updates and additions compared to
+[Orchard $\NoteCommit$](./note-commit.md).
 
 ## Message decomposition
 
@@ -79,11 +79,11 @@ $$
     (\text{bits 9..=248 of } \psi) \bconcat
     (\text{bits 249..=253 of } \psi) \bconcat
     (\text{bit 254 of } \psi) \\
-AssetBase &= h_2^{ZSA} \bconcat i \bconcat j_0 \bconcat j_1 \\
- &= (\text{bits 0..=3 of } x(AssetBase)) \bconcat
-    (\text{bits 4..=253 of } x(AssetBase)) \bconcat
-    (\text{bit 254 of } x(AssetBase)) \bconcat
-    (ỹ \text{ bit of } AssetBase) \\
+\mathsf{AssetBase} &= h_2^{ZSA} \bconcat i \bconcat j_0 \bconcat j_1 \\
+ &= (\text{bits 0..=3 of } x(\mathsf{AssetBase})) \bconcat
+    (\text{bits 4..=253 of } x(\mathsf{AssetBase})) \bconcat
+    (\text{bit 254 of } x(\mathsf{AssetBase})) \bconcat
+    (ỹ \text{ bit of } \mathsf{AssetBase}) \\
 \end{aligned}
 $$
 
@@ -153,6 +153,8 @@ Outside this gate, we have constrained:
 ### $j$ decomposition
 
 $$j = j_0 \bconcat j_1 \bconcat j_2$$
+with $j_2$ is 8 zero bits.
+
 $j$ has been constrained to be $10$ bits by the $\SinsemillaHash$.
 
 #### Region layout
@@ -177,34 +179,34 @@ $$
 
 ## Field element checks
 
-In addition to [field element checks for ZEC NoteCommit](./note-commit.md#field-element-checks),
+In addition to [field element checks for Orchard NoteCommit](./note-commit.md#field-element-checks),
 we have to
 - constrain $\ItoLEBSP{\BaseLength{Orchard}}(x(\mathsf{AssetBase}))$
   to be 255-bit value, with top bit $j_0$.
-- constrain $\ItoLEBSP{\BaseLength{Orchard}}(x(\mathsf{AssetBase})) &= x(\mathsf{AssetBase}) \pmod{q_\mathbb{P}}$
+- constrain $\ItoLEBSP{\BaseLength{Orchard}}(x(\mathsf{AssetBase})) = x(\mathsf{AssetBase}) \pmod{q_\mathbb{P}}$
 where $q_\mathbb{P}$ is the Pallas base field modulus.
 - check that $\mathsf{AssetBase}$ is indeed canonically-encoded field elements, i.e.
-$$\ItoLEBSP{\BaseLength{Orchard}}(x(\mathsf{AssetBase})) &< q_\mathbb{P}$$
+$$\ItoLEBSP{\BaseLength{Orchard}}(x(\mathsf{AssetBase})) < q_\mathbb{P}$$
 
 $\mathsf{pk_d}$ and $\mathsf{AssetBase}$ have a similar message piece decomposition.
-Thus, we will reuse the $\mathsf{pk_d}$ gates to check those constraints on \mathsf{AssetBase}$.
+Thus, we will reuse the $\mathsf{pk_d}$ gates to check those constraints on $\mathsf{AssetBase}$.
 
 ### $x(\mathsf{AssetBase})$ is a Pallas base field element
-Recall that $x(\mathsf{AssetBase}) = h_2 + 2^4 \cdot i + 2^{254} \cdot j_0$.
+Recall that $x(\mathsf{AssetBase}) = h_2^{ZSA} + 2^4 \cdot i + 2^{254} \cdot j_0$.
 
 #### Region layout
 $$
 \begin{array}{|c|c|c|c|c|}
 \hline
-      A_6             & A_7 &  A_8  &      A_9     & q_{\NoteCommit,x(\mathsf{pk_d})} \\\hline
-x(\mathsf{AssetBase}) & h_2 &   i   & z_{i,13}     &                1                 \\\hline
-                      & j_0 & h_2i' & z_{h_2i',14} &                0                 \\\hline
+      A_6             & A_7       &  A_8  &      A_9     & q_{\NoteCommit,x(\mathsf{pk_d})} \\\hline
+x(\mathsf{AssetBase}) & h_2^{ZSA} &   i   & z_{i,13}     &                1                 \\\hline
+                      & j_0       & h_2i' & z_{h_2i',14} &                0                 \\\hline
 \end{array}
 $$
 
 where
 - $z_{i,13}$ is the index-13 running sum output by $\SinsemillaHash(i)$,
-- $h_2i' = h_2 + 2^4 \cdot i + 2^{140} - t_\mathbb{P}$, and
+- $h_2i' = h_2^{ZSA} + 2^4 \cdot i + 2^{140} - t_\mathbb{P}$, and
 - $z_{h_2i',14}$ is the index-14 running sum output by $\SinsemillaHash(h_2i')$,
 
 #### Constraints
@@ -212,19 +214,19 @@ $$
 \begin{array}{|c|l|}
 \hline
 \text{Degree} & \text{Constraint} \\\hline
-2 & q_{\NoteCommit,x(\mathsf{AssetBast})} \cdot \left(h_2 + i \cdot 2^4 + j_0 \cdot 2^{254} - x(\mathsf{AssetBase}) \right) = 0 \\\hline
+2 & q_{\NoteCommit,x(\mathsf{AssetBast})} \cdot \left(h_2^{ZSA} + i \cdot 2^4 + j_0 \cdot 2^{254} - x(\mathsf{AssetBase}) \right) = 0 \\\hline
 3 & q_{\NoteCommit,x(\mathsf{AssetBase})} \cdot j_0 \cdot z_{i,13} = 0 \\\hline
-2 & q_{\NoteCommit,x(\mathsf{AssetBase})} \cdot (h_2 + i \cdot 2^4 + 2^{140} - t_\mathbb{P} - {h_2}i') = 0 \\\hline
+2 & q_{\NoteCommit,x(\mathsf{AssetBase})} \cdot (h_2^{ZSA} + i \cdot 2^4 + 2^{140} - t_\mathbb{P} - {h_2}i') = 0 \\\hline
 3 & q_{\NoteCommit,x(\mathsf{AssetBase})} \cdot j_0 \cdot z_{{h_2}i',14} = 0 \\\hline
 \end{array}
 $$
 
 ### Decomposition of $y(\mathsf{AssetBase})$
 
-We would like to verify that the following decomposition of $y(\mathsf{AssetBase}$ is correct
+We would like to verify that the following decomposition of $y(\mathsf{AssetBase})$ is correct
 $$
 \begin{align}
-y &= j_1 \bconcat k_0 \bconcat k_1 \bconcat k_2 \bconcat k_3\\
+y &= \textsf{LSB} \bconcat k_0 \bconcat k_1 \bconcat k_2 \bconcat k_3\\
   &= \textsf{LSB}
       \bconcat \text{ (bits $1..=9$ of $y$) }
       \bconcat \text{ (bits $10..=249$ of $y$) }
@@ -234,8 +236,8 @@ y &= j_1 \bconcat k_0 \bconcat k_1 \bconcat k_2 \bconcat k_3\\
 $$
 where $\textsf{LSB}=j_1$.
 
-To do that, we will use the gate to check that the decompositions of
-$y(\mathsf{g_d})$ and $y(\mathsf{pk_d})$ are correct.
+To achieve this, we will use the same gate that is utilized to verify the correctness
+of the decompositions of $y(\mathsf{g_d})$ and $y(\mathsf{pk_d})$.
 
 Let $j = \textsf{LSB} + 2 \cdot k_0 + 2^{10} \cdot k_1$.
 We decompose $j$ to be $250$ bits using a strict $25-$word
@@ -279,7 +281,8 @@ y &= ỹ \bconcat k_0 \bconcat k_1 \bconcat k_2 \bconcat k_3\\
 $$
 Let $\begin{cases}
 j = \textsf{LSB} + 2 \cdot k_0 + 2^{10} \cdot k_1 \\
-j' = j + 2^{130} - t_\mathbb{P}$.
+j' = j + 2^{130} - t_\mathbb{P}
+\end{cases}$.
 
 #### Region layout
 $$
@@ -310,20 +313,20 @@ Outside this gate, we have constrained:
 - $\ShortLookupRangeCheck{k_2, 4}$
 
 ## $\mathsf{SinsemillaHashToPoint}$ evaluations
-To evaluate our ZSA $\NoteCommit$, we must evalute
-$h = \begin{cases} h_{ZEC} &\text{ if } \mathsf{AssetBase} = \mathcal{V}^{\mathsf{Orchard}} \\
-h_{ZSA} &\text{ otherwise} \end{cases}$.
+To evaluate our OrchardZSA $\NoteCommit$, we must evalute
+$\mathsf{h} = \begin{cases} \mathsf{h_{ZEC}} &\text{ if } \mathsf{AssetBase} = \mathcal{V}^{\mathsf{Orchard}} \\
+\mathsf{h_{ZSA}} &\text{ otherwise} \end{cases}$.
 
-We observe that the messages to hash in $h_{ZEC}$ and $h_{ZSA}$  have a similar prefix
+We observe that the messages to hash in $\mathsf{h_{ZEC}}$ and $\mathsf{h_{ZSA}}$  have a similar prefix
 $$\begin{cases}
 \mathsf{h_{ZEC}} = \mathsf{SinsemillaHashToPoint}(\texttt{"z.cash:Orchard-NoteCommit-M"},
-\mathsf{prefix} \bconcat \mathsf{suffix_{ZEC}) \\
+\mathsf{prefix} \bconcat \mathsf{suffix_{ZEC}}) \\
 \mathsf{h_{ZSA}} = \mathsf{SinsemillaHashToPoint}(\texttt{"z.cash:ZSA-NoteCommit-M"},
-\mathsf{prefix} \bconcat \mathsf{suffix_{ZSA})
+\mathsf{prefix} \bconcat \mathsf{suffix_{ZSA}})
 \end{cases}$$
 where
 $$\begin{cases}
-\mathsf{prefix} = a \bconcat b \bconcat c \bconcat d \bconcat e \bconcat e f \bconcat g \\
+\mathsf{prefix} = a \bconcat b \bconcat c \bconcat d \bconcat e \bconcat f \bconcat g \\
 \mathsf{suffix_{ZEC}} = h_0 \bconcat h_1 \bconcat 0000 \\
 \mathsf{suffix_{ZSA}} = h_0 \bconcat h_1 \bconcat h_2^{ZSA} \bconcat i \bconcat j
 \end{cases}$$
@@ -336,12 +339,17 @@ where
 $$\begin{cases}
 \mathcal{Q}_{ZEC} = \mathcal{Q}(\texttt{"z.cash:Orchard-NoteCommit-M"}) \\
 \mathcal{Q}_{ZSA} = \mathcal{Q}(\texttt{"z.cash:ZSA-NoteCommit-M"})
-\end{casees}$$
-2. Evaluate $h_{common}$ which is equal to the Sinsemilla hash evaluation from the inital
-point $\mathcal{Q}_{init}}$ with the message $\mathsh{prefix}$
-3. Evaluate $h_{ZSA}$ and $h_{ZEC}$ which are equal to the Sinsemilla hash evaluations from the initial point $h_{common}$ with the message $suffix_{ZSA}$ and $suffix_{ZEC}$ respectively
+\end{cases}$$
+2. Evaluate $\mathsf{h_{common}}$ which is equal to the Sinsemilla hash evaluation from the inital
+point $\mathcal{Q}_{init}$ with the message $\mathsf{prefix}$
+$$\mathsf{h_{common}} = \mathsf{SinsemillaHash}(\mathcal{Q}_{init}, \mathsf{prefix})$$
+3. Evaluate $\mathsf{h_{ZSA}}$ and $\mathsf{h_{ZEC}}$ which are equal to the Sinsemilla hash evaluations from the initial point $h_{common}$ with the message $\mathsf{suffix_{ZSA}}$ and $\mathsf{suffix_{ZEC}}$ respectively
+$$\begin{cases}
+\mathsf{h_{ZEC}} = \mathsf{SinsemillaHash}(\mathsf{h_{common}}, \mathsf{suffix_{ZEC}}) \\
+\mathsf{h_{ZSA}} = \mathsf{SinsemillaHash}(\mathsf{h_{common}}, \mathsf{suffix_{ZSA}})
+\end{cases}$$
 4. Select the desired hash thanks to a multiplexer gate
-$$ h = MUX(h_{ZSA}, h_{ZEC}, \mathsf{AssetBase} == \mathcal{V}^{\mathsf{Orchard}})$$
+$$ \mathsf{h} = MUX(\mathsf{h_{ZSA}}, \mathsf{h_{ZEC}}, \mathsf{AssetBase} == \mathcal{V}^{\mathsf{Orchard}})$$
 
 ![](./zsa-note-commit.png)
 
