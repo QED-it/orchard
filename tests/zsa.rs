@@ -146,6 +146,7 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note) {
             recipient: keys.recipient,
             value: NoteValue::from_raw(40),
         }),
+        true,
         &mut rng,
     );
 
@@ -158,6 +159,7 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note) {
             asset_descr,
             keys.recipient,
             NoteValue::from_raw(2),
+            false,
             &mut rng,
         )
         .is_ok());
