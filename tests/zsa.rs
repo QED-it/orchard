@@ -302,7 +302,8 @@ fn zsa_issue_and_transfer() {
     let asset_descr = b"zsa_asset".to_vec();
 
     // Prepare ZSA
-    let (_, zsa_note_1, zsa_note_2) = issue_zsa_notes(&asset_descr, &keys);
+    let (reference_note, zsa_note_1, zsa_note_2) = issue_zsa_notes(&asset_descr, &keys);
+    verify_reference_note(&reference_note, zsa_note_1.asset());
 
     let (merkle_path1, merkle_path2, anchor) =
         build_merkle_path_with_two_leaves(&zsa_note_1, &zsa_note_2);
@@ -455,7 +456,8 @@ fn zsa_issue_and_transfer() {
     .unwrap();
 
     // 7. Spend ZSA notes of different asset types
-    let (_, zsa_note_t7, _) = issue_zsa_notes(b"zsa_asset2", &keys);
+    let (reference_note, zsa_note_t7, _) = issue_zsa_notes(b"zsa_asset2", &keys);
+    verify_reference_note(&reference_note, zsa_note_t7.asset());
     let (merkle_path_t7_1, merkle_path_t7_2, anchor_t7) =
         build_merkle_path_with_two_leaves(&zsa_note_t7, &zsa_note_2);
     let zsa_spend_t7_1: TestSpendInfo = TestSpendInfo {
