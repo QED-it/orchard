@@ -305,18 +305,14 @@ impl IssueBundle<Unauthorized> {
 
         let asset = AssetBase::derive(&ik, &asset_desc);
 
-        let reference_note = Note::new(
-            ReferenceKeys::recipient(),
-            NoteValue::zero(),
-            asset,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
-            &mut rng,
-        );
-
         let mut notes = vec![];
-        if first_issuance {
+        let reference_notes = if first_issuance {
+            let reference_note = create_reference_note(asset, &mut rng);
             notes.push(reference_note);
-        }
+            HashMap::from([(asset, reference_note)])
+        } else {
+            HashMap::new()
+        };
 
         let action = match issue_info {
             None => IssueAction {
@@ -341,12 +337,6 @@ impl IssueBundle<Unauthorized> {
                     finalize: false,
                 }
             }
-        };
-
-        let reference_notes = if first_issuance {
-            HashMap::from([(asset, reference_note)])
-        } else {
-            HashMap::new()
         };
 
         Ok((
@@ -385,14 +375,6 @@ impl IssueBundle<Unauthorized> {
 
         let asset = AssetBase::derive(&self.ik, asset_desc);
 
-        let reference_note = Note::new(
-            ReferenceKeys::recipient(),
-            NoteValue::zero(),
-            asset,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
-            &mut rng,
-        );
-
         let note = Note::new(
             recipient,
             value,
@@ -400,6 +382,14 @@ impl IssueBundle<Unauthorized> {
             Rho::from_nf_old(Nullifier::dummy(&mut rng)),
             &mut rng,
         );
+
+        let notes = if first_issuance {
+            let reference_note = create_reference_note(asset, &mut rng);
+            self.reference_notes.insert(asset, reference_note);
+            vec![reference_note, note]
+        } else {
+            vec![note]
+        };
 
         let action = self
             .actions
@@ -409,18 +399,10 @@ impl IssueBundle<Unauthorized> {
         match action {
             Some(action) => {
                 // Append to an existing IssueAction.
-                action.notes.push(note);
-                if first_issuance {
-                    action.notes.push(reference_note);
-                }
+                action.notes.extend(notes);
             }
             None => {
                 // Insert a new IssueAction.
-                let notes = if first_issuance {
-                    vec![reference_note, note]
-                } else {
-                    vec![note]
-                };
                 self.actions.push(IssueAction {
                     asset_desc: Vec::from(asset_desc),
                     notes,
@@ -428,10 +410,6 @@ impl IssueBundle<Unauthorized> {
                 });
             }
         };
-
-        if first_issuance {
-            self.reference_notes.insert(asset, reference_note);
-        }
 
         Ok(asset)
     }
@@ -471,6 +449,16 @@ impl IssueBundle<Unauthorized> {
             authorization: Prepared { sighash },
         }
     }
+}
+
+fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
+    Note::new(
+        ReferenceKeys::recipient(),
+        NoteValue::zero(),
+        asset,
+        Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+        &mut rng,
+    )
 }
 
 impl IssueBundle<Prepared> {

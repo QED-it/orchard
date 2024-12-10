@@ -172,6 +172,13 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note, Note) {
     let note1 = notes[1];
     let note2 = notes[2];
 
+    // Check reference_note
+    assert_eq!(reference_note.value(), NoteValue::from_raw(0));
+    assert_eq!(
+        reference_note.asset(),
+        AssetBase::derive(&keys.ik().clone(), asset_descr)
+    );
+
     assert!(verify_issue_bundle(
         &issue_bundle,
         issue_bundle.commitment().into(),
