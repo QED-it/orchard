@@ -13,6 +13,7 @@ use orchard::{
     builder::{Builder, BundleType},
     circuit::{ProvingKey, VerifyingKey},
     domain::OrchardDomain,
+    issuance::verify_reference_note,
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     orchard_flavor::OrchardZSA,
     value::NoteValue,
@@ -172,11 +173,9 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note, Note) {
     let note1 = notes[1];
     let note2 = notes[2];
 
-    // Check reference_note
-    assert_eq!(reference_note.value(), NoteValue::from_raw(0));
-    assert_eq!(
-        reference_note.asset(),
-        AssetBase::derive(&keys.ik().clone(), asset_descr)
+    verify_reference_note(
+        reference_note,
+        AssetBase::derive(&keys.ik().clone(), asset_descr),
     );
 
     assert!(verify_issue_bundle(

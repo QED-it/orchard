@@ -461,6 +461,18 @@ fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
     )
 }
 
+/// Validation for reference note
+///
+/// The following checks are performed:
+/// - the note value of the reference note is equal to 0
+/// - the asset of the reference note is equal to the provided asset
+/// - the recipient of the reference note is equal to the reference recipient
+pub fn verify_reference_note(note: &Note, asset: AssetBase) {
+    assert_eq!(note.value(), NoteValue::from_raw(0));
+    assert_eq!(note.asset(), asset);
+    assert_eq!(note.recipient(), ReferenceKeys::recipient());
+}
+
 impl IssueBundle<Prepared> {
     /// Sign the `IssueBundle`.
     /// The call makes sure that the provided `isk` matches the `ik` and the derived `asset` for each note in the bundle.
@@ -657,7 +669,9 @@ mod tests {
         IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         IssueBundleInvalidSignature, WrongAssetDescSize,
     };
-    use crate::issuance::{verify_issue_bundle, IssueAction, Signed, Unauthorized};
+    use crate::issuance::{
+        verify_issue_bundle, verify_reference_note, IssueAction, Signed, Unauthorized,
+    };
     use crate::keys::{
         FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
@@ -872,7 +886,7 @@ mod tests {
         );
 
         let (mut bundle, asset) = IssueBundle::new(
-            ik,
+            ik.clone(),
             str.clone().into_bytes(),
             Some(IssueInfo {
                 recipient,
@@ -912,7 +926,8 @@ mod tests {
         assert_eq!(actions_vec.len(), 1);
         let action = actions_vec[0];
         assert_eq!(action.notes.len(), 3);
-        // The note at index 0 is the reference note.
+        let reference_note = action.notes.get(0).unwrap();
+        verify_reference_note(reference_note, asset);
         let first_note = action.notes.get(1).unwrap();
         assert_eq!(first_note.value().inner(), 5);
         assert_eq!(first_note.asset(), asset);
@@ -927,7 +942,8 @@ mod tests {
         assert_eq!(action2_vec.len(), 1);
         let action2 = action2_vec[0];
         assert_eq!(action2.notes.len(), 2);
-        // The note at index 0 is the reference note.
+        let reference_note = action.notes.get(0).unwrap();
+        verify_reference_note(reference_note, AssetBase::derive(&ik, str2.as_bytes()));
         let first_note = action2.notes().get(1).unwrap();
         assert_eq!(first_note.value().inner(), 15);
         assert_eq!(first_note.asset(), third_asset);
@@ -1492,7 +1508,8 @@ mod tests {
 
         let action = actions_vec[0];
         assert_eq!(action.asset_desc(), &asset_desc_1);
-        // The note at index 0 is the reference note.
+        let reference_note = action.notes.get(0).unwrap();
+        verify_reference_note(reference_note, asset_base_1);
         assert_eq!(action.notes.get(1).unwrap().value().inner(), 5);
         assert_eq!(bundle.get_actions_by_desc(&asset_desc_1), actions_vec);
 
@@ -1502,7 +1519,8 @@ mod tests {
 
         let action2 = action2_vec[0];
         assert_eq!(action2.asset_desc(), &asset_desc_2);
-        // The note at index 0 is the reference note.
+        let reference_note = action2.notes.get(0).unwrap();
+        verify_reference_note(reference_note, asset_base_2);
         assert_eq!(action2.notes.get(1).unwrap().value().inner(), 10);
         assert_eq!(bundle.get_actions_by_desc(&asset_desc_2), action2_vec);
     }
