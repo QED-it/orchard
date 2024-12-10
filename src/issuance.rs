@@ -942,7 +942,7 @@ mod tests {
         assert_eq!(action2_vec.len(), 1);
         let action2 = action2_vec[0];
         assert_eq!(action2.notes.len(), 2);
-        let reference_note = action.notes.get(0).unwrap();
+        let reference_note = action2.notes.get(0).unwrap();
         verify_reference_note(reference_note, AssetBase::derive(&ik, str2.as_bytes()));
         let first_note = action2.notes().get(1).unwrap();
         assert_eq!(first_note.value().inner(), 15);
