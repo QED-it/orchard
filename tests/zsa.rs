@@ -13,7 +13,6 @@ use orchard::{
     builder::{Builder, BundleType},
     circuit::{ProvingKey, VerifyingKey},
     domain::OrchardDomain,
-    issuance::verify_reference_note,
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     orchard_flavor::OrchardZSA,
     value::NoteValue,
@@ -291,6 +290,21 @@ fn verify_unique_spent_nullifiers(bundle: &Bundle<Authorized, i64, OrchardZSA>) 
         // position of the item is equal to the current index i.
         unique_nulifiers.iter().position(|x| x == item) == Some(i)
     })
+}
+
+/// Validation for reference note
+///
+/// The following checks are performed:
+/// - the note value of the reference note is equal to 0
+/// - the asset of the reference note is equal to the provided asset
+/// - the recipient of the reference note is equal to the reference recipient
+fn verify_reference_note(note: &Note, asset: AssetBase) {
+    let reference_sk = SpendingKey::from_bytes([0; 32]).unwrap();
+    let reference_fvk = FullViewingKey::from(&reference_sk);
+    let reference_recipient = reference_fvk.address_at(0u32, Scope::External);
+    assert_eq!(note.value(), NoteValue::from_raw(0));
+    assert_eq!(note.asset(), asset);
+    assert_eq!(note.recipient(), reference_recipient);
 }
 
 /// Issue several ZSA and native notes and spend them in different combinations, e.g. split and join

@@ -495,18 +495,6 @@ fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
     )
 }
 
-/// Validation for reference note
-///
-/// The following checks are performed:
-/// - the note value of the reference note is equal to 0
-/// - the asset of the reference note is equal to the provided asset
-/// - the recipient of the reference note is equal to the reference recipient
-pub fn verify_reference_note(note: &Note, asset: AssetBase) {
-    assert_eq!(note.value(), NoteValue::from_raw(0));
-    assert_eq!(note.asset(), asset);
-    assert_eq!(note.recipient(), ReferenceKeys::recipient());
-}
-
 impl IssueBundle<Prepared> {
     /// Sign the `IssueBundle`.
     /// The call makes sure that the provided `isk` matches the `ik` and the derived `asset` for each note in the bundle.
@@ -697,14 +685,13 @@ impl fmt::Display for Error {
 #[cfg(test)]
 mod tests {
     use super::{AssetSupply, IssueBundle, IssueInfo};
+    use crate::constants::reference_keys::ReferenceKeys;
     use crate::issuance::Error::{
         AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
         IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         IssueBundleInvalidSignature, WrongAssetDescSize,
     };
-    use crate::issuance::{
-        verify_issue_bundle, verify_reference_note, IssueAction, Signed, Unauthorized,
-    };
+    use crate::issuance::{verify_issue_bundle, IssueAction, Signed, Unauthorized};
     use crate::keys::{
         FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
@@ -717,6 +704,18 @@ mod tests {
     use rand::rngs::OsRng;
     use rand::RngCore;
     use std::collections::HashSet;
+
+    /// Validation for reference note
+    ///
+    /// The following checks are performed:
+    /// - the note value of the reference note is equal to 0
+    /// - the asset of the reference note is equal to the provided asset
+    /// - the recipient of the reference note is equal to the reference recipient
+    fn verify_reference_note(note: &Note, asset: AssetBase) {
+        assert_eq!(note.value(), NoteValue::from_raw(0));
+        assert_eq!(note.asset(), asset);
+        assert_eq!(note.recipient(), ReferenceKeys::recipient());
+    }
 
     fn setup_params() -> (
         OsRng,
