@@ -221,20 +221,50 @@ impl<T: IssueAuth> IssueBundle<T> {
         &self.authorization
     }
 
-    /// Find the actions corresponding to the `asset_desc` for a given `IssueBundle`.
-    pub fn get_actions_by_desc(&self, asset_desc: &[u8]) -> Vec<&IssueAction> {
-        self.actions
+    /// Find the action corresponding to the `asset_desc` for a given `IssueBundle`.
+    ///
+    /// # Returns
+    ///
+    /// If a single matching action is found, it is returned as `Some(&IssueAction)`.
+    /// If no action matches the given `asset_desc`, it returns `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if multiple matching actions are found.
+    pub fn get_action_by_desc(&self, asset_desc: &[u8]) -> Option<&IssueAction> {
+        let issue_actions: Vec<&IssueAction> = self
+            .actions
             .iter()
             .filter(|a| a.asset_desc.eq(asset_desc))
-            .collect()
+            .collect();
+        match issue_actions.len() {
+            0 => None,
+            1 => Some(issue_actions[0]),
+            _ => panic!("Multiple IssueActions with the same asset_desc"),
+        }
     }
 
     /// Find the actions corresponding to an Asset Base `asset` for a given `IssueBundle`.
-    pub fn get_actions_by_asset(&self, asset: &AssetBase) -> Vec<&IssueAction> {
-        self.actions
+    ///
+    /// # Returns
+    ///
+    /// If a single matching action is found, it is returned as `Some(&IssueAction)`.
+    /// If no action matches the given Asset Base `asset`, it returns `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if multiple matching actions are found.
+    pub fn get_action_by_asset(&self, asset: &AssetBase) -> Option<&IssueAction> {
+        let issue_actions: Vec<&IssueAction> = self
+            .actions
             .iter()
             .filter(|a| AssetBase::derive(&self.ik, &a.asset_desc).eq(asset))
-            .collect()
+            .collect();
+        match issue_actions.len() {
+            0 => None,
+            1 => Some(issue_actions[0]),
+            _ => panic!("Multiple IssueActions with the same AssetBase"),
+        }
     }
 
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
@@ -924,9 +954,7 @@ mod tests {
         let actions = bundle.actions();
         assert_eq!(actions.len(), 2);
 
-        let actions_vec = bundle.get_actions_by_asset(&asset);
-        assert_eq!(actions_vec.len(), 1);
-        let action = actions_vec[0];
+        let action = bundle.get_action_by_asset(&asset).unwrap();
         assert_eq!(action.notes.len(), 3);
         let reference_note = action.notes.get(0).unwrap();
         verify_reference_note(reference_note, asset);
@@ -940,9 +968,7 @@ mod tests {
         assert_eq!(second_note.asset(), asset);
         assert_eq!(second_note.recipient(), recipient);
 
-        let action2_vec = bundle.get_actions_by_desc(str2.as_bytes());
-        assert_eq!(action2_vec.len(), 1);
-        let action2 = action2_vec[0];
+        let action2 = bundle.get_action_by_desc(str2.as_bytes()).unwrap();
         assert_eq!(action2.notes.len(), 2);
         let reference_note = action2.notes.get(0).unwrap();
         verify_reference_note(reference_note, AssetBase::derive(&ik, str2.as_bytes()));
@@ -1509,26 +1535,20 @@ mod tests {
             .unwrap();
 
         // Checks for the case of UTF-8 encoded asset description.
-        let actions_vec = bundle.get_actions_by_asset(&asset_base_1);
-        assert_eq!(actions_vec.len(), 1);
-
-        let action = actions_vec[0];
+        let action = bundle.get_action_by_asset(&asset_base_1).unwrap();
         assert_eq!(action.asset_desc(), &asset_desc_1);
         let reference_note = action.notes.get(0).unwrap();
         verify_reference_note(reference_note, asset_base_1);
         assert_eq!(action.notes.get(1).unwrap().value().inner(), 5);
-        assert_eq!(bundle.get_actions_by_desc(&asset_desc_1), actions_vec);
+        assert_eq!(bundle.get_action_by_desc(&asset_desc_1).unwrap(), action);
 
         // Checks for the case on non-UTF-8 encoded asset description.
-        let action2_vec = bundle.get_actions_by_asset(&asset_base_2);
-        assert_eq!(action2_vec.len(), 1);
-
-        let action2 = action2_vec[0];
+        let action2 = bundle.get_action_by_asset(&asset_base_2).unwrap();
         assert_eq!(action2.asset_desc(), &asset_desc_2);
         let reference_note = action2.notes.get(0).unwrap();
         verify_reference_note(reference_note, asset_base_2);
         assert_eq!(action2.notes.get(1).unwrap().value().inner(), 10);
-        assert_eq!(bundle.get_actions_by_desc(&asset_desc_2), action2_vec);
+        assert_eq!(bundle.get_action_by_desc(&asset_desc_2).unwrap(), action2);
     }
 }
 
