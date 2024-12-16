@@ -4,7 +4,7 @@ use group::Group;
 use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
@@ -435,6 +435,23 @@ impl IssueBundle<Unauthorized> {
             actions: self.actions,
             authorization: Prepared { sighash },
         }
+    }
+}
+
+impl<T: IssueAuth> IssueBundle<T> {
+    /// Returns the reference notes for the `IssueBundle`.
+    pub fn get_reference_notes(self) -> HashMap<AssetBase, Note> {
+        let mut reference_notes = HashMap::new();
+        self.actions.iter().for_each(|action| {
+            action.notes.iter().for_each(|note| {
+                if (note.recipient() == ReferenceKeys::recipient())
+                    && (note.value() == NoteValue::zero())
+                {
+                    reference_notes.insert(note.asset(), *note);
+                }
+            })
+        });
+        reference_notes
     }
 }
 
@@ -932,6 +949,11 @@ mod tests {
         let first_note = action2.notes().get(1).unwrap();
         assert_eq!(first_note.value().inner(), 15);
         assert_eq!(first_note.asset(), third_asset);
+
+        let reference_notes = bundle.get_reference_notes();
+        assert_eq!(reference_notes.len(), 2);
+        verify_reference_note(reference_notes.get(&asset).unwrap(), asset);
+        verify_reference_note(reference_notes.get(&third_asset).unwrap(), third_asset);
     }
 
     #[test]
