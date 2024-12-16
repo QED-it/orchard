@@ -4,7 +4,7 @@ use group::Group;
 use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
@@ -30,8 +30,6 @@ pub struct IssueBundle<T: IssueAuth> {
     ik: IssuanceValidatingKey,
     /// The list of issue actions that make up this bundle.
     actions: NonEmpty<IssueAction>,
-    /// The list of reference notes created in this bundle.
-    reference_notes: HashMap<AssetBase, Note>,
     /// The authorization for this action.
     authorization: T,
 }
@@ -249,13 +247,11 @@ impl<T: IssueAuth> IssueBundle<T> {
     pub fn from_parts(
         ik: IssuanceValidatingKey,
         actions: NonEmpty<IssueAction>,
-        reference_notes: HashMap<AssetBase, Note>,
         authorization: T,
     ) -> Self {
         IssueBundle {
             ik,
             actions,
-            reference_notes,
             authorization,
         }
     }
@@ -269,7 +265,6 @@ impl<T: IssueAuth> IssueBundle<T> {
         IssueBundle {
             ik: self.ik,
             actions: self.actions,
-            reference_notes: self.reference_notes,
             authorization: map_auth(authorization),
         }
     }
@@ -306,12 +301,8 @@ impl IssueBundle<Unauthorized> {
         let asset = AssetBase::derive(&ik, &asset_desc);
 
         let mut notes = vec![];
-        let reference_notes = if first_issuance {
-            let reference_note = create_reference_note(asset, &mut rng);
-            notes.push(reference_note);
-            HashMap::from([(asset, reference_note)])
-        } else {
-            HashMap::new()
+        if first_issuance {
+            notes.push(create_reference_note(asset, &mut rng));
         };
 
         let action = match issue_info {
@@ -343,7 +334,6 @@ impl IssueBundle<Unauthorized> {
             IssueBundle {
                 ik,
                 actions: NonEmpty::new(action),
-                reference_notes,
                 authorization: Unauthorized,
             },
             asset,
@@ -384,9 +374,7 @@ impl IssueBundle<Unauthorized> {
         );
 
         let notes = if first_issuance {
-            let reference_note = create_reference_note(asset, &mut rng);
-            self.reference_notes.insert(asset, reference_note);
-            vec![reference_note, note]
+            vec![create_reference_note(asset, &mut rng), note]
         } else {
             vec![note]
         };
@@ -445,7 +433,6 @@ impl IssueBundle<Unauthorized> {
         IssueBundle {
             ik: self.ik,
             actions: self.actions,
-            reference_notes: self.reference_notes,
             authorization: Prepared { sighash },
         }
     }
@@ -493,7 +480,6 @@ impl IssueBundle<Prepared> {
         Ok(IssueBundle {
             ik: self.ik,
             actions: self.actions,
-            reference_notes: self.reference_notes,
             authorization: Signed { signature },
         })
     }
@@ -683,7 +669,7 @@ mod tests {
     use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashSet;
 
     fn setup_params() -> (
         OsRng,
@@ -781,8 +767,7 @@ mod tests {
         let action =
             IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], false);
 
-        let bundle =
-            IssueBundle::from_parts(ik, NonEmpty::new(action), HashMap::new(), Unauthorized);
+        let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), Unauthorized);
 
         (isk, bundle, sighash)
     }
@@ -1441,7 +1426,6 @@ mod tests {
         let signed = IssueBundle {
             ik: bundle.ik,
             actions: bundle.actions,
-            reference_notes: bundle.reference_notes,
             authorization: Signed {
                 signature: isk.try_sign(&sighash).unwrap(),
             },
@@ -1539,7 +1523,6 @@ pub mod testing {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
-    use std::collections::HashMap;
 
     prop_compose! {
         /// Generate a uniformly distributed signature
@@ -1578,7 +1561,6 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
-                reference_notes: HashMap::new(),
                 authorization: Unauthorized
             }
         }
@@ -1597,7 +1579,6 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
-                reference_notes: HashMap::new(),
                 authorization: Prepared { sighash: fake_sighash }
             }
         }
@@ -1616,7 +1597,6 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
-                reference_notes: HashMap::new(),
                 authorization: Signed { signature: fake_sig },
             }
         }
