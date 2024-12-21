@@ -18,7 +18,7 @@ use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
 use crate::note::{AssetBase, Nullifier, Rho};
 
-use crate::value::{NoteValue, ValueSum};
+use crate::value::NoteValue;
 use crate::{Address, Note};
 
 use crate::supply_info::{AssetSupply, SupplyInfo};
@@ -132,7 +132,7 @@ impl IssueAction {
         let value_sum = self
             .notes
             .iter()
-            .try_fold(ValueSum::zero(), |value_sum, &note| {
+            .try_fold(NoteValue::zero(), |value_sum, &note| {
                 //The asset base should not be the identity point of the Pallas curve.
                 if bool::from(note.asset().cv_base().is_identity()) {
                     return Err(AssetBaseCannotBeIdentityPoint);
@@ -470,7 +470,7 @@ impl IssueBundle<Unauthorized> {
 
 impl<T: IssueAuth> IssueBundle<T> {
     /// Returns the reference notes for the `IssueBundle`.
-    pub fn get_reference_notes(self) -> HashMap<AssetBase, Note> {
+    pub fn get_reference_notes(&self) -> HashMap<AssetBase, Note> {
         let mut reference_notes = HashMap::new();
         self.actions.iter().for_each(|action| {
             action.notes.iter().for_each(|note| {
@@ -561,12 +561,14 @@ impl IssueBundle<Signed> {
 /// * For each `Note` inside an `IssueAction`:
 ///     * All notes have the same, correct `AssetBase`.
 ///
-// # Returns
+/// # Returns
 ///
-/// A Result containing a SupplyInfo struct, which stores supply information in a HashMap.
-/// The HashMap uses AssetBase as the key, and an AssetSupply struct as the value. The
-/// AssetSupply contains a ValueSum (representing the total value of all notes for the asset)
-/// and a bool indicating whether the asset is finalized.
+/// A Result containing a SupplyInfo struct, which stores supply information and reference notes in
+/// two HashMaps. The HashMap `assets` uses AssetBase as the key, and an AssetSupply struct as the
+/// value. The AssetSupply contains a ValueSum (representing the total value of all notes for the
+/// asset) and a bool indicating whether the asset is finalized. The HashMap `reference_notes` uses
+/// AssetBase as the key, and a Note struct as the value. The Note is the reference note for this
+/// asset.
 ///
 /// # Errors
 ///
@@ -591,26 +593,25 @@ pub fn verify_issue_bundle(
         .verify(&sighash, &bundle.authorization.signature)
         .map_err(|_| IssueBundleInvalidSignature)?;
 
-    let supply_info =
-        bundle
-            .actions()
-            .iter()
-            .try_fold(SupplyInfo::new(), |mut supply_info, action| {
-                if !is_asset_desc_of_valid_size(action.asset_desc()) {
-                    return Err(WrongAssetDescSize);
-                }
+    let supply_info = bundle.actions().iter().try_fold(
+        SupplyInfo::new(bundle.get_reference_notes()),
+        |mut supply_info, action| {
+            if !is_asset_desc_of_valid_size(action.asset_desc()) {
+                return Err(WrongAssetDescSize);
+            }
 
-                let (asset, supply) = action.verify_supply(bundle.ik())?;
+            let (asset, supply) = action.verify_supply(bundle.ik())?;
 
-                // Fail if the asset was previously finalized.
-                if finalized.contains(&asset) {
-                    return Err(IssueActionPreviouslyFinalizedAssetBase(asset));
-                }
+            // Fail if the asset was previously finalized.
+            if finalized.contains(&asset) {
+                return Err(IssueActionPreviouslyFinalizedAssetBase(asset));
+            }
 
-                supply_info.add_supply(asset, supply)?;
+            supply_info.add_supply(asset, supply)?;
 
-                Ok(supply_info)
-            })?;
+            Ok(supply_info)
+        },
+    )?;
 
     Ok(supply_info)
 }
@@ -696,7 +697,7 @@ mod tests {
         FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
     use crate::note::{AssetBase, Nullifier, Rho};
-    use crate::value::{NoteValue, ValueSum};
+    use crate::value::NoteValue;
     use crate::{Address, Note};
     use group::{Group, GroupEncoding};
     use nonempty::NonEmpty;
@@ -829,7 +830,7 @@ mod tests {
         let (asset, supply) = result.unwrap();
 
         assert_eq!(asset, test_asset);
-        assert_eq!(supply.amount, ValueSum::from_raw(30));
+        assert_eq!(supply.amount, NoteValue::from_raw(30));
         assert!(!supply.is_finalized);
     }
 
@@ -854,7 +855,7 @@ mod tests {
         let (asset, supply) = result.unwrap();
 
         assert_eq!(asset, test_asset);
-        assert_eq!(supply.amount, ValueSum::from_raw(30));
+        assert_eq!(supply.amount, NoteValue::from_raw(30));
         assert!(supply.is_finalized);
     }
 
@@ -1229,15 +1230,15 @@ mod tests {
 
         assert_eq!(
             supply_info.assets.get(&asset1_base),
-            Some(&AssetSupply::new(ValueSum::from_raw(15), true))
+            Some(&AssetSupply::new(NoteValue::from_raw(15), true))
         );
         assert_eq!(
             supply_info.assets.get(&asset2_base),
-            Some(&AssetSupply::new(ValueSum::from_raw(10), true))
+            Some(&AssetSupply::new(NoteValue::from_raw(10), true))
         );
         assert_eq!(
             supply_info.assets.get(&asset3_base),
-            Some(&AssetSupply::new(ValueSum::from_raw(5), false))
+            Some(&AssetSupply::new(NoteValue::from_raw(5), false))
         );
     }
 
