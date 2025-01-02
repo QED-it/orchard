@@ -298,6 +298,37 @@ impl<T: IssueAuth> IssueBundle<T> {
             authorization: map_auth(authorization),
         }
     }
+
+    /// Returns the reference notes for the `IssueBundle`.
+    pub fn get_reference_notes(self) -> HashMap<AssetBase, Note> {
+        let mut reference_notes = HashMap::new();
+        self.actions.iter().for_each(|action| {
+            action.notes.iter().for_each(|note| {
+                if (note.recipient() == ReferenceKeys::recipient())
+                    && (note.value() == NoteValue::zero())
+                {
+                    reference_notes.insert(note.asset(), *note);
+                }
+            })
+        });
+        reference_notes
+    }
+
+    /// Compute the correct `\rho` value for each note in the bundle.
+    pub fn finalize(&mut self, nullifier: Nullifier) {
+        self.actions
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index_action, action)| {
+                action
+                    .notes
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(index_note, note)| {
+                        note.update_rho_for_issuance_note(nullifier, index_action, index_note);
+                    });
+            });
+    }
 }
 
 impl IssueBundle<Unauthorized> {
@@ -465,23 +496,6 @@ impl IssueBundle<Unauthorized> {
             actions: self.actions,
             authorization: Prepared { sighash },
         }
-    }
-}
-
-impl<T: IssueAuth> IssueBundle<T> {
-    /// Returns the reference notes for the `IssueBundle`.
-    pub fn get_reference_notes(self) -> HashMap<AssetBase, Note> {
-        let mut reference_notes = HashMap::new();
-        self.actions.iter().for_each(|action| {
-            action.notes.iter().for_each(|note| {
-                if (note.recipient() == ReferenceKeys::recipient())
-                    && (note.value() == NoteValue::zero())
-                {
-                    reference_notes.insert(note.asset(), *note);
-                }
-            })
-        });
-        reference_notes
     }
 }
 

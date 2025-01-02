@@ -1,4 +1,5 @@
 //! Data structures used for note construction.
+use blake2b_simd::Params;
 use core::fmt;
 use memuse::DynamicUsage;
 
@@ -21,6 +22,8 @@ pub use self::commitment::{ExtractedNoteCommitment, NoteCommitment};
 
 pub(crate) mod nullifier;
 pub use self::nullifier::Nullifier;
+
+const ZSA_ISSUE_NOTE_RHO_PERSONALIZATION: &[u8; 16] = b"ZSA_IssueNoteRho";
 
 /// The randomness used to construct a note.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -344,6 +347,31 @@ impl Note {
             rseed_split_note: CtOption::new(RandomSeed::random(rng, &self.rho), 1u8.into()),
             ..self
         }
+    }
+
+    /// Update the rho value of the issuance note.
+    pub(crate) fn update_rho_for_issuance_note(
+        &mut self,
+        nullifier: Nullifier,
+        index_action: usize,
+        index_note: usize,
+    ) {
+        let index_action_bytes: [u8; 4] = (index_action.try_into().unwrap() as u32).to_le_bytes();
+        let index_note_bytes: [u8; 4] = (index_note.try_into().unwrap() as u32).to_le_bytes();
+        self.rho = Rho(to_base(
+            Params::new()
+                .hash_length(64)
+                .personal(ZSA_ISSUE_NOTE_RHO_PERSONALIZATION)
+                .to_state()
+                .update(&nullifier.to_bytes())
+                .update(&[0x84])
+                .update(index_action_bytes.as_ref())
+                .update(index_note_bytes.as_ref())
+                .finalize()
+                .as_bytes()
+                .try_into()
+                .unwrap(),
+        ));
     }
 }
 
