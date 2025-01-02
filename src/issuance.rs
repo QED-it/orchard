@@ -314,8 +314,11 @@ impl<T: IssueAuth> IssueBundle<T> {
         reference_notes
     }
 
-    /// Compute the correct `\rho` value for each note in the bundle.
-    pub fn finalize(&mut self, nullifier: Nullifier) {
+    /// Compute the correct `\rho` value for each note in the bundle according to
+    /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227].
+    ///
+    /// [zip227]: https://zips.z.cash/zip-0227
+    pub fn update_rho(&mut self, nullifier: Nullifier) {
         self.actions
             .iter_mut()
             .enumerate()
@@ -325,7 +328,11 @@ impl<T: IssueAuth> IssueBundle<T> {
                     .iter_mut()
                     .enumerate()
                     .for_each(|(index_note, note)| {
-                        note.update_rho_for_issuance_note(nullifier, index_action, index_note);
+                        note.update_rho_for_issuance_note(
+                            nullifier,
+                            index_action.try_into().unwrap(),
+                            index_note.try_into().unwrap(),
+                        );
                     });
             });
     }
@@ -338,7 +345,7 @@ impl IssueBundle<Unauthorized> {
     /// and with `finalize` set to true.
     /// Otherwise, the new `IssueBundle` will contain one `IssueAction with one note created from
     /// issue_info values and with `finalize` set to false. In this created note, rho will be
-    /// randomly sampled, similar to dummy note generation.
+    /// set to zero. The rho value will be updated later by calling the `update_rho` method.
     ///
     /// If `first_issuance` is true, the `IssueBundle` will contain a reference note for the asset
     /// defined by (`asset_desc`, `ik`).
@@ -377,7 +384,7 @@ impl IssueBundle<Unauthorized> {
                     issue_info.recipient,
                     issue_info.value,
                     asset,
-                    Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+                    Rho::zero(),
                     &mut rng,
                 );
 
@@ -403,7 +410,7 @@ impl IssueBundle<Unauthorized> {
 
     /// Add a new note to the `IssueBundle`.
     ///
-    /// Rho will be randomly sampled, similar to dummy note generation.
+    /// Rho is set to zero. The rho value will be updated later by calling the `update_rho` method.
     /// If `first_issuance` is true, we will also add a reference note for the asset defined by
     /// (`asset_desc`, `ik`).
     ///
@@ -426,13 +433,7 @@ impl IssueBundle<Unauthorized> {
 
         let asset = AssetBase::derive(&self.ik, asset_desc);
 
-        let note = Note::new(
-            recipient,
-            value,
-            asset,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
-            &mut rng,
-        );
+        let note = Note::new(recipient, value, asset, Rho::zero(), &mut rng);
 
         let notes = if first_issuance {
             vec![create_reference_note(asset, &mut rng), note]
@@ -504,7 +505,7 @@ fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
         ReferenceKeys::recipient(),
         NoteValue::zero(),
         asset,
-        Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+        Rho::zero(),
         &mut rng,
     )
 }

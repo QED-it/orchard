@@ -61,6 +61,12 @@ impl Rho {
     pub(crate) fn into_inner(self) -> pallas::Base {
         self.0
     }
+
+    /// When creating an issuance note, the rho value is initialized with the Pallas base element zero.
+    /// This value will be updated later by calling `update_rho` method on the `IssueBundle`.
+    pub(crate) fn zero() -> Self {
+        Rho(pallas::Base::zero())
+    }
 }
 
 pub(crate) mod asset_base;
@@ -349,15 +355,16 @@ impl Note {
         }
     }
 
-    /// Update the rho value of the issuance note.
+    /// Update the rho value of the issuance note (see
+    /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227]).
+    ///
+    /// [zip227]: https://zips.z.cash/zip-0227
     pub(crate) fn update_rho_for_issuance_note(
         &mut self,
         nullifier: Nullifier,
-        index_action: usize,
-        index_note: usize,
+        index_action: u32,
+        index_note: u32,
     ) {
-        let index_action_bytes: [u8; 4] = (index_action.try_into().unwrap() as u32).to_le_bytes();
-        let index_note_bytes: [u8; 4] = (index_note.try_into().unwrap() as u32).to_le_bytes();
         self.rho = Rho(to_base(
             Params::new()
                 .hash_length(64)
@@ -365,8 +372,8 @@ impl Note {
                 .to_state()
                 .update(&nullifier.to_bytes())
                 .update(&[0x84])
-                .update(index_action_bytes.as_ref())
-                .update(index_note_bytes.as_ref())
+                .update(index_action.to_le_bytes().as_ref())
+                .update(index_note.to_le_bytes().as_ref())
                 .finalize()
                 .as_bytes()
                 .try_into()
