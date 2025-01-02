@@ -550,6 +550,14 @@ impl Builder {
         }
     }
 
+    /// Returns true if the builder is empty.
+    pub fn is_empty(&self) -> bool {
+        self.spends.is_empty()
+            && self.outputs.is_empty()
+            && self.burn.is_empty()
+            && self.reference_notes.is_empty()
+    }
+
     /// Adds a note to be spent in this transaction.
     ///
     /// - `note` is a spendable note, obtained by trial-decrypting an [`Action`] using the
