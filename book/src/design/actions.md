@@ -20,10 +20,9 @@ balance the transaction without doubling its size.
 
 ## Dummy notes for Orchard
 
-For Orchard, a transaction is a bundle of actions,
-where each action is composed of one spend and one output.
-It means that we have the same number of spends and outputs in one transaction.
-If we would like to create a transaction with a different number of spends and ouputs,
+For Orchard, a transaction is a bundle of actions. Each action is composed of one spend and one output.
+This means we have the same amount of "spends" and "outputs" in one transaction.
+If we would like to create a transaction with a different number of spends and outputs,
 we need to add "dummy" spends or outputs to balance their count.
 A dummy spend or output is a note with a value of zero and a random recipient address.
 In the ZK proof, when the value of the spent note is zero,
@@ -31,13 +30,12 @@ we do not verify that the corresponding spent note commitment is part of the Mer
 
 ## Split notes for OrchardZSA
 
-For OrchardZSA, if the number of inputs exceeds the number of ouputs,
+For OrchardZSA, if the number of inputs exceeds the number of outputs,
 we use dummy output notes (as in Orchard) to fill all actions.
-Conversely, if the number of outputs exceeds the number of inputs,
-we use split notes to fill the actions.
-In OrchardZSA, it is crucial to ensure that the AssetBase is correctly created.
+Conversely, if the number of outputs exceeds the number of inputs, we use split notes to fill the actions.
+In OrchardZSA, ensuring that the AssetBase is correctly created is crucial.
 For this reason, split notes are used instead of dummy spent notes.
-Split notes are essentially duplicates of a real spent notes,
+Split notes are essentially duplicates of actual spent notes,
 but with the following differences:
 - The nullifier is randomized to prevent it from being treated as double-spending.
 - Its value is excluded from the transaction's or bundle's value balance.
@@ -47,7 +45,7 @@ is part of the Merkle tree. This ensures that the AssetBase is constructed prope
 a note associated with this AssetBase exists within the Merkle tree.
 
 For further details about split notes, refer to
-[ZIP206](https://github.com/zcash/zips/blob/main/zips/zip-0226.rst).
+[ZIP226](https://github.com/zcash/zips/blob/main/zips/zip-0226.rst).
 
 ## Memo fields
 

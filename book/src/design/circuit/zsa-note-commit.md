@@ -2,16 +2,20 @@
 
 In the OrchardZSA protocol, the $\NoteCommit$ function is defined as follows:
 $$
-\mathsf{NoteCommit^{OrchardZSA}_{rcm}}(
+\begin{align}
+&\mathsf{NoteCommit^{OrchardZSA}_{rcm}}(
 \DiversifiedTransmitBaseRepr,
 \DiversifiedTransmitPublicRepr,
 \ItoLEBSP{64}(\mathsf{v}),
 \ItoLEBSP{\BaseLength{Orchard}}(\rho),
 \ItoLEBSP{\BaseLength{Orchard}}(\psi),
-\mathsf{AssetBase}) = \begin{cases}
+\mathsf{AssetBase}) = \\
+&\;\;\;\;\;
+\begin{cases}
 \mathsf{h_{ZEC}} + [\mathsf{rcm}]\,\mathsf{GroupHash}^{\mathbb{P}}(\texttt{"z.cash:Orchard-NoteCommit-r"}, \texttt{""}) &\text{ if } \mathsf{AssetBase} = \mathcal{V}^{\mathsf{Orchard}} \\
 \mathsf{h_{ZSA}} + [\mathsf{rcm}]\,\mathsf{GroupHash}^{\mathbb{P}}(\texttt{"z.cash:Orchard-NoteCommit-r"}, \texttt{""}) &\text{otherwise}
 \end{cases}
+\end{align}
 $$
 where
 $$

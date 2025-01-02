@@ -15,8 +15,10 @@ value commitments:
 $$\begin{cases}
 \mathsf{cv^{Sapling}} &= \mathit{HomomorphicCommit}^{\mathsf{Sapling}}_{\mathsf{rcv}}(\mathsf{v}) \\
 &= [\mathsf{v}]\,\mathcal{V}^{\mathsf{Sapling}} + [\mathsf{rcv}]\,\mathcal{R}^{\mathsf{Sapling}} \\
+\\
 \mathsf{cv^{Orchard}} &= \mathit{HomomorphicCommit}^{\mathsf{Orchard}}_{\mathsf{rcv}}(\mathsf{v}) \\
 &= [\mathsf{v}]\,\mathcal{V}^{\mathsf{Orchard}} + [\mathsf{rcv}]\,\mathcal{R}^{\mathsf{Orchard}} \\
+\\
 \mathsf{cv^{ZSA}} &= [\mathsf{v}]\,\mathsf{AssetBase} + [\mathsf{rcv}]\,\mathcal{R}^{\mathsf{Orchard}} \\
 \end{cases}$$
 
