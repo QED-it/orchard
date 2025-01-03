@@ -896,7 +896,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_basic() {
-        let (rng, _, ik, recipient, _) = setup_params();
+        let (mut rng, _, ik, recipient, _) = setup_params();
 
         let str = "Halo".to_string();
         let str2 = "Halo2".to_string();
@@ -964,6 +964,13 @@ mod tests {
             )
             .unwrap();
         assert_ne!(asset, third_asset);
+
+        assert_eq!(
+            bundle.actions().get(0).unwrap().notes.get(0).unwrap().rho(),
+            Rho::zero()
+        );
+        bundle.update_rho(Nullifier::dummy(&mut rng));
+        assert!(bundle.actions().get(0).unwrap().notes.get(0).unwrap().rho() != Rho::zero());
 
         let actions = bundle.actions();
         assert_eq!(actions.len(), 2);
