@@ -150,7 +150,11 @@ impl IssueAction {
 
         Ok((
             issue_asset,
-            AssetSupply::new(value_sum, self.is_finalized()),
+            AssetSupply::new(
+                value_sum,
+                self.is_finalized(),
+                self.get_reference_note().cloned(),
+            ),
         ))
     }
 
@@ -162,6 +166,13 @@ impl IssueAction {
         } else {
             0b0000_0000
         }
+    }
+
+    /// Returns the reference note.
+    pub fn get_reference_note(&self) -> Option<&Note> {
+        self.notes.iter().find(|note| {
+            (note.recipient() == ReferenceKeys::recipient()) && (note.value() == NoteValue::zero())
+        })
     }
 }
 
@@ -299,19 +310,18 @@ impl<T: IssueAuth> IssueBundle<T> {
         }
     }
 
+    // FIXME: Is get_reference_notes needed now as we have get_reference_note for action?
     /// Returns the reference notes for the `IssueBundle`.
     pub fn get_reference_notes(&self) -> HashMap<AssetBase, Note> {
-        let mut reference_notes = HashMap::new();
-        self.actions.iter().for_each(|action| {
-            action.notes.iter().for_each(|note| {
-                if (note.recipient() == ReferenceKeys::recipient())
-                    && (note.value() == NoteValue::zero())
-                {
-                    reference_notes.insert(note.asset(), *note);
-                }
+        self.actions
+            .iter()
+            .filter_map(|action| action.get_reference_note())
+            .fold(HashMap::new(), |mut reference_notes, reference_note| {
+                reference_notes
+                    .entry(reference_note.asset())
+                    .or_insert(*reference_note);
+                reference_notes
             })
-        });
-        reference_notes
     }
 }
 
@@ -591,25 +601,26 @@ pub fn verify_issue_bundle(
         .verify(&sighash, &bundle.authorization.signature)
         .map_err(|_| IssueBundleInvalidSignature)?;
 
-    let supply_info = bundle.actions().iter().try_fold(
-        SupplyInfo::new(bundle.get_reference_notes()),
-        |mut supply_info, action| {
-            if !is_asset_desc_of_valid_size(action.asset_desc()) {
-                return Err(WrongAssetDescSize);
-            }
+    let supply_info =
+        bundle
+            .actions()
+            .iter()
+            .try_fold(SupplyInfo::new(), |mut supply_info, action| {
+                if !is_asset_desc_of_valid_size(action.asset_desc()) {
+                    return Err(WrongAssetDescSize);
+                }
 
-            let (asset, supply) = action.verify_supply(bundle.ik())?;
+                let (asset, supply) = action.verify_supply(bundle.ik())?;
 
-            // Fail if the asset was previously finalized.
-            if finalized.contains(&asset) {
-                return Err(IssueActionPreviouslyFinalizedAssetBase(asset));
-            }
+                // Fail if the asset was previously finalized.
+                if finalized.contains(&asset) {
+                    return Err(IssueActionPreviouslyFinalizedAssetBase(asset));
+                }
 
-            supply_info.add_supply(asset, supply)?;
+                supply_info.add_supply(asset, supply)?;
 
-            Ok(supply_info)
-        },
-    )?;
+                Ok(supply_info)
+            })?;
 
     Ok(supply_info)
 }
@@ -1226,17 +1237,33 @@ mod tests {
 
         assert_eq!(supply_info.assets.len(), 3);
 
+        let reference_note1 = signed.actions()[0].notes()[0];
+        let reference_note2 = signed.actions()[1].notes()[0];
+        let reference_note3 = signed.actions()[2].notes()[0];
+
         assert_eq!(
             supply_info.assets.get(&asset1_base),
-            Some(&AssetSupply::new(NoteValue::from_raw(15), true))
+            Some(&AssetSupply::new(
+                NoteValue::from_raw(15),
+                true,
+                Some(reference_note1)
+            ))
         );
         assert_eq!(
             supply_info.assets.get(&asset2_base),
-            Some(&AssetSupply::new(NoteValue::from_raw(10), true))
+            Some(&AssetSupply::new(
+                NoteValue::from_raw(10),
+                true,
+                Some(reference_note2)
+            ))
         );
         assert_eq!(
             supply_info.assets.get(&asset3_base),
-            Some(&AssetSupply::new(NoteValue::from_raw(5), false))
+            Some(&AssetSupply::new(
+                NoteValue::from_raw(5),
+                false,
+                Some(reference_note3)
+            ))
         );
     }
 

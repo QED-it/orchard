@@ -4,7 +4,7 @@ use std::collections::{hash_map, HashMap, HashSet};
 
 use crate::{issuance::Error, note::AssetBase, value::NoteValue, Note};
 
-/// Represents the amount of an asset and its finalization status.
+/// Represents the amount of an asset, its finalization status and reference note.
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct AssetSupply {
@@ -12,14 +12,18 @@ pub struct AssetSupply {
     pub amount: NoteValue,
     /// Whether or not the asset is finalized.
     pub is_finalized: bool,
+    /// The reference note.
+    pub reference_note: Option<Note>,
 }
 
 impl AssetSupply {
-    /// Creates a new AssetSupply instance with the given amount and finalization status.
-    pub fn new(amount: NoteValue, is_finalized: bool) -> Self {
+    /// Creates a new AssetSupply instance with the given amount, finalization status and reference
+    /// note.
+    pub fn new(amount: NoteValue, is_finalized: bool, reference_note: Option<Note>) -> Self {
         Self {
             amount,
             is_finalized,
+            reference_note,
         }
     }
 }
@@ -29,16 +33,13 @@ impl AssetSupply {
 pub struct SupplyInfo {
     /// A map of asset bases to their respective supply information.
     pub assets: HashMap<AssetBase, AssetSupply>,
-    /// A map of asset bases to their respective reference note.
-    pub reference_notes: HashMap<AssetBase, Note>,
 }
 
 impl SupplyInfo {
     /// Creates a new, empty `SupplyInfo` instance.
-    pub fn new(reference_notes: HashMap<AssetBase, Note>) -> Self {
+    pub fn new() -> Self {
         Self {
             assets: HashMap::new(),
-            reference_notes,
         }
     }
 
@@ -51,6 +52,7 @@ impl SupplyInfo {
                 let supply = entry.into_mut();
                 supply.amount = (supply.amount + new_supply.amount).ok_or(Error::ValueOverflow)?;
                 supply.is_finalized |= new_supply.is_finalized;
+                supply.reference_note = supply.reference_note.or(new_supply.reference_note);
             }
             hash_map::Entry::Vacant(entry) => {
                 entry.insert(new_supply);
@@ -73,7 +75,7 @@ impl SupplyInfo {
 
 impl Default for SupplyInfo {
     fn default() -> Self {
-        Self::new(HashMap::new())
+        Self::new()
     }
 }
 
@@ -98,16 +100,16 @@ mod tests {
 
     #[test]
     fn test_add_supply_valid() {
-        let mut supply_info = SupplyInfo::new(HashMap::new());
+        let mut supply_info = SupplyInfo::new();
 
         let asset1 = create_test_asset(b"Asset 1");
         let asset2 = create_test_asset(b"Asset 2");
 
-        let supply1 = AssetSupply::new(NoteValue::from_raw(20), false);
-        let supply2 = AssetSupply::new(NoteValue::from_raw(30), true);
-        let supply3 = AssetSupply::new(NoteValue::from_raw(10), false);
-        let supply4 = AssetSupply::new(NoteValue::from_raw(10), true);
-        let supply5 = AssetSupply::new(NoteValue::from_raw(50), false);
+        let supply1 = AssetSupply::new(NoteValue::from_raw(20), false, None);
+        let supply2 = AssetSupply::new(NoteValue::from_raw(30), true, None);
+        let supply3 = AssetSupply::new(NoteValue::from_raw(10), false, None);
+        let supply4 = AssetSupply::new(NoteValue::from_raw(10), true, None);
+        let supply5 = AssetSupply::new(NoteValue::from_raw(50), false, None);
 
         assert_eq!(supply_info.assets.len(), 0);
 
@@ -116,7 +118,7 @@ mod tests {
         assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset1),
-            Some(&AssetSupply::new(sum([&supply1]).unwrap(), false))
+            Some(&AssetSupply::new(sum([&supply1]).unwrap(), false, None))
         );
 
         // Add supply2
@@ -124,7 +126,11 @@ mod tests {
         assert_eq!(supply_info.assets.len(), 1);
         assert_eq!(
             supply_info.assets.get(&asset1),
-            Some(&AssetSupply::new(sum([&supply1, &supply2]).unwrap(), true))
+            Some(&AssetSupply::new(
+                sum([&supply1, &supply2]).unwrap(),
+                true,
+                None
+            ))
         );
 
         // Add supply3
@@ -134,7 +140,8 @@ mod tests {
             supply_info.assets.get(&asset1),
             Some(&AssetSupply::new(
                 sum([&supply1, &supply2, &supply3]).unwrap(),
-                true
+                true,
+                None
             ))
         );
 
@@ -145,7 +152,8 @@ mod tests {
             supply_info.assets.get(&asset1),
             Some(&AssetSupply::new(
                 sum([&supply1, &supply2, &supply3, &supply4]).unwrap(),
-                true
+                true,
+                None
             ))
         );
 
@@ -156,27 +164,28 @@ mod tests {
             supply_info.assets.get(&asset1),
             Some(&AssetSupply::new(
                 sum([&supply1, &supply2, &supply3, &supply4]).unwrap(),
-                true
+                true,
+                None
             ))
         );
         assert_eq!(
             supply_info.assets.get(&asset2),
-            Some(&AssetSupply::new(sum([&supply5]).unwrap(), false))
+            Some(&AssetSupply::new(sum([&supply5]).unwrap(), false, None))
         );
     }
 
     #[test]
     fn test_update_finalization_set() {
-        let mut supply_info = SupplyInfo::new(HashMap::new());
+        let mut supply_info = SupplyInfo::new();
 
         let asset1 = create_test_asset(b"Asset 1");
         let asset2 = create_test_asset(b"Asset 2");
         let asset3 = create_test_asset(b"Asset 3");
 
-        let supply1 = AssetSupply::new(NoteValue::from_raw(10), false);
-        let supply2 = AssetSupply::new(NoteValue::from_raw(20), true);
-        let supply3 = AssetSupply::new(NoteValue::from_raw(40), false);
-        let supply4 = AssetSupply::new(NoteValue::from_raw(50), true);
+        let supply1 = AssetSupply::new(NoteValue::from_raw(10), false, None);
+        let supply2 = AssetSupply::new(NoteValue::from_raw(20), true, None);
+        let supply3 = AssetSupply::new(NoteValue::from_raw(40), false, None);
+        let supply4 = AssetSupply::new(NoteValue::from_raw(50), true, None);
 
         assert!(supply_info.add_supply(asset1, supply1).is_ok());
         assert!(supply_info.add_supply(asset1, supply2).is_ok());
