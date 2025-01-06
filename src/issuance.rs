@@ -4,7 +4,7 @@ use group::Group;
 use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
@@ -308,20 +308,6 @@ impl<T: IssueAuth> IssueBundle<T> {
             actions: self.actions,
             authorization: map_auth(authorization),
         }
-    }
-
-    // FIXME: Is get_reference_notes needed now as we have get_reference_note for action?
-    /// Returns the reference notes for the `IssueBundle`.
-    pub fn get_reference_notes(&self) -> HashMap<AssetBase, Note> {
-        self.actions
-            .iter()
-            .filter_map(|action| action.get_reference_note())
-            .fold(HashMap::new(), |mut reference_notes, reference_note| {
-                reference_notes
-                    .entry(reference_note.asset())
-                    .or_insert(*reference_note);
-                reference_notes
-            })
     }
 }
 
@@ -985,10 +971,8 @@ mod tests {
         assert_eq!(first_note.value().inner(), 15);
         assert_eq!(first_note.asset(), third_asset);
 
-        let reference_notes = bundle.get_reference_notes();
-        assert_eq!(reference_notes.len(), 2);
-        verify_reference_note(reference_notes.get(&asset).unwrap(), asset);
-        verify_reference_note(reference_notes.get(&third_asset).unwrap(), third_asset);
+        verify_reference_note(action.get_reference_note().unwrap(), asset);
+        verify_reference_note(action2.get_reference_note().unwrap(), third_asset);
     }
 
     #[test]
