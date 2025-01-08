@@ -2,7 +2,7 @@
 //!
 //! The module provides a function `validate_bundle_burn` that can be used to validate the burn values for the bundle.
 //!
-use std::{collections::HashMap, fmt};
+use std::{collections::HashSet, fmt};
 
 use crate::{note::AssetBase, value::NoteValue};
 
@@ -33,7 +33,7 @@ pub enum BurnError {
 /// * Any asset in the `burn` vector has a zero value (`BurnError::ZeroAmount`).
 /// * Any asset in the `burn` vector is not unique (`BurnError::DuplicateAsset`).
 pub fn validate_bundle_burn(burn: &[(AssetBase, NoteValue)]) -> Result<(), BurnError> {
-    let mut burn_set = HashMap::new();
+    let mut burn_set = HashSet::new();
 
     for (asset, value) in burn {
         if asset.is_native().into() {
@@ -42,7 +42,7 @@ pub fn validate_bundle_burn(burn: &[(AssetBase, NoteValue)]) -> Result<(), BurnE
         if value.inner() == 0 {
             return Err(BurnError::ZeroAmount);
         }
-        if burn_set.insert(*asset, *value).is_some() {
+        if !burn_set.insert(*asset) {
             return Err(BurnError::DuplicateAsset);
         }
     }
