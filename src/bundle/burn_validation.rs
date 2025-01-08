@@ -33,7 +33,7 @@ pub enum BurnError {
 /// * Any asset in the `burn` vector has a zero value (`BurnError::ZeroAmount`).
 /// * Any asset in the `burn` vector is not unique (`BurnError::DuplicateAsset`).
 pub fn validate_bundle_burn(burn: &[(AssetBase, NoteValue)]) -> Result<(), BurnError> {
-    let mut burn_set = HashMap::<AssetBase, NoteValue>::new();
+    let mut burn_set = HashMap::new();
 
     for (asset, value) in burn {
         if asset.is_native().into() {

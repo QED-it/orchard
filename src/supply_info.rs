@@ -14,8 +14,8 @@ pub struct AssetSupply {
     /// Whether or not the asset is finalized.
     pub is_finalized: bool,
 
-    /// The reference note, `None` if this `AssetSupply` instance is created from
-    /// an issue bundle where no note in any issue action matches the reference note condition.
+    /// The reference note, `None` if this `AssetSupply` instance is created from an issue bundle that does not include
+    /// a reference note (a non-first issuance)
     pub reference_note: Option<Note>,
 }
 
@@ -94,7 +94,7 @@ mod tests {
         AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc)
     }
 
-    fn sum<'a, T: IntoIterator<Item = &'a AssetSupply>>(supplies: T) -> Option<NoteValue> {
+    fn sum<T: IntoIterator<Item = &AssetSupply>>(supplies: T) -> Option<NoteValue> {
         supplies
             .into_iter()
             .map(|supply| supply.amount)
