@@ -177,7 +177,11 @@ impl IssueAction {
         }
     }
 
-    /// Returns the reference note.
+    /// Returns the reference note if the first note matches the reference note criteria.
+    ///
+    /// A reference note must be the first note in the `notes` vector and satisfy the following:
+    /// - The note's value is zero.
+    /// - The note's recipient matches the reference recipient.
     pub fn get_reference_note(&self) -> Option<&Note> {
         self.notes.first().filter(|note| is_reference_note(note))
     }
