@@ -94,7 +94,7 @@ mod tests {
         AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc)
     }
 
-    fn sum<T: IntoIterator<Item = &AssetSupply>>(supplies: T) -> Option<NoteValue> {
+    fn sum<'a, T: IntoIterator<Item = &'a AssetSupply>>(supplies: T) -> Option<NoteValue> {
         supplies
             .into_iter()
             .map(|supply| supply.amount)
