@@ -170,7 +170,7 @@ impl IssueAction {
 
     /// Returns the reference note.
     pub fn get_reference_note(&self) -> Option<&Note> {
-        self.notes.iter().find(|note| {
+        self.notes.first().filter(|note| {
             (note.recipient() == ReferenceKeys::recipient()) && (note.value() == NoteValue::zero())
         })
     }
