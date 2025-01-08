@@ -23,6 +23,15 @@ use crate::{Address, Note};
 
 use crate::supply_info::{AssetSupply, SupplyInfo};
 
+/// Checks if a given note is a reference note.
+///
+/// A reference note satisfies the following conditions:
+/// - The note's value is zero.
+/// - The note's recipient matches the reference recipient.
+fn is_reference_note(note: &Note) -> bool {
+    note.value() == NoteValue::zero() && note.recipient() == ReferenceKeys::recipient()
+}
+
 /// A bundle of actions to be applied to the ledger.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IssueBundle<T: IssueAuth> {
@@ -170,9 +179,7 @@ impl IssueAction {
 
     /// Returns the reference note.
     pub fn get_reference_note(&self) -> Option<&Note> {
-        self.notes.first().filter(|note| {
-            (note.recipient() == ReferenceKeys::recipient()) && (note.value() == NoteValue::zero())
-        })
+        self.notes.first().filter(|note| is_reference_note(note))
     }
 }
 
@@ -680,13 +687,14 @@ impl fmt::Display for Error {
 #[cfg(test)]
 mod tests {
     use super::{AssetSupply, IssueBundle, IssueInfo};
-    use crate::constants::reference_keys::ReferenceKeys;
     use crate::issuance::Error::{
         AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
         IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         IssueBundleInvalidSignature, WrongAssetDescSize,
     };
-    use crate::issuance::{verify_issue_bundle, IssueAction, Signed, Unauthorized};
+    use crate::issuance::{
+        is_reference_note, verify_issue_bundle, IssueAction, Signed, Unauthorized,
+    };
     use crate::keys::{
         FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
     };
@@ -704,12 +712,11 @@ mod tests {
     ///
     /// The following checks are performed:
     /// - the note value of the reference note is equal to 0
-    /// - the asset of the reference note is equal to the provided asset
     /// - the recipient of the reference note is equal to the reference recipient
+    /// - the asset of the reference note is equal to the provided asset
     fn verify_reference_note(note: &Note, asset: AssetBase) {
-        assert_eq!(note.value(), NoteValue::from_raw(0));
+        assert!(is_reference_note(note));
         assert_eq!(note.asset(), asset);
-        assert_eq!(note.recipient(), ReferenceKeys::recipient());
     }
 
     fn setup_params() -> (
