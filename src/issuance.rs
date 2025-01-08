@@ -557,12 +557,11 @@ impl IssueBundle<Signed> {
 ///
 /// # Returns
 ///
-/// A Result containing a SupplyInfo struct, which stores supply information and reference notes in
-/// two HashMaps. The HashMap `assets` uses AssetBase as the key, and an AssetSupply struct as the
-/// value. The AssetSupply contains a NoteValue (representing the total value of all notes for the
-/// asset) and a bool indicating whether the asset is finalized. The HashMap `reference_notes` uses
-/// AssetBase as the key, and a Note struct as the value. The Note is the reference note for this
-/// asset.
+/// A Result containing a SupplyInfo struct, which stores supply information in a HashMap.
+/// The HashMap `assets` uses AssetBase as the key, and an AssetSupply struct as the
+/// value. The AssetSupply contains a NoteValue (representing the total value of all notes for
+/// the asset), a bool indicating whether the asset is finalized and a Note (the reference note
+/// for this asset).
 ///
 /// # Errors
 ///

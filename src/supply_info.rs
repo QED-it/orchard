@@ -10,9 +10,12 @@ use crate::{issuance::Error, note::AssetBase, value::NoteValue, Note};
 pub struct AssetSupply {
     /// The amount of the asset.
     pub amount: NoteValue,
+
     /// Whether or not the asset is finalized.
     pub is_finalized: bool,
-    /// The reference note.
+
+    /// The reference note, `None` if this `AssetSupply` instance is created from
+    /// an issue bundle where no note in any issue action matches the reference note condition.
     pub reference_note: Option<Note>,
 }
 

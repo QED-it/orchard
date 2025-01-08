@@ -18,37 +18,36 @@ pub enum BurnError {
     ZeroAmount,
 }
 
-/// Validates burn for a bundle by ensuring each asset is unique, non-native, and has a non-zero value value.
+/// Validates burn for a bundle by ensuring each asset is unique, non-native, and has a non-zero value.
 ///
 /// Each burn element is represented as a tuple of `AssetBase` and `NoteValue` (value for the burn).
 ///
 /// # Arguments
 ///
-/// * `burns` - A vector of assets, where each asset is represented as a tuple of `AssetBase` and `NoteValue` (value the burn).
+/// * `burn` - A vector of assets, where each asset is represented as a tuple of `AssetBase` and `NoteValue` (value the burn).
 ///
 /// # Errors
 ///
 /// Returns a `BurnError` if:
-/// * Any asset in the `burn` vector is not unique (`BurnError::DuplicateAsset`).
 /// * Any asset in the `burn` vector is native (`BurnError::NativeAsset`).
-pub fn validate_bundle_burn<'a, I: IntoIterator<Item = &'a (AssetBase, NoteValue)>>(
-    burn: I,
-) -> Result<HashMap<AssetBase, NoteValue>, BurnError> {
+/// * Any asset in the `burn` vector has a zero value (`BurnError::ZeroAmount`).
+/// * Any asset in the `burn` vector is not unique (`BurnError::DuplicateAsset`).
+pub fn validate_bundle_burn(burn: &[(AssetBase, NoteValue)]) -> Result<(), BurnError> {
     let mut burn_set = HashMap::<AssetBase, NoteValue>::new();
 
-    for (asset, value) in burn.into_iter().cloned() {
+    for (asset, value) in burn {
         if asset.is_native().into() {
             return Err(BurnError::NativeAsset);
         }
         if value.inner() == 0 {
             return Err(BurnError::ZeroAmount);
         }
-        if burn_set.insert(asset, value).is_some() {
+        if burn_set.insert(*asset, *value).is_some() {
             return Err(BurnError::DuplicateAsset);
         }
     }
 
-    Ok(burn_set)
+    Ok(())
 }
 
 impl fmt::Display for BurnError {
