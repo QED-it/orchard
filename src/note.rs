@@ -69,6 +69,31 @@ impl Rho {
     }
 }
 
+/// Evaluate the rho value of the issuance note (see
+/// [ZIP-227: Issuance of Zcash Shielded Assets][zip227]).
+///
+/// [zip227]: https://zips.z.cash/zip-0227
+pub(crate) fn rho_for_issuance_note(
+    first_nullifier: Nullifier,
+    index_action: u32,
+    index_note: u32,
+) -> Rho {
+    Rho(to_base(
+        Params::new()
+            .hash_length(64)
+            .personal(ZSA_ISSUE_NOTE_RHO_PERSONALIZATION)
+            .to_state()
+            .update(&first_nullifier.to_bytes())
+            .update(&[0x84])
+            .update(index_action.to_le_bytes().as_ref())
+            .update(index_note.to_le_bytes().as_ref())
+            .finalize()
+            .as_bytes()
+            .try_into()
+            .unwrap(),
+    ))
+}
+
 pub(crate) mod asset_base;
 pub use self::asset_base::AssetBase;
 
@@ -353,32 +378,6 @@ impl Note {
             rseed_split_note: CtOption::new(RandomSeed::random(rng, &self.rho), 1u8.into()),
             ..self
         }
-    }
-
-    /// Update the rho value of the issuance note (see
-    /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227]).
-    ///
-    /// [zip227]: https://zips.z.cash/zip-0227
-    pub(crate) fn update_rho_for_issuance_note(
-        &mut self,
-        nullifier: Nullifier,
-        index_action: u32,
-        index_note: u32,
-    ) {
-        self.rho = Rho(to_base(
-            Params::new()
-                .hash_length(64)
-                .personal(ZSA_ISSUE_NOTE_RHO_PERSONALIZATION)
-                .to_state()
-                .update(&nullifier.to_bytes())
-                .update(&[0x84])
-                .update(index_action.to_le_bytes().as_ref())
-                .update(index_note.to_le_bytes().as_ref())
-                .finalize()
-                .as_bytes()
-                .try_into()
-                .unwrap(),
-        ));
     }
 }
 
