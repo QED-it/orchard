@@ -32,6 +32,7 @@ mod spec;
 pub mod supply_info;
 pub mod tree;
 pub mod value;
+pub mod verification;
 pub mod zip32;
 
 #[cfg(test)]

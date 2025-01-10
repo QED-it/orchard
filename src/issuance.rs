@@ -4,7 +4,6 @@ use group::Group;
 use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
-use std::collections::HashSet;
 use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
@@ -21,7 +20,7 @@ use crate::note::{AssetBase, Nullifier, Rho};
 use crate::value::NoteValue;
 use crate::{Address, Note};
 
-use crate::supply_info::{AssetSupply, SupplyInfo};
+use crate::supply_info::AssetSupply;
 
 /// Checks if a given note is a reference note.
 ///
@@ -129,7 +128,10 @@ impl IssueAction {
     ///   `AssetBase` for **all** internal notes.
     ///
     /// * `IssueActionWithoutNoteNotFinalized`:If the `IssueAction` contains no note and is not finalized.
-    fn verify_supply(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
+    pub(crate) fn verify_supply(
+        &self,
+        ik: &IssuanceValidatingKey,
+    ) -> Result<(AssetBase, AssetSupply), Error> {
         if self.notes.is_empty() && !self.is_finalized() {
             return Err(IssueActionWithoutNoteNotFinalized);
         }
@@ -551,74 +553,6 @@ impl IssueBundle<Signed> {
     pub fn authorizing_commitment(&self) -> IssueBundleAuthorizingCommitment {
         IssueBundleAuthorizingCommitment(hash_issue_bundle_auth_data(self))
     }
-}
-
-/// Validation for Orchard IssueBundles
-///
-/// A set of previously finalized asset types must be provided in `finalized` argument.
-///
-/// The following checks are performed:
-/// * For the `IssueBundle`:
-///     * the Signature on top of the provided `sighash` verifies correctly.
-/// * For each `IssueAction`:
-///     * Asset description size is correct.
-///     * `AssetBase` for the `IssueAction` has not been previously finalized.
-/// * For each `Note` inside an `IssueAction`:
-///     * All notes have the same, correct `AssetBase`.
-///
-/// # Returns
-///
-/// A Result containing a SupplyInfo struct, which stores supply information in a HashMap.
-/// The HashMap `assets` uses AssetBase as the key, and an AssetSupply struct as the
-/// value. The AssetSupply contains a NoteValue (representing the total value of all notes for
-/// the asset), a bool indicating whether the asset is finalized and a Note (the reference note
-/// for this asset).
-///
-/// # Errors
-///
-/// * `IssueBundleInvalidSignature`: This error occurs if the signature verification
-///    for the provided `sighash` fails.
-/// * `WrongAssetDescSize`: This error is raised if the asset description size for any
-///    asset in the bundle is incorrect.
-/// * `IssueActionPreviouslyFinalizedAssetBase`:  This error occurs if the asset has already been
-///    finalized (inserted into the `finalized` collection).
-/// * `ValueOverflow`: This error occurs if an overflow happens during the calculation of
-///     the value sum for the notes in the asset.
-/// * `IssueBundleIkMismatchAssetBase`: This error is raised if the `AssetBase` derived from
-///    the `ik` (Issuance Validating Key) and the `asset_desc` (Asset Description) does not match
-///    the expected `AssetBase`.
-pub fn verify_issue_bundle(
-    bundle: &IssueBundle<Signed>,
-    sighash: [u8; 32],
-    finalized: &HashSet<AssetBase>, // The finalization set.
-) -> Result<SupplyInfo, Error> {
-    bundle
-        .ik
-        .verify(&sighash, &bundle.authorization.signature)
-        .map_err(|_| IssueBundleInvalidSignature)?;
-
-    let supply_info =
-        bundle
-            .actions()
-            .iter()
-            .try_fold(SupplyInfo::new(), |mut supply_info, action| {
-                if !is_asset_desc_of_valid_size(action.asset_desc()) {
-                    return Err(WrongAssetDescSize);
-                }
-
-                let (asset, supply) = action.verify_supply(bundle.ik())?;
-
-                // Fail if the asset was previously finalized.
-                if finalized.contains(&asset) {
-                    return Err(IssueActionPreviouslyFinalizedAssetBase(asset));
-                }
-
-                supply_info.add_supply(asset, supply)?;
-
-                Ok(supply_info)
-            })?;
-
-    Ok(supply_info)
 }
 
 /// Errors produced during the issuance process
