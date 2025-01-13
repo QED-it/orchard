@@ -16,7 +16,7 @@ use crate::issuance::Error::{
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
-use crate::note::{rho_for_issuance_note, AssetBase, Nullifier};
+use crate::note::{AssetBase, Nullifier, Rho};
 
 use crate::value::NoteValue;
 use crate::{Address, Note};
@@ -41,9 +41,6 @@ pub struct IssueBundle<T: IssueAuth> {
     actions: NonEmpty<IssueAction>,
     /// The authorization for this action.
     authorization: T,
-    /// The first nullifier of the transfer bundle.
-    /// It will be used to evaluate the rho value for each issuance note.
-    first_nullifier: Nullifier,
 }
 
 /// An issue action applied to the global ledger.
@@ -303,13 +300,11 @@ impl<T: IssueAuth> IssueBundle<T> {
         ik: IssuanceValidatingKey,
         actions: NonEmpty<IssueAction>,
         authorization: T,
-        first_nullifier: Nullifier,
     ) -> Self {
         IssueBundle {
             ik,
             actions,
             authorization,
-            first_nullifier,
         }
     }
 
@@ -323,8 +318,30 @@ impl<T: IssueAuth> IssueBundle<T> {
             ik: self.ik,
             actions: self.actions,
             authorization: map_auth(authorization),
-            first_nullifier: self.first_nullifier,
         }
+    }
+
+    /// Compute the correct `\rho` value for each note in the bundle according to
+    /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227].
+    ///
+    /// [zip227]: https://zips.z.cash/zip-0227
+    pub fn update_rho(&mut self, nullifier: Nullifier) {
+        self.actions
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index_action, action)| {
+                action
+                    .notes
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(index_note, note)| {
+                        note.update_rho_for_issuance_note(
+                            nullifier,
+                            index_action.try_into().unwrap(),
+                            index_note.try_into().unwrap(),
+                        );
+                    });
+            });
     }
 }
 
@@ -350,7 +367,6 @@ impl IssueBundle<Unauthorized> {
         asset_desc: Vec<u8>,
         issue_info: Option<IssueInfo>,
         first_issuance: bool,
-        first_nullifier: Nullifier,
         mut rng: impl RngCore,
     ) -> Result<(IssueBundle<Unauthorized>, AssetBase), Error> {
         if !is_asset_desc_of_valid_size(&asset_desc) {
@@ -361,13 +377,7 @@ impl IssueBundle<Unauthorized> {
 
         let mut notes = vec![];
         if first_issuance {
-            notes.push(create_reference_note(
-                asset,
-                first_nullifier,
-                0,
-                0,
-                &mut rng,
-            ));
+            notes.push(create_reference_note(asset, &mut rng));
         };
 
         let action = match issue_info {
@@ -381,7 +391,7 @@ impl IssueBundle<Unauthorized> {
                     issue_info.recipient,
                     issue_info.value,
                     asset,
-                    rho_for_issuance_note(first_nullifier, 0, notes.len().try_into().unwrap()),
+                    Rho::zero(),
                     &mut rng,
                 );
 
@@ -400,7 +410,6 @@ impl IssueBundle<Unauthorized> {
                 ik,
                 actions: NonEmpty::new(action),
                 authorization: Unauthorized,
-                first_nullifier,
             },
             asset,
         ))
@@ -431,59 +440,26 @@ impl IssueBundle<Unauthorized> {
 
         let asset = AssetBase::derive(&self.ik, asset_desc);
 
-        let action_with_index = self
+        let note = Note::new(recipient, value, asset, Rho::zero(), &mut rng);
+
+        let notes = if first_issuance {
+            vec![create_reference_note(asset, &mut rng), note]
+        } else {
+            vec![note]
+        };
+
+        let action = self
             .actions
             .iter_mut()
-            .enumerate()
-            .find(|(_, issue_action)| issue_action.asset_desc.eq(asset_desc));
+            .find(|issue_action| issue_action.asset_desc.eq(asset_desc));
 
-        match action_with_index {
-            Some((index_action, action)) => {
+        match action {
+            Some(action) => {
                 // Append to an existing IssueAction.
-                if first_issuance {
-                    action.notes.push(create_reference_note(
-                        asset,
-                        self.first_nullifier,
-                        index_action,
-                        action.notes().len(),
-                        &mut rng,
-                    ));
-                }
-                action.notes.push(Note::new(
-                    recipient,
-                    value,
-                    asset,
-                    rho_for_issuance_note(
-                        self.first_nullifier,
-                        index_action.try_into().unwrap(),
-                        action.notes.len().try_into().unwrap(),
-                    ),
-                    &mut rng,
-                ));
+                action.notes.extend(notes);
             }
             None => {
                 // Insert a new IssueAction.
-                let mut notes = vec![];
-                if first_issuance {
-                    notes.push(create_reference_note(
-                        asset,
-                        self.first_nullifier,
-                        self.actions.len(),
-                        0,
-                        &mut rng,
-                    ));
-                }
-                notes.push(Note::new(
-                    recipient,
-                    value,
-                    asset,
-                    rho_for_issuance_note(
-                        self.first_nullifier,
-                        self.actions.len().try_into().unwrap(),
-                        notes.len().try_into().unwrap(),
-                    ),
-                    &mut rng,
-                ));
                 self.actions.push(IssueAction {
                     asset_desc: Vec::from(asset_desc),
                     notes,
@@ -527,27 +503,16 @@ impl IssueBundle<Unauthorized> {
             ik: self.ik,
             actions: self.actions,
             authorization: Prepared { sighash },
-            first_nullifier: self.first_nullifier,
         }
     }
 }
 
-fn create_reference_note(
-    asset: AssetBase,
-    first_nullifier: Nullifier,
-    index_action: usize,
-    index_note: usize,
-    mut rng: impl RngCore,
-) -> Note {
+fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
     Note::new(
         ReferenceKeys::recipient(),
         NoteValue::zero(),
         asset,
-        rho_for_issuance_note(
-            first_nullifier,
-            index_action.try_into().unwrap(),
-            index_note.try_into().unwrap(),
-        ),
+        Rho::zero(),
         &mut rng,
     )
 }
@@ -573,7 +538,6 @@ impl IssueBundle<Prepared> {
             ik: self.ik,
             actions: self.actions,
             authorization: Signed { signature },
-            first_nullifier: self.first_nullifier,
         })
     }
 }
@@ -782,7 +746,6 @@ mod tests {
         IssuanceValidatingKey,
         Address,
         [u8; 32],
-        Nullifier,
     ) {
         let mut rng = OsRng;
 
@@ -795,9 +758,7 @@ mod tests {
         let mut sighash = [0u8; 32];
         rng.fill_bytes(&mut sighash);
 
-        let first_nullifier = Nullifier::dummy(&mut rng);
-
-        (rng, isk, ik, recipient, sighash, first_nullifier)
+        (rng, isk, ik, recipient, sighash)
     }
 
     /// Sets up test parameters for supply tests.
@@ -811,7 +772,7 @@ mod tests {
         note2_asset_desc: Option<&[u8]>, // if None, both notes use the same asset
         finalize: bool,
     ) -> (IssuanceValidatingKey, AssetBase, IssueAction) {
-        let (mut rng, _, ik, recipient, _, _) = setup_params();
+        let (mut rng, _, ik, recipient, _) = setup_params();
 
         let asset = AssetBase::derive(&ik, note1_asset_desc);
         let note2_asset = note2_asset_desc.map_or(asset, |desc| AssetBase::derive(&ik, desc));
@@ -854,7 +815,7 @@ mod tests {
         note1_value: u64,
         note2_value: u64,
     ) -> (IssuanceAuthorizingKey, IssueBundle<Unauthorized>, [u8; 32]) {
-        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
         let note1 = Note::new(
             recipient,
@@ -875,8 +836,7 @@ mod tests {
         let action =
             IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], false);
 
-        let bundle =
-            IssueBundle::from_parts(ik, NonEmpty::new(action), Unauthorized, first_nullifier);
+        let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), Unauthorized);
 
         (isk, bundle, sighash)
     }
@@ -934,7 +894,7 @@ mod tests {
     #[test]
     fn verify_supply_ik_mismatch_asset_base() {
         let (_, _, action) = supply_test_params(10, 20, b"Asset 1", None, false);
-        let (_, _, ik, _, _, _) = setup_params();
+        let (_, _, ik, _, _) = setup_params();
 
         assert_eq!(
             action.verify_supply(&ik),
@@ -944,7 +904,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_basic() {
-        let (rng, _, ik, recipient, _, first_nullifier) = setup_params();
+        let (mut rng, _, ik, recipient, _) = setup_params();
 
         let str = "Halo".to_string();
         let str2 = "Halo2".to_string();
@@ -958,7 +918,6 @@ mod tests {
                     value: NoteValue::unsplittable()
                 }),
                 true,
-                first_nullifier,
                 rng,
             )
             .unwrap_err(),
@@ -974,7 +933,6 @@ mod tests {
                     value: NoteValue::unsplittable()
                 }),
                 true,
-                first_nullifier,
                 rng,
             )
             .unwrap_err(),
@@ -989,7 +947,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1015,6 +972,13 @@ mod tests {
             )
             .unwrap();
         assert_ne!(asset, third_asset);
+
+        assert_eq!(
+            bundle.actions().get(0).unwrap().notes.get(0).unwrap().rho(),
+            Rho::zero()
+        );
+        bundle.update_rho(Nullifier::dummy(&mut rng));
+        assert!(bundle.actions().get(0).unwrap().notes.get(0).unwrap().rho() != Rho::zero());
 
         let actions = bundle.actions();
         assert_eq!(actions.len(), 2);
@@ -1047,7 +1011,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_finalize_asset() {
-        let (rng, _, ik, recipient, _, first_nullifier) = setup_params();
+        let (rng, _, ik, recipient, _) = setup_params();
 
         let (mut bundle, _) = IssueBundle::new(
             ik,
@@ -1057,7 +1021,6 @@ mod tests {
                 value: NoteValue::from_raw(u64::MIN),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .expect("Should properly add recipient");
@@ -1081,7 +1044,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_prepare() {
-        let (rng, _, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (rng, _, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1091,7 +1054,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1102,7 +1064,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_sign() {
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1112,7 +1074,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1125,7 +1086,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_invalid_isk_for_signature() {
-        let (rng, _, ik, recipient, _, first_nullifier) = setup_params();
+        let (rng, _, ik, recipient, _) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1135,7 +1096,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1152,7 +1112,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_incorrect_asset_for_signature() {
-        let (mut rng, isk, ik, recipient, _, first_nullifier) = setup_params();
+        let (mut rng, isk, ik, recipient, _) = setup_params();
 
         // Create a bundle with "normal" note
         let (mut bundle, _) = IssueBundle::new(
@@ -1163,7 +1123,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1188,7 +1147,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify() {
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1198,7 +1157,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1215,7 +1173,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_with_finalize() {
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (mut bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1225,7 +1183,6 @@ mod tests {
                 value: NoteValue::from_raw(7),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1245,7 +1202,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_with_supply_info() {
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let asset1_desc = b"Verify with supply info 1".to_vec();
         let asset2_desc = b"Verify with supply info 2".to_vec();
@@ -1263,7 +1220,6 @@ mod tests {
                 value: NoteValue::from_raw(7),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1331,7 +1287,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_previously_finalized() {
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1341,7 +1297,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1368,7 +1323,7 @@ mod tests {
             }
         }
 
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1378,7 +1333,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1401,7 +1355,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_wrong_sighash() {
-        let (rng, isk, ik, recipient, random_sighash, first_nullifier) = setup_params();
+        let (rng, isk, ik, recipient, random_sighash) = setup_params();
         let (bundle, _) = IssueBundle::new(
             ik,
             b"Asset description".to_vec(),
@@ -1410,7 +1364,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1427,7 +1380,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_incorrect_asset_description() {
-        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1437,7 +1390,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1467,7 +1419,7 @@ mod tests {
     fn issue_bundle_verify_fail_incorrect_ik() {
         let asset_description = b"Asset".to_vec();
 
-        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (mut rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1477,7 +1429,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1515,7 +1466,7 @@ mod tests {
             }
         }
 
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1525,7 +1476,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1570,7 +1520,6 @@ mod tests {
             authorization: Signed {
                 signature: isk.try_sign(&sighash).unwrap(),
             },
-            first_nullifier: bundle.first_nullifier,
         };
 
         assert_eq!(
@@ -1598,7 +1547,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_asset_desc_roundtrip() {
-        let (rng, _, ik, recipient, _, first_nullifier) = setup_params();
+        let (rng, _, ik, recipient, _) = setup_params();
 
         // Generated using https://onlinetools.com/utf8/generate-random-utf8
         let asset_desc_1 = "󅞞 򬪗YV8𱈇m0{둛򙎠[㷊V֤]9Ծ̖l󾓨2닯򗏟iȰ䣄˃Oߺ񗗼🦄"
@@ -1620,7 +1569,6 @@ mod tests {
                 value: NoteValue::from_raw(5),
             }),
             true,
-            first_nullifier,
             rng,
         )
         .unwrap();
@@ -1655,8 +1603,6 @@ pub mod testing {
     use crate::keys::testing::arb_issuance_validating_key;
     use crate::note::asset_base::testing::zsa_asset_base;
     use crate::note::testing::arb_zsa_note;
-    use crate::note::Nullifier;
-    use k256::elliptic_curve::rand_core::OsRng;
     use k256::schnorr;
     use nonempty::NonEmpty;
     use proptest::collection::vec;
@@ -1700,8 +1646,7 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
-                authorization: Unauthorized,
-                first_nullifier: Nullifier::dummy(&mut OsRng)
+                authorization: Unauthorized
             }
         }
     }
@@ -1719,8 +1664,7 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
-                authorization: Prepared { sighash: fake_sighash },
-                first_nullifier: Nullifier::dummy(&mut OsRng)
+                authorization: Prepared { sighash: fake_sighash }
             }
         }
     }
@@ -1739,7 +1683,6 @@ pub mod testing {
                 ik,
                 actions,
                 authorization: Signed { signature: fake_sig },
-                first_nullifier: Nullifier::dummy(&mut OsRng)
             }
         }
     }
