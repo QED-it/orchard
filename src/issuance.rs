@@ -334,13 +334,11 @@ impl IssueBundle<Unauthorized> {
     /// If issue_info is None, the new `IssueBundle` will contain one `IssueAction` without notes
     /// and with `finalize` set to true.
     /// Otherwise, the new `IssueBundle` will contain one `IssueAction with one note created from
-    /// issue_info values and with `finalize` set to false.
+    /// issue_info values and with `finalize` set to false. In this created note, rho will be
+    /// set to zero. The rho value will be updated later by calling the `update_rho` method.
     ///
     /// If `first_issuance` is true, the `IssueBundle` will contain a reference note for the asset
     /// defined by (`asset_desc`, `ik`).
-    ///
-    /// The `first_nullifier` argument will be used to evaluate the rho value for each issuance note
-    /// of this `IssueBundle`.
     ///
     /// # Errors
     ///
@@ -410,6 +408,7 @@ impl IssueBundle<Unauthorized> {
 
     /// Add a new note to the `IssueBundle`.
     ///
+    /// Rho is set to zero. The rho value will be updated later by calling the `update_rho` method.
     /// If `first_issuance` is true, we will also add a reference note for the asset defined by
     /// (`asset_desc`, `ik`).
     ///

@@ -61,6 +61,12 @@ impl Rho {
     pub(crate) fn into_inner(self) -> pallas::Base {
         self.0
     }
+
+    /// When creating an issuance note, the rho value is initialized with the Pallas base element zero.
+    /// This value will be updated later by calling `update_rho` method on the `IssueBundle`.
+    pub(crate) fn zero() -> Self {
+        Rho(pallas::Base::zero())
+    }
 }
 
 /// Evaluate the rho value of the issuance note (see
