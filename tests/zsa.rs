@@ -6,7 +6,7 @@ use incrementalmerkletree::Hashable;
 use orchard::bundle::Authorized;
 use orchard::issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized};
 use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
-use orchard::note::{AssetBase, ExtractedNoteCommitment};
+use orchard::note::{AssetBase, ExtractedNoteCommitment, Nullifier};
 
 use orchard::tree::{MerkleHashOrchard, MerklePath};
 use orchard::{
@@ -76,9 +76,11 @@ fn prepare_keys() -> Keychain {
 fn sign_issue_bundle(
     unauthorized: IssueBundle<Unauthorized>,
     isk: &IssuanceAuthorizingKey,
+    first_nullifier: Nullifier,
 ) -> IssueBundle<Signed> {
-    let sighash = unauthorized.commitment().into();
-    let proven = unauthorized.prepare(sighash);
+    let partially_prepared = unauthorized.update_rho(first_nullifier);
+    let sighash = partially_prepared.commitment().into();
+    let proven = partially_prepared.prepare(sighash);
     proven.sign(isk).unwrap()
 }
 
@@ -136,7 +138,11 @@ pub fn build_merkle_path_with_two_leaves(
     (merkle_path1, merkle_path2, anchor)
 }
 
-fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note, Note) {
+fn issue_zsa_notes(
+    asset_descr: &[u8],
+    keys: &Keychain,
+    first_nullifier: Nullifier,
+) -> (Note, Note, Note) {
     let mut rng = OsRng;
     // Create a issuance bundle
     let unauthorized_asset = IssueBundle::new(
@@ -164,7 +170,7 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note, Note) {
         )
         .is_ok());
 
-    let issue_bundle = sign_issue_bundle(unauthorized, keys.isk());
+    let issue_bundle = sign_issue_bundle(unauthorized, keys.isk(), first_nullifier);
 
     // Take notes from first action
     let notes = issue_bundle.get_all_notes();
@@ -315,8 +321,11 @@ fn zsa_issue_and_transfer() {
     let keys = prepare_keys();
     let asset_descr = b"zsa_asset".to_vec();
 
+    let native_note = create_native_note(&keys);
+
     // Prepare ZSA
-    let (reference_note, zsa_note_1, zsa_note_2) = issue_zsa_notes(&asset_descr, &keys);
+    let (reference_note, zsa_note_1, zsa_note_2) =
+        issue_zsa_notes(&asset_descr, &keys, native_note.nullifier(keys.fvk()));
     verify_reference_note(&reference_note, zsa_note_1.asset());
 
     let (merkle_path1, merkle_path2, anchor) =
@@ -331,7 +340,6 @@ fn zsa_issue_and_transfer() {
         merkle_path: merkle_path2,
     };
 
-    let native_note = create_native_note(&keys);
     let (native_merkle_path_1, native_merkle_path_2, native_anchor) =
         build_merkle_path_with_two_leaves(&native_note, &zsa_note_1);
     let native_spend: TestSpendInfo = TestSpendInfo {
@@ -470,7 +478,8 @@ fn zsa_issue_and_transfer() {
     .unwrap();
 
     // 7. Spend ZSA notes of different asset types
-    let (reference_note, zsa_note_t7, _) = issue_zsa_notes(b"zsa_asset2", &keys);
+    let (reference_note, zsa_note_t7, _) =
+        issue_zsa_notes(b"zsa_asset2", &keys, native_note.nullifier(keys.fvk()));
     verify_reference_note(&reference_note, zsa_note_t7.asset());
     let (merkle_path_t7_1, merkle_path_t7_2, anchor_t7) =
         build_merkle_path_with_two_leaves(&zsa_note_t7, &zsa_note_2);

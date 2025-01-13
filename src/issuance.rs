@@ -10,9 +10,9 @@ use std::fmt;
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::constants::reference_keys::ReferenceKeys;
 use crate::issuance::Error::{
-    AssetBaseCannotBeIdentityPoint, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
-    IssueBundleInvalidSignature, ValueOverflow, WrongAssetDescSize,
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, ValueOverflow, WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
@@ -194,6 +194,11 @@ pub trait IssueAuth: fmt::Debug + Clone {}
 #[derive(Debug, Clone)]
 pub struct Unauthorized;
 
+/// Marker for an unauthorized bundle with correct rho values for each issue note and with no
+/// proofs or signatures.
+#[derive(Debug, Clone)]
+pub struct PartiallyPrepared;
+
 /// Marker for an unauthorized bundle with injected sighash.
 #[derive(Debug, Clone)]
 pub struct Prepared {
@@ -221,6 +226,7 @@ impl Signed {
 }
 
 impl IssueAuth for Unauthorized {}
+impl IssueAuth for PartiallyPrepared {}
 impl IssueAuth for Prepared {}
 impl IssueAuth for Signed {}
 
@@ -319,29 +325,6 @@ impl<T: IssueAuth> IssueBundle<T> {
             actions: self.actions,
             authorization: map_auth(authorization),
         }
-    }
-
-    /// Compute the correct `\rho` value for each note in the bundle according to
-    /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227].
-    ///
-    /// [zip227]: https://zips.z.cash/zip-0227
-    pub fn update_rho(&mut self, nullifier: Nullifier) {
-        self.actions
-            .iter_mut()
-            .enumerate()
-            .for_each(|(index_action, action)| {
-                action
-                    .notes
-                    .iter_mut()
-                    .enumerate()
-                    .for_each(|(index_note, note)| {
-                        note.update_rho_for_issuance_note(
-                            nullifier,
-                            index_action.try_into().unwrap(),
-                            index_note.try_into().unwrap(),
-                        );
-                    });
-            });
     }
 }
 
@@ -456,6 +439,10 @@ impl IssueBundle<Unauthorized> {
         match action {
             Some(action) => {
                 // Append to an existing IssueAction.
+                if first_issuance {
+                    // It cannot be first issuance because we have already some notes for this asset.
+                    return Err(CannotBeFirstIssuance);
+                }
                 action.notes.extend(notes);
             }
             None => {
@@ -497,6 +484,34 @@ impl IssueBundle<Unauthorized> {
         Ok(())
     }
 
+    /// Compute the correct rho value for each note in the bundle according to
+    /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227].
+    ///
+    /// [zip227]: https://zips.z.cash/zip-0227
+    pub fn update_rho(self, first_nullifier: Nullifier) -> IssueBundle<PartiallyPrepared> {
+        let mut bundle = self;
+        bundle
+            .actions
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index_action, action)| {
+                action
+                    .notes
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(index_note, note)| {
+                        note.update_rho_for_issuance_note(
+                            first_nullifier,
+                            index_action.try_into().unwrap(),
+                            index_note.try_into().unwrap(),
+                        );
+                    });
+            });
+        bundle.map_authorization(|_| PartiallyPrepared)
+    }
+}
+
+impl IssueBundle<PartiallyPrepared> {
     /// Loads the sighash into the bundle, as preparation for signing.
     pub fn prepare(self, sighash: [u8; 32]) -> IssueBundle<Prepared> {
         IssueBundle {
@@ -651,6 +666,8 @@ pub enum Error {
     IssueActionWithoutNoteNotFinalized,
     /// The `AssetBase` is the Pallas identity point, which is invalid.
     AssetBaseCannotBeIdentityPoint,
+    /// It cannot be first issuance because we have already some notes for this asset.
+    CannotBeFirstIssuance,
 
     /// Verification errors:
     /// Invalid signature.
@@ -687,6 +704,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "the AssetBase is the identity point of the Pallas curve, which is invalid."
+                )
+            }
+            CannotBeFirstIssuance => {
+                write!(
+                    f,
+                    "it cannot be first issuance because we have already some notes for this asset."
                 )
             }
             IssueBundleInvalidSignature => {
@@ -746,6 +769,7 @@ mod tests {
         IssuanceValidatingKey,
         Address,
         [u8; 32],
+        Nullifier,
     ) {
         let mut rng = OsRng;
 
@@ -758,7 +782,9 @@ mod tests {
         let mut sighash = [0u8; 32];
         rng.fill_bytes(&mut sighash);
 
-        (rng, isk, ik, recipient, sighash)
+        let first_nullifier = Nullifier::dummy(&mut rng);
+
+        (rng, isk, ik, recipient, sighash, first_nullifier)
     }
 
     /// Sets up test parameters for supply tests.
@@ -772,7 +798,7 @@ mod tests {
         note2_asset_desc: Option<&[u8]>, // if None, both notes use the same asset
         finalize: bool,
     ) -> (IssuanceValidatingKey, AssetBase, IssueAction) {
-        let (mut rng, _, ik, recipient, _) = setup_params();
+        let (mut rng, _, ik, recipient, _, _) = setup_params();
 
         let asset = AssetBase::derive(&ik, note1_asset_desc);
         let note2_asset = note2_asset_desc.map_or(asset, |desc| AssetBase::derive(&ik, desc));
@@ -781,7 +807,7 @@ mod tests {
             recipient,
             NoteValue::from_raw(note1_value),
             asset,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
@@ -789,7 +815,7 @@ mod tests {
             recipient,
             NoteValue::from_raw(note2_value),
             note2_asset,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
@@ -814,14 +840,19 @@ mod tests {
     fn identity_point_test_params(
         note1_value: u64,
         note2_value: u64,
-    ) -> (IssuanceAuthorizingKey, IssueBundle<Unauthorized>, [u8; 32]) {
-        let (mut rng, isk, ik, recipient, sighash) = setup_params();
+    ) -> (
+        IssuanceAuthorizingKey,
+        IssueBundle<Unauthorized>,
+        [u8; 32],
+        Nullifier,
+    ) {
+        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let note1 = Note::new(
             recipient,
             NoteValue::from_raw(note1_value),
             identity_point(),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
@@ -829,7 +860,7 @@ mod tests {
             recipient,
             NoteValue::from_raw(note2_value),
             identity_point(),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
@@ -838,7 +869,7 @@ mod tests {
 
         let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), Unauthorized);
 
-        (isk, bundle, sighash)
+        (isk, bundle, sighash, first_nullifier)
     }
 
     #[test]
@@ -858,7 +889,7 @@ mod tests {
 
     #[test]
     fn verify_supply_invalid_for_asset_base_as_identity() {
-        let (_, bundle, _) = identity_point_test_params(10, 20);
+        let (_, bundle, _, _) = identity_point_test_params(10, 20);
 
         assert_eq!(
             bundle.actions.head.verify_supply(&bundle.ik),
@@ -894,7 +925,7 @@ mod tests {
     #[test]
     fn verify_supply_ik_mismatch_asset_base() {
         let (_, _, action) = supply_test_params(10, 20, b"Asset 1", None, false);
-        let (_, _, ik, _, _) = setup_params();
+        let (_, _, ik, _, _, _) = setup_params();
 
         assert_eq!(
             action.verify_supply(&ik),
@@ -904,7 +935,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_basic() {
-        let (mut rng, _, ik, recipient, _) = setup_params();
+        let (rng, _, ik, recipient, _, first_nullifier) = setup_params();
 
         let str = "Halo".to_string();
         let str2 = "Halo2".to_string();
@@ -977,7 +1008,7 @@ mod tests {
             bundle.actions().get(0).unwrap().notes.get(0).unwrap().rho(),
             Rho::zero()
         );
-        bundle.update_rho(Nullifier::dummy(&mut rng));
+        let bundle = bundle.update_rho(first_nullifier);
         assert!(bundle.actions().get(0).unwrap().notes.get(0).unwrap().rho() != Rho::zero());
 
         let actions = bundle.actions();
@@ -1011,7 +1042,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_finalize_asset() {
-        let (rng, _, ik, recipient, _) = setup_params();
+        let (rng, _, ik, recipient, _, _) = setup_params();
 
         let (mut bundle, _) = IssueBundle::new(
             ik,
@@ -1044,7 +1075,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_prepare() {
-        let (rng, _, ik, recipient, sighash) = setup_params();
+        let (rng, _, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1058,13 +1089,13 @@ mod tests {
         )
         .unwrap();
 
-        let prepared = bundle.prepare(sighash);
+        let prepared = bundle.update_rho(first_nullifier).prepare(sighash);
         assert_eq!(prepared.authorization().sighash, sighash);
     }
 
     #[test]
     fn issue_bundle_sign() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1078,7 +1109,11 @@ mod tests {
         )
         .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let signed = bundle
+            .update_rho(first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         ik.verify(&sighash, &signed.authorization.signature)
             .expect("signature should be valid");
@@ -1086,7 +1121,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_invalid_isk_for_signature() {
-        let (rng, _, ik, recipient, _) = setup_params();
+        let (rng, _, ik, recipient, _, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1103,6 +1138,7 @@ mod tests {
         let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
 
         let err = bundle
+            .update_rho(first_nullifier)
             .prepare([0; 32])
             .sign(&wrong_isk)
             .expect_err("should not be able to sign");
@@ -1112,7 +1148,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_incorrect_asset_for_signature() {
-        let (mut rng, isk, ik, recipient, _) = setup_params();
+        let (mut rng, isk, ik, recipient, _, first_nullifier) = setup_params();
 
         // Create a bundle with "normal" note
         let (mut bundle, _) = IssueBundle::new(
@@ -1132,12 +1168,13 @@ mod tests {
             recipient,
             NoteValue::from_raw(5),
             AssetBase::derive(bundle.ik(), b"zsa_asset"),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
         bundle.actions.first_mut().notes.push(note);
 
         let err = bundle
+            .update_rho(first_nullifier)
             .prepare([0; 32])
             .sign(&isk)
             .expect_err("should not be able to sign");
@@ -1147,7 +1184,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1161,7 +1198,11 @@ mod tests {
         )
         .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let signed = bundle
+            .update_rho(first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
         let prev_finalized = &mut HashSet::new();
 
         let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
@@ -1173,7 +1214,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_with_finalize() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (mut bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1189,7 +1230,11 @@ mod tests {
 
         bundle.finalize_action(b"Verify with finalize").unwrap();
 
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let signed = bundle
+            .update_rho(first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
         let prev_finalized = &mut HashSet::new();
 
         let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
@@ -1202,7 +1247,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_with_supply_info() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let asset1_desc = b"Verify with supply info 1".to_vec();
         let asset2_desc = b"Verify with supply info 2".to_vec();
@@ -1240,7 +1285,11 @@ mod tests {
             .add_recipient(&asset3_desc, recipient, NoteValue::from_raw(5), true, rng)
             .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let signed = bundle
+            .update_rho(first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
         let prev_finalized = &mut HashSet::new();
 
         let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
@@ -1287,7 +1336,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_previously_finalized() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1301,7 +1350,11 @@ mod tests {
         )
         .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let signed = bundle
+            .update_rho(first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
         let prev_finalized = &mut HashSet::new();
 
         let final_type = AssetBase::derive(&ik, b"already final");
@@ -1323,7 +1376,7 @@ mod tests {
             }
         }
 
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1339,7 +1392,11 @@ mod tests {
 
         let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
 
-        let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let mut signed = bundle
+            .update_rho(first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         signed.set_authorization(Signed {
             signature: wrong_isk.try_sign(&sighash).unwrap(),
@@ -1355,7 +1412,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_wrong_sighash() {
-        let (rng, isk, ik, recipient, random_sighash) = setup_params();
+        let (rng, isk, ik, recipient, random_sighash, first_nullifier) = setup_params();
         let (bundle, _) = IssueBundle::new(
             ik,
             b"Asset description".to_vec(),
@@ -1369,7 +1426,11 @@ mod tests {
         .unwrap();
 
         let sighash: [u8; 32] = bundle.commitment().into();
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let signed = bundle
+            .update_rho(first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
         let prev_finalized = &HashSet::new();
 
         assert_eq!(
@@ -1380,7 +1441,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_incorrect_asset_description() {
-        let (mut rng, isk, ik, recipient, sighash) = setup_params();
+        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1394,14 +1455,18 @@ mod tests {
         )
         .unwrap();
 
-        let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let mut signed = bundle
+            .update_rho(first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         // Add "bad" note
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
             AssetBase::derive(signed.ik(), b"zsa_asset"),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
@@ -1419,7 +1484,7 @@ mod tests {
     fn issue_bundle_verify_fail_incorrect_ik() {
         let asset_description = b"Asset".to_vec();
 
-        let (mut rng, isk, ik, recipient, sighash) = setup_params();
+        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1433,7 +1498,11 @@ mod tests {
         )
         .unwrap();
 
-        let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let mut signed = bundle
+            .update_rho(first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         let incorrect_isk = IssuanceAuthorizingKey::random();
         let incorrect_ik: IssuanceValidatingKey = (&incorrect_isk).into();
@@ -1443,7 +1512,7 @@ mod tests {
             recipient,
             NoteValue::from_raw(55),
             AssetBase::derive(&incorrect_ik, &asset_description),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
@@ -1466,7 +1535,7 @@ mod tests {
             }
         }
 
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1480,7 +1549,11 @@ mod tests {
         )
         .unwrap();
 
-        let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let mut signed = bundle
+            .update_rho(first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
         let prev_finalized = HashSet::new();
 
         // 1. Try a description that is too long
@@ -1502,17 +1575,21 @@ mod tests {
 
     #[test]
     fn issue_bundle_cannot_be_signed_with_asset_base_identity_point() {
-        let (isk, bundle, sighash) = identity_point_test_params(10, 20);
+        let (isk, bundle, sighash, first_nullifier) = identity_point_test_params(10, 20);
 
         assert_eq!(
-            bundle.prepare(sighash).sign(&isk).unwrap_err(),
+            bundle
+                .update_rho(first_nullifier)
+                .prepare(sighash)
+                .sign(&isk)
+                .unwrap_err(),
             AssetBaseCannotBeIdentityPoint
         );
     }
 
     #[test]
     fn issue_bundle_verify_fail_asset_base_identity_point() {
-        let (isk, bundle, sighash) = identity_point_test_params(10, 20);
+        let (isk, bundle, sighash, _) = identity_point_test_params(10, 20);
 
         let signed = IssueBundle {
             ik: bundle.ik,
@@ -1547,7 +1624,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_asset_desc_roundtrip() {
-        let (rng, _, ik, recipient, _) = setup_params();
+        let (rng, _, ik, recipient, _, _) = setup_params();
 
         // Generated using https://onlinetools.com/utf8/generate-random-utf8
         let asset_desc_1 = "󅞞 򬪗YV8𱈇m0{둛򙎠[㷊V֤]9Ծ̖l󾓨2닯򗏟iȰ䣄˃Oߺ񗗼🦄"
