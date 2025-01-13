@@ -365,21 +365,33 @@ impl Note {
         index_action: u32,
         index_note: u32,
     ) {
-        self.rho = Rho(to_base(
-            Params::new()
-                .hash_length(64)
-                .personal(ZSA_ISSUE_NOTE_RHO_PERSONALIZATION)
-                .to_state()
-                .update(&nullifier.to_bytes())
-                .update(&[0x84])
-                .update(index_action.to_le_bytes().as_ref())
-                .update(index_note.to_le_bytes().as_ref())
-                .finalize()
-                .as_bytes()
-                .try_into()
-                .unwrap(),
-        ));
+        self.rho = rho_for_issuance_note(nullifier, index_action, index_note);
     }
+}
+
+/// Evaluate the rho value of the issuance note (see
+/// [ZIP-227: Issuance of Zcash Shielded Assets][zip227]).
+///
+/// [zip227]: https://zips.z.cash/zip-0227
+pub(crate) fn rho_for_issuance_note(
+    nullifier: Nullifier,
+    index_action: u32,
+    index_note: u32,
+) -> Rho {
+    Rho(to_base(
+        Params::new()
+            .hash_length(64)
+            .personal(ZSA_ISSUE_NOTE_RHO_PERSONALIZATION)
+            .to_state()
+            .update(&nullifier.to_bytes())
+            .update(&[0x84])
+            .update(index_action.to_le_bytes().as_ref())
+            .update(index_note.to_le_bytes().as_ref())
+            .finalize()
+            .as_bytes()
+            .try_into()
+            .unwrap(),
+    ))
 }
 
 /// An encrypted note.
