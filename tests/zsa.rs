@@ -314,6 +314,7 @@ fn zsa_issue_and_transfer() {
     let keys = prepare_keys(5);
     let keys2 = prepare_keys(10);
     let keys3 = prepare_keys(15);
+
     let native_note: Note = create_native_note(&keys);
 
     // Prepare ZSA
