@@ -10,9 +10,9 @@ use std::fmt;
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::constants::reference_keys::ReferenceKeys;
 use crate::issuance::Error::{
-    AssetBaseCannotBeIdentityPoint, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
-    IssueBundleInvalidSignature, ValueOverflow, WrongAssetDescSize,
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, ValueOverflow, WrongAssetDescSize,
 };
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
@@ -442,13 +442,9 @@ impl IssueBundle<Unauthorized> {
             Some((index_action, action)) => {
                 // Append to an existing IssueAction.
                 if first_issuance {
-                    action.notes.push(create_reference_note(
-                        asset,
-                        self.first_nullifier,
-                        index_action,
-                        action.notes().len(),
-                        &mut rng,
-                    ));
+                    // It cannot be the first issuance of this asset
+                    // because we have already some notes for this asset.
+                    return Err(CannotBeFirstIssuance);
                 }
                 action.notes.push(Note::new(
                     recipient,
@@ -688,6 +684,8 @@ pub enum Error {
     IssueActionWithoutNoteNotFinalized,
     /// The `AssetBase` is the Pallas identity point, which is invalid.
     AssetBaseCannotBeIdentityPoint,
+    /// It cannot be a first issuance, because we have already some notes for this asset.
+    CannotBeFirstIssuance,
 
     /// Verification errors:
     /// Invalid signature.
@@ -724,6 +722,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "the AssetBase is the identity point of the Pallas curve, which is invalid."
+                )
+            }
+            CannotBeFirstIssuance => {
+                write!(
+                    f,
+                    "it cannot be a first issuance, because we have already some notes for this asset."
                 )
             }
             IssueBundleInvalidSignature => {
