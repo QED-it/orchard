@@ -565,7 +565,7 @@ fn zsa_issue_and_transfer() {
         vec![&native_spend],
         vec![],
         vec![(AssetBase::native(), native_spend.note.value())],
-        native_anchor,
+        anchor,
         2,
         &keys,
     );
