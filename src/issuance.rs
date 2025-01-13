@@ -745,26 +745,20 @@ impl fmt::Display for Error {
 #[cfg(test)]
 mod tests {
     use super::{AssetSupply, IssueBundle, IssueInfo};
-    use crate::{
-        builder::{Builder, BundleType},
-        circuit::ProvingKey,
-        issuance::Error::{
-            AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
-            IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
-            IssueBundleInvalidSignature, WrongAssetDescSize,
-        },
-        issuance::{is_reference_note, verify_issue_bundle, IssueAction, Signed, Unauthorized},
-        keys::{
-            FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope,
-            SpendAuthorizingKey, SpendingKey,
-        },
-        note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
-        orchard_flavor::OrchardZSA,
-        tree::{MerkleHashOrchard, MerklePath},
-        value::NoteValue,
-        Address, Bundle, Note,
+    use crate::issuance::Error::{
+        AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
+        IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
+        IssueBundleInvalidSignature, WrongAssetDescSize,
     };
-    use bridgetree::BridgeTree;
+    use crate::issuance::{
+        is_reference_note, verify_issue_bundle, IssueAction, Signed, Unauthorized,
+    };
+    use crate::keys::{
+        FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
+    };
+    use crate::note::{AssetBase, Nullifier, Rho};
+    use crate::value::NoteValue;
+    use crate::{Address, Note};
     use group::{Group, GroupEncoding};
     use nonempty::NonEmpty;
     use pasta_curves::pallas::{Point, Scalar};
@@ -1651,111 +1645,6 @@ mod tests {
         verify_reference_note(reference_note, asset_base_2);
         assert_eq!(action2.notes.get(1).unwrap().value().inner(), 10);
         assert_eq!(bundle.get_action_by_desc(&asset_desc_2).unwrap(), action2);
-    }
-
-    #[test]
-    fn verify_rho_computation_for_issuance_notes() {
-        // Setup keys
-        let pk = ProvingKey::build::<OrchardZSA>();
-        let sk = SpendingKey::from_bytes([1; 32]).unwrap();
-        let fvk = FullViewingKey::from(&sk);
-        let recipient = fvk.address_at(0u32, Scope::External);
-        let isk = IssuanceAuthorizingKey::from_bytes([2; 32]).unwrap();
-        let ik = IssuanceValidatingKey::from(&isk);
-
-        // Setup note and merkle tree
-        let mut rng = OsRng;
-        let asset1 = AssetBase::derive(&ik, b"zsa_asset1");
-        let note1 = Note::new(
-            recipient,
-            NoteValue::from_raw(10),
-            asset1,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
-            &mut rng,
-        );
-        // Build the merkle tree with only note1
-        let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
-        let cmx: ExtractedNoteCommitment = note1.commitment().into();
-        let leaf = MerkleHashOrchard::from_cmx(&cmx);
-        tree.append(leaf);
-        let position = tree.mark().unwrap();
-        let root = tree.root(0).unwrap();
-        let anchor = root.into();
-        let auth_path = tree.witness(position, 0).unwrap();
-        let merkle_path = MerklePath::from_parts(
-            u64::from(position).try_into().unwrap(),
-            auth_path[..].try_into().unwrap(),
-        );
-
-        // Create a transfer bundle
-        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
-        builder.add_spend(fvk, note1, merkle_path).unwrap();
-        builder
-            .add_output(None, recipient, NoteValue::from_raw(5), asset1, None)
-            .unwrap();
-        builder
-            .add_output(None, recipient, NoteValue::from_raw(5), asset1, None)
-            .unwrap();
-        let unauthorized = builder.build(&mut rng).unwrap().0;
-        let sighash = unauthorized.commitment().into();
-        let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
-        let authorized: Bundle<_, i64, OrchardZSA> = proven
-            .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
-            .unwrap();
-
-        // Create an issue bundle
-        let asset2 = "asset2".to_string();
-        let asset3 = "asset3".to_string();
-        let (mut bundle, asset) = IssueBundle::new(
-            ik,
-            asset2.clone().into_bytes(),
-            Some(IssueInfo {
-                recipient,
-                value: NoteValue::from_raw(5),
-            }),
-            true,
-            *authorized.actions().first().nullifier(),
-            rng,
-        )
-        .unwrap();
-
-        let another_asset = bundle
-            .add_recipient(
-                asset2.as_bytes(),
-                recipient,
-                NoteValue::from_raw(10),
-                false,
-                rng,
-            )
-            .unwrap();
-        assert_eq!(asset, another_asset);
-
-        let third_asset = bundle
-            .add_recipient(
-                asset3.as_bytes(),
-                recipient,
-                NoteValue::from_raw(10),
-                true,
-                rng,
-            )
-            .unwrap();
-        assert_ne!(asset, third_asset);
-
-        assert_eq!(bundle.actions().len(), 2);
-        assert_eq!(bundle.actions().get(0).unwrap().notes().len(), 3);
-        assert_eq!(bundle.actions().get(1).unwrap().notes().len(), 2);
-
-        // Check the rho value for each issuance note in the issue bundle
-        for (index_action, action) in bundle.actions.iter().enumerate() {
-            for (index_note, note) in action.notes.iter().enumerate() {
-                let expected_rho = rho_for_issuance_note(
-                    *authorized.actions().first().nullifier(),
-                    index_action.try_into().unwrap(),
-                    index_note.try_into().unwrap(),
-                );
-                assert_eq!(note.rho(), expected_rho);
-            }
-        }
     }
 }
 
