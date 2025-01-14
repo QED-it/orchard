@@ -16,7 +16,10 @@ pub(crate) const ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b
 pub(crate) const ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] =
     b"ZTxIdOrcActNHash";
 pub(crate) const ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcBurnHash";
-const ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrchaHash";
+pub(crate) const ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrchaHash";
+pub(crate) const ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION: &[u8; 16] =
+    b"ZTxAuthOrcAGHash";
+
 const ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION: &[u8; 16] = b"ZTxIdSAIssueHash";
 const ZCASH_ORCHARD_ZSA_ISSUE_ACTION_PERSONALIZATION: &[u8; 16] = b"ZTxIdIssuActHash";
 const ZCASH_ORCHARD_ZSA_ISSUE_NOTE_PERSONALIZATION: &[u8; 16] = b"ZTxIdIAcNoteHash";
@@ -60,15 +63,7 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 pub(crate) fn hash_bundle_auth_data<V, D: OrchardDomainCommon>(
     bundle: &Bundle<Authorized, V, D>,
 ) -> Blake2bHash {
-    let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
-    h.update(bundle.authorization().proof().as_ref());
-    for action in bundle.actions().iter() {
-        h.update(&<[u8; 64]>::from(action.authorization()));
-    }
-    h.update(&<[u8; 64]>::from(
-        bundle.authorization().binding_signature(),
-    ));
-    h.finalize()
+    D::hash_bundle_auth_data(bundle)
 }
 
 /// Construct the commitment for an absent bundle as defined in

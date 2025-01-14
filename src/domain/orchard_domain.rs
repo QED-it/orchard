@@ -6,6 +6,7 @@ use core::fmt;
 use blake2b_simd::{Hash as Blake2bHash, State};
 use zcash_note_encryption_zsa::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
 
+use crate::bundle::Authorized;
 use crate::{
     action::Action,
     bundle::{
@@ -110,6 +111,16 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
         main_hasher.update(mh.finalize().as_bytes());
         main_hasher.update(nh.finalize().as_bytes());
     }
+
+    /// Evaluate `orchard_auth_digest` for the bundle as defined in
+    /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+    /// for OrchardVanilla and as defined in
+    /// [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226]
+    /// for OrchardZSA
+    ///
+    /// [zip244]: https://zips.z.cash/zip-0244
+    /// [zip226]: https://zips.z.cash/zip-0226
+    fn hash_bundle_auth_data<V>(bundle: &Bundle<Authorized, V, Self>) -> Blake2bHash;
 }
 
 /// Orchard-specific note encryption logic.
