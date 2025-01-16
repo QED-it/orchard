@@ -456,6 +456,9 @@ impl ActionInfo {
 /// This is returned by [`Builder::build`].
 pub type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven, Unauthorized>, V, D>;
 
+/// Type alias for an authorized bundle that has proofs and signatures.
+pub type AuthorizedBundle<V, D> = Bundle<Authorized, V, D>;
+
 /// Metadata about a bundle created by [`bundle`] or [`Builder::build`] that is not
 /// necessarily recoverable from the bundle itself.
 ///

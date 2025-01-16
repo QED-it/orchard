@@ -124,8 +124,9 @@ pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake
 #[cfg(test)]
 mod tests {
     use crate::{
-        builder::{Builder, BundleType, UnauthorizedBundle},
-        bundle::commitments::hash_bundle_txid_data,
+        builder::{AuthorizedBundle, Builder, BundleType, UnauthorizedBundle},
+        bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
+        circuit::ProvingKey,
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
         orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
@@ -187,6 +188,47 @@ mod tests {
         assert_eq!(
             sighash.to_hex().as_str(),
             "43cfaab1ffcd8d4752e5e7479fd619c769e3ab459b6f10bbba80533608f546b0"
+        );
+    }
+
+    fn generate_auth_bundle<FL: OrchardFlavor>(
+        bundle_type: BundleType,
+    ) -> AuthorizedBundle<i64, FL> {
+        let rng1 = StdRng::seed_from_u64(6);
+        let rng2 = StdRng::seed_from_u64(7);
+        let pk = ProvingKey::build::<FL>();
+        generate_bundle(bundle_type)
+            .create_proof(&pk, rng1)
+            .unwrap()
+            .prepare(rng2, [0u8; 32])
+            .finalize()
+            .unwrap()
+    }
+
+    /// Verify that the authorizing data commitment for an Orchard Vanilla bundle matches a fixed
+    /// reference value to ensure consistency.
+    #[test]
+    fn test_hash_bundle_auth_data_for_orchard_vanilla() {
+        let bundle = generate_auth_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
+        let orchard_auth_digest = hash_bundle_auth_data(&bundle);
+        assert_eq!(
+            orchard_auth_digest.to_hex().as_str(),
+            // Bundle hash for Orchard (vanilla) generated using
+            // Zcash/Orchard commit: 23a167e3972632586dc628ddbdd69d156dfd607b
+            "f2e86b437ea754e31bc4d8396bf5825bfe1254d195645e754b9492eeaebd3353"
+        );
+    }
+
+    /// Verify that the authorizing data commitment for an OrchardZSA bundle matches a fixed
+    /// reference value to ensure consistency.
+    #[test]
+    fn test_hash_bundle_auth_data_for_orchard_zsa() {
+        let bundle = generate_auth_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA);
+        let orchard_auth_digest = hash_bundle_auth_data(&bundle);
+        println!("{}", orchard_auth_digest.to_hex().as_str());
+        assert_eq!(
+            orchard_auth_digest.to_hex().as_str(),
+            "62edd0aa19002dc00ef5bed516a46bfbc645d84c8cc967797eb5a6527dd47dc6"
         );
     }
 }
