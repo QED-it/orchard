@@ -124,8 +124,11 @@ pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake
 #[cfg(test)]
 mod tests {
     use crate::{
-        builder::{AuthorizedBundle, Builder, BundleType, UnauthorizedBundle},
-        bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
+        builder::{Builder, BundleType, UnauthorizedBundle},
+        bundle::{
+            commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
+            Authorized, Bundle,
+        },
         circuit::ProvingKey,
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
@@ -193,7 +196,7 @@ mod tests {
 
     fn generate_auth_bundle<FL: OrchardFlavor>(
         bundle_type: BundleType,
-    ) -> AuthorizedBundle<i64, FL> {
+    ) -> Bundle<Authorized, i64, FL> {
         let mut rng = StdRng::seed_from_u64(6);
         let pk = ProvingKey::build::<FL>();
         let bundle = generate_bundle(bundle_type)
