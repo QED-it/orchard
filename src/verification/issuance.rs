@@ -1,6 +1,5 @@
 //! Issuance verification functions
 
-// FIXME: move all verification tests here
 use std::collections::HashMap;
 
 use crate::{
@@ -15,49 +14,46 @@ use crate::{
     supply_info::AssetSupply,
 };
 
-// FIXME: update the doc comment
 /// Validation for Orchard IssueBundles
 ///
-/// A set of previously finalized asset types must be provided in `finalized` argument.
-///
 /// The following checks are performed:
-/// * For the `IssueBundle`:
-///     * the Signature on top of the provided `sighash` verifies correctly.
-/// * For each `IssueAction`:
-///     * Asset description size is correct.
-///     * `AssetBase` for the `IssueAction` has not been previously finalized.
-/// * For each `Note` inside an `IssueAction`:
-///     * All notes have the same, correct `AssetBase`.
+/// - **IssueBundle Verification**:
+///     - The signature on the provided `sighash` is verified correctly.
+/// - **IssueAction Verification**:
+///     - The asset description size is correct.
+///     - The `verify_supply` method checks pass,
+///     - The new amount does not overflow the previous total supply value.
+///     - The `AssetBase` for the `IssueAction` has not been previously finalized.
+///
+/// # Arguments
+///
+/// - `bundle` - A reference to the `IssueBundle` to be validated.
+/// - `sighash` - A 32-byte array representing the sighash used to verify the bundle's signature.
+/// - `get_asset_state` - A closure that takes a reference to an `AssetBase` and returns an
+///   `Option<AssetSupply>`, representing the current state of the asset in the global store of
+///   previously issued assets.
 ///
 /// # Returns
 ///
-/// A Result containing a SupplyInfo struct, which stores supply information in a HashMap.
-/// The HashMap `assets` uses AssetBase as the key, and an AssetSupply struct as the
-/// value. The AssetSupply contains a NoteValue (representing the total value of all notes for
-/// the asset), a bool indicating whether the asset is finalized and a Note (the reference note
-/// for this asset).
+/// A `Result` with a `HashMap` on success, which contains new values for updated or newly added
+/// items in the global state. Each key is an `AssetBase`, and the corresponding value is a new
+/// (updated) `AssetSupply`.
 ///
 /// # Errors
 ///
-/// * `IssueBundleInvalidSignature`: This error occurs if the signature verification
-///    for the provided `sighash` fails.
-/// * `WrongAssetDescSize`: This error is raised if the asset description size for any
-///    asset in the bundle is incorrect.
-/// * `IssueActionPreviouslyFinalizedAssetBase`:  This error occurs if the asset has already been
-///    finalized (inserted into the `finalized` collection).
-/// * `ValueOverflow`: This error occurs if an overflow happens during the calculation of
-///     the value sum for the notes in the asset.
-/// * `IssueBundleIkMismatchAssetBase`: This error is raised if the `AssetBase` derived from
-///    the `ik` (Issuance Validating Key) and the `asset_desc` (Asset Description) does not match
-///    the expected `AssetBase`.
-
+/// - `IssueBundleInvalidSignature`: Occurs if the signature verification for the provided `sighash`
+///    fails.
+/// - `WrongAssetDescSize`: Raised if the asset description size for any asset in the bundle is
+///    incorrect.
+/// - `ValueOverflow`: Occurs if an overflow happens during the calculation of the total value for
+///    the notes.
+/// - `IssueActionPreviouslyFinalizedAssetBase`: Occurs if the asset has already been finalized.
+/// - **Other Errors**: Any additional errors returned by the `verify_supply` method of `IssueAction`
+///   will also be propagated.
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
     // FIXME: consider using AssetStateStore trait with get_asset method instead
-    // FIXME: consider not using AssetStateUpdates (it's used for atomict batch updates), but
-    // delegate this functionality to Zebra and simply add add_asset method to AssetStateStore
-    // and use it instead
     get_asset_state: impl Fn(&AssetBase) -> Option<AssetSupply>,
 ) -> Result<HashMap<AssetBase, AssetSupply>, Error> {
     bundle
