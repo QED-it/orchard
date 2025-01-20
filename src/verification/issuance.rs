@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use crate::{
     issuance::{
+        AssetSupply,
         Error::{
             self, IssueActionPreviouslyFinalizedAssetBase, IssueBundleInvalidSignature,
             ValueOverflow, WrongAssetDescSize,
@@ -11,7 +12,6 @@ use crate::{
         IssueBundle, Signed,
     },
     note::{asset_base::is_asset_desc_of_valid_size, AssetBase},
-    supply_info::AssetSupply,
 };
 
 /// Validation for Orchard IssueBundles
@@ -182,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn issue_bundle_verify_with_supply_info() {
+    fn issue_bundle_verify_with_issued_assets() {
         let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let asset1_desc = b"Verify with supply info 1".to_vec();

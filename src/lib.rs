@@ -29,7 +29,6 @@ pub mod note;
 pub mod orchard_flavor;
 pub mod primitives;
 mod spec;
-pub mod supply_info;
 pub mod tree;
 pub mod value;
 pub mod verification;
