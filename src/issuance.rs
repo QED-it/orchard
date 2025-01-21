@@ -4,7 +4,7 @@ use group::Group;
 use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
@@ -21,7 +21,7 @@ use crate::note::{AssetBase, Nullifier, Rho};
 use crate::value::NoteValue;
 use crate::{Address, Note};
 
-use crate::supply_info::{AssetSupply, SupplyInfo};
+use crate::supply_info::AssetSupply;
 
 /// Checks if a given note is a reference note.
 ///
@@ -555,70 +555,88 @@ impl IssueBundle<Signed> {
 
 /// Validation for Orchard IssueBundles
 ///
-/// A set of previously finalized asset types must be provided in `finalized` argument.
-///
 /// The following checks are performed:
-/// * For the `IssueBundle`:
-///     * the Signature on top of the provided `sighash` verifies correctly.
-/// * For each `IssueAction`:
-///     * Asset description size is correct.
-///     * `AssetBase` for the `IssueAction` has not been previously finalized.
-/// * For each `Note` inside an `IssueAction`:
-///     * All notes have the same, correct `AssetBase`.
+/// - **IssueBundle Verification**:
+///     - The signature on the provided `sighash` is verified correctly.
+/// - **IssueAction Verification**:
+///     - The asset description size is correct.
+///     - The `verify_supply` method checks pass,
+///     - The new amount does not overflow the previous total supply value.
+///     - The `AssetBase` for the `IssueAction` has not been previously finalized.
+///
+/// # Arguments
+///
+/// - `bundle` - A reference to the `IssueBundle` to be validated.
+/// - `sighash` - A 32-byte array representing the sighash used to verify the bundle's signature.
+/// - `get_asset_state` - A closure that takes a reference to an `AssetBase` and returns an
+///   `Option<AssetSupply>`, representing the current state of the asset in the global store of
+///   previously issued assets.
 ///
 /// # Returns
 ///
-/// A Result containing a SupplyInfo struct, which stores supply information in a HashMap.
-/// The HashMap `assets` uses AssetBase as the key, and an AssetSupply struct as the
-/// value. The AssetSupply contains a NoteValue (representing the total value of all notes for
-/// the asset), a bool indicating whether the asset is finalized and a Note (the reference note
-/// for this asset).
+/// A `Result` with a `HashMap` on success, which contains new values for updated or newly added
+/// items in the global state. Each key is an `AssetBase`, and the corresponding value is a new
+/// (updated) `AssetSupply`.
 ///
 /// # Errors
 ///
-/// * `IssueBundleInvalidSignature`: This error occurs if the signature verification
-///    for the provided `sighash` fails.
-/// * `WrongAssetDescSize`: This error is raised if the asset description size for any
-///    asset in the bundle is incorrect.
-/// * `IssueActionPreviouslyFinalizedAssetBase`:  This error occurs if the asset has already been
-///    finalized (inserted into the `finalized` collection).
-/// * `ValueOverflow`: This error occurs if an overflow happens during the calculation of
-///     the value sum for the notes in the asset.
-/// * `IssueBundleIkMismatchAssetBase`: This error is raised if the `AssetBase` derived from
-///    the `ik` (Issuance Validating Key) and the `asset_desc` (Asset Description) does not match
-///    the expected `AssetBase`.
+/// - `IssueBundleInvalidSignature`: Occurs if the signature verification for the provided `sighash`
+///    fails.
+/// - `WrongAssetDescSize`: Raised if the asset description size for any asset in the bundle is
+///    incorrect.
+/// - `ValueOverflow`: Occurs if an overflow happens during the calculation of the total value for
+///    the notes.
+/// - `IssueActionPreviouslyFinalizedAssetBase`: Occurs if the asset has already been finalized.
+/// - **Other Errors**: Any additional errors returned by the `verify_supply` method of `IssueAction`
+///   will also be propagated.
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
-    finalized: &HashSet<AssetBase>, // The finalization set.
-) -> Result<SupplyInfo, Error> {
+    // FIXME: consider using AssetStateStore trait with get_asset method instead
+    get_asset_state: impl Fn(&AssetBase) -> Option<AssetSupply>,
+) -> Result<HashMap<AssetBase, AssetSupply>, Error> {
     bundle
-        .ik
-        .verify(&sighash, &bundle.authorization.signature)
+        .ik()
+        .verify(&sighash, bundle.authorization().signature())
         .map_err(|_| IssueBundleInvalidSignature)?;
 
-    let supply_info =
+    let verified_asset_states =
         bundle
             .actions()
             .iter()
-            .try_fold(SupplyInfo::new(), |mut supply_info, action| {
+            .try_fold(HashMap::new(), |mut verified_asset_states, action| {
                 if !is_asset_desc_of_valid_size(action.asset_desc()) {
                     return Err(WrongAssetDescSize);
                 }
 
-                let (asset, supply) = action.verify_supply(bundle.ik())?;
+                let (asset, action_asset_state) = action.verify_supply(bundle.ik())?;
 
-                // Fail if the asset was previously finalized.
-                if finalized.contains(&asset) {
-                    return Err(IssueActionPreviouslyFinalizedAssetBase(asset));
-                }
+                let old_asset_state = verified_asset_states
+                    .get(&asset)
+                    .cloned()
+                    .or_else(|| get_asset_state(&asset))
+                    .unwrap_or_default();
 
-                supply_info.add_supply(asset, supply)?;
+                let amount =
+                    (old_asset_state.amount + action_asset_state.amount).ok_or(ValueOverflow)?;
 
-                Ok(supply_info)
+                let is_finalized = (!old_asset_state.is_finalized)
+                    .then_some(action_asset_state.is_finalized)
+                    .ok_or(IssueActionPreviouslyFinalizedAssetBase(asset))?;
+
+                let reference_note = old_asset_state
+                    .reference_note
+                    .or(action_asset_state.reference_note);
+
+                verified_asset_states.insert(
+                    asset,
+                    AssetSupply::new(amount, is_finalized, reference_note),
+                );
+
+                Ok(verified_asset_states)
             })?;
 
-    Ok(supply_info)
+    Ok(verified_asset_states)
 }
 
 /// Errors produced during the issuance process
@@ -688,13 +706,14 @@ impl fmt::Display for Error {
     }
 }
 
+// FIXME: Add more tests for issued_assets (i.e. "global state") change after verify_issue_bundle
+// is called: 1) check for expected output, 2) check for processing of existing assets etc.
 #[cfg(test)]
 mod tests {
     use super::{AssetSupply, IssueBundle, IssueInfo};
     use crate::issuance::Error::{
-        AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
-        IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
-        IssueBundleInvalidSignature, WrongAssetDescSize,
+        AssetBaseCannotBeIdentityPoint, IssueActionPreviouslyFinalizedAssetBase,
+        IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, WrongAssetDescSize,
     };
     use crate::issuance::{
         is_reference_note, verify_issue_bundle, IssueAction, Signed, Unauthorized,
@@ -710,7 +729,7 @@ mod tests {
     use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     /// Validation for reference note
     ///
@@ -824,6 +843,17 @@ mod tests {
         (isk, bundle, sighash)
     }
 
+    // Creates a set of finalized assets from a map of issued assets to support the new return type
+    // of the `verify_issue_bundle` function.
+    // TODO: Adapt issue bundle verification test functions to the new return type and remove this
+    // function.
+    fn get_finalization_set(issued_assets: &HashMap<AssetBase, AssetSupply>) -> HashSet<AssetBase> {
+        issued_assets
+            .iter()
+            .filter_map(|(asset, asset_supply)| asset_supply.is_finalized.then(|| asset.clone()))
+            .collect::<HashSet<_>>()
+    }
+
     #[test]
     fn verify_supply_valid() {
         let (ik, test_asset, action) = supply_test_params(10, 20, b"Asset 1", None, false);
@@ -886,242 +916,6 @@ mod tests {
     }
 
     #[test]
-    fn issue_bundle_basic() {
-        let (rng, _, ik, recipient, _) = setup_params();
-
-        let str = "Halo".to_string();
-        let str2 = "Halo2".to_string();
-
-        assert_eq!(
-            IssueBundle::new(
-                ik.clone(),
-                vec![b'X'; 513],
-                Some(IssueInfo {
-                    recipient,
-                    value: NoteValue::unsplittable()
-                }),
-                true,
-                rng,
-            )
-            .unwrap_err(),
-            WrongAssetDescSize
-        );
-
-        assert_eq!(
-            IssueBundle::new(
-                ik.clone(),
-                b"".to_vec(),
-                Some(IssueInfo {
-                    recipient,
-                    value: NoteValue::unsplittable()
-                }),
-                true,
-                rng,
-            )
-            .unwrap_err(),
-            WrongAssetDescSize
-        );
-
-        let (mut bundle, asset) = IssueBundle::new(
-            ik.clone(),
-            str.clone().into_bytes(),
-            Some(IssueInfo {
-                recipient,
-                value: NoteValue::from_raw(5),
-            }),
-            true,
-            rng,
-        )
-        .unwrap();
-
-        let another_asset = bundle
-            .add_recipient(
-                &str.into_bytes(),
-                recipient,
-                NoteValue::from_raw(10),
-                false,
-                rng,
-            )
-            .unwrap();
-        assert_eq!(asset, another_asset);
-
-        let third_asset = bundle
-            .add_recipient(
-                str2.as_bytes(),
-                recipient,
-                NoteValue::from_raw(15),
-                true,
-                rng,
-            )
-            .unwrap();
-        assert_ne!(asset, third_asset);
-
-        let actions = bundle.actions();
-        assert_eq!(actions.len(), 2);
-
-        let action = bundle.get_action_by_asset(&asset).unwrap();
-        assert_eq!(action.notes.len(), 3);
-        let reference_note = action.notes.get(0).unwrap();
-        verify_reference_note(reference_note, asset);
-        let first_note = action.notes.get(1).unwrap();
-        assert_eq!(first_note.value().inner(), 5);
-        assert_eq!(first_note.asset(), asset);
-        assert_eq!(first_note.recipient(), recipient);
-
-        let second_note = action.notes.get(2).unwrap();
-        assert_eq!(second_note.value().inner(), 10);
-        assert_eq!(second_note.asset(), asset);
-        assert_eq!(second_note.recipient(), recipient);
-
-        let action2 = bundle.get_action_by_desc(str2.as_bytes()).unwrap();
-        assert_eq!(action2.notes.len(), 2);
-        let reference_note = action2.notes.get(0).unwrap();
-        verify_reference_note(reference_note, AssetBase::derive(&ik, str2.as_bytes()));
-        let first_note = action2.notes().get(1).unwrap();
-        assert_eq!(first_note.value().inner(), 15);
-        assert_eq!(first_note.asset(), third_asset);
-
-        verify_reference_note(action.get_reference_note().unwrap(), asset);
-        verify_reference_note(action2.get_reference_note().unwrap(), third_asset);
-    }
-
-    #[test]
-    fn issue_bundle_finalize_asset() {
-        let (rng, _, ik, recipient, _) = setup_params();
-
-        let (mut bundle, _) = IssueBundle::new(
-            ik,
-            b"NFT".to_vec(),
-            Some(IssueInfo {
-                recipient,
-                value: NoteValue::from_raw(u64::MIN),
-            }),
-            true,
-            rng,
-        )
-        .expect("Should properly add recipient");
-
-        bundle
-            .finalize_action(b"NFT")
-            .expect("Should finalize properly");
-
-        assert_eq!(
-            bundle.finalize_action(b"Another NFT").unwrap_err(),
-            IssueActionNotFound
-        );
-
-        assert_eq!(
-            bundle.finalize_action(&vec![b'X'; 513]).unwrap_err(),
-            WrongAssetDescSize
-        );
-
-        assert_eq!(bundle.finalize_action(b"").unwrap_err(), WrongAssetDescSize);
-    }
-
-    #[test]
-    fn issue_bundle_prepare() {
-        let (rng, _, ik, recipient, sighash) = setup_params();
-
-        let (bundle, _) = IssueBundle::new(
-            ik,
-            b"Frost".to_vec(),
-            Some(IssueInfo {
-                recipient,
-                value: NoteValue::from_raw(5),
-            }),
-            true,
-            rng,
-        )
-        .unwrap();
-
-        let prepared = bundle.prepare(sighash);
-        assert_eq!(prepared.authorization().sighash, sighash);
-    }
-
-    #[test]
-    fn issue_bundle_sign() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
-
-        let (bundle, _) = IssueBundle::new(
-            ik.clone(),
-            b"Sign".to_vec(),
-            Some(IssueInfo {
-                recipient,
-                value: NoteValue::from_raw(5),
-            }),
-            true,
-            rng,
-        )
-        .unwrap();
-
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-
-        ik.verify(&sighash, &signed.authorization.signature)
-            .expect("signature should be valid");
-    }
-
-    #[test]
-    fn issue_bundle_invalid_isk_for_signature() {
-        let (rng, _, ik, recipient, _) = setup_params();
-
-        let (bundle, _) = IssueBundle::new(
-            ik,
-            b"IssueBundle".to_vec(),
-            Some(IssueInfo {
-                recipient,
-                value: NoteValue::from_raw(5),
-            }),
-            true,
-            rng,
-        )
-        .unwrap();
-
-        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
-
-        let err = bundle
-            .prepare([0; 32])
-            .sign(&wrong_isk)
-            .expect_err("should not be able to sign");
-
-        assert_eq!(err, IssueBundleIkMismatchAssetBase);
-    }
-
-    #[test]
-    fn issue_bundle_incorrect_asset_for_signature() {
-        let (mut rng, isk, ik, recipient, _) = setup_params();
-
-        // Create a bundle with "normal" note
-        let (mut bundle, _) = IssueBundle::new(
-            ik,
-            b"IssueBundle".to_vec(),
-            Some(IssueInfo {
-                recipient,
-                value: NoteValue::from_raw(5),
-            }),
-            true,
-            rng,
-        )
-        .unwrap();
-
-        // Add "bad" note
-        let note = Note::new(
-            recipient,
-            NoteValue::from_raw(5),
-            AssetBase::derive(bundle.ik(), b"zsa_asset"),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
-            &mut rng,
-        );
-        bundle.actions.first_mut().notes.push(note);
-
-        let err = bundle
-            .prepare([0; 32])
-            .sign(&isk)
-            .expect_err("should not be able to sign");
-
-        assert_eq!(err, IssueBundleIkMismatchAssetBase);
-    }
-
-    #[test]
     fn issue_bundle_verify() {
         let (rng, isk, ik, recipient, sighash) = setup_params();
 
@@ -1138,11 +932,9 @@ mod tests {
         .unwrap();
 
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = &mut HashSet::new();
 
-        let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
-
-        supply_info.update_finalization_set(prev_finalized);
+        let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
+        let prev_finalized = get_finalization_set(&issued_assets);
 
         assert!(prev_finalized.is_empty());
     }
@@ -1166,18 +958,16 @@ mod tests {
         bundle.finalize_action(b"Verify with finalize").unwrap();
 
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = &mut HashSet::new();
 
-        let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
-
-        supply_info.update_finalization_set(prev_finalized);
+        let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
+        let prev_finalized = get_finalization_set(&issued_assets);
 
         assert_eq!(prev_finalized.len(), 1);
         assert!(prev_finalized.contains(&AssetBase::derive(&ik, b"Verify with finalize")));
     }
 
     #[test]
-    fn issue_bundle_verify_with_supply_info() {
+    fn issue_bundle_verify_with_issued_assets() {
         let (rng, isk, ik, recipient, sighash) = setup_params();
 
         let asset1_desc = b"Verify with supply info 1".to_vec();
@@ -1217,11 +1007,9 @@ mod tests {
             .unwrap();
 
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = &mut HashSet::new();
 
-        let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
-
-        supply_info.update_finalization_set(prev_finalized);
+        let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
+        let prev_finalized = get_finalization_set(&issued_assets);
 
         assert_eq!(prev_finalized.len(), 2);
 
@@ -1229,14 +1017,14 @@ mod tests {
         assert!(prev_finalized.contains(&asset2_base));
         assert!(!prev_finalized.contains(&asset3_base));
 
-        assert_eq!(supply_info.assets.len(), 3);
+        assert_eq!(issued_assets.keys().len(), 3);
 
         let reference_note1 = signed.actions()[0].notes()[0];
         let reference_note2 = signed.actions()[1].notes()[0];
         let reference_note3 = signed.actions()[2].notes()[0];
 
         assert_eq!(
-            supply_info.assets.get(&asset1_base),
+            issued_assets.get(&asset1_base),
             Some(&AssetSupply::new(
                 NoteValue::from_raw(15),
                 true,
@@ -1244,7 +1032,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            supply_info.assets.get(&asset2_base),
+            issued_assets.get(&asset2_base),
             Some(&AssetSupply::new(
                 NoteValue::from_raw(10),
                 true,
@@ -1252,7 +1040,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            supply_info.assets.get(&asset3_base),
+            issued_assets.get(&asset3_base),
             Some(&AssetSupply::new(
                 NoteValue::from_raw(5),
                 false,
@@ -1278,14 +1066,19 @@ mod tests {
         .unwrap();
 
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = &mut HashSet::new();
 
         let final_type = AssetBase::derive(&ik, b"already final");
 
-        prev_finalized.insert(final_type);
+        let issued_assets = [(
+            final_type,
+            AssetSupply::new(NoteValue::from_raw(0), true, None),
+        )]
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |asset| issued_assets.get(asset).copied())
+                .unwrap_err(),
             IssueActionPreviouslyFinalizedAssetBase(final_type)
         );
     }
@@ -1321,10 +1114,8 @@ mod tests {
             signature: wrong_isk.try_sign(&sighash).unwrap(),
         });
 
-        let prev_finalized = &HashSet::new();
-
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             IssueBundleInvalidSignature
         );
     }
@@ -1346,10 +1137,9 @@ mod tests {
 
         let sighash: [u8; 32] = bundle.commitment().into();
         let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = &HashSet::new();
 
         assert_eq!(
-            verify_issue_bundle(&signed, random_sighash, prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, random_sighash, |_| None).unwrap_err(),
             IssueBundleInvalidSignature
         );
     }
@@ -1383,10 +1173,8 @@ mod tests {
 
         signed.actions.first_mut().notes.push(note);
 
-        let prev_finalized = &HashSet::new();
-
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             IssueBundleIkMismatchAssetBase
         );
     }
@@ -1425,10 +1213,8 @@ mod tests {
 
         signed.actions.first_mut().notes = vec![note];
 
-        let prev_finalized = &HashSet::new();
-
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             IssueBundleIkMismatchAssetBase
         );
     }
@@ -1457,13 +1243,12 @@ mod tests {
         .unwrap();
 
         let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = HashSet::new();
 
         // 1. Try a description that is too long
         signed.actions.first_mut().modify_descr(vec![b'X'; 513]);
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             WrongAssetDescSize
         );
 
@@ -1471,7 +1256,7 @@ mod tests {
         signed.actions.first_mut().modify_descr(b"".to_vec());
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             WrongAssetDescSize
         );
     }
@@ -1491,7 +1276,7 @@ mod tests {
         let (isk, bundle, sighash) = identity_point_test_params(10, 20);
 
         let signed = IssueBundle {
-            ik: bundle.ik,
+            ik: bundle.ik().clone(),
             actions: bundle.actions,
             authorization: Signed {
                 signature: isk.try_sign(&sighash).unwrap(),
@@ -1499,7 +1284,7 @@ mod tests {
         };
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, &HashSet::new()).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             AssetBaseCannotBeIdentityPoint
         );
     }

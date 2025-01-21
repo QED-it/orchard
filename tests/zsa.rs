@@ -19,7 +19,6 @@ use orchard::{
     Address, Anchor, Bundle, Note,
 };
 use rand::rngs::OsRng;
-use std::collections::HashSet;
 use zcash_note_encryption_zsa::try_note_decryption;
 
 #[derive(Debug)]
@@ -177,12 +176,7 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note, Note) {
         AssetBase::derive(&keys.ik().clone(), asset_descr),
     );
 
-    assert!(verify_issue_bundle(
-        &issue_bundle,
-        issue_bundle.commitment().into(),
-        &HashSet::new(),
-    )
-    .is_ok());
+    assert!(verify_issue_bundle(&issue_bundle, issue_bundle.commitment().into(), |_| None).is_ok());
 
     (*reference_note, *note1, *note2)
 }
