@@ -4,7 +4,7 @@ use crate::builder::verify_bundle;
 use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
 use orchard::bundle::Authorized;
-use orchard::issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized};
+use orchard::issuance::{verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo, Signed};
 use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use orchard::note::{AssetBase, ExtractedNoteCommitment, Nullifier};
 
@@ -74,9 +74,9 @@ fn prepare_keys() -> Keychain {
 }
 
 fn sign_issue_bundle(
-    unauthorized: IssueBundle<Unauthorized>,
+    unauthorized: IssueBundle<AwaitingNullifier>,
     isk: &IssuanceAuthorizingKey,
-    first_nullifier: Nullifier,
+    first_nullifier: &Nullifier,
 ) -> IssueBundle<Signed> {
     let partially_prepared = unauthorized.update_rho(first_nullifier);
     let sighash = partially_prepared.commitment().into();
@@ -141,7 +141,7 @@ pub fn build_merkle_path_with_two_leaves(
 fn issue_zsa_notes(
     asset_descr: &[u8],
     keys: &Keychain,
-    first_nullifier: Nullifier,
+    first_nullifier: &Nullifier,
 ) -> (Note, Note, Note) {
     let mut rng = OsRng;
     // Create a issuance bundle
@@ -325,7 +325,7 @@ fn zsa_issue_and_transfer() {
 
     // Prepare ZSA
     let (reference_note, zsa_note_1, zsa_note_2) =
-        issue_zsa_notes(&asset_descr, &keys, native_note.nullifier(keys.fvk()));
+        issue_zsa_notes(&asset_descr, &keys, &native_note.nullifier(keys.fvk()));
     verify_reference_note(&reference_note, zsa_note_1.asset());
 
     let (merkle_path1, merkle_path2, anchor) =
@@ -479,7 +479,7 @@ fn zsa_issue_and_transfer() {
 
     // 7. Spend ZSA notes of different asset types
     let (reference_note, zsa_note_t7, _) =
-        issue_zsa_notes(b"zsa_asset2", &keys, native_note.nullifier(keys.fvk()));
+        issue_zsa_notes(b"zsa_asset2", &keys, &native_note.nullifier(keys.fvk()));
     verify_reference_note(&reference_note, zsa_note_t7.asset());
     let (merkle_path_t7_1, merkle_path_t7_2, anchor_t7) =
         build_merkle_path_with_two_leaves(&zsa_note_t7, &zsa_note_2);

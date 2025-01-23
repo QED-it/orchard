@@ -190,16 +190,15 @@ impl IssueAction {
 /// Defines the authorization type of an Issue bundle.
 pub trait IssueAuth: fmt::Debug + Clone {}
 
-/// Marker for an unauthorized bundle with no proofs or signatures.
+/// Marker for an unsigned bundle with no nullifier and no sighash injected.
 #[derive(Debug, Clone)]
-pub struct Unauthorized;
+pub struct AwaitingNullifier;
 
-/// Marker for an unauthorized bundle with correct rho values for each issue note and with no
-/// proofs or signatures.
+/// Marker for an unsigned bundle with a Nullifier injected.
 #[derive(Debug, Clone)]
-pub struct PartiallyPrepared;
+pub struct AwaitingSighash;
 
-/// Marker for an unauthorized bundle with injected sighash.
+/// Marker for an unsigned bundle with both Sighash and Nullifier injected.
 #[derive(Debug, Clone)]
 pub struct Prepared {
     sighash: [u8; 32],
@@ -225,8 +224,8 @@ impl Signed {
     }
 }
 
-impl IssueAuth for Unauthorized {}
-impl IssueAuth for PartiallyPrepared {}
+impl IssueAuth for AwaitingNullifier {}
+impl IssueAuth for AwaitingSighash {}
 impl IssueAuth for Prepared {}
 impl IssueAuth for Signed {}
 
@@ -328,7 +327,7 @@ impl<T: IssueAuth> IssueBundle<T> {
     }
 }
 
-impl IssueBundle<Unauthorized> {
+impl IssueBundle<AwaitingNullifier> {
     /// Constructs a new `IssueBundle`.
     ///
     /// If issue_info is None, the new `IssueBundle` will contain one `IssueAction` without notes
@@ -351,7 +350,7 @@ impl IssueBundle<Unauthorized> {
         issue_info: Option<IssueInfo>,
         first_issuance: bool,
         mut rng: impl RngCore,
-    ) -> Result<(IssueBundle<Unauthorized>, AssetBase), Error> {
+    ) -> Result<(IssueBundle<AwaitingNullifier>, AssetBase), Error> {
         if !is_asset_desc_of_valid_size(&asset_desc) {
             return Err(WrongAssetDescSize);
         }
@@ -392,7 +391,7 @@ impl IssueBundle<Unauthorized> {
             IssueBundle {
                 ik,
                 actions: NonEmpty::new(action),
-                authorization: Unauthorized,
+                authorization: AwaitingNullifier,
             },
             asset,
         ))
@@ -488,7 +487,7 @@ impl IssueBundle<Unauthorized> {
     /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227].
     ///
     /// [zip227]: https://zips.z.cash/zip-0227
-    pub fn update_rho(self, first_nullifier: Nullifier) -> IssueBundle<PartiallyPrepared> {
+    pub fn update_rho(self, first_nullifier: &Nullifier) -> IssueBundle<AwaitingSighash> {
         let mut bundle = self;
         bundle
             .actions
@@ -507,11 +506,11 @@ impl IssueBundle<Unauthorized> {
                         );
                     });
             });
-        bundle.map_authorization(|_| PartiallyPrepared)
+        bundle.map_authorization(|_| AwaitingSighash)
     }
 }
 
-impl IssueBundle<PartiallyPrepared> {
+impl IssueBundle<AwaitingSighash> {
     /// Loads the sighash into the bundle, as preparation for signing.
     pub fn prepare(self, sighash: [u8; 32]) -> IssueBundle<Prepared> {
         IssueBundle {
@@ -739,7 +738,9 @@ mod tests {
             IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
             IssueBundleInvalidSignature, WrongAssetDescSize,
         },
-        issuance::{is_reference_note, verify_issue_bundle, IssueAction, Signed, Unauthorized},
+        issuance::{
+            is_reference_note, verify_issue_bundle, AwaitingNullifier, IssueAction, Signed,
+        },
         keys::{
             FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope,
             SpendAuthorizingKey, SpendingKey,
@@ -848,7 +849,7 @@ mod tests {
         note2_value: u64,
     ) -> (
         IssuanceAuthorizingKey,
-        IssueBundle<Unauthorized>,
+        IssueBundle<AwaitingNullifier>,
         [u8; 32],
         Nullifier,
     ) {
@@ -873,7 +874,7 @@ mod tests {
         let action =
             IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], false);
 
-        let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), Unauthorized);
+        let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), AwaitingNullifier);
 
         (isk, bundle, sighash, first_nullifier)
     }
@@ -1014,7 +1015,7 @@ mod tests {
             bundle.actions().get(0).unwrap().notes.get(0).unwrap().rho(),
             Rho::zero()
         );
-        let bundle = bundle.update_rho(first_nullifier);
+        let bundle = bundle.update_rho(&first_nullifier);
         assert!(bundle.actions().get(0).unwrap().notes.get(0).unwrap().rho() != Rho::zero());
 
         let actions = bundle.actions();
@@ -1095,7 +1096,7 @@ mod tests {
         )
         .unwrap();
 
-        let prepared = bundle.update_rho(first_nullifier).prepare(sighash);
+        let prepared = bundle.update_rho(&first_nullifier).prepare(sighash);
         assert_eq!(prepared.authorization().sighash, sighash);
     }
 
@@ -1116,7 +1117,7 @@ mod tests {
         .unwrap();
 
         let signed = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare(sighash)
             .sign(&isk)
             .unwrap();
@@ -1144,7 +1145,7 @@ mod tests {
         let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
 
         let err = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare([0; 32])
             .sign(&wrong_isk)
             .expect_err("should not be able to sign");
@@ -1180,7 +1181,7 @@ mod tests {
         bundle.actions.first_mut().notes.push(note);
 
         let err = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare([0; 32])
             .sign(&isk)
             .expect_err("should not be able to sign");
@@ -1205,7 +1206,7 @@ mod tests {
         .unwrap();
 
         let signed = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare(sighash)
             .sign(&isk)
             .unwrap();
@@ -1237,7 +1238,7 @@ mod tests {
         bundle.finalize_action(b"Verify with finalize").unwrap();
 
         let signed = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare(sighash)
             .sign(&isk)
             .unwrap();
@@ -1292,7 +1293,7 @@ mod tests {
             .unwrap();
 
         let signed = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare(sighash)
             .sign(&isk)
             .unwrap();
@@ -1357,7 +1358,7 @@ mod tests {
         .unwrap();
 
         let signed = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare(sighash)
             .sign(&isk)
             .unwrap();
@@ -1399,7 +1400,7 @@ mod tests {
         let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
 
         let mut signed = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare(sighash)
             .sign(&isk)
             .unwrap();
@@ -1433,7 +1434,7 @@ mod tests {
 
         let sighash: [u8; 32] = bundle.commitment().into();
         let signed = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare(sighash)
             .sign(&isk)
             .unwrap();
@@ -1462,7 +1463,7 @@ mod tests {
         .unwrap();
 
         let mut signed = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare(sighash)
             .sign(&isk)
             .unwrap();
@@ -1505,7 +1506,7 @@ mod tests {
         .unwrap();
 
         let mut signed = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare(sighash)
             .sign(&isk)
             .unwrap();
@@ -1556,7 +1557,7 @@ mod tests {
         .unwrap();
 
         let mut signed = bundle
-            .update_rho(first_nullifier)
+            .update_rho(&first_nullifier)
             .prepare(sighash)
             .sign(&isk)
             .unwrap();
@@ -1585,7 +1586,7 @@ mod tests {
 
         assert_eq!(
             bundle
-                .update_rho(first_nullifier)
+                .update_rho(&first_nullifier)
                 .prepare(sighash)
                 .sign(&isk)
                 .unwrap_err(),
@@ -1772,8 +1773,7 @@ mod tests {
                 .for_each(|note| assert_eq!(note.rho(), Rho::zero()))
         });
 
-        let partially_prepared_bundle =
-            bundle.update_rho(*authorized.actions().first().nullifier());
+        let partially_prepared_bundle = bundle.update_rho(authorized.actions().first().nullifier());
 
         assert_eq!(partially_prepared_bundle.actions().len(), 2);
         assert_eq!(
@@ -1799,7 +1799,7 @@ mod tests {
         for (index_action, action) in partially_prepared_bundle.actions.iter().enumerate() {
             for (index_note, note) in action.notes.iter().enumerate() {
                 let expected_rho = rho_for_issuance_note(
-                    *authorized.actions().first().nullifier(),
+                    authorized.actions().first().nullifier(),
                     index_action.try_into().unwrap(),
                     index_note.try_into().unwrap(),
                 );
@@ -1813,7 +1813,7 @@ mod tests {
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
-    use crate::issuance::{IssueAction, IssueBundle, Prepared, Signed, Unauthorized};
+    use crate::issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed};
     use crate::keys::testing::arb_issuance_validating_key;
     use crate::note::asset_base::testing::zsa_asset_base;
     use crate::note::testing::arb_zsa_note;
@@ -1855,12 +1855,12 @@ pub mod testing {
         (
             actions in vec(arb_issue_action(b"asset_desc".to_vec()), n_actions),
             ik in arb_issuance_validating_key()
-        ) -> IssueBundle<Unauthorized> {
+        ) -> IssueBundle<AwaitingNullifier> {
             let actions = NonEmpty::from_vec(actions).unwrap();
             IssueBundle {
                 ik,
                 actions,
-                authorization: Unauthorized
+                authorization: AwaitingNullifier
             }
         }
     }

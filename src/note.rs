@@ -361,7 +361,7 @@ impl Note {
     /// [zip227]: https://zips.z.cash/zip-0227
     pub(crate) fn update_rho_for_issuance_note(
         &mut self,
-        nullifier: Nullifier,
+        nullifier: &Nullifier,
         index_action: u32,
         index_note: u32,
     ) {
@@ -374,7 +374,7 @@ impl Note {
 ///
 /// [zip227]: https://zips.z.cash/zip-0227
 pub(crate) fn rho_for_issuance_note(
-    nullifier: Nullifier,
+    nullifier: &Nullifier,
     index_action: u32,
     index_note: u32,
 ) -> Rho {
