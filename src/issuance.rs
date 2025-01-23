@@ -332,7 +332,7 @@ impl IssueBundle<AwaitingNullifier> {
     ///
     /// If issue_info is None, the new `IssueBundle` will contain one `IssueAction` without notes
     /// and with `finalize` set to true.
-    /// Otherwise, the new `IssueBundle` will contain one `IssueAction with one note created from
+    /// Otherwise, the new `IssueBundle` will contain one `IssueAction` with one note created from
     /// issue_info values and with `finalize` set to false. In this created note, rho will be
     /// set to zero. The rho value will be updated later by calling the `update_rho` method.
     ///
@@ -1011,17 +1011,24 @@ mod tests {
             .unwrap();
         assert_ne!(asset, third_asset);
 
-        assert_eq!(
-            bundle.actions().get(0).unwrap().notes.get(0).unwrap().rho(),
-            Rho::zero()
-        );
-        let bundle = bundle.update_rho(&first_nullifier);
-        assert!(bundle.actions().get(0).unwrap().notes.get(0).unwrap().rho() != Rho::zero());
+        bundle.actions().iter().for_each(|action| {
+            action
+                .notes()
+                .iter()
+                .for_each(|note| assert_eq!(note.rho(), Rho::zero()))
+        });
+        let awaiting_sighash_bundle = bundle.update_rho(&first_nullifier);
+        awaiting_sighash_bundle.actions().iter().for_each(|action| {
+            action
+                .notes()
+                .iter()
+                .for_each(|note| assert_ne!(note.rho(), Rho::zero()))
+        });
 
-        let actions = bundle.actions();
+        let actions = awaiting_sighash_bundle.actions();
         assert_eq!(actions.len(), 2);
 
-        let action = bundle.get_action_by_asset(&asset).unwrap();
+        let action = awaiting_sighash_bundle.get_action_by_asset(&asset).unwrap();
         assert_eq!(action.notes.len(), 3);
         let reference_note = action.notes.get(0).unwrap();
         verify_reference_note(reference_note, asset);
@@ -1035,7 +1042,9 @@ mod tests {
         assert_eq!(second_note.asset(), asset);
         assert_eq!(second_note.recipient(), recipient);
 
-        let action2 = bundle.get_action_by_desc(str2.as_bytes()).unwrap();
+        let action2 = awaiting_sighash_bundle
+            .get_action_by_desc(str2.as_bytes())
+            .unwrap();
         assert_eq!(action2.notes.len(), 2);
         let reference_note = action2.notes.get(0).unwrap();
         verify_reference_note(reference_note, AssetBase::derive(&ik, str2.as_bytes()));
@@ -1773,11 +1782,11 @@ mod tests {
                 .for_each(|note| assert_eq!(note.rho(), Rho::zero()))
         });
 
-        let partially_prepared_bundle = bundle.update_rho(authorized.actions().first().nullifier());
+        let awaiting_sighash_bundle = bundle.update_rho(authorized.actions().first().nullifier());
 
-        assert_eq!(partially_prepared_bundle.actions().len(), 2);
+        assert_eq!(awaiting_sighash_bundle.actions().len(), 2);
         assert_eq!(
-            partially_prepared_bundle
+            awaiting_sighash_bundle
                 .actions()
                 .get(0)
                 .unwrap()
@@ -1786,7 +1795,7 @@ mod tests {
             3
         );
         assert_eq!(
-            partially_prepared_bundle
+            awaiting_sighash_bundle
                 .actions()
                 .get(1)
                 .unwrap()
@@ -1796,7 +1805,7 @@ mod tests {
         );
 
         // Check the rho value for each issuance note in the issue bundle
-        for (index_action, action) in partially_prepared_bundle.actions.iter().enumerate() {
+        for (index_action, action) in awaiting_sighash_bundle.actions.iter().enumerate() {
             for (index_note, note) in action.notes.iter().enumerate() {
                 let expected_rho = rho_for_issuance_note(
                     authorized.actions().first().nullifier(),
@@ -1851,7 +1860,7 @@ pub mod testing {
 
     prop_compose! {
         /// Generate an arbitrary issue bundle with fake authorization data.
-        pub fn arb_unathorized_issue_bundle(n_actions: usize)
+        pub fn arb_awaiting_nullifier_issue_bundle(n_actions: usize)
         (
             actions in vec(arb_issue_action(b"asset_desc".to_vec()), n_actions),
             ik in arb_issuance_validating_key()

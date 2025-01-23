@@ -74,14 +74,14 @@ fn prepare_keys() -> Keychain {
 }
 
 fn sign_issue_bundle(
-    unauthorized: IssueBundle<AwaitingNullifier>,
+    awaiting_nullifier_bundle: IssueBundle<AwaitingNullifier>,
     isk: &IssuanceAuthorizingKey,
     first_nullifier: &Nullifier,
 ) -> IssueBundle<Signed> {
-    let partially_prepared = unauthorized.update_rho(first_nullifier);
-    let sighash = partially_prepared.commitment().into();
-    let proven = partially_prepared.prepare(sighash);
-    proven.sign(isk).unwrap()
+    let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier);
+    let sighash = awaiting_sighash_bundle.commitment().into();
+    let prepared_bundle = awaiting_sighash_bundle.prepare(sighash);
+    prepared_bundle.sign(isk).unwrap()
 }
 
 fn build_and_sign_bundle(
@@ -145,7 +145,7 @@ fn issue_zsa_notes(
 ) -> (Note, Note, Note) {
     let mut rng = OsRng;
     // Create a issuance bundle
-    let unauthorized_asset = IssueBundle::new(
+    let awaiting_nullifier_bundle_asset = IssueBundle::new(
         keys.ik().clone(),
         asset_descr.to_owned(),
         Some(IssueInfo {
@@ -156,11 +156,11 @@ fn issue_zsa_notes(
         &mut rng,
     );
 
-    assert!(unauthorized_asset.is_ok());
+    assert!(awaiting_nullifier_bundle_asset.is_ok());
 
-    let (mut unauthorized, _) = unauthorized_asset.unwrap();
+    let (mut awaiting_nullifier_bundle, _) = awaiting_nullifier_bundle_asset.unwrap();
 
-    assert!(unauthorized
+    assert!(awaiting_nullifier_bundle
         .add_recipient(
             asset_descr,
             keys.recipient,
@@ -170,7 +170,7 @@ fn issue_zsa_notes(
         )
         .is_ok());
 
-    let issue_bundle = sign_issue_bundle(unauthorized, keys.isk(), first_nullifier);
+    let issue_bundle = sign_issue_bundle(awaiting_nullifier_bundle, keys.isk(), first_nullifier);
 
     // Take notes from first action
     let notes = issue_bundle.get_all_notes();
