@@ -9,11 +9,6 @@ use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::constants::reference_keys::ReferenceKeys;
-use crate::issuance::Error::{
-    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
-    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, ValueOverflow, WrongAssetDescSize,
-};
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
 use crate::note::{AssetBase, Nullifier, Rho};
@@ -22,6 +17,12 @@ use crate::value::NoteValue;
 use crate::{Address, Note};
 
 use crate::supply_info::AssetSupply;
+
+use Error::{
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, ValueOverflow, WrongAssetDescSize,
+};
 
 /// Checks if a given note is a reference note.
 ///
