@@ -620,7 +620,6 @@ impl IssueBundle<Signed> {
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
-    // FIXME: consider using AssetStateStore trait with get_asset method instead
     get_asset_state: impl Fn(&AssetBase) -> Option<BundleAssetInfo>,
 ) -> Result<HashMap<AssetBase, BundleAssetInfo>, Error> {
     bundle
@@ -674,7 +673,7 @@ pub fn verify_issue_bundle(
     Ok(verified_asset_states)
 }
 
-// FIXME: IssueActionPreviouslyFinalizedAssetBase contains AssetBase but
+// FIXME: Why IssueActionPreviouslyFinalizedAssetBase contains AssetBase but
 // WrongAssetDescSize and new MissingReferenceNoteOnFirstIssuance don't?
 /// Errors produced during the issuance process
 #[derive(Debug, PartialEq, Eq)]
