@@ -104,12 +104,12 @@ impl IssueAction {
         self.finalize
     }
 
-    /// Verifies and computes the new asset supply for an `IssueAction`.
+    /// Verifies an `IssueAction` and computes the asset supply for it.
     ///
     /// This function calculates the total value (supply) of the asset by summing the values
     /// of all its notes and ensures that all note types are equal. It returns the asset and
     /// its supply as a tuple (`AssetBase`, `AssetSupply`) or an error if the asset was not
-    ///  properly derived or an overflow occurred during the supply amount calculation.
+    /// properly derived or an overflow occurred during the supply amount calculation.
     ///
     /// # Arguments
     ///
@@ -129,7 +129,7 @@ impl IssueAction {
     ///   `AssetBase` for **all** internal notes.
     ///
     /// * `IssueActionWithoutNoteNotFinalized`:If the `IssueAction` contains no note and is not finalized.
-    fn verify_supply(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
+    fn verify(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
         if self.notes.is_empty() && !self.is_finalized() {
             return Err(IssueActionWithoutNoteNotFinalized);
         }
@@ -539,7 +539,7 @@ impl IssueBundle<Prepared> {
 
         // Make sure the `expected_ik` matches the `asset` for all notes.
         self.actions.iter().try_for_each(|action| {
-            action.verify_supply(&expected_ik)?;
+            action.verify(&expected_ik)?;
             Ok(())
         })?;
 
@@ -591,7 +591,7 @@ impl IssueBundle<Signed> {
 ///     - The signature on the provided `sighash` is verified correctly.
 /// - **IssueAction Verification**:
 ///     - The asset description size is correct.
-///     - The `verify_supply` method checks pass,
+///     - The `IssueAction::verify` method checks pass,
 ///     - The new amount does not overflow the previous total supply value.
 ///     - The `AssetBase` for the `IssueAction` has not been previously finalized.
 ///
@@ -618,7 +618,7 @@ impl IssueBundle<Signed> {
 /// - `ValueOverflow`: Occurs if an overflow happens during the calculation of the total value for
 ///    the notes.
 /// - `IssueActionPreviouslyFinalizedAssetBase`: Occurs if the asset has already been finalized.
-/// - **Other Errors**: Any additional errors returned by the `verify_supply` method of `IssueAction`
+/// - **Other Errors**: Any additional errors returned by the `IssueAction::verify` method.
 ///   will also be propagated.
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
@@ -640,7 +640,7 @@ pub fn verify_issue_bundle(
                     return Err(WrongAssetDescSize);
                 }
 
-                let (asset, action_asset_state) = action.verify_supply(bundle.ik())?;
+                let (asset, action_asset_state) = action.verify(bundle.ik())?;
 
                 let old_asset_state = verified_asset_states
                     .get(&asset)
@@ -911,10 +911,10 @@ mod tests {
     }
 
     #[test]
-    fn verify_supply_valid() {
+    fn action_verify_valid() {
         let (ik, test_asset, action) = supply_test_params(10, 20, b"Asset 1", None, false);
 
-        let result = action.verify_supply(&ik);
+        let result = action.verify(&ik);
 
         assert!(result.is_ok());
 
@@ -926,20 +926,20 @@ mod tests {
     }
 
     #[test]
-    fn verify_supply_invalid_for_asset_base_as_identity() {
+    fn action_verify_invalid_for_asset_base_as_identity() {
         let (_, bundle, _, _) = identity_point_test_params(10, 20);
 
         assert_eq!(
-            bundle.actions.head.verify_supply(&bundle.ik),
+            bundle.actions.head.verify(&bundle.ik),
             Err(AssetBaseCannotBeIdentityPoint)
         );
     }
 
     #[test]
-    fn verify_supply_finalized() {
+    fn action_verify_finalized() {
         let (ik, test_asset, action) = supply_test_params(10, 20, b"Asset 1", None, true);
 
-        let result = action.verify_supply(&ik);
+        let result = action.verify(&ik);
 
         assert!(result.is_ok());
 
@@ -951,24 +951,18 @@ mod tests {
     }
 
     #[test]
-    fn verify_supply_incorrect_asset_base() {
+    fn action_verify_incorrect_asset_base() {
         let (ik, _, action) = supply_test_params(10, 20, b"Asset 1", Some(b"Asset 2"), false);
 
-        assert_eq!(
-            action.verify_supply(&ik),
-            Err(IssueBundleIkMismatchAssetBase)
-        );
+        assert_eq!(action.verify(&ik), Err(IssueBundleIkMismatchAssetBase));
     }
 
     #[test]
-    fn verify_supply_ik_mismatch_asset_base() {
+    fn action_verify_ik_mismatch_asset_base() {
         let (_, _, action) = supply_test_params(10, 20, b"Asset 1", None, false);
         let (_, _, ik, _, _, _) = setup_params();
 
-        assert_eq!(
-            action.verify_supply(&ik),
-            Err(IssueBundleIkMismatchAssetBase)
-        );
+        assert_eq!(action.verify(&ik), Err(IssueBundleIkMismatchAssetBase));
     }
 
     #[test]
