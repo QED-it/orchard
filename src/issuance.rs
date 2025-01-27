@@ -16,12 +16,13 @@ use crate::note::{AssetBase, Nullifier, Rho};
 use crate::value::NoteValue;
 use crate::{Address, Note};
 
-use crate::supply_info::AssetSupply;
+use crate::supply_info::{ActionAssetInfo, BundleAssetInfo};
 
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
     IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature, ValueOverflow, WrongAssetDescSize,
+    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
+    MissingReferenceNoteOnFirstIssuance, ValueOverflow, WrongAssetDescSize,
 };
 
 /// Checks if a given note is a reference note.
@@ -105,12 +106,7 @@ impl IssueAction {
         self.finalize
     }
 
-    /// Verifies an `IssueAction` and computes the asset supply for it.
-    ///
-    /// This function calculates the total value (supply) of the asset by summing the values
-    /// of all its notes and ensures that all note types are equal. It returns the asset and
-    /// its supply as a tuple (`AssetBase`, `AssetSupply`) or an error if the asset was not
-    /// properly derived or an overflow occurred during the supply amount calculation.
+    /// Verifies this `IssueAction` and calculates the aggregated asset information.
     ///
     /// # Arguments
     ///
@@ -118,7 +114,7 @@ impl IssueAction {
     ///
     /// # Returns
     ///
-    /// A `Result` containing a tuple with an `AssetBase` and an `AssetSupply`, or an `Error`.
+    /// A `Result` containing a tuple with an `AssetBase` and an `ActionAssetInfo`, or an `Error`.
     ///
     /// # Errors
     ///
@@ -130,7 +126,7 @@ impl IssueAction {
     ///   `AssetBase` for **all** internal notes.
     ///
     /// * `IssueActionWithoutNoteNotFinalized`:If the `IssueAction` contains no note and is not finalized.
-    fn verify(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
+    fn verify(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, ActionAssetInfo), Error> {
         if self.notes.is_empty() && !self.is_finalized() {
             return Err(IssueActionWithoutNoteNotFinalized);
         }
@@ -160,7 +156,7 @@ impl IssueAction {
 
         Ok((
             issue_asset,
-            AssetSupply::new(
+            ActionAssetInfo::new(
                 value_sum,
                 self.is_finalized(),
                 self.get_reference_note().cloned(),
@@ -585,48 +581,48 @@ impl IssueBundle<Signed> {
     }
 }
 
-/// Validation for Orchard IssueBundles
+/// Validates an [`IssueBundle`] by performing the following checks:
 ///
-/// The following checks are performed:
-/// - **IssueBundle Verification**:
-///     - The signature on the provided `sighash` is verified correctly.
+/// - **Signature Verification**:
+///   - Ensures the signature on the provided `sighash` matches the bundle’s authorization.
 /// - **IssueAction Verification**:
-///     - The asset description size is correct.
-///     - The `IssueAction::verify` method checks pass,
-///     - The new amount does not overflow the previous total supply value.
-///     - The `AssetBase` for the `IssueAction` has not been previously finalized.
+///   - Checks that the asset description size is correct.
+///   - Runs all checks within the `IssueAction::verify` method.
+///   - Ensures the total supply value does not overflow when adding the new amount to the existing supply.
+///   - Verifies that the `AssetBase` has not already been finalized.
+///   - Requires a reference note for the *first issuance* of an asset; subsequent issuances may omit it.
 ///
 /// # Arguments
 ///
-/// - `bundle` - A reference to the `IssueBundle` to be validated.
-/// - `sighash` - A 32-byte array representing the sighash used to verify the bundle's signature.
-/// - `get_asset_state` - A closure that takes a reference to an `AssetBase` and returns an
-///   `Option<AssetSupply>`, representing the current state of the asset in the global store of
-///   previously issued assets.
+/// - `bundle`: A reference to the [`IssueBundle`] to be validated.
+/// - `sighash`: A 32-byte array representing the `sighash` used to verify the bundle's signature.
+/// - `get_asset_state`: A closure that takes a reference to an [`AssetBase`] and returns an
+///   [`Option<BundleAssetInfo>`], representing the current state of the asset from a global store
+///   of previously issued assets.
 ///
 /// # Returns
 ///
-/// A `Result` with a `HashMap` on success, which contains new values for updated or newly added
-/// items in the global state. Each key is an `AssetBase`, and the corresponding value is a new
-/// (updated) `AssetSupply`.
+/// A `Result` containing a [`HashMap<AssetBase, BundleAssetInfo>`] upon success, where each key-value
+/// pair represents the new or updated state of an asset. The key is an [`AssetBase`], and the value
+/// is the corresponding updated [`BundleAssetInfo`].
 ///
 /// # Errors
 ///
-/// - `IssueBundleInvalidSignature`: Occurs if the signature verification for the provided `sighash`
-///    fails.
-/// - `WrongAssetDescSize`: Raised if the asset description size for any asset in the bundle is
-///    incorrect.
-/// - `ValueOverflow`: Occurs if an overflow happens during the calculation of the total value for
-///    the notes.
-/// - `IssueActionPreviouslyFinalizedAssetBase`: Occurs if the asset has already been finalized.
-/// - **Other Errors**: Any additional errors returned by the `IssueAction::verify` method.
-///   will also be propagated.
+/// - [`IssueBundleInvalidSignature`]: If the signature verification for the provided `sighash` fails.
+/// - [`WrongAssetDescSize`]: If the asset description size is invalid.
+/// - [`ValueOverflow`]: If adding the new amount to the existing total supply causes an overflow.
+/// - [`IssueActionPreviouslyFinalizedAssetBase`]: If an action is attempted on an asset that has
+///   already been finalized.
+/// - [`MissingReferenceNoteOnFirstIssuance`]: If no reference note is provided for the first
+///   issuance of a new asset.
+/// - **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
+///   propagated
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
     // FIXME: consider using AssetStateStore trait with get_asset method instead
-    get_asset_state: impl Fn(&AssetBase) -> Option<AssetSupply>,
-) -> Result<HashMap<AssetBase, AssetSupply>, Error> {
+    get_asset_state: impl Fn(&AssetBase) -> Option<BundleAssetInfo>,
+) -> Result<HashMap<AssetBase, BundleAssetInfo>, Error> {
     bundle
         .ik()
         .verify(&sighash, bundle.authorization().signature())
@@ -641,29 +637,36 @@ pub fn verify_issue_bundle(
                     return Err(WrongAssetDescSize);
                 }
 
-                let (asset, action_asset_state) = action.verify(bundle.ik())?;
+                let (asset, action_asset_info) = action.verify(bundle.ik())?;
 
-                let old_asset_state = verified_asset_states
+                let verified_asset_state = match verified_asset_states
                     .get(&asset)
                     .cloned()
                     .or_else(|| get_asset_state(&asset))
-                    .unwrap_or_default();
+                {
+                    // The first issuance of the asset
+                    None => BundleAssetInfo::new(
+                        action_asset_info.amount,
+                        action_asset_info.is_finalized,
+                        action_asset_info
+                            .reference_note
+                            .ok_or(MissingReferenceNoteOnFirstIssuance)?,
+                    ),
 
-                let amount =
-                    (old_asset_state.amount + action_asset_state.amount).ok_or(ValueOverflow)?;
+                    // Subsequent issuances of the asset
+                    Some(old_asset_state) => {
+                        let amount = (old_asset_state.amount + action_asset_info.amount)
+                            .ok_or(ValueOverflow)?;
 
-                let is_finalized = (!old_asset_state.is_finalized)
-                    .then_some(action_asset_state.is_finalized)
-                    .ok_or(IssueActionPreviouslyFinalizedAssetBase(asset))?;
+                        let is_finalized = (!old_asset_state.is_finalized)
+                            .then_some(action_asset_info.is_finalized)
+                            .ok_or(IssueActionPreviouslyFinalizedAssetBase(asset))?;
 
-                let reference_note = old_asset_state
-                    .reference_note
-                    .or(action_asset_state.reference_note);
+                        BundleAssetInfo::new(amount, is_finalized, old_asset_state.reference_note)
+                    }
+                };
 
-                verified_asset_states.insert(
-                    asset,
-                    AssetSupply::new(amount, is_finalized, reference_note),
-                );
+                verified_asset_states.insert(asset, verified_asset_state);
 
                 Ok(verified_asset_states)
             })?;
@@ -671,6 +674,8 @@ pub fn verify_issue_bundle(
     Ok(verified_asset_states)
 }
 
+// FIXME: IssueActionPreviouslyFinalizedAssetBase contains AssetBase but
+// WrongAssetDescSize and new MissingReferenceNoteOnFirstIssuance don't?
 /// Errors produced during the issuance process
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
@@ -687,6 +692,7 @@ pub enum Error {
     /// It cannot be first issuance because we have already some notes for this asset.
     CannotBeFirstIssuance,
 
+    // FIXME: split the group comment ("Verification errors")?
     /// Verification errors:
     /// Invalid signature.
     IssueBundleInvalidSignature,
@@ -695,6 +701,9 @@ pub enum Error {
 
     /// Overflow error occurred while calculating the value of the asset
     ValueOverflow,
+
+    /// No reference note is provided for the first issuance of a new asset.
+    MissingReferenceNoteOnFirstIssuance,
 }
 
 impl fmt::Display for Error {
@@ -742,6 +751,12 @@ impl fmt::Display for Error {
                     "overflow error occurred while calculating the value of the asset"
                 )
             }
+            MissingReferenceNoteOnFirstIssuance => {
+                write!(
+                    f,
+                    "no reference note is provided for the first issuance of a new asset."
+                )
+            }
         }
     }
 }
@@ -750,7 +765,7 @@ impl fmt::Display for Error {
 // is called: 1) check for expected output, 2) check for processing of existing assets etc.
 #[cfg(test)]
 mod tests {
-    use super::{AssetSupply, IssueBundle, IssueInfo};
+    use super::{BundleAssetInfo, IssueBundle, IssueInfo};
     use crate::{
         builder::{Builder, BundleType},
         circuit::ProvingKey,
@@ -904,7 +919,9 @@ mod tests {
     // of the `verify_issue_bundle` function.
     // TODO: Adapt issue bundle verification test functions to the new return type and remove this
     // function.
-    fn get_finalization_set(issued_assets: &HashMap<AssetBase, AssetSupply>) -> HashSet<AssetBase> {
+    fn get_finalization_set(
+        issued_assets: &HashMap<AssetBase, BundleAssetInfo>,
+    ) -> HashSet<AssetBase> {
         issued_assets
             .iter()
             .filter_map(|(asset, asset_supply)| asset_supply.is_finalized.then(|| asset.clone()))
@@ -1346,33 +1363,33 @@ mod tests {
 
         assert_eq!(
             issued_assets.get(&asset1_base),
-            Some(&AssetSupply::new(
+            Some(&BundleAssetInfo::new(
                 NoteValue::from_raw(15),
                 true,
-                Some(reference_note1)
+                reference_note1
             ))
         );
         assert_eq!(
             issued_assets.get(&asset2_base),
-            Some(&AssetSupply::new(
+            Some(&BundleAssetInfo::new(
                 NoteValue::from_raw(10),
                 true,
-                Some(reference_note2)
+                reference_note2
             ))
         );
         assert_eq!(
             issued_assets.get(&asset3_base),
-            Some(&AssetSupply::new(
+            Some(&BundleAssetInfo::new(
                 NoteValue::from_raw(5),
                 false,
-                Some(reference_note3)
+                reference_note3
             ))
         );
     }
 
     #[test]
     fn issue_bundle_verify_fail_previously_finalized() {
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1396,7 +1413,17 @@ mod tests {
 
         let issued_assets = [(
             final_type,
-            AssetSupply::new(NoteValue::from_raw(0), true, None),
+            BundleAssetInfo::new(
+                NoteValue::from_raw(20),
+                true,
+                Note::new(
+                    recipient,
+                    NoteValue::from_raw(10),
+                    final_type,
+                    Rho::zero(),
+                    &mut rng,
+                ),
+            ),
         )]
         .into_iter()
         .collect::<HashMap<_, _>>();
