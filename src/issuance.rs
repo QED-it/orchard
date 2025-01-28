@@ -148,6 +148,9 @@ impl IssueAction {
                     return Err(AssetBaseCannotBeIdentityPoint);
                 }
 
+                // FIXME: Refactored this to use "if ..." instead of a chain with "then()"
+                // method to unify the approach with other "ifs" in this function and
+                // verify_issue_bundle function.
                 // All assets should be derived correctly
                 if note.asset() != issue_asset {
                     return Err(IssueBundleIkMismatchAssetBase);
