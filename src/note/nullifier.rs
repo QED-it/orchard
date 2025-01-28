@@ -1,15 +1,15 @@
 use group::{ff::PrimeField, Group};
 use halo2_proofs::arithmetic::CurveExt;
 use memuse::DynamicUsage;
-use pasta_curves::{arithmetic::CurveAffine, pallas};
+use pasta_curves::pallas;
 use rand::RngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 use super::NoteCommitment;
 use crate::{
+    constants::nullifier_l::nullifier_l,
     keys::NullifierDerivingKey,
     spec::{extract_p, mod_r_p},
-    NULLIFIER_L,
 };
 
 /// A unique nullifier for a note.
@@ -61,8 +61,7 @@ impl Nullifier {
         let k = pallas::Point::hash_to_curve("z.cash:Orchard")(b"K");
 
         let nullifier = k * mod_r_p(nk.prf_nf(rho) + psi) + cm.0;
-        let split_note_nullifier =
-            nullifier + pallas::Affine::from_xy(NULLIFIER_L.0, NULLIFIER_L.1).unwrap();
+        let split_note_nullifier = nullifier + nullifier_l();
 
         let selected_nullifier =
             pallas::Point::conditional_select(&nullifier, &split_note_nullifier, is_split_note);

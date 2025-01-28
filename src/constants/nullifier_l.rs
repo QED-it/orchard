@@ -2,7 +2,7 @@
 //!
 //! This constant is used to evaluate the nullifier of a split note (ZIP 226).
 
-use pasta_curves::pallas;
+use pasta_curves::{arithmetic::CurveAffine, pallas};
 
 /// Constant used as $\mathcal{L}^{\mathsf{Orchard}}$ in DeriveNullifier.
 pub const NULLIFIER_L: (pallas::Base, pallas::Base) = (
@@ -19,6 +19,10 @@ pub const NULLIFIER_L: (pallas::Base, pallas::Base) = (
         0x093c_af7e_c368_376e,
     ]),
 );
+
+pub fn nullifier_l() -> pallas::Affine {
+    pallas::Affine::from_xy(NULLIFIER_L.0, NULLIFIER_L.1).unwrap()
+}
 
 #[cfg(test)]
 mod tests {

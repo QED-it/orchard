@@ -41,7 +41,6 @@ pub use action::Action;
 pub use address::Address;
 pub use bundle::Bundle;
 pub use circuit::Proof;
-pub use constants::nullifier_l::NULLIFIER_L;
 pub use constants::reference_keys::ReferenceKeys;
 pub use constants::MERKLE_DEPTH_ORCHARD as NOTE_COMMITMENT_TREE_DEPTH;
 pub use note::Note;
