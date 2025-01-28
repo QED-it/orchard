@@ -148,9 +148,10 @@ impl IssueAction {
                     return Err(AssetBaseCannotBeIdentityPoint);
                 }
 
-                // FIXME: Refactored this to use "if ..." instead of a chain with "then()"
-                // method to unify the approach with other "ifs" in this function and
-                // verify_issue_bundle function.
+                // FIXME: I refactored this to use "if ..." instead of chaining with the "then()"
+                // method to unify the approach with other "if" statements in this function and
+                // the `verify_issue_bundle` function.
+
                 // All assets should be derived correctly
                 if note.asset() != issue_asset {
                     return Err(IssueBundleIkMismatchAssetBase);
@@ -672,8 +673,8 @@ pub fn verify_issue_bundle(
     Ok(verified_asset_states)
 }
 
-// FIXME: Why IssueActionPreviouslyFinalizedAssetBase contains AssetBase but
-// WrongAssetDescSize and new MissingReferenceNoteOnFirstIssuance don't?
+// FIXME: Why does IssueActionPreviouslyFinalizedAssetBase contain AssetBase, but
+// WrongAssetDescSize and MissingReferenceNoteOnFirstIssuance do not?
 /// Errors produced during the issuance process
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
@@ -690,7 +691,7 @@ pub enum Error {
     /// It cannot be first issuance because we have already some notes for this asset.
     CannotBeFirstIssuance,
 
-    // FIXME: split the group comment ("Verification errors")?
+    // FIXME: Split the group comment ("Verification errors")?
     /// Verification errors:
     /// Invalid signature.
     IssueBundleInvalidSignature,
@@ -759,8 +760,6 @@ impl fmt::Display for Error {
     }
 }
 
-// FIXME: Add more tests for issued_assets (i.e. "global state") change after verify_issue_bundle
-// is called: 1) check for expected output, 2) check for processing of existing assets etc.
 #[cfg(test)]
 mod tests {
     use super::{AssetInfo, IssueBundle, IssueInfo};
@@ -1297,6 +1296,8 @@ mod tests {
         assert!(prev_finalized.contains(&AssetBase::derive(&ik, b"Verify with finalize")));
     }
 
+    // FIXME: Make it a workflow test: perform a series of bundle creations and verifications,
+    // with a global state simulation
     #[test]
     fn issue_bundle_verify_with_issued_assets() {
         let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
