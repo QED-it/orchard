@@ -769,7 +769,8 @@ mod tests {
         issuance::Error::{
             AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
             IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
-            IssueBundleInvalidSignature, MissingReferenceNoteOnFirstIssuance, WrongAssetDescSize,
+            IssueBundleInvalidSignature, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+            WrongAssetDescSize,
         },
         issuance::{
             is_reference_note, verify_issue_bundle, AwaitingNullifier, IssueAction, Signed,
@@ -1534,25 +1535,41 @@ mod tests {
         );
         assert_eq!(global_state, expected_global_state4);
 
-        // ** Bundle5 (valid) **
+        // ** Bundle5 (invalid) **
 
         let bundle5 = build_issue_bundle(&[
+            (&asset3_desc, u64::MAX - 20, true, true),
+            (&asset4_desc, 77, true, false),
+        ]);
+
+        let expected_global_state5 = expected_global_state4;
+
+        assert_eq!(
+            verify_issue_bundle(&bundle5, sighash, |asset| global_state.get(asset).cloned())
+                .unwrap_err(),
+            ValueOverflow,
+        );
+        assert_eq!(global_state, expected_global_state5);
+
+        // ** Bundle6 (valid) **
+
+        let bundle6 = build_issue_bundle(&[
             (&asset3_desc, 50, true, true),
             (&asset4_desc, 77, true, false),
         ]);
 
-        let expected_global_state5 = build_expected_global_state(&[
+        let expected_global_state6 = build_expected_global_state(&[
             (&asset1_base, 18, true, first_note(&bundle1, 0)),
             (&asset2_base, 10, true, first_note(&bundle1, 1)),
             (&asset3_base, 75, true, first_note(&bundle1, 2)),
-            (&asset4_base, 77, false, first_note(&bundle5, 1)),
+            (&asset4_base, 77, false, first_note(&bundle6, 1)),
         ]);
 
         global_state.extend(
-            verify_issue_bundle(&bundle5, sighash, |asset| global_state.get(asset).cloned())
+            verify_issue_bundle(&bundle6, sighash, |asset| global_state.get(asset).cloned())
                 .unwrap(),
         );
-        assert_eq!(global_state, expected_global_state5);
+        assert_eq!(global_state, expected_global_state6);
     }
 
     #[test]
