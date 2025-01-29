@@ -769,7 +769,7 @@ mod tests {
         issuance::Error::{
             AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
             IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
-            IssueBundleInvalidSignature, WrongAssetDescSize,
+            IssueBundleInvalidSignature, MissingReferenceNoteOnFirstIssuance, WrongAssetDescSize,
         },
         issuance::{
             is_reference_note, verify_issue_bundle, AwaitingNullifier, IssueAction, Signed,
@@ -1296,8 +1296,6 @@ mod tests {
         );
     }
 
-    // FIXME: Make it a workflow test: perform a series of bundle creations and verifications,
-    // with a global state simulation
     #[test]
     fn issue_bundle_verify_with_issued_assets() {
         let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
@@ -1376,6 +1374,185 @@ mod tests {
                 reference_note3
             ))
         );
+    }
+
+    // Issuance workflow test: performs a series of bundle creations and verifications,
+    // with a global state simulation
+    #[test]
+    fn issue_bundle_verify_with_global_state() {
+        type GlobalState = HashMap<AssetBase, AssetInfo>;
+
+        fn first_note(bundle: &IssueBundle<Signed>, action_index: usize) -> Note {
+            bundle.actions()[action_index].notes()[0]
+        }
+
+        fn build_expected_global_state(data: &[(&AssetBase, u64, bool, Note)]) -> GlobalState {
+            data.into_iter()
+                .cloned()
+                .map(|(asset_base, amount, is_finalized, reference_note)| {
+                    (
+                        asset_base.clone(),
+                        AssetInfo::new(NoteValue::from_raw(amount), is_finalized, reference_note),
+                    )
+                })
+                .collect::<HashMap<_, _>>()
+        }
+
+        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+
+        // A closure to build an issue bundle using parameters from `setup_params`.
+        // Using a closure avoids passing `rng`, `ik`, etc. each time.
+        let build_issue_bundle = |data: &[(&Vec<u8>, u64, bool, bool)]| -> IssueBundle<Signed> {
+            let (asset_desc, amount, first_issuance, is_finalized) = data.first().unwrap().clone();
+
+            let (mut bundle, _) = IssueBundle::new(
+                ik.clone(),
+                asset_desc.clone(),
+                Some(IssueInfo {
+                    recipient,
+                    value: NoteValue::from_raw(amount),
+                }),
+                first_issuance,
+                rng,
+            )
+            .unwrap();
+
+            if is_finalized {
+                bundle.finalize_action(asset_desc).unwrap();
+            }
+
+            for (asset_desc, amount, first_issuance, is_finalized) in
+                data.into_iter().skip(1).cloned()
+            {
+                bundle
+                    .add_recipient(
+                        &asset_desc,
+                        recipient,
+                        NoteValue::from_raw(amount),
+                        first_issuance,
+                        rng,
+                    )
+                    .unwrap();
+
+                if is_finalized {
+                    bundle.finalize_action(asset_desc).unwrap();
+                }
+            }
+
+            bundle
+                .update_rho(&first_nullifier)
+                .prepare(sighash)
+                .sign(&isk)
+                .unwrap()
+        };
+
+        let asset1_desc = b"Verify with issued assets 1".to_vec();
+        let asset2_desc = b"Verify with issued assets 2".to_vec();
+        let asset3_desc = b"Verify with issued assets 3".to_vec();
+        let asset4_desc = b"Verify with issued assets 4".to_vec();
+
+        let asset1_base = AssetBase::derive(&ik, &asset1_desc);
+        let asset2_base = AssetBase::derive(&ik, &asset2_desc);
+        let asset3_base = AssetBase::derive(&ik, &asset3_desc);
+        let asset4_base = AssetBase::derive(&ik, &asset4_desc);
+
+        let mut global_state = GlobalState::new();
+
+        // We'll issue and verify a series of bundles. For valid bundles, the global
+        // state is updated and must match the expected result. For invalid bundles,
+        // we check the expected error, leaving the state unchanged.
+
+        // ** Bundle1 (valid) **
+
+        let bundle1 = build_issue_bundle(&[
+            (&asset1_desc, 7, true, false),
+            (&asset1_desc, 8, false, false),
+            (&asset2_desc, 10, true, true),
+            (&asset3_desc, 5, true, false),
+        ]);
+
+        let expected_global_state1 = build_expected_global_state(&[
+            (&asset1_base, 15, false, first_note(&bundle1, 0)),
+            (&asset2_base, 10, true, first_note(&bundle1, 1)),
+            (&asset3_base, 5, false, first_note(&bundle1, 2)),
+        ]);
+
+        global_state.extend(
+            verify_issue_bundle(&bundle1, sighash, |asset| global_state.get(asset).cloned())
+                .unwrap(),
+        );
+        assert_eq!(global_state, expected_global_state1);
+
+        // ** Bundle2 (valid) **
+
+        let bundle2 = build_issue_bundle(&[
+            (&asset1_desc, 3, true, true),
+            (&asset3_desc, 20, false, false),
+        ]);
+
+        let expected_global_state2 = build_expected_global_state(&[
+            (&asset1_base, 18, true, first_note(&bundle1, 0)),
+            (&asset2_base, 10, true, first_note(&bundle1, 1)),
+            (&asset3_base, 25, false, first_note(&bundle1, 2)),
+        ]);
+
+        global_state.extend(
+            verify_issue_bundle(&bundle2, sighash, |asset| global_state.get(asset).cloned())
+                .unwrap(),
+        );
+        assert_eq!(global_state, expected_global_state2);
+
+        // ** Bundle3 (invalid) **
+
+        let bundle3 = build_issue_bundle(&[
+            (&asset1_desc, 3, true, false),
+            (&asset3_desc, 20, false, false),
+        ]);
+
+        let expected_global_state3 = expected_global_state2;
+
+        assert_eq!(
+            verify_issue_bundle(&bundle3, sighash, |asset| global_state.get(asset).cloned())
+                .unwrap_err(),
+            IssueActionPreviouslyFinalizedAssetBase(asset1_base),
+        );
+        assert_eq!(global_state, expected_global_state3);
+
+        // ** Bundle4 (invalid) **
+
+        let bundle4 = build_issue_bundle(&[
+            (&asset3_desc, 50, true, true),
+            (&asset4_desc, 77, false, false),
+        ]);
+
+        let expected_global_state4 = expected_global_state3;
+
+        assert_eq!(
+            verify_issue_bundle(&bundle4, sighash, |asset| global_state.get(asset).cloned())
+                .unwrap_err(),
+            MissingReferenceNoteOnFirstIssuance,
+        );
+        assert_eq!(global_state, expected_global_state4);
+
+        // ** Bundle5 (valid) **
+
+        let bundle5 = build_issue_bundle(&[
+            (&asset3_desc, 50, true, true),
+            (&asset4_desc, 77, true, false),
+        ]);
+
+        let expected_global_state5 = build_expected_global_state(&[
+            (&asset1_base, 18, true, first_note(&bundle1, 0)),
+            (&asset2_base, 10, true, first_note(&bundle1, 1)),
+            (&asset3_base, 75, true, first_note(&bundle1, 2)),
+            (&asset4_base, 77, false, first_note(&bundle5, 1)),
+        ]);
+
+        global_state.extend(
+            verify_issue_bundle(&bundle5, sighash, |asset| global_state.get(asset).cloned())
+                .unwrap(),
+        );
+        assert_eq!(global_state, expected_global_state5);
     }
 
     #[test]
