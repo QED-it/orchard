@@ -790,7 +790,7 @@ mod tests {
     use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     /// Validation for reference note
     ///
@@ -910,17 +910,6 @@ mod tests {
         let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), AwaitingNullifier);
 
         (isk, bundle, sighash, first_nullifier)
-    }
-
-    // Creates a set of finalized assets from a map of issued assets to support the new return type
-    // of the `verify_issue_bundle` function.
-    // TODO: Adapt issue bundle verification test functions to the new return type and remove this
-    // function.
-    fn get_finalization_set(issued_assets: &HashMap<AssetBase, AssetInfo>) -> HashSet<AssetBase> {
-        issued_assets
-            .iter()
-            .filter_map(|(asset, asset_info)| asset_info.is_finalized.then(|| asset.clone()))
-            .collect::<HashSet<_>>()
     }
 
     #[test]
@@ -1242,7 +1231,7 @@ mod tests {
         let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
 
         let (bundle, _) = IssueBundle::new(
-            ik,
+            ik.clone(),
             b"Verify".to_vec(),
             Some(IssueInfo {
                 recipient,
@@ -1260,9 +1249,15 @@ mod tests {
             .unwrap();
 
         let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
-        let prev_finalized = get_finalization_set(&issued_assets);
 
-        assert!(prev_finalized.is_empty());
+        let first_note = *signed.actions().first().notes().first().unwrap();
+        assert_eq!(
+            issued_assets,
+            HashMap::from([(
+                AssetBase::derive(&ik, b"Verify"),
+                AssetInfo::new(NoteValue::from_raw(5), false, first_note)
+            )])
+        );
     }
 
     #[test]
@@ -1290,10 +1285,15 @@ mod tests {
             .unwrap();
 
         let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
-        let prev_finalized = get_finalization_set(&issued_assets);
 
-        assert_eq!(prev_finalized.len(), 1);
-        assert!(prev_finalized.contains(&AssetBase::derive(&ik, b"Verify with finalize")));
+        let first_note = *signed.actions().first().notes().first().unwrap();
+        assert_eq!(
+            issued_assets,
+            HashMap::from([(
+                AssetBase::derive(&ik, b"Verify with finalize"),
+                AssetInfo::new(NoteValue::from_raw(7), true, first_note)
+            )])
+        );
     }
 
     // FIXME: Make it a workflow test: perform a series of bundle creations and verifications,
@@ -1345,13 +1345,6 @@ mod tests {
             .unwrap();
 
         let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
-        let prev_finalized = get_finalization_set(&issued_assets);
-
-        assert_eq!(prev_finalized.len(), 2);
-
-        assert!(prev_finalized.contains(&asset1_base));
-        assert!(prev_finalized.contains(&asset2_base));
-        assert!(!prev_finalized.contains(&asset3_base));
 
         assert_eq!(issued_assets.keys().len(), 3);
 
