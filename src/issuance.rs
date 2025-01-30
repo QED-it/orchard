@@ -29,7 +29,7 @@ use crate::note::{AssetBase, Nullifier, Rho};
 use crate::value::NoteValue;
 use crate::{Address, Note};
 
-use crate::supply_info::AssetRecord;
+use crate::asset_record::AssetRecord;
 
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
