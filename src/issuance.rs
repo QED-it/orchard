@@ -1400,11 +1400,19 @@ mod tests {
                 .collect::<HashMap<_, _>>()
         }
 
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        fn build_issue_bundle(
+            params: &(
+                OsRng,
+                IssuanceAuthorizingKey,
+                IssuanceValidatingKey,
+                Address,
+                [u8; 32],
+                Nullifier,
+            ),
+            data: &[(&Vec<u8>, u64, bool, bool)],
+        ) -> IssueBundle<Signed> {
+            let (rng, ref isk, ref ik, recipient, sighash, ref first_nullifier) = *params;
 
-        // A closure to build an issue bundle using parameters from `setup_params`.
-        // Using a closure avoids passing `rng`, `ik`, etc. each time.
-        let build_issue_bundle = |data: &[(&Vec<u8>, u64, bool, bool)]| -> IssueBundle<Signed> {
             let (asset_desc, amount, first_issuance, is_finalized) = data.first().unwrap().clone();
 
             let (mut bundle, _) = IssueBundle::new(
@@ -1446,7 +1454,11 @@ mod tests {
                 .prepare(sighash)
                 .sign(&isk)
                 .unwrap()
-        };
+        }
+
+        let params = setup_params();
+
+        let (_, _, ik, _, sighash, _) = params.clone();
 
         let asset1_desc = b"Verify with issued assets 1".to_vec();
         let asset2_desc = b"Verify with issued assets 2".to_vec();
@@ -1466,12 +1478,15 @@ mod tests {
 
         // ** Bundle1 (valid) **
 
-        let bundle1 = build_issue_bundle(&[
-            (&asset1_desc, 7, true, false),
-            (&asset1_desc, 8, false, false),
-            (&asset2_desc, 10, true, true),
-            (&asset3_desc, 5, true, false),
-        ]);
+        let bundle1 = build_issue_bundle(
+            &params,
+            &[
+                (&asset1_desc, 7, true, false),
+                (&asset1_desc, 8, false, false),
+                (&asset2_desc, 10, true, true),
+                (&asset3_desc, 5, true, false),
+            ],
+        );
 
         let expected_global_state1 = build_expected_global_state(&[
             (&asset1_base, 15, false, first_note(&bundle1, 0)),
@@ -1487,10 +1502,13 @@ mod tests {
 
         // ** Bundle2 (valid) **
 
-        let bundle2 = build_issue_bundle(&[
-            (&asset1_desc, 3, true, true),
-            (&asset3_desc, 20, false, false),
-        ]);
+        let bundle2 = build_issue_bundle(
+            &params,
+            &[
+                (&asset1_desc, 3, true, true),
+                (&asset3_desc, 20, false, false),
+            ],
+        );
 
         let expected_global_state2 = build_expected_global_state(&[
             (&asset1_base, 18, true, first_note(&bundle1, 0)),
@@ -1506,10 +1524,13 @@ mod tests {
 
         // ** Bundle3 (invalid) **
 
-        let bundle3 = build_issue_bundle(&[
-            (&asset1_desc, 3, true, false),
-            (&asset3_desc, 20, false, false),
-        ]);
+        let bundle3 = build_issue_bundle(
+            &params,
+            &[
+                (&asset1_desc, 3, true, false),
+                (&asset3_desc, 20, false, false),
+            ],
+        );
 
         let expected_global_state3 = expected_global_state2;
 
@@ -1522,10 +1543,13 @@ mod tests {
 
         // ** Bundle4 (invalid) **
 
-        let bundle4 = build_issue_bundle(&[
-            (&asset3_desc, 50, true, true),
-            (&asset4_desc, 77, false, false),
-        ]);
+        let bundle4 = build_issue_bundle(
+            &params,
+            &[
+                (&asset3_desc, 50, true, true),
+                (&asset4_desc, 77, false, false),
+            ],
+        );
 
         let expected_global_state4 = expected_global_state3;
 
@@ -1538,10 +1562,13 @@ mod tests {
 
         // ** Bundle5 (invalid) **
 
-        let bundle5 = build_issue_bundle(&[
-            (&asset3_desc, u64::MAX - 20, true, true),
-            (&asset4_desc, 77, true, false),
-        ]);
+        let bundle5 = build_issue_bundle(
+            &params,
+            &[
+                (&asset3_desc, u64::MAX - 20, true, true),
+                (&asset4_desc, 77, true, false),
+            ],
+        );
 
         let expected_global_state5 = expected_global_state4;
 
@@ -1554,10 +1581,13 @@ mod tests {
 
         // ** Bundle6 (valid) **
 
-        let bundle6 = build_issue_bundle(&[
-            (&asset3_desc, 50, true, true),
-            (&asset4_desc, 77, true, false),
-        ]);
+        let bundle6 = build_issue_bundle(
+            &params,
+            &[
+                (&asset3_desc, 50, true, true),
+                (&asset4_desc, 77, true, false),
+            ],
+        );
 
         let expected_global_state6 = build_expected_global_state(&[
             (&asset1_base, 18, true, first_note(&bundle1, 0)),
