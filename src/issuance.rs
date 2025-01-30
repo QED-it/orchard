@@ -29,7 +29,7 @@ use crate::note::{AssetBase, Nullifier, Rho};
 use crate::value::NoteValue;
 use crate::{Address, Note};
 
-use crate::supply_info::AssetInfo;
+use crate::supply_info::AssetRecord;
 
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
@@ -606,14 +606,14 @@ impl IssueBundle<Signed> {
 /// - `bundle`: A reference to the [`IssueBundle`] to be validated.
 /// - `sighash`: A 32-byte array representing the `sighash` used to verify the bundle's signature.
 /// - `get_global_asset_state`: A closure that takes a reference to an [`AssetBase`] and returns an
-///   [`Option<AssetInfo>`], representing the current state of the asset from a global store
+///   [`Option<AssetRecord>`], representing the current state of the asset from a global store
 ///   of previously issued assets.
 ///
 /// # Returns
 ///
-/// A `Result` containing a [`HashMap<AssetBase, AssetInfo>`] upon success, where each key-value
+/// A `Result` containing a [`HashMap<AssetBase, AssetRecord>`] upon success, where each key-value
 /// pair represents the new or updated state of an asset. The key is an [`AssetBase`], and the value
-/// is the corresponding updated [`AssetInfo`].
+/// is the corresponding updated [`AssetRecord`].
 ///
 /// # Errors
 ///
@@ -629,59 +629,57 @@ impl IssueBundle<Signed> {
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
-    get_global_asset_state: impl Fn(&AssetBase) -> Option<AssetInfo>,
-) -> Result<HashMap<AssetBase, AssetInfo>, Error> {
+    get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
+) -> Result<HashMap<AssetBase, AssetRecord>, Error> {
     bundle
         .ik()
         .verify(&sighash, bundle.authorization().signature())
         .map_err(|_| IssueBundleInvalidSignature)?;
 
-    let verified_asset_states =
+    let new_records =
         bundle
             .actions()
             .iter()
-            .try_fold(HashMap::new(), |mut verified_asset_states, action| {
+            .try_fold(HashMap::new(), |mut new_records, action| {
                 if !is_asset_desc_of_valid_size(action.asset_desc()) {
                     return Err(WrongAssetDescSize);
                 }
 
-                let (asset, action_amount) = action.verify(bundle.ik())?;
-                let action_is_finalized = action.is_finalized();
-                let action_reference_note = action.get_reference_note();
+                let (asset, amount) = action.verify(bundle.ik())?;
+                let is_finalized = action.is_finalized();
+                let ref_note = action.get_reference_note();
 
-                let verified_asset_state = match verified_asset_states
+                let new_asset_record = match new_records
                     .get(&asset)
                     .cloned()
-                    .or_else(|| get_global_asset_state(&asset))
+                    .or_else(|| get_global_records(&asset))
                 {
                     // The first issuance of the asset
-                    None => AssetInfo::new(
-                        action_amount,
-                        action_is_finalized,
-                        *action_reference_note.ok_or(MissingReferenceNoteOnFirstIssuance)?,
+                    None => AssetRecord::new(
+                        amount,
+                        is_finalized,
+                        *ref_note.ok_or(MissingReferenceNoteOnFirstIssuance)?,
                     ),
 
-                    // Subsequent issuance of the asset
-                    Some(prev_asset_state) => {
-                        let amount =
-                            (prev_asset_state.amount + action_amount).ok_or(ValueOverflow)?;
+                    // Subsequent issuances of the asset
+                    Some(current_record) => {
+                        let amount = (current_record.amount + amount).ok_or(ValueOverflow)?;
 
-                        if prev_asset_state.is_finalized {
+                        if current_record.is_finalized {
                             return Err(IssueActionPreviouslyFinalizedAssetBase);
                         }
 
-                        AssetInfo::new(amount, action_is_finalized, prev_asset_state.reference_note)
+                        AssetRecord::new(amount, is_finalized, current_record.reference_note)
                     }
                 };
 
-                verified_asset_states.insert(asset, verified_asset_state);
+                new_records.insert(asset, new_asset_record);
 
-                Ok(verified_asset_states)
+                Ok(new_records)
             })?;
 
-    Ok(verified_asset_states)
+    Ok(new_records)
 }
-
 /// Errors produced during the issuance process
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
@@ -768,7 +766,7 @@ impl fmt::Display for Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{AssetInfo, IssueBundle, IssueInfo};
+    use super::{AssetRecord, IssueBundle, IssueInfo};
     use crate::{
         builder::{Builder, BundleType},
         circuit::ProvingKey,
@@ -1262,7 +1260,7 @@ mod tests {
             issued_assets,
             HashMap::from([(
                 AssetBase::derive(&ik, b"Verify"),
-                AssetInfo::new(NoteValue::from_raw(5), false, first_note)
+                AssetRecord::new(NoteValue::from_raw(5), false, first_note)
             )])
         );
     }
@@ -1298,7 +1296,7 @@ mod tests {
             issued_assets,
             HashMap::from([(
                 AssetBase::derive(&ik, b"Verify with finalize"),
-                AssetInfo::new(NoteValue::from_raw(7), true, first_note)
+                AssetRecord::new(NoteValue::from_raw(7), true, first_note)
             )])
         );
     }
@@ -1359,7 +1357,7 @@ mod tests {
 
         assert_eq!(
             issued_assets.get(&asset1_base),
-            Some(&AssetInfo::new(
+            Some(&AssetRecord::new(
                 NoteValue::from_raw(15),
                 true,
                 reference_note1
@@ -1367,7 +1365,7 @@ mod tests {
         );
         assert_eq!(
             issued_assets.get(&asset2_base),
-            Some(&AssetInfo::new(
+            Some(&AssetRecord::new(
                 NoteValue::from_raw(10),
                 true,
                 reference_note2
@@ -1375,7 +1373,7 @@ mod tests {
         );
         assert_eq!(
             issued_assets.get(&asset3_base),
-            Some(&AssetInfo::new(
+            Some(&AssetRecord::new(
                 NoteValue::from_raw(5),
                 false,
                 reference_note3
@@ -1387,7 +1385,7 @@ mod tests {
     // with a global state simulation
     #[test]
     fn issue_bundle_verify_with_global_state() {
-        type GlobalState = HashMap<AssetBase, AssetInfo>;
+        type GlobalState = HashMap<AssetBase, AssetRecord>;
 
         fn first_note(bundle: &IssueBundle<Signed>, action_index: usize) -> Note {
             bundle.actions()[action_index].notes()[0]
@@ -1399,7 +1397,7 @@ mod tests {
                 .map(|(asset_base, amount, is_finalized, reference_note)| {
                     (
                         asset_base.clone(),
-                        AssetInfo::new(NoteValue::from_raw(amount), is_finalized, reference_note),
+                        AssetRecord::new(NoteValue::from_raw(amount), is_finalized, reference_note),
                     )
                 })
                 .collect::<HashMap<_, _>>()
@@ -1604,7 +1602,7 @@ mod tests {
 
         let issued_assets = [(
             final_type,
-            AssetInfo::new(
+            AssetRecord::new(
                 NoteValue::from_raw(20),
                 true,
                 Note::new(
