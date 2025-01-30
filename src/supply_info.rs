@@ -6,7 +6,7 @@ use crate::{value::NoteValue, Note};
 /// and reference note.
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
-pub struct AssetInfo {
+pub struct AssetRecord {
     /// The amount of the asset.
     pub amount: NoteValue,
 
@@ -17,8 +17,8 @@ pub struct AssetInfo {
     pub reference_note: Note,
 }
 
-impl AssetInfo {
-    /// Creates a new [`AssetInfo`] instance.
+impl AssetRecord {
+    /// Creates a new [`AssetRecord`] instance.
     pub fn new(amount: NoteValue, is_finalized: bool, reference_note: Note) -> Self {
         Self {
             amount,
