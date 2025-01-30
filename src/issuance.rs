@@ -676,6 +676,7 @@ pub fn verify_issue_bundle(
             Ok(new_records)
         })
 }
+
 /// Errors produced during the issuance process
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
