@@ -636,49 +636,46 @@ pub fn verify_issue_bundle(
         .verify(&sighash, bundle.authorization().signature())
         .map_err(|_| IssueBundleInvalidSignature)?;
 
-    let new_records =
-        bundle
-            .actions()
-            .iter()
-            .try_fold(HashMap::new(), |mut new_records, action| {
-                if !is_asset_desc_of_valid_size(action.asset_desc()) {
-                    return Err(WrongAssetDescSize);
-                }
+    bundle
+        .actions()
+        .iter()
+        .try_fold(HashMap::new(), |mut new_records, action| {
+            if !is_asset_desc_of_valid_size(action.asset_desc()) {
+                return Err(WrongAssetDescSize);
+            }
 
-                let (asset, amount) = action.verify(bundle.ik())?;
-                let is_finalized = action.is_finalized();
-                let ref_note = action.get_reference_note();
+            let (asset, amount) = action.verify(bundle.ik())?;
+            let is_finalized = action.is_finalized();
+            let ref_note = action.get_reference_note();
 
-                let new_asset_record = match new_records
-                    .get(&asset)
-                    .cloned()
-                    .or_else(|| get_global_records(&asset))
-                {
-                    // The first issuance of the asset
-                    None => AssetRecord::new(
-                        amount,
-                        is_finalized,
-                        *ref_note.ok_or(MissingReferenceNoteOnFirstIssuance)?,
-                    ),
+            let new_asset_record = match new_records
+                .get(&asset)
+                .cloned()
+                .or_else(|| get_global_records(&asset))
+            {
+                // The first issuance of the asset
+                None => AssetRecord::new(
+                    amount,
+                    is_finalized,
+                    *ref_note.ok_or(MissingReferenceNoteOnFirstIssuance)?,
+                ),
 
-                    // Subsequent issuances of the asset
-                    Some(current_record) => {
-                        let amount = (current_record.amount + amount).ok_or(ValueOverflow)?;
+                // Subsequent issuances of the asset
+                Some(current_record) => {
+                    let amount = (current_record.amount + amount).ok_or(ValueOverflow)?;
 
-                        if current_record.is_finalized {
-                            return Err(IssueActionPreviouslyFinalizedAssetBase);
-                        }
-
-                        AssetRecord::new(amount, is_finalized, current_record.reference_note)
+                    if current_record.is_finalized {
+                        return Err(IssueActionPreviouslyFinalizedAssetBase);
                     }
-                };
 
-                new_records.insert(asset, new_asset_record);
+                    AssetRecord::new(amount, is_finalized, current_record.reference_note)
+                }
+            };
 
-                Ok(new_records)
-            })?;
+            new_records.insert(asset, new_asset_record);
 
-    Ok(new_records)
+            Ok(new_records)
+        })
 }
 /// Errors produced during the issuance process
 #[derive(Debug, PartialEq, Eq)]
