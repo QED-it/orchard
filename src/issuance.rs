@@ -125,6 +125,7 @@ impl IssueAction {
     /// of all its notes and ensures that all note types are equal. It returns the asset and
     /// its supply as a tuple (`AssetBase`, `NoteValue`) or an error if the asset was not
     /// properly derived or an overflow occurred during the supply amount calculation.
+    ///
     /// # Arguments
     ///
     /// * `ik` - A reference to the `IssuanceValidatingKey` used for deriving the asset.
@@ -137,13 +138,16 @@ impl IssueAction {
     ///
     /// This function may return an error in any of the following cases:
     ///
+    /// * `WrongAssetDescSize`: The asset description size is invalid.
     /// * `ValueOverflow`: The total amount value of all notes in the `IssueAction` overflows.
-    ///
     /// * `IssueBundleIkMismatchAssetBase`: The provided `ik` is not used to derive the
     ///   `AssetBase` for **all** internal notes.
-    ///
     /// * `IssueActionWithoutNoteNotFinalized`: The `IssueAction` contains no notes and is not finalized.
     fn verify(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, NoteValue), Error> {
+        if !is_asset_desc_of_valid_size(self.asset_desc()) {
+            return Err(WrongAssetDescSize);
+        }
+
         if self.notes.is_empty() && !self.is_finalized() {
             return Err(IssueActionWithoutNoteNotFinalized);
         }
@@ -592,20 +596,20 @@ impl IssueBundle<Signed> {
 
 /// Validates an [`IssueBundle`] by performing the following checks:
 ///
-/// - **Signature Verification**:
+/// - **IssueBundle Auth signature verification**:
 ///   - Ensures the signature on the provided `sighash` matches the bundle’s authorization.
-/// - **IssueAction Verification**:
-///   - Checks that the asset description size is correct.
-///   - Runs all checks within the `IssueAction::verify` method.
+/// - **Static IssueAction verification**:
+///   - Runs checks using the `IssueAction::verify` method.
+/// - **Node global state related verification**:
 ///   - Ensures the total supply value does not overflow when adding the new amount to the existing supply.
 ///   - Verifies that the `AssetBase` has not already been finalized.
 ///   - Requires a reference note for the *first issuance* of an asset; subsequent issuance may omit it.
 ///
 /// # Arguments
 ///
-/// - `bundle`: A reference to the [`IssueBundle`] to be validated.
-/// - `sighash`: A 32-byte array representing the `sighash` used to verify the bundle's signature.
-/// - `get_global_asset_state`: A closure that takes a reference to an [`AssetBase`] and returns an
+/// * `bundle`: A reference to the [`IssueBundle`] to be validated.
+/// * `sighash`: A 32-byte array representing the `sighash` used to verify the bundle's signature.
+/// * `get_global_asset_state`: A closure that takes a reference to an [`AssetBase`] and returns an
 ///   [`Option<AssetRecord>`], representing the current state of the asset from a global store
 ///   of previously issued assets.
 ///
@@ -617,14 +621,13 @@ impl IssueBundle<Signed> {
 ///
 /// # Errors
 ///
-/// - [`IssueBundleInvalidSignature`]: Signature verification for the provided `sighash` fails.
-/// - [`WrongAssetDescSize`]: The asset description size is invalid.
-/// - [`ValueOverflow`]: adding the new amount to the existing total supply causes an overflow.
-/// - [`IssueActionPreviouslyFinalizedAssetBase`]: An action is attempted on an asset that has
+/// * `IssueBundleInvalidSignature`: Signature verification for the provided `sighash` fails.
+/// * `ValueOverflow`: adding the new amount to the existing total supply causes an overflow.
+/// * `IssueActionPreviouslyFinalizedAssetBase`: An action is attempted on an asset that has
 ///   already been finalized.
-/// - [`MissingReferenceNoteOnFirstIssuance`]: No reference note is provided for the first
+/// * `MissingReferenceNoteOnFirstIssuance`: No reference note is provided for the first
 ///   issuance of a new asset.
-/// - **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
+/// * **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
 ///   propagated
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
@@ -640,10 +643,6 @@ pub fn verify_issue_bundle(
         .actions()
         .iter()
         .try_fold(HashMap::new(), |mut new_records, action| {
-            if !is_asset_desc_of_valid_size(action.asset_desc()) {
-                return Err(WrongAssetDescSize);
-            }
-
             let (asset, amount) = action.verify(bundle.ik())?;
             let is_finalized = action.is_finalized();
             let ref_note = action.get_reference_note();
