@@ -854,14 +854,17 @@ mod tests {
         assert_eq!(note.asset(), asset);
     }
 
-    fn setup_params() -> (
-        OsRng,
-        IssuanceAuthorizingKey,
-        IssuanceValidatingKey,
-        Address,
-        [u8; 32],
-        Nullifier,
-    ) {
+    #[derive(Clone)]
+    struct TestParams {
+        rng: OsRng,
+        isk: IssuanceAuthorizingKey,
+        ik: IssuanceValidatingKey,
+        recipient: Address,
+        sighash: [u8; 32],
+        first_nullifier: Nullifier,
+    }
+
+    fn setup_params() -> TestParams {
         let mut rng = OsRng;
 
         let isk = IssuanceAuthorizingKey::random();
@@ -875,7 +878,14 @@ mod tests {
 
         let first_nullifier = Nullifier::dummy(&mut rng);
 
-        (rng, isk, ik, recipient, sighash, first_nullifier)
+        TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        }
     }
 
     /// Sets up test parameters for action verification tests.
@@ -889,7 +899,12 @@ mod tests {
         note2_asset_desc: Option<&[u8]>, // if None, both notes use the same asset
         finalize: bool,
     ) -> (IssuanceValidatingKey, AssetBase, IssueAction) {
-        let (mut rng, _, ik, recipient, _, _) = setup_params();
+        let TestParams {
+            mut rng,
+            ik,
+            recipient,
+            ..
+        } = setup_params();
 
         let asset = AssetBase::derive(&ik, note1_asset_desc);
         let note2_asset = note2_asset_desc.map_or(asset, |desc| AssetBase::derive(&ik, desc));
@@ -937,7 +952,14 @@ mod tests {
         [u8; 32],
         Nullifier,
     ) {
-        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let note1 = Note::new(
             recipient,
@@ -1014,14 +1036,20 @@ mod tests {
     #[test]
     fn action_verify_ik_mismatch_asset_base() {
         let (_, _, action) = action_verify_test_params(10, 20, b"Asset 1", None, false);
-        let (_, _, ik, _, _, _) = setup_params();
+        let TestParams { ik, .. } = setup_params();
 
         assert_eq!(action.verify(&ik), Err(IssueBundleIkMismatchAssetBase));
     }
 
     #[test]
     fn issue_bundle_basic() {
-        let (rng, _, ik, recipient, _, first_nullifier) = setup_params();
+        let TestParams {
+            rng,
+            ik,
+            recipient,
+            first_nullifier,
+            ..
+        } = setup_params();
 
         let str = "Halo".to_string();
         let str2 = "Halo2".to_string();
@@ -1137,7 +1165,9 @@ mod tests {
 
     #[test]
     fn issue_bundle_finalize_asset() {
-        let (rng, _, ik, recipient, _, _) = setup_params();
+        let TestParams {
+            rng, ik, recipient, ..
+        } = setup_params();
 
         let (mut bundle, _) = IssueBundle::new(
             ik,
@@ -1170,7 +1200,14 @@ mod tests {
 
     #[test]
     fn issue_bundle_prepare() {
-        let (rng, _, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            rng,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+            ..
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1190,7 +1227,14 @@ mod tests {
 
     #[test]
     fn issue_bundle_sign() {
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1216,7 +1260,13 @@ mod tests {
 
     #[test]
     fn issue_bundle_invalid_isk_for_signature() {
-        let (rng, _, ik, recipient, _, first_nullifier) = setup_params();
+        let TestParams {
+            rng,
+            ik,
+            recipient,
+            first_nullifier,
+            ..
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1243,7 +1293,14 @@ mod tests {
 
     #[test]
     fn issue_bundle_incorrect_asset_for_signature() {
-        let (mut rng, isk, ik, recipient, _, first_nullifier) = setup_params();
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            first_nullifier,
+            ..
+        } = setup_params();
 
         // Create a bundle with "normal" note
         let (mut bundle, _) = IssueBundle::new(
@@ -1279,7 +1336,14 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify() {
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1313,7 +1377,14 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_with_finalize() {
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (mut bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1349,7 +1420,14 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_with_issued_assets() {
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let asset1_desc = b"Verify with issued assets 1".to_vec();
         let asset2_desc = b"Verify with issued assets 2".to_vec();
@@ -1450,17 +1528,17 @@ mod tests {
         }
 
         fn build_issue_bundle(
-            params: &(
-                OsRng,
-                IssuanceAuthorizingKey,
-                IssuanceValidatingKey,
-                Address,
-                [u8; 32],
-                Nullifier,
-            ),
+            params: &TestParams,
             data: &[(&Vec<u8>, u64, bool, bool)],
         ) -> IssueBundle<Signed> {
-            let (rng, ref isk, ref ik, recipient, sighash, ref first_nullifier) = *params;
+            let TestParams {
+                rng,
+                ref isk,
+                ref ik,
+                recipient,
+                sighash,
+                ref first_nullifier,
+            } = *params;
 
             let (asset_desc, amount, first_issuance, is_finalized) = data.first().unwrap().clone();
 
@@ -1507,7 +1585,7 @@ mod tests {
 
         let params = setup_params();
 
-        let (_, _, ik, _, sighash, _) = params.clone();
+        let TestParams { ik, sighash, .. } = params.clone();
 
         let asset1_desc = b"Verify with issued assets 1".to_vec();
         let asset2_desc = b"Verify with issued assets 2".to_vec();
@@ -1654,7 +1732,14 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_previously_finalized() {
-        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1709,7 +1794,14 @@ mod tests {
             }
         }
 
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1743,7 +1835,15 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_wrong_sighash() {
-        let (rng, isk, ik, recipient, random_sighash, first_nullifier) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash: random_sighash,
+            first_nullifier,
+        } = setup_params();
+
         let (bundle, _) = IssueBundle::new(
             ik,
             b"Asset description".to_vec(),
@@ -1771,7 +1871,14 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_incorrect_asset_description() {
-        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1812,7 +1919,14 @@ mod tests {
     fn issue_bundle_verify_fail_incorrect_ik() {
         let asset_description = b"Asset".to_vec();
 
-        let (mut rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1861,7 +1975,14 @@ mod tests {
             }
         }
 
-        let (rng, isk, ik, recipient, sighash, first_nullifier) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1949,7 +2070,9 @@ mod tests {
 
     #[test]
     fn issue_bundle_asset_desc_roundtrip() {
-        let (rng, _, ik, recipient, _, _) = setup_params();
+        let TestParams {
+            rng, ik, recipient, ..
+        } = setup_params();
 
         // Generated using https://onlinetools.com/utf8/generate-random-utf8
         let asset_desc_1 = "󅞞 򬪗YV8𱈇m0{둛򙎠[㷊V֤]9Ծ̖l󾓨2닯򗏟iȰ䣄˃Oߺ񗗼🦄"
