@@ -23,14 +23,14 @@ fn build_state_entry(
 }
 
 #[derive(Clone)]
-struct BundleTestData {
+struct IssueTestNote {
     asset_desc: Vec<u8>,
     amount: u64,
     is_finalized: bool,
     first_issuance: bool,
 }
 
-impl BundleTestData {
+impl IssueTestNote {
     fn new(asset_desc: &Vec<u8>, amount: u64, is_finalized: bool, first_issuance: bool) -> Self {
         Self {
             asset_desc: asset_desc.clone(),
@@ -45,7 +45,7 @@ fn get_first_note(bundle: &IssueBundle<Signed>, action_index: usize) -> &Note {
     bundle.actions()[action_index].notes().first().unwrap()
 }
 
-fn build_issue_bundle(params: &TestParams, data: &[BundleTestData]) -> IssueBundle<Signed> {
+fn build_issue_bundle(params: &TestParams, data: &[IssueTestNote]) -> IssueBundle<Signed> {
     let TestParams {
         rng,
         ref isk,
@@ -55,7 +55,7 @@ fn build_issue_bundle(params: &TestParams, data: &[BundleTestData]) -> IssueBund
         ref first_nullifier,
     } = *params;
 
-    let BundleTestData {
+    let IssueTestNote {
         asset_desc,
         amount,
         is_finalized,
@@ -78,7 +78,7 @@ fn build_issue_bundle(params: &TestParams, data: &[BundleTestData]) -> IssueBund
         bundle.finalize_action(&asset_desc).unwrap();
     }
 
-    for BundleTestData {
+    for IssueTestNote {
         asset_desc,
         amount,
         is_finalized,
@@ -136,10 +136,10 @@ fn issue_bundle_verify_with_global_state() {
     let bundle1 = build_issue_bundle(
         &params,
         &[
-            BundleTestData::new(&asset1_desc, 7, false, true),
-            BundleTestData::new(&asset1_desc, 8, false, false),
-            BundleTestData::new(&asset2_desc, 10, true, true),
-            BundleTestData::new(&asset3_desc, 5, false, true),
+            IssueTestNote::new(&asset1_desc, 7, false, true),
+            IssueTestNote::new(&asset1_desc, 8, false, false),
+            IssueTestNote::new(&asset2_desc, 10, true, true),
+            IssueTestNote::new(&asset3_desc, 5, false, true),
         ],
     );
 
@@ -159,8 +159,8 @@ fn issue_bundle_verify_with_global_state() {
     let bundle2 = build_issue_bundle(
         &params,
         &[
-            BundleTestData::new(&asset1_desc, 3, true, true),
-            BundleTestData::new(&asset3_desc, 20, false, false),
+            IssueTestNote::new(&asset1_desc, 3, true, true),
+            IssueTestNote::new(&asset3_desc, 20, false, false),
         ],
     );
 
@@ -180,8 +180,8 @@ fn issue_bundle_verify_with_global_state() {
     let bundle3 = build_issue_bundle(
         &params,
         &[
-            BundleTestData::new(&asset1_desc, 3, false, true),
-            BundleTestData::new(&asset3_desc, 20, false, false),
+            IssueTestNote::new(&asset1_desc, 3, false, true),
+            IssueTestNote::new(&asset3_desc, 20, false, false),
         ],
     );
 
@@ -199,8 +199,8 @@ fn issue_bundle_verify_with_global_state() {
     let bundle4 = build_issue_bundle(
         &params,
         &[
-            BundleTestData::new(&asset3_desc, 50, true, true),
-            BundleTestData::new(&asset4_desc, 77, false, false),
+            IssueTestNote::new(&asset3_desc, 50, true, true),
+            IssueTestNote::new(&asset4_desc, 77, false, false),
         ],
     );
 
@@ -218,8 +218,8 @@ fn issue_bundle_verify_with_global_state() {
     let bundle5 = build_issue_bundle(
         &params,
         &[
-            BundleTestData::new(&asset3_desc, u64::MAX - 20, true, true),
-            BundleTestData::new(&asset4_desc, 77, false, true),
+            IssueTestNote::new(&asset3_desc, u64::MAX - 20, true, true),
+            IssueTestNote::new(&asset4_desc, 77, false, true),
         ],
     );
 
@@ -237,8 +237,8 @@ fn issue_bundle_verify_with_global_state() {
     let bundle6 = build_issue_bundle(
         &params,
         &[
-            BundleTestData::new(&asset3_desc, 50, true, true),
-            BundleTestData::new(&asset4_desc, 77, false, true),
+            IssueTestNote::new(&asset3_desc, 50, true, true),
+            IssueTestNote::new(&asset4_desc, 77, false, true),
         ],
     );
 
