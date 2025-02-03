@@ -678,54 +678,6 @@ pub fn verify_issue_bundle(
         })
 }
 
-/// Attempts to revert ("undo") the issuance actions in `bundle`.
-///
-/// ## How it works
-/// 1. Calls [`verify_issue_bundle`] with a custom `get_global_asset_state` that
-///    fabricates zero-amount, non-final asset states. This lets us compute the
-///    net effect (`delta`) introduced by the bundle.
-/// 2. For each asset in the resulting `delta` map, we subtract out its `delta.amount`
-///    from the *real* global state. If finalization has changed, we abort.
-/// 3. We set `is_finalized` to false in the returned map.
-///
-/// Returns `None` if any step fails (e.g., asset doesn't exist, underflow on amount,
-/// or a finalization mismatch).
-pub fn revert_issue_bundle(
-    bundle: &IssueBundle<Signed>,
-    sighash: [u8; 32],
-    get_global_asset_state: impl Fn(&AssetBase) -> Option<AssetRecord>,
-) -> Option<HashMap<AssetBase, AssetRecord>> {
-    let asset_state_deltas = verify_issue_bundle(bundle, sighash, |asset| {
-        get_global_asset_state(asset).map(|prev_asset_state| {
-            AssetRecord::new(NoteValue::zero(), false, prev_asset_state.reference_note)
-        })
-    })
-    .ok()?;
-
-    asset_state_deltas
-        .into_iter()
-        .map(|(asset, asset_state_delta)| {
-            let prev_asset_state = get_global_asset_state(&asset)?;
-
-            let new_amount = NoteValue::from_raw(
-                prev_asset_state
-                    .amount
-                    .inner()
-                    .checked_sub(asset_state_delta.amount.inner())?,
-            );
-
-            if prev_asset_state.is_finalized != asset_state_delta.is_finalized {
-                return None;
-            }
-
-            Some((
-                asset,
-                AssetRecord::new(new_amount, false, prev_asset_state.reference_note),
-            ))
-        })
-        .collect()
-}
-
 /// Errors produced during the issuance process
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
