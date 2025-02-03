@@ -1,14 +1,56 @@
 use std::collections::HashMap;
 
-use crate::issuance::{
-    verify_issue_bundle, AssetBase, AssetRecord,
-    Error::{
-        IssueActionPreviouslyFinalizedAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+use rand::{rngs::OsRng, RngCore};
+
+use orchard::{
+    asset_record::AssetRecord,
+    issuance::{
+        verify_issue_bundle,
+        Error::{
+            IssueActionPreviouslyFinalizedAssetBase, MissingReferenceNoteOnFirstIssuance,
+            ValueOverflow,
+        },
+        IssueBundle, IssueInfo, Signed,
     },
-    IssueBundle, IssueInfo, Note, NoteValue, Signed,
+    keys::{FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey},
+    note::{AssetBase, Nullifier},
+    value::NoteValue,
+    Address, Note,
 };
 
-use super::{setup_params, TestParams};
+#[derive(Clone)]
+struct TestParams {
+    rng: OsRng,
+    isk: IssuanceAuthorizingKey,
+    ik: IssuanceValidatingKey,
+    recipient: Address,
+    sighash: [u8; 32],
+    first_nullifier: Nullifier,
+}
+
+fn setup_params() -> TestParams {
+    let mut rng = OsRng;
+
+    let isk = IssuanceAuthorizingKey::random();
+    let ik: IssuanceValidatingKey = (&isk).into();
+
+    let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
+    let recipient = fvk.address_at(0u32, Scope::External);
+
+    let mut sighash = [0u8; 32];
+    rng.fill_bytes(&mut sighash);
+
+    let first_nullifier = Nullifier::dummy(&mut rng);
+
+    TestParams {
+        rng,
+        isk,
+        ik,
+        recipient,
+        sighash,
+        first_nullifier,
+    }
+}
 
 fn build_state_entry(
     asset_base: &AssetBase,

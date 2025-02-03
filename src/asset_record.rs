@@ -4,8 +4,7 @@ use crate::{value::NoteValue, Note};
 
 /// Represents aggregated information about an asset, including its supply, finalization status,
 /// and reference note.
-#[derive(Debug, Clone, Copy)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AssetRecord {
     /// The amount of the asset.
     pub amount: NoteValue,

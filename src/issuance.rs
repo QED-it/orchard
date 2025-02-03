@@ -794,8 +794,6 @@ mod tests {
     use rand::RngCore;
     use std::collections::HashMap;
 
-    mod global_state;
-
     /// Validation for reference note
     ///
     /// The following checks are performed:
