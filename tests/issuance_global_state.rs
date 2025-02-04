@@ -35,8 +35,8 @@ struct TestParams {
 }
 
 fn setup_params() -> TestParams {
-    use group::ff::{FromUniformBytes, PrimeField};
-    use pasta_curves::pallas;
+    use group::{ff::PrimeField, Curve, Group};
+    use pasta_curves::{arithmetic::CurveAffine, pallas};
 
     let rng = OsRng;
 
@@ -48,8 +48,20 @@ fn setup_params() -> TestParams {
 
     let sighash = random_bytes(rng);
 
-    let base = pallas::Base::from_uniform_bytes(&random_bytes(rng));
-    let first_nullifier = Nullifier::from_bytes(&base.to_repr()).unwrap();
+    let first_nullifier = {
+        let point = pallas::Point::random(rng);
+
+        // For testing purposes only: replicate the behavior of the
+        // `orchard::spec::extract_p` function, which is marked as `pub(crate)` in
+        // `orchard` and is therefore not visible here.
+        let base = point
+            .to_affine()
+            .coordinates()
+            .map(|c| *c.x())
+            .unwrap_or_else(pallas::Base::zero);
+
+        Nullifier::from_bytes(&base.to_repr()).unwrap()
+    };
 
     TestParams {
         rng,
