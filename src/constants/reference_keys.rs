@@ -1,4 +1,10 @@
-//! Orchard reference keys (spending key and recipient address) used for reference notes.
+//! Orchard reference keys, including the spending key and recipient address, used for reference notes.
+//!
+//! The reference SpendingKey is a placeholder key with all bytes set to zero.
+//! Using this SpendingKey, we derive the FullViewingKey, and the recipient address.
+//! To avoid repeating the derivation process whenever the recipient address is required, we store
+//! its raw encoding.
+
 use crate::{
     address::Address,
     keys::{FullViewingKey, SpendingKey},

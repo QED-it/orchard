@@ -1,26 +1,51 @@
-//! Structs related to issuance bundles and the associated logic.
+//! Issuance logic for Zcash Shielded Assets (ZSAs).
+//!
+//! This module defines structures and methods for creating, authorizing, and verifying
+//! issuance bundles, which introduce new shielded assets into the Orchard protocol.
+//!
+//! The core components include:
+//! - `IssueBundle`: Represents a collection of issuance actions with authorization states.
+//! - `IssueAction`: Defines an individual issuance event, including asset details and notes.
+//! - `IssueAuth` variants: Track issuance states from creation to finalization.
+//! - `verify_issue_bundle`: Ensures issuance validity and prevents unauthorized asset creation.
+//!
+//! Errors related to issuance, such as invalid signatures or supply overflows,
+//! are handled through the `Error` enum.
+
 use blake2b_simd::Hash as Blake2bHash;
 use group::Group;
 use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
-use crate::issuance::Error::{
-    AssetBaseCannotBeIdentityPoint, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
-    IssueBundleInvalidSignature, ValueSumOverflow, WrongAssetDescSize,
-};
+use crate::constants::reference_keys::ReferenceKeys;
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use crate::note::asset_base::is_asset_desc_of_valid_size;
 use crate::note::{AssetBase, Nullifier, Rho};
 
-use crate::constants::reference_keys::ReferenceKeys;
-use crate::supply_info::{AssetSupply, SupplyInfo};
-use crate::value::{NoteValue, ValueSum};
+use crate::value::NoteValue;
 use crate::{Address, Note};
+
+use crate::asset_record::AssetRecord;
+
+use Error::{
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
+    MissingReferenceNoteOnFirstIssuance, ValueOverflow, WrongAssetDescSize,
+};
+
+/// Checks if a given note is a reference note.
+///
+/// A reference note satisfies the following conditions:
+/// - The note's value is zero.
+/// - The note's recipient matches the reference recipient.
+fn is_reference_note(note: &Note) -> bool {
+    note.value() == NoteValue::zero() && note.recipient() == ReferenceKeys::recipient()
+}
 
 /// A bundle of actions to be applied to the ledger.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,8 +54,6 @@ pub struct IssueBundle<T: IssueAuth> {
     ik: IssuanceValidatingKey,
     /// The list of issue actions that make up this bundle.
     actions: NonEmpty<IssueAction>,
-    /// The list of reference notes created in this bundle.
-    reference_notes: HashMap<AssetBase, Note>,
     /// The authorization for this action.
     authorization: T,
 }
@@ -100,8 +123,8 @@ impl IssueAction {
     ///
     /// This function calculates the total value (supply) of the asset by summing the values
     /// of all its notes and ensures that all note types are equal. It returns the asset and
-    /// its supply as a tuple (`AssetBase`, `AssetSupply`) or an error if the asset was not
-    ///  properly derived or an overflow occurred during the supply amount calculation.
+    /// its supply as a tuple (`AssetBase`, `NoteValue`) or an error if the asset was not
+    /// properly derived or an overflow occurred during the supply amount calculation.
     ///
     /// # Arguments
     ///
@@ -109,19 +132,22 @@ impl IssueAction {
     ///
     /// # Returns
     ///
-    /// A `Result` containing a tuple with an `AssetBase` and an `AssetSupply`, or an `Error`.
+    /// A `Result` containing a tuple with an `AssetBase` and an `NoteValue`, or an `Error`.
     ///
     /// # Errors
     ///
     /// This function may return an error in any of the following cases:
     ///
-    /// * `ValueSumOverflow`: If the total amount value of all notes in the `IssueAction` overflows.
-    ///
-    /// * `IssueBundleIkMismatchAssetBase`: If the provided `ik` is not used to derive the
+    /// * `WrongAssetDescSize`: The asset description size is invalid.
+    /// * `ValueOverflow`: The total amount value of all notes in the `IssueAction` overflows.
+    /// * `IssueBundleIkMismatchAssetBase`: The provided `ik` is not used to derive the
     ///   `AssetBase` for **all** internal notes.
-    ///
-    /// * `IssueActionWithoutNoteNotFinalized`:If the `IssueAction` contains no note and is not finalized.
-    fn verify_supply(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, AssetSupply), Error> {
+    /// * `IssueActionWithoutNoteNotFinalized`: The `IssueAction` contains no notes and is not finalized.
+    fn verify(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, NoteValue), Error> {
+        if !is_asset_desc_of_valid_size(self.asset_desc()) {
+            return Err(WrongAssetDescSize);
+        }
+
         if self.notes.is_empty() && !self.is_finalized() {
             return Err(IssueActionWithoutNoteNotFinalized);
         }
@@ -133,26 +159,22 @@ impl IssueAction {
         let value_sum = self
             .notes
             .iter()
-            .try_fold(ValueSum::zero(), |value_sum, &note| {
+            .try_fold(NoteValue::zero(), |value_sum, &note| {
                 //The asset base should not be the identity point of the Pallas curve.
                 if bool::from(note.asset().cv_base().is_identity()) {
                     return Err(AssetBaseCannotBeIdentityPoint);
                 }
 
                 // All assets should be derived correctly
-                note.asset()
-                    .eq(&issue_asset)
-                    .then_some(())
-                    .ok_or(IssueBundleIkMismatchAssetBase)?;
+                if note.asset() != issue_asset {
+                    return Err(IssueBundleIkMismatchAssetBase);
+                }
 
                 // The total amount should not overflow
-                (value_sum + note.value()).ok_or(ValueSumOverflow)
+                (value_sum + note.value()).ok_or(ValueOverflow)
             })?;
 
-        Ok((
-            issue_asset,
-            AssetSupply::new(value_sum, self.is_finalized()),
-        ))
+        Ok((issue_asset, value_sum))
     }
 
     /// Serialize `finalize` flag to a byte
@@ -164,16 +186,29 @@ impl IssueAction {
             0b0000_0000
         }
     }
+
+    /// Returns the reference note if the first note matches the reference note criteria.
+    ///
+    /// A reference note must be the first note in the `notes` vector and satisfy the following:
+    /// - The note's value is zero.
+    /// - The note's recipient matches the reference recipient.
+    pub fn get_reference_note(&self) -> Option<&Note> {
+        self.notes.first().filter(|note| is_reference_note(note))
+    }
 }
 
 /// Defines the authorization type of an Issue bundle.
 pub trait IssueAuth: fmt::Debug + Clone {}
 
-/// Marker for an unauthorized bundle with no proofs or signatures.
+/// Marker for an unsigned bundle with no nullifier and no sighash injected.
 #[derive(Debug, Clone)]
-pub struct Unauthorized;
+pub struct AwaitingNullifier;
 
-/// Marker for an unauthorized bundle with injected sighash.
+/// Marker for an unsigned bundle with a Nullifier injected.
+#[derive(Debug, Clone)]
+pub struct AwaitingSighash;
+
+/// Marker for an unsigned bundle with both Sighash and Nullifier injected.
 #[derive(Debug, Clone)]
 pub struct Prepared {
     sighash: [u8; 32],
@@ -199,7 +234,8 @@ impl Signed {
     }
 }
 
-impl IssueAuth for Unauthorized {}
+impl IssueAuth for AwaitingNullifier {}
+impl IssueAuth for AwaitingSighash {}
 impl IssueAuth for Prepared {}
 impl IssueAuth for Signed {}
 
@@ -222,20 +258,50 @@ impl<T: IssueAuth> IssueBundle<T> {
         &self.authorization
     }
 
-    /// Find the actions corresponding to the `asset_desc` for a given `IssueBundle`.
-    pub fn get_actions_by_desc(&self, asset_desc: &[u8]) -> Vec<&IssueAction> {
-        self.actions
+    /// Find the action corresponding to the `asset_desc` for a given `IssueBundle`.
+    ///
+    /// # Returns
+    ///
+    /// If a single matching action is found, it is returned as `Some(&IssueAction)`.
+    /// If no action matches the given `asset_desc`, it returns `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if multiple matching actions are found.
+    pub fn get_action_by_desc(&self, asset_desc: &[u8]) -> Option<&IssueAction> {
+        let issue_actions: Vec<&IssueAction> = self
+            .actions
             .iter()
             .filter(|a| a.asset_desc.eq(asset_desc))
-            .collect()
+            .collect();
+        match issue_actions.len() {
+            0 => None,
+            1 => Some(issue_actions[0]),
+            _ => panic!("Multiple IssueActions with the same asset_desc"),
+        }
     }
 
     /// Find the actions corresponding to an Asset Base `asset` for a given `IssueBundle`.
-    pub fn get_actions_by_asset(&self, asset: &AssetBase) -> Vec<&IssueAction> {
-        self.actions
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&IssueAction)` if a single matching action is found.
+    /// Returns `None` if no action matches the given asset base.
+    ///
+    /// # Panics
+    ///
+    /// Panics if multiple matching actions are found.
+    pub fn get_action_by_asset(&self, asset: &AssetBase) -> Option<&IssueAction> {
+        let issue_actions: Vec<&IssueAction> = self
+            .actions
             .iter()
             .filter(|a| AssetBase::derive(&self.ik, &a.asset_desc).eq(asset))
-            .collect()
+            .collect();
+        match issue_actions.len() {
+            0 => None,
+            1 => Some(issue_actions[0]),
+            _ => panic!("Multiple IssueActions with the same AssetBase"),
+        }
     }
 
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
@@ -248,13 +314,11 @@ impl<T: IssueAuth> IssueBundle<T> {
     pub fn from_parts(
         ik: IssuanceValidatingKey,
         actions: NonEmpty<IssueAction>,
-        reference_notes: HashMap<AssetBase, Note>,
         authorization: T,
     ) -> Self {
         IssueBundle {
             ik,
             actions,
-            reference_notes,
             authorization,
         }
     }
@@ -268,20 +332,19 @@ impl<T: IssueAuth> IssueBundle<T> {
         IssueBundle {
             ik: self.ik,
             actions: self.actions,
-            reference_notes: self.reference_notes,
             authorization: map_auth(authorization),
         }
     }
 }
 
-impl IssueBundle<Unauthorized> {
+impl IssueBundle<AwaitingNullifier> {
     /// Constructs a new `IssueBundle`.
     ///
     /// If issue_info is None, the new `IssueBundle` will contain one `IssueAction` without notes
     /// and with `finalize` set to true.
-    /// Otherwise, the new `IssueBundle` will contain one `IssueAction with one note created from
+    /// Otherwise, the new `IssueBundle` will contain one `IssueAction` with one note created from
     /// issue_info values and with `finalize` set to false. In this created note, rho will be
-    /// randomly sampled, similar to dummy note generation.
+    /// set to zero. The rho value will be updated later by calling the `update_rho` method.
     ///
     /// If `first_issuance` is true, the `IssueBundle` will contain a reference note for the asset
     /// defined by (`asset_desc`, `ik`).
@@ -290,32 +353,24 @@ impl IssueBundle<Unauthorized> {
     ///
     /// This function may return an error in any of the following cases:
     ///
-    /// * `WrongAssetDescSize`: If `asset_desc` is empty or longer than 512 bytes.
+    /// * `WrongAssetDescSize`: The `asset_desc` is empty or longer than 512 bytes.
     pub fn new(
         ik: IssuanceValidatingKey,
         asset_desc: Vec<u8>,
         issue_info: Option<IssueInfo>,
         first_issuance: bool,
         mut rng: impl RngCore,
-    ) -> Result<(IssueBundle<Unauthorized>, AssetBase), Error> {
+    ) -> Result<(IssueBundle<AwaitingNullifier>, AssetBase), Error> {
         if !is_asset_desc_of_valid_size(&asset_desc) {
             return Err(WrongAssetDescSize);
         }
 
         let asset = AssetBase::derive(&ik, &asset_desc);
 
-        let reference_note = Note::new(
-            ReferenceKeys::recipient(),
-            NoteValue::zero(),
-            asset,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
-            &mut rng,
-        );
-
         let mut notes = vec![];
         if first_issuance {
-            notes.push(reference_note);
-        }
+            notes.push(create_reference_note(asset, &mut rng));
+        };
 
         let action = match issue_info {
             None => IssueAction {
@@ -328,7 +383,7 @@ impl IssueBundle<Unauthorized> {
                     issue_info.recipient,
                     issue_info.value,
                     asset,
-                    Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+                    Rho::zero(),
                     &mut rng,
                 );
 
@@ -342,18 +397,11 @@ impl IssueBundle<Unauthorized> {
             }
         };
 
-        let reference_notes = if first_issuance {
-            HashMap::from([(asset, reference_note)])
-        } else {
-            HashMap::new()
-        };
-
         Ok((
             IssueBundle {
                 ik,
                 actions: NonEmpty::new(action),
-                reference_notes,
-                authorization: Unauthorized,
+                authorization: AwaitingNullifier,
             },
             asset,
         ))
@@ -361,7 +409,7 @@ impl IssueBundle<Unauthorized> {
 
     /// Add a new note to the `IssueBundle`.
     ///
-    /// Rho will be randomly sampled, similar to dummy note generation.
+    /// Rho is set to zero. The rho value will be updated later by calling the `update_rho` method.
     /// If `first_issuance` is true, we will also add a reference note for the asset defined by
     /// (`asset_desc`, `ik`).
     ///
@@ -369,7 +417,7 @@ impl IssueBundle<Unauthorized> {
     ///
     /// This function may return an error in any of the following cases:
     ///
-    /// * `WrongAssetDescSize`: If `asset_desc` is empty or longer than 512 bytes.
+    /// * `WrongAssetDescSize`: The `asset_desc` is empty or longer than 512 bytes.
     pub fn add_recipient(
         &mut self,
         asset_desc: &[u8],
@@ -384,21 +432,13 @@ impl IssueBundle<Unauthorized> {
 
         let asset = AssetBase::derive(&self.ik, asset_desc);
 
-        let reference_note = Note::new(
-            ReferenceKeys::recipient(),
-            NoteValue::zero(),
-            asset,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
-            &mut rng,
-        );
+        let note = Note::new(recipient, value, asset, Rho::zero(), &mut rng);
 
-        let note = Note::new(
-            recipient,
-            value,
-            asset,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
-            &mut rng,
-        );
+        let notes = if first_issuance {
+            vec![create_reference_note(asset, &mut rng), note]
+        } else {
+            vec![note]
+        };
 
         let action = self
             .actions
@@ -408,18 +448,14 @@ impl IssueBundle<Unauthorized> {
         match action {
             Some(action) => {
                 // Append to an existing IssueAction.
-                action.notes.push(note);
                 if first_issuance {
-                    action.notes.push(reference_note);
+                    // It cannot be first issuance because we have already some notes for this asset.
+                    return Err(CannotBeFirstIssuance);
                 }
+                action.notes.extend(notes);
             }
             None => {
                 // Insert a new IssueAction.
-                let notes = if first_issuance {
-                    vec![reference_note, note]
-                } else {
-                    vec![note]
-                };
                 self.actions.push(IssueAction {
                     asset_desc: Vec::from(asset_desc),
                     notes,
@@ -427,10 +463,6 @@ impl IssueBundle<Unauthorized> {
                 });
             }
         };
-
-        if first_issuance {
-            self.reference_notes.insert(asset, reference_note);
-        }
 
         Ok(asset)
     }
@@ -461,15 +493,52 @@ impl IssueBundle<Unauthorized> {
         Ok(())
     }
 
+    /// Compute the correct rho value for each note in the bundle according to
+    /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227].
+    ///
+    /// [zip227]: https://zips.z.cash/zip-0227
+    pub fn update_rho(self, first_nullifier: &Nullifier) -> IssueBundle<AwaitingSighash> {
+        let mut bundle = self;
+        bundle
+            .actions
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index_action, action)| {
+                action
+                    .notes
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(index_note, note)| {
+                        note.update_rho_for_issuance_note(
+                            first_nullifier,
+                            index_action.try_into().unwrap(),
+                            index_note.try_into().unwrap(),
+                        );
+                    });
+            });
+        bundle.map_authorization(|_| AwaitingSighash)
+    }
+}
+
+impl IssueBundle<AwaitingSighash> {
     /// Loads the sighash into the bundle, as preparation for signing.
     pub fn prepare(self, sighash: [u8; 32]) -> IssueBundle<Prepared> {
         IssueBundle {
             ik: self.ik,
             actions: self.actions,
-            reference_notes: self.reference_notes,
             authorization: Prepared { sighash },
         }
     }
+}
+
+fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
+    Note::new(
+        ReferenceKeys::recipient(),
+        NoteValue::zero(),
+        asset,
+        Rho::zero(),
+        &mut rng,
+    )
 }
 
 impl IssueBundle<Prepared> {
@@ -480,7 +549,7 @@ impl IssueBundle<Prepared> {
 
         // Make sure the `expected_ik` matches the `asset` for all notes.
         self.actions.iter().try_for_each(|action| {
-            action.verify_supply(&expected_ik)?;
+            action.verify(&expected_ik)?;
             Ok(())
         })?;
 
@@ -492,7 +561,6 @@ impl IssueBundle<Prepared> {
         Ok(IssueBundle {
             ik: self.ik,
             actions: self.actions,
-            reference_notes: self.reference_notes,
             authorization: Signed { signature },
         })
     }
@@ -526,71 +594,88 @@ impl IssueBundle<Signed> {
     }
 }
 
-/// Validation for Orchard IssueBundles
+/// Validates an [`IssueBundle`] by performing the following checks:
 ///
-/// A set of previously finalized asset types must be provided in `finalized` argument.
+/// - **IssueBundle Auth signature verification**:
+///   - Ensures the signature on the provided `sighash` matches the bundle’s authorization.
+/// - **Static IssueAction verification**:
+///   - Runs checks using the `IssueAction::verify` method.
+/// - **Node global state related verification**:
+///   - Ensures the total supply value does not overflow when adding the new amount to the existing supply.
+///   - Verifies that the `AssetBase` has not already been finalized.
+///   - Requires a reference note for the *first issuance* of an asset; subsequent issuance may omit it.
 ///
-/// The following checks are performed:
-/// * For the `IssueBundle`:
-///     * the Signature on top of the provided `sighash` verifies correctly.
-/// * For each `IssueAction`:
-///     * Asset description size is collect.
-///     * `AssetBase` for the `IssueAction` has not been previously finalized.
-/// * For each `Note` inside an `IssueAction`:
-///     * All notes have the same, correct `AssetBase`.
+/// # Arguments
 ///
-// # Returns
+/// * `bundle`: A reference to the [`IssueBundle`] to be validated.
+/// * `sighash`: A 32-byte array representing the `sighash` used to verify the bundle's signature.
+/// * `get_global_asset_state`: A closure that takes a reference to an [`AssetBase`] and returns an
+///   [`Option<AssetRecord>`], representing the current state of the asset from a global store
+///   of previously issued assets.
 ///
-/// A Result containing a SupplyInfo struct, which stores supply information in a HashMap.
-/// The HashMap uses AssetBase as the key, and an AssetSupply struct as the value. The
-/// AssetSupply contains a ValueSum (representing the total value of all notes for the asset)
-/// and a bool indicating whether the asset is finalized.
+/// # Returns
+///
+/// A `Result` containing a [`HashMap<AssetBase, AssetRecord>`] upon success, where each key-value
+/// pair represents the new or updated state of an asset. The key is an [`AssetBase`], and the value
+/// is the corresponding updated [`AssetRecord`].
 ///
 /// # Errors
 ///
-/// * `IssueBundleInvalidSignature`: This error occurs if the signature verification
-///    for the provided `sighash` fails.
-/// * `WrongAssetDescSize`: This error is raised if the asset description size for any
-///    asset in the bundle is incorrect.
-/// * `IssueActionPreviouslyFinalizedAssetBase`:  This error occurs if the asset has already been
-///    finalized (inserted into the `finalized` collection).
-/// * `ValueSumOverflow`: This error occurs if an overflow happens during the calculation of
-///     the value sum for the notes in the asset.
-/// * `IssueBundleIkMismatchAssetBase`: This error is raised if the `AssetBase` derived from
-///    the `ik` (Issuance Validating Key) and the `asset_desc` (Asset Description) does not match
-///    the expected `AssetBase`.
+/// * `IssueBundleInvalidSignature`: Signature verification for the provided `sighash` fails.
+/// * `ValueOverflow`: adding the new amount to the existing total supply causes an overflow.
+/// * `IssueActionPreviouslyFinalizedAssetBase`: An action is attempted on an asset that has
+///   already been finalized.
+/// * `MissingReferenceNoteOnFirstIssuance`: No reference note is provided for the first
+///   issuance of a new asset.
+/// * **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
+///   propagated
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
-    finalized: &HashSet<AssetBase>, // The finalization set.
-) -> Result<SupplyInfo, Error> {
+    get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
+) -> Result<HashMap<AssetBase, AssetRecord>, Error> {
     bundle
-        .ik
-        .verify(&sighash, &bundle.authorization.signature)
+        .ik()
+        .verify(&sighash, bundle.authorization().signature())
         .map_err(|_| IssueBundleInvalidSignature)?;
 
-    let supply_info =
-        bundle
-            .actions()
-            .iter()
-            .try_fold(SupplyInfo::new(), |mut supply_info, action| {
-                if !is_asset_desc_of_valid_size(action.asset_desc()) {
-                    return Err(WrongAssetDescSize);
+    bundle
+        .actions()
+        .iter()
+        .try_fold(HashMap::new(), |mut new_records, action| {
+            let (asset, amount) = action.verify(bundle.ik())?;
+
+            let is_finalized = action.is_finalized();
+            let ref_note = action.get_reference_note();
+
+            let new_asset_record = match new_records
+                .get(&asset)
+                .cloned()
+                .or_else(|| get_global_records(&asset))
+            {
+                // The first issuance of the asset
+                None => AssetRecord::new(
+                    amount,
+                    is_finalized,
+                    *ref_note.ok_or(MissingReferenceNoteOnFirstIssuance)?,
+                ),
+
+                // Subsequent issuance of the asset
+                Some(current_record) => {
+                    let amount = (current_record.amount + amount).ok_or(ValueOverflow)?;
+
+                    if current_record.is_finalized {
+                        return Err(IssueActionPreviouslyFinalizedAssetBase);
+                    }
+
+                    AssetRecord::new(amount, is_finalized, current_record.reference_note)
                 }
+            };
 
-                let (asset, supply) = action.verify_supply(bundle.ik())?;
+            new_records.insert(asset, new_asset_record);
 
-                // Fail if the asset was previously finalized.
-                if finalized.contains(&asset) {
-                    return Err(IssueActionPreviouslyFinalizedAssetBase(asset));
-                }
-
-                supply_info.add_supply(asset, supply)?;
-
-                Ok(supply_info)
-            })?;
-
-    Ok(supply_info)
+            Ok(new_records)
+        })
 }
 
 /// Errors produced during the issuance process
@@ -606,15 +691,20 @@ pub enum Error {
     IssueActionWithoutNoteNotFinalized,
     /// The `AssetBase` is the Pallas identity point, which is invalid.
     AssetBaseCannotBeIdentityPoint,
+    /// It cannot be first issuance because we have already some notes for this asset.
+    CannotBeFirstIssuance,
 
     /// Verification errors:
     /// Invalid signature.
     IssueBundleInvalidSignature,
     /// The provided `AssetBase` has been previously finalized.
-    IssueActionPreviouslyFinalizedAssetBase(AssetBase),
+    IssueActionPreviouslyFinalizedAssetBase,
 
     /// Overflow error occurred while calculating the value of the asset
-    ValueSumOverflow,
+    ValueOverflow,
+
+    /// No reference note is provided for the first issuance of a new asset.
+    MissingReferenceNoteOnFirstIssuance,
 }
 
 impl fmt::Display for Error {
@@ -644,16 +734,28 @@ impl fmt::Display for Error {
                     "the AssetBase is the identity point of the Pallas curve, which is invalid."
                 )
             }
+            CannotBeFirstIssuance => {
+                write!(
+                    f,
+                    "it cannot be first issuance because we have already some notes for this asset."
+                )
+            }
             IssueBundleInvalidSignature => {
                 write!(f, "invalid signature")
             }
-            IssueActionPreviouslyFinalizedAssetBase(_) => {
+            IssueActionPreviouslyFinalizedAssetBase => {
                 write!(f, "the provided `AssetBase` has been previously finalized")
             }
-            ValueSumOverflow => {
+            ValueOverflow => {
                 write!(
                     f,
                     "overflow error occurred while calculating the value of the asset"
+                )
+            }
+            MissingReferenceNoteOnFirstIssuance => {
+                write!(
+                    f,
+                    "no reference note is provided for the first issuance of a new asset."
                 )
             }
         }
@@ -662,33 +764,58 @@ impl fmt::Display for Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{AssetSupply, IssueBundle, IssueInfo};
-    use crate::issuance::Error::{
-        AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
-        IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
-        IssueBundleInvalidSignature, WrongAssetDescSize,
+    use super::{AssetRecord, IssueBundle, IssueInfo};
+    use crate::{
+        builder::{Builder, BundleType},
+        circuit::ProvingKey,
+        issuance::Error::{
+            AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
+            IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
+            IssueBundleInvalidSignature, WrongAssetDescSize,
+        },
+        issuance::{
+            is_reference_note, verify_issue_bundle, AwaitingNullifier, IssueAction, Signed,
+        },
+        keys::{
+            FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope,
+            SpendAuthorizingKey, SpendingKey,
+        },
+        note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
+        orchard_flavor::OrchardZSA,
+        tree::{MerkleHashOrchard, MerklePath},
+        value::NoteValue,
+        Address, Bundle, Note,
     };
-    use crate::issuance::{verify_issue_bundle, IssueAction, Signed, Unauthorized};
-    use crate::keys::{
-        FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope, SpendingKey,
-    };
-    use crate::note::{AssetBase, Nullifier, Rho};
-    use crate::value::{NoteValue, ValueSum};
-    use crate::{Address, Note};
+    use bridgetree::BridgeTree;
     use group::{Group, GroupEncoding};
     use nonempty::NonEmpty;
     use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
-    fn setup_params() -> (
-        OsRng,
-        IssuanceAuthorizingKey,
-        IssuanceValidatingKey,
-        Address,
-        [u8; 32],
-    ) {
+    /// Validation for reference note
+    ///
+    /// The following checks are performed:
+    /// - the note value of the reference note is equal to 0
+    /// - the recipient of the reference note is equal to the reference recipient
+    /// - the asset of the reference note is equal to the provided asset
+    fn verify_reference_note(note: &Note, asset: AssetBase) {
+        assert!(is_reference_note(note));
+        assert_eq!(note.asset(), asset);
+    }
+
+    #[derive(Clone)]
+    struct TestParams {
+        rng: OsRng,
+        isk: IssuanceAuthorizingKey,
+        ik: IssuanceValidatingKey,
+        recipient: Address,
+        sighash: [u8; 32],
+        first_nullifier: Nullifier,
+    }
+
+    fn setup_params() -> TestParams {
         let mut rng = OsRng;
 
         let isk = IssuanceAuthorizingKey::random();
@@ -700,21 +827,35 @@ mod tests {
         let mut sighash = [0u8; 32];
         rng.fill_bytes(&mut sighash);
 
-        (rng, isk, ik, recipient, sighash)
+        let first_nullifier = Nullifier::dummy(&mut rng);
+
+        TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        }
     }
 
-    /// Sets up test parameters for supply tests.
+    /// Sets up test parameters for action verification tests.
     ///
     /// This function generates two notes with the specified values and asset descriptions,
     /// and returns the issuance validating key, the asset base, and the issue action.
-    fn supply_test_params(
+    fn action_verify_test_params(
         note1_value: u64,
         note2_value: u64,
         note1_asset_desc: &[u8],
         note2_asset_desc: Option<&[u8]>, // if None, both notes use the same asset
         finalize: bool,
     ) -> (IssuanceValidatingKey, AssetBase, IssueAction) {
-        let (mut rng, _, ik, recipient, _) = setup_params();
+        let TestParams {
+            mut rng,
+            ik,
+            recipient,
+            ..
+        } = setup_params();
 
         let asset = AssetBase::derive(&ik, note1_asset_desc);
         let note2_asset = note2_asset_desc.map_or(asset, |desc| AssetBase::derive(&ik, desc));
@@ -723,7 +864,7 @@ mod tests {
             recipient,
             NoteValue::from_raw(note1_value),
             asset,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
@@ -731,7 +872,7 @@ mod tests {
             recipient,
             NoteValue::from_raw(note2_value),
             note2_asset,
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
@@ -756,14 +897,26 @@ mod tests {
     fn identity_point_test_params(
         note1_value: u64,
         note2_value: u64,
-    ) -> (IssuanceAuthorizingKey, IssueBundle<Unauthorized>, [u8; 32]) {
-        let (mut rng, isk, ik, recipient, sighash) = setup_params();
+    ) -> (
+        IssuanceAuthorizingKey,
+        IssueBundle<AwaitingNullifier>,
+        [u8; 32],
+        Nullifier,
+    ) {
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let note1 = Note::new(
             recipient,
             NoteValue::from_raw(note1_value),
             identity_point(),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
@@ -771,83 +924,83 @@ mod tests {
             recipient,
             NoteValue::from_raw(note2_value),
             identity_point(),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
         let action =
             IssueAction::from_parts("arbitrary asset_desc".into(), vec![note1, note2], false);
 
-        let bundle =
-            IssueBundle::from_parts(ik, NonEmpty::new(action), HashMap::new(), Unauthorized);
+        let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), AwaitingNullifier);
 
-        (isk, bundle, sighash)
+        (isk, bundle, sighash, first_nullifier)
     }
 
     #[test]
-    fn verify_supply_valid() {
-        let (ik, test_asset, action) = supply_test_params(10, 20, b"Asset 1", None, false);
+    fn action_verify_valid() {
+        let (ik, test_asset, action) = action_verify_test_params(10, 20, b"Asset 1", None, false);
 
-        let result = action.verify_supply(&ik);
+        let result = action.verify(&ik);
 
         assert!(result.is_ok());
 
-        let (asset, supply) = result.unwrap();
+        let (asset, amount) = result.unwrap();
 
         assert_eq!(asset, test_asset);
-        assert_eq!(supply.amount, ValueSum::from_raw(30));
-        assert!(!supply.is_finalized);
+        assert_eq!(amount, NoteValue::from_raw(30));
+        assert!(!action.is_finalized());
     }
 
     #[test]
-    fn verify_supply_invalid_for_asset_base_as_identity() {
-        let (_, bundle, _) = identity_point_test_params(10, 20);
+    fn action_verify_invalid_for_asset_base_as_identity() {
+        let (_, bundle, _, _) = identity_point_test_params(10, 20);
 
         assert_eq!(
-            bundle.actions.head.verify_supply(&bundle.ik),
+            bundle.actions.head.verify(&bundle.ik),
             Err(AssetBaseCannotBeIdentityPoint)
         );
     }
 
     #[test]
-    fn verify_supply_finalized() {
-        let (ik, test_asset, action) = supply_test_params(10, 20, b"Asset 1", None, true);
+    fn action_verify_finalized() {
+        let (ik, test_asset, action) = action_verify_test_params(10, 20, b"Asset 1", None, true);
 
-        let result = action.verify_supply(&ik);
+        let result = action.verify(&ik);
 
         assert!(result.is_ok());
 
-        let (asset, supply) = result.unwrap();
+        let (asset, amount) = result.unwrap();
 
         assert_eq!(asset, test_asset);
-        assert_eq!(supply.amount, ValueSum::from_raw(30));
-        assert!(supply.is_finalized);
+        assert_eq!(amount, NoteValue::from_raw(30));
+        assert!(action.is_finalized());
     }
 
     #[test]
-    fn verify_supply_incorrect_asset_base() {
-        let (ik, _, action) = supply_test_params(10, 20, b"Asset 1", Some(b"Asset 2"), false);
+    fn action_verify_incorrect_asset_base() {
+        let (ik, _, action) =
+            action_verify_test_params(10, 20, b"Asset 1", Some(b"Asset 2"), false);
 
-        assert_eq!(
-            action.verify_supply(&ik),
-            Err(IssueBundleIkMismatchAssetBase)
-        );
+        assert_eq!(action.verify(&ik), Err(IssueBundleIkMismatchAssetBase));
     }
 
     #[test]
-    fn verify_supply_ik_mismatch_asset_base() {
-        let (_, _, action) = supply_test_params(10, 20, b"Asset 1", None, false);
-        let (_, _, ik, _, _) = setup_params();
+    fn action_verify_ik_mismatch_asset_base() {
+        let (_, _, action) = action_verify_test_params(10, 20, b"Asset 1", None, false);
+        let TestParams { ik, .. } = setup_params();
 
-        assert_eq!(
-            action.verify_supply(&ik),
-            Err(IssueBundleIkMismatchAssetBase)
-        );
+        assert_eq!(action.verify(&ik), Err(IssueBundleIkMismatchAssetBase));
     }
 
     #[test]
     fn issue_bundle_basic() {
-        let (rng, _, ik, recipient, _) = setup_params();
+        let TestParams {
+            rng,
+            ik,
+            recipient,
+            first_nullifier,
+            ..
+        } = setup_params();
 
         let str = "Halo".to_string();
         let str2 = "Halo2".to_string();
@@ -883,7 +1036,7 @@ mod tests {
         );
 
         let (mut bundle, asset) = IssueBundle::new(
-            ik,
+            ik.clone(),
             str.clone().into_bytes(),
             Some(IssueInfo {
                 recipient,
@@ -916,14 +1069,27 @@ mod tests {
             .unwrap();
         assert_ne!(asset, third_asset);
 
-        let actions = bundle.actions();
+        bundle.actions().iter().for_each(|action| {
+            action
+                .notes()
+                .iter()
+                .for_each(|note| assert_eq!(note.rho(), Rho::zero()))
+        });
+        let awaiting_sighash_bundle = bundle.update_rho(&first_nullifier);
+        awaiting_sighash_bundle.actions().iter().for_each(|action| {
+            action
+                .notes()
+                .iter()
+                .for_each(|note| assert_ne!(note.rho(), Rho::zero()))
+        });
+
+        let actions = awaiting_sighash_bundle.actions();
         assert_eq!(actions.len(), 2);
 
-        let actions_vec = bundle.get_actions_by_asset(&asset);
-        assert_eq!(actions_vec.len(), 1);
-        let action = actions_vec[0];
+        let action = awaiting_sighash_bundle.get_action_by_asset(&asset).unwrap();
         assert_eq!(action.notes.len(), 3);
-        // The note at index 0 is the reference note.
+        let reference_note = action.notes.get(0).unwrap();
+        verify_reference_note(reference_note, asset);
         let first_note = action.notes.get(1).unwrap();
         assert_eq!(first_note.value().inner(), 5);
         assert_eq!(first_note.asset(), asset);
@@ -934,19 +1100,25 @@ mod tests {
         assert_eq!(second_note.asset(), asset);
         assert_eq!(second_note.recipient(), recipient);
 
-        let action2_vec = bundle.get_actions_by_desc(str2.as_bytes());
-        assert_eq!(action2_vec.len(), 1);
-        let action2 = action2_vec[0];
+        let action2 = awaiting_sighash_bundle
+            .get_action_by_desc(str2.as_bytes())
+            .unwrap();
         assert_eq!(action2.notes.len(), 2);
-        // The note at index 0 is the reference note.
+        let reference_note = action2.notes.get(0).unwrap();
+        verify_reference_note(reference_note, AssetBase::derive(&ik, str2.as_bytes()));
         let first_note = action2.notes().get(1).unwrap();
         assert_eq!(first_note.value().inner(), 15);
         assert_eq!(first_note.asset(), third_asset);
+
+        verify_reference_note(action.get_reference_note().unwrap(), asset);
+        verify_reference_note(action2.get_reference_note().unwrap(), third_asset);
     }
 
     #[test]
     fn issue_bundle_finalize_asset() {
-        let (rng, _, ik, recipient, _) = setup_params();
+        let TestParams {
+            rng, ik, recipient, ..
+        } = setup_params();
 
         let (mut bundle, _) = IssueBundle::new(
             ik,
@@ -979,7 +1151,14 @@ mod tests {
 
     #[test]
     fn issue_bundle_prepare() {
-        let (rng, _, ik, recipient, sighash) = setup_params();
+        let TestParams {
+            rng,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+            ..
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -993,13 +1172,20 @@ mod tests {
         )
         .unwrap();
 
-        let prepared = bundle.prepare(sighash);
+        let prepared = bundle.update_rho(&first_nullifier).prepare(sighash);
         assert_eq!(prepared.authorization().sighash, sighash);
     }
 
     #[test]
     fn issue_bundle_sign() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1013,7 +1199,11 @@ mod tests {
         )
         .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         ik.verify(&sighash, &signed.authorization.signature)
             .expect("signature should be valid");
@@ -1021,7 +1211,13 @@ mod tests {
 
     #[test]
     fn issue_bundle_invalid_isk_for_signature() {
-        let (rng, _, ik, recipient, _) = setup_params();
+        let TestParams {
+            rng,
+            ik,
+            recipient,
+            first_nullifier,
+            ..
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1038,6 +1234,7 @@ mod tests {
         let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
 
         let err = bundle
+            .update_rho(&first_nullifier)
             .prepare([0; 32])
             .sign(&wrong_isk)
             .expect_err("should not be able to sign");
@@ -1047,7 +1244,14 @@ mod tests {
 
     #[test]
     fn issue_bundle_incorrect_asset_for_signature() {
-        let (mut rng, isk, ik, recipient, _) = setup_params();
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            first_nullifier,
+            ..
+        } = setup_params();
 
         // Create a bundle with "normal" note
         let (mut bundle, _) = IssueBundle::new(
@@ -1067,12 +1271,13 @@ mod tests {
             recipient,
             NoteValue::from_raw(5),
             AssetBase::derive(bundle.ik(), b"zsa_asset"),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
         bundle.actions.first_mut().notes.push(note);
 
         let err = bundle
+            .update_rho(&first_nullifier)
             .prepare([0; 32])
             .sign(&isk)
             .expect_err("should not be able to sign");
@@ -1082,10 +1287,17 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
-            ik,
+            ik.clone(),
             b"Verify".to_vec(),
             Some(IssueInfo {
                 recipient,
@@ -1096,19 +1308,34 @@ mod tests {
         )
         .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = &mut HashSet::new();
+        let signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
-        let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
+        let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
 
-        supply_info.update_finalization_set(prev_finalized);
-
-        assert!(prev_finalized.is_empty());
+        let first_note = *signed.actions().first().notes().first().unwrap();
+        assert_eq!(
+            issued_assets,
+            HashMap::from([(
+                AssetBase::derive(&ik, b"Verify"),
+                AssetRecord::new(NoteValue::from_raw(5), false, first_note)
+            )])
+        );
     }
 
     #[test]
     fn issue_bundle_verify_with_finalize() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (mut bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1124,24 +1351,38 @@ mod tests {
 
         bundle.finalize_action(b"Verify with finalize").unwrap();
 
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = &mut HashSet::new();
+        let signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
-        let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
+        let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
 
-        supply_info.update_finalization_set(prev_finalized);
-
-        assert_eq!(prev_finalized.len(), 1);
-        assert!(prev_finalized.contains(&AssetBase::derive(&ik, b"Verify with finalize")));
+        let first_note = *signed.actions().first().notes().first().unwrap();
+        assert_eq!(
+            issued_assets,
+            HashMap::from([(
+                AssetBase::derive(&ik, b"Verify with finalize"),
+                AssetRecord::new(NoteValue::from_raw(7), true, first_note)
+            )])
+        );
     }
 
     #[test]
-    fn issue_bundle_verify_with_supply_info() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+    fn issue_bundle_verify_with_issued_assets() {
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
-        let asset1_desc = b"Verify with supply info 1".to_vec();
-        let asset2_desc = b"Verify with supply info 2".to_vec();
-        let asset3_desc = b"Verify with supply info 3".to_vec();
+        let asset1_desc = b"Verify with issued assets 1".to_vec();
+        let asset2_desc = b"Verify with issued assets 2".to_vec();
+        let asset3_desc = b"Verify with issued assets 3".to_vec();
 
         let asset1_base = AssetBase::derive(&ik, &asset1_desc);
         let asset2_base = AssetBase::derive(&ik, &asset2_desc);
@@ -1175,38 +1416,56 @@ mod tests {
             .add_recipient(&asset3_desc, recipient, NoteValue::from_raw(5), true, rng)
             .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = &mut HashSet::new();
+        let signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
-        let supply_info = verify_issue_bundle(&signed, sighash, prev_finalized).unwrap();
+        let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
 
-        supply_info.update_finalization_set(prev_finalized);
+        assert_eq!(issued_assets.keys().len(), 3);
 
-        assert_eq!(prev_finalized.len(), 2);
-
-        assert!(prev_finalized.contains(&asset1_base));
-        assert!(prev_finalized.contains(&asset2_base));
-        assert!(!prev_finalized.contains(&asset3_base));
-
-        assert_eq!(supply_info.assets.len(), 3);
+        let reference_note1 = signed.actions()[0].notes()[0];
+        let reference_note2 = signed.actions()[1].notes()[0];
+        let reference_note3 = signed.actions()[2].notes()[0];
 
         assert_eq!(
-            supply_info.assets.get(&asset1_base),
-            Some(&AssetSupply::new(ValueSum::from_raw(15), true))
+            issued_assets.get(&asset1_base),
+            Some(&AssetRecord::new(
+                NoteValue::from_raw(15),
+                true,
+                reference_note1
+            ))
         );
         assert_eq!(
-            supply_info.assets.get(&asset2_base),
-            Some(&AssetSupply::new(ValueSum::from_raw(10), true))
+            issued_assets.get(&asset2_base),
+            Some(&AssetRecord::new(
+                NoteValue::from_raw(10),
+                true,
+                reference_note2
+            ))
         );
         assert_eq!(
-            supply_info.assets.get(&asset3_base),
-            Some(&AssetSupply::new(ValueSum::from_raw(5), false))
+            issued_assets.get(&asset3_base),
+            Some(&AssetRecord::new(
+                NoteValue::from_raw(5),
+                false,
+                reference_note3
+            ))
         );
     }
 
     #[test]
     fn issue_bundle_verify_fail_previously_finalized() {
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1220,16 +1479,35 @@ mod tests {
         )
         .unwrap();
 
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = &mut HashSet::new();
+        let signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         let final_type = AssetBase::derive(&ik, b"already final");
 
-        prev_finalized.insert(final_type);
+        let issued_assets = [(
+            final_type,
+            AssetRecord::new(
+                NoteValue::from_raw(20),
+                true,
+                Note::new(
+                    recipient,
+                    NoteValue::from_raw(10),
+                    final_type,
+                    Rho::zero(),
+                    &mut rng,
+                ),
+            ),
+        )]
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
-            IssueActionPreviouslyFinalizedAssetBase(final_type)
+            verify_issue_bundle(&signed, sighash, |asset| issued_assets.get(asset).copied())
+                .unwrap_err(),
+            IssueActionPreviouslyFinalizedAssetBase
         );
     }
 
@@ -1242,7 +1520,14 @@ mod tests {
             }
         }
 
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1258,23 +1543,33 @@ mod tests {
 
         let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
 
-        let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let mut signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         signed.set_authorization(Signed {
             signature: wrong_isk.try_sign(&sighash).unwrap(),
         });
 
-        let prev_finalized = &HashSet::new();
-
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             IssueBundleInvalidSignature
         );
     }
 
     #[test]
     fn issue_bundle_verify_fail_wrong_sighash() {
-        let (rng, isk, ik, recipient, random_sighash) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash: random_sighash,
+            first_nullifier,
+        } = setup_params();
+
         let (bundle, _) = IssueBundle::new(
             ik,
             b"Asset description".to_vec(),
@@ -1288,18 +1583,28 @@ mod tests {
         .unwrap();
 
         let sighash: [u8; 32] = bundle.commitment().into();
-        let signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = &HashSet::new();
+        let signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         assert_eq!(
-            verify_issue_bundle(&signed, random_sighash, prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, random_sighash, |_| None).unwrap_err(),
             IssueBundleInvalidSignature
         );
     }
 
     #[test]
     fn issue_bundle_verify_fail_incorrect_asset_description() {
-        let (mut rng, isk, ik, recipient, sighash) = setup_params();
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1313,23 +1618,25 @@ mod tests {
         )
         .unwrap();
 
-        let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let mut signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         // Add "bad" note
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
             AssetBase::derive(signed.ik(), b"zsa_asset"),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
         signed.actions.first_mut().notes.push(note);
 
-        let prev_finalized = &HashSet::new();
-
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             IssueBundleIkMismatchAssetBase
         );
     }
@@ -1338,7 +1645,14 @@ mod tests {
     fn issue_bundle_verify_fail_incorrect_ik() {
         let asset_description = b"Asset".to_vec();
 
-        let (mut rng, isk, ik, recipient, sighash) = setup_params();
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1352,7 +1666,11 @@ mod tests {
         )
         .unwrap();
 
-        let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
+        let mut signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         let incorrect_isk = IssuanceAuthorizingKey::random();
         let incorrect_ik: IssuanceValidatingKey = (&incorrect_isk).into();
@@ -1362,16 +1680,14 @@ mod tests {
             recipient,
             NoteValue::from_raw(55),
             AssetBase::derive(&incorrect_ik, &asset_description),
-            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            Rho::zero(),
             &mut rng,
         );
 
         signed.actions.first_mut().notes = vec![note];
 
-        let prev_finalized = &HashSet::new();
-
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             IssueBundleIkMismatchAssetBase
         );
     }
@@ -1385,7 +1701,14 @@ mod tests {
             }
         }
 
-        let (rng, isk, ik, recipient, sighash) = setup_params();
+        let TestParams {
+            rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1399,14 +1722,17 @@ mod tests {
         )
         .unwrap();
 
-        let mut signed = bundle.prepare(sighash).sign(&isk).unwrap();
-        let prev_finalized = HashSet::new();
+        let mut signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
 
         // 1. Try a description that is too long
         signed.actions.first_mut().modify_descr(vec![b'X'; 513]);
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             WrongAssetDescSize
         );
 
@@ -1414,36 +1740,39 @@ mod tests {
         signed.actions.first_mut().modify_descr(b"".to_vec());
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, &prev_finalized).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             WrongAssetDescSize
         );
     }
 
     #[test]
     fn issue_bundle_cannot_be_signed_with_asset_base_identity_point() {
-        let (isk, bundle, sighash) = identity_point_test_params(10, 20);
+        let (isk, bundle, sighash, first_nullifier) = identity_point_test_params(10, 20);
 
         assert_eq!(
-            bundle.prepare(sighash).sign(&isk).unwrap_err(),
+            bundle
+                .update_rho(&first_nullifier)
+                .prepare(sighash)
+                .sign(&isk)
+                .unwrap_err(),
             AssetBaseCannotBeIdentityPoint
         );
     }
 
     #[test]
     fn issue_bundle_verify_fail_asset_base_identity_point() {
-        let (isk, bundle, sighash) = identity_point_test_params(10, 20);
+        let (isk, bundle, sighash, _) = identity_point_test_params(10, 20);
 
         let signed = IssueBundle {
-            ik: bundle.ik,
+            ik: bundle.ik().clone(),
             actions: bundle.actions,
-            reference_notes: bundle.reference_notes,
             authorization: Signed {
                 signature: isk.try_sign(&sighash).unwrap(),
             },
         };
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, &HashSet::new()).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             AssetBaseCannotBeIdentityPoint
         );
     }
@@ -1467,7 +1796,9 @@ mod tests {
 
     #[test]
     fn issue_bundle_asset_desc_roundtrip() {
-        let (rng, _, ik, recipient, _) = setup_params();
+        let TestParams {
+            rng, ik, recipient, ..
+        } = setup_params();
 
         // Generated using https://onlinetools.com/utf8/generate-random-utf8
         let asset_desc_1 = "󅞞 򬪗YV8𱈇m0{둛򙎠[㷊V֤]9Ծ̖l󾓨2닯򗏟iȰ䣄˃Oߺ񗗼🦄"
@@ -1498,24 +1829,150 @@ mod tests {
             .unwrap();
 
         // Checks for the case of UTF-8 encoded asset description.
-        let actions_vec = bundle.get_actions_by_asset(&asset_base_1);
-        assert_eq!(actions_vec.len(), 1);
-
-        let action = actions_vec[0];
+        let action = bundle.get_action_by_asset(&asset_base_1).unwrap();
         assert_eq!(action.asset_desc(), &asset_desc_1);
-        // The note at index 0 is the reference note.
+        let reference_note = action.notes.get(0).unwrap();
+        verify_reference_note(reference_note, asset_base_1);
         assert_eq!(action.notes.get(1).unwrap().value().inner(), 5);
-        assert_eq!(bundle.get_actions_by_desc(&asset_desc_1), actions_vec);
+        assert_eq!(bundle.get_action_by_desc(&asset_desc_1).unwrap(), action);
 
         // Checks for the case on non-UTF-8 encoded asset description.
-        let action2_vec = bundle.get_actions_by_asset(&asset_base_2);
-        assert_eq!(action2_vec.len(), 1);
-
-        let action2 = action2_vec[0];
+        let action2 = bundle.get_action_by_asset(&asset_base_2).unwrap();
         assert_eq!(action2.asset_desc(), &asset_desc_2);
-        // The note at index 0 is the reference note.
+        let reference_note = action2.notes.get(0).unwrap();
+        verify_reference_note(reference_note, asset_base_2);
         assert_eq!(action2.notes.get(1).unwrap().value().inner(), 10);
-        assert_eq!(bundle.get_actions_by_desc(&asset_desc_2), action2_vec);
+        assert_eq!(bundle.get_action_by_desc(&asset_desc_2).unwrap(), action2);
+    }
+
+    #[test]
+    fn verify_rho_computation_for_issuance_notes() {
+        // Setup keys
+        let pk = ProvingKey::build::<OrchardZSA>();
+        let sk = SpendingKey::from_bytes([1; 32]).unwrap();
+        let fvk = FullViewingKey::from(&sk);
+        let recipient = fvk.address_at(0u32, Scope::External);
+        let isk = IssuanceAuthorizingKey::from_bytes([2; 32]).unwrap();
+        let ik = IssuanceValidatingKey::from(&isk);
+
+        // Setup note and merkle tree
+        let mut rng = OsRng;
+        let asset1 = AssetBase::derive(&ik, b"zsa_asset1");
+        let note1 = Note::new(
+            recipient,
+            NoteValue::from_raw(10),
+            asset1,
+            Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            &mut rng,
+        );
+        // Build the merkle tree with only note1
+        let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
+        let cmx: ExtractedNoteCommitment = note1.commitment().into();
+        let leaf = MerkleHashOrchard::from_cmx(&cmx);
+        tree.append(leaf);
+        let position = tree.mark().unwrap();
+        let root = tree.root(0).unwrap();
+        let anchor = root.into();
+        let auth_path = tree.witness(position, 0).unwrap();
+        let merkle_path = MerklePath::from_parts(
+            u64::from(position).try_into().unwrap(),
+            auth_path[..].try_into().unwrap(),
+        );
+
+        // Create a transfer bundle
+        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
+        builder.add_spend(fvk, note1, merkle_path).unwrap();
+        builder
+            .add_output(None, recipient, NoteValue::from_raw(5), asset1, None)
+            .unwrap();
+        builder
+            .add_output(None, recipient, NoteValue::from_raw(5), asset1, None)
+            .unwrap();
+        let unauthorized = builder.build(&mut rng).unwrap().0;
+        let sighash = unauthorized.commitment().into();
+        let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
+        let authorized: Bundle<_, i64, OrchardZSA> = proven
+            .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
+            .unwrap();
+
+        // Create an issue bundle
+        let asset2 = "asset2".to_string();
+        let asset3 = "asset3".to_string();
+        let (mut bundle, asset) = IssueBundle::new(
+            ik,
+            asset2.clone().into_bytes(),
+            Some(IssueInfo {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
+            true,
+            rng,
+        )
+        .unwrap();
+
+        let another_asset = bundle
+            .add_recipient(
+                asset2.as_bytes(),
+                recipient,
+                NoteValue::from_raw(10),
+                false,
+                rng,
+            )
+            .unwrap();
+        assert_eq!(asset, another_asset);
+
+        let third_asset = bundle
+            .add_recipient(
+                asset3.as_bytes(),
+                recipient,
+                NoteValue::from_raw(10),
+                true,
+                rng,
+            )
+            .unwrap();
+        assert_ne!(asset, third_asset);
+
+        // Check that all rho values are zero.
+        bundle.actions().iter().for_each(|action| {
+            action
+                .notes()
+                .iter()
+                .for_each(|note| assert_eq!(note.rho(), Rho::zero()))
+        });
+
+        let awaiting_sighash_bundle = bundle.update_rho(authorized.actions().first().nullifier());
+
+        assert_eq!(awaiting_sighash_bundle.actions().len(), 2);
+        assert_eq!(
+            awaiting_sighash_bundle
+                .actions()
+                .get(0)
+                .unwrap()
+                .notes()
+                .len(),
+            3
+        );
+        assert_eq!(
+            awaiting_sighash_bundle
+                .actions()
+                .get(1)
+                .unwrap()
+                .notes()
+                .len(),
+            2
+        );
+
+        // Check the rho value for each issuance note in the issue bundle
+        for (index_action, action) in awaiting_sighash_bundle.actions.iter().enumerate() {
+            for (index_note, note) in action.notes.iter().enumerate() {
+                let expected_rho = rho_for_issuance_note(
+                    authorized.actions().first().nullifier(),
+                    index_action.try_into().unwrap(),
+                    index_note.try_into().unwrap(),
+                );
+                assert_eq!(note.rho(), expected_rho);
+            }
+        }
     }
 }
 
@@ -1523,7 +1980,7 @@ mod tests {
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
-    use crate::issuance::{IssueAction, IssueBundle, Prepared, Signed, Unauthorized};
+    use crate::issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed};
     use crate::keys::testing::arb_issuance_validating_key;
     use crate::note::asset_base::testing::zsa_asset_base;
     use crate::note::testing::arb_zsa_note;
@@ -1532,7 +1989,6 @@ pub mod testing {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
-    use std::collections::HashMap;
 
     prop_compose! {
         /// Generate a uniformly distributed signature
@@ -1562,17 +2018,16 @@ pub mod testing {
 
     prop_compose! {
         /// Generate an arbitrary issue bundle with fake authorization data.
-        pub fn arb_unathorized_issue_bundle(n_actions: usize)
+        pub fn arb_awaiting_nullifier_issue_bundle(n_actions: usize)
         (
             actions in vec(arb_issue_action(b"asset_desc".to_vec()), n_actions),
             ik in arb_issuance_validating_key()
-        ) -> IssueBundle<Unauthorized> {
+        ) -> IssueBundle<AwaitingNullifier> {
             let actions = NonEmpty::from_vec(actions).unwrap();
             IssueBundle {
                 ik,
                 actions,
-                reference_notes: HashMap::new(),
-                authorization: Unauthorized
+                authorization: AwaitingNullifier
             }
         }
     }
@@ -1590,7 +2045,6 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
-                reference_notes: HashMap::new(),
                 authorization: Prepared { sighash: fake_sighash }
             }
         }
@@ -1609,7 +2063,6 @@ pub mod testing {
             IssueBundle {
                 ik,
                 actions,
-                reference_notes: HashMap::new(),
                 authorization: Signed { signature: fake_sig },
             }
         }

@@ -3,16 +3,15 @@ mod builder;
 use crate::builder::{verify_action_group, verify_bundle, verify_swap_bundle};
 use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
-use orchard::bundle::Authorization;
 use orchard::{
     builder::{Builder, BundleType},
-    bundle::Authorized,
+    bundle::{Authorization, Authorized},
     circuit::{ProvingKey, VerifyingKey},
-    issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized},
+    domain::OrchardDomain,
+    issuance::{verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo, Signed},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
-    note::{AssetBase, ExtractedNoteCommitment},
-    note_encryption::OrchardDomain,
+    note::{AssetBase, ExtractedNoteCommitment, Nullifier},
     orchard_flavor::OrchardZSA,
     swap_bundle::{ActionGroup, ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
@@ -20,7 +19,6 @@ use orchard::{
     Address, Anchor, Bundle, Note, ReferenceKeys,
 };
 use rand::rngs::OsRng;
-use std::collections::HashSet;
 use zcash_note_encryption_zsa::try_note_decryption;
 
 #[derive(Debug)]
@@ -75,12 +73,14 @@ fn prepare_keys(seed: u8) -> Keychain {
 }
 
 fn sign_issue_bundle(
-    unauthorized: IssueBundle<Unauthorized>,
+    awaiting_nullifier_bundle: IssueBundle<AwaitingNullifier>,
     isk: &IssuanceAuthorizingKey,
+    first_nullifier: &Nullifier,
 ) -> IssueBundle<Signed> {
-    let sighash = unauthorized.commitment().into();
-    let proven = unauthorized.prepare(sighash);
-    proven.sign(isk).unwrap()
+    let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier);
+    let sighash = awaiting_sighash_bundle.commitment().into();
+    let prepared_bundle = awaiting_sighash_bundle.prepare(sighash);
+    prepared_bundle.sign(isk).unwrap()
 }
 
 fn build_and_sign_bundle(
@@ -89,7 +89,7 @@ fn build_and_sign_bundle(
     pk: &ProvingKey,
     sk: &SpendingKey,
 ) -> Bundle<Authorized, i64, OrchardZSA> {
-    let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
+    let unauthorized = builder.build(&mut rng).unwrap().0;
     let sighash = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
     proven
@@ -104,11 +104,7 @@ fn build_and_sign_action_group(
     pk: &ProvingKey,
     sk: &SpendingKey,
 ) -> ActionGroup<ActionGroupAuthorized, i64> {
-    let unauthorized = builder
-        .build_action_group(&mut rng, timelimit)
-        .unwrap()
-        .unwrap()
-        .0;
+    let unauthorized = builder.build_action_group(&mut rng, timelimit).unwrap().0;
     let action_group_digest = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
 
@@ -150,10 +146,14 @@ fn build_merkle_paths(notes: Vec<&Note>) -> (Vec<MerklePath>, Anchor) {
     (merkle_paths, anchor)
 }
 
-fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note, Note) {
+fn issue_zsa_notes(
+    asset_descr: &[u8],
+    keys: &Keychain,
+    first_nullifier: &Nullifier,
+) -> (Note, Note, Note) {
     let mut rng = OsRng;
     // Create a issuance bundle
-    let unauthorized_asset = IssueBundle::new(
+    let awaiting_nullifier_bundle_asset = IssueBundle::new(
         keys.ik().clone(),
         asset_descr.to_owned(),
         Some(IssueInfo {
@@ -164,11 +164,11 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note, Note) {
         &mut rng,
     );
 
-    assert!(unauthorized_asset.is_ok());
+    assert!(awaiting_nullifier_bundle_asset.is_ok());
 
-    let (mut unauthorized, _) = unauthorized_asset.unwrap();
+    let (mut awaiting_nullifier_bundle, _) = awaiting_nullifier_bundle_asset.unwrap();
 
-    assert!(unauthorized
+    assert!(awaiting_nullifier_bundle
         .add_recipient(
             asset_descr,
             keys.recipient,
@@ -178,7 +178,7 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note, Note) {
         )
         .is_ok());
 
-    let issue_bundle = sign_issue_bundle(unauthorized, keys.isk());
+    let issue_bundle = sign_issue_bundle(awaiting_nullifier_bundle, keys.isk(), first_nullifier);
 
     // Take notes from first action
     let notes = issue_bundle.get_all_notes();
@@ -186,12 +186,12 @@ fn issue_zsa_notes(asset_descr: &[u8], keys: &Keychain) -> (Note, Note, Note) {
     let note1 = notes[1];
     let note2 = notes[2];
 
-    assert!(verify_issue_bundle(
-        &issue_bundle,
-        issue_bundle.commitment().into(),
-        &HashSet::new(),
-    )
-    .is_ok());
+    verify_reference_note(
+        reference_note,
+        AssetBase::derive(&keys.ik().clone(), asset_descr),
+    );
+
+    assert!(verify_issue_bundle(&issue_bundle, issue_bundle.commitment().into(), |_| None).is_ok());
 
     (*reference_note, *note1, *note2)
 }
@@ -214,7 +214,7 @@ fn create_native_note(keys: &Keychain) -> Note {
             ),
             Ok(())
         );
-        let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
+        let unauthorized = builder.build(&mut rng).unwrap().0;
         let sighash = unauthorized.commitment().into();
         let proven = unauthorized.create_proof(keys.pk(), &mut rng).unwrap();
         proven.apply_signatures(rng, sighash, &[]).unwrap()
@@ -352,6 +352,21 @@ fn verify_unique_spent_nullifiers<A: Authorization>(bundle: &Bundle<A, i64, Orch
     })
 }
 
+/// Validation for reference note
+///
+/// The following checks are performed:
+/// - the note value of the reference note is equal to 0
+/// - the asset of the reference note is equal to the provided asset
+/// - the recipient of the reference note is equal to the reference recipient
+fn verify_reference_note(note: &Note, asset: AssetBase) {
+    let reference_sk = SpendingKey::from_bytes([0; 32]).unwrap();
+    let reference_fvk = FullViewingKey::from(&reference_sk);
+    let reference_recipient = reference_fvk.address_at(0u32, Scope::External);
+    assert_eq!(note.value(), NoteValue::from_raw(0));
+    assert_eq!(note.asset(), asset);
+    assert_eq!(note.recipient(), reference_recipient);
+}
+
 /// Issue several ZSA and native notes and spend them in different combinations, e.g. split and join
 #[test]
 fn zsa_issue_and_transfer() {
@@ -362,8 +377,12 @@ fn zsa_issue_and_transfer() {
     let keys3 = prepare_keys(15);
     let asset_descr = b"zsa_asset".to_vec();
 
+    let native_note = create_native_note(&keys);
+
     // Prepare ZSA
-    let (_, zsa_note_1, zsa_note_2) = issue_zsa_notes(&asset_descr, &keys);
+    let (reference_note, zsa_note_1, zsa_note_2) =
+        issue_zsa_notes(&asset_descr, &keys, &native_note.nullifier(keys.fvk()));
+    verify_reference_note(&reference_note, zsa_note_1.asset());
 
     let (merkle_paths, anchor) = build_merkle_paths(vec![&zsa_note_1, &zsa_note_2]);
 
@@ -534,7 +553,8 @@ fn zsa_issue_and_transfer() {
     .unwrap();
 
     // 7. Spend ZSA notes of different asset types
-    let (_, zsa_note_t7, _) = issue_zsa_notes(b"zsa_asset2", &keys);
+    let (_, zsa_note_t7, _) =
+        issue_zsa_notes(b"zsa_asset2", &keys, &native_note.nullifier(keys.fvk()));
     let (merkle_paths_t7, anchor_t7) = build_merkle_paths(vec![&zsa_note_t7, &zsa_note_2]);
     assert_eq!(merkle_paths_t7.len(), 2);
     let merkle_path_t7_1 = merkle_paths_t7[0].clone();
@@ -663,22 +683,28 @@ fn action_group_and_swap_bundle() {
     // Create notes for user1
     let keys1 = prepare_keys(5);
 
-    let asset_descr1 = b"zsa_asset1".to_vec();
-    let (asset1_reference_note, asset1_note1, asset1_note2) =
-        issue_zsa_notes(&asset_descr1, &keys1);
-
     let user1_native_note1 = create_native_note(&keys1);
     let user1_native_note2 = create_native_note(&keys1);
+
+    let asset_descr1 = b"zsa_asset1".to_vec();
+    let (asset1_reference_note, asset1_note1, asset1_note2) = issue_zsa_notes(
+        &asset_descr1,
+        &keys1,
+        &user1_native_note1.nullifier(keys1.fvk()),
+    );
 
     // Create notes for user2
     let keys2 = prepare_keys(10);
 
-    let asset_descr2 = b"zsa_asset2".to_vec();
-    let (asset2_reference_note, asset2_note1, asset2_note2) =
-        issue_zsa_notes(&asset_descr2, &keys2);
-
     let user2_native_note1 = create_native_note(&keys2);
     let user2_native_note2 = create_native_note(&keys2);
+
+    let asset_descr2 = b"zsa_asset2".to_vec();
+    let (asset2_reference_note, asset2_note1, asset2_note2) = issue_zsa_notes(
+        &asset_descr2,
+        &keys2,
+        &user2_native_note2.nullifier(keys1.fvk()),
+    );
 
     // Create matcher keys
     let matcher_keys = prepare_keys(15);

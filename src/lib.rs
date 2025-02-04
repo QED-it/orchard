@@ -18,22 +18,19 @@
 
 mod action;
 mod address;
+pub mod asset_record;
 pub mod builder;
 pub mod bundle;
 pub mod circuit;
 mod constants;
+pub mod domain;
 pub mod issuance;
 pub mod keys;
 pub mod note;
-pub mod supply_info;
-pub mod swap_bundle;
-
-pub mod note_encryption;
-
 pub mod orchard_flavor;
-
 pub mod primitives;
 mod spec;
+pub mod swap_bundle;
 pub mod tree;
 pub mod value;
 pub mod zip32;

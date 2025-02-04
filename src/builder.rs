@@ -17,15 +17,15 @@ use crate::{
     address::Address,
     builder::BuildError::{BurnNative, BurnZero},
     bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags},
-    circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey},
+    circuit::{Circuit, Instance, Proof, ProvingKey, Witnesses},
     constants::reference_keys::ReferenceKeys,
+    domain::{OrchardDomain, OrchardDomainCommon},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
     },
     note::{AssetBase, Note, Rho, TransmittedNoteCiphertext},
-    note_encryption::{OrchardDomain, OrchardDomainCommon},
-    orchard_flavor::{OrchardFlavor, OrchardZSA},
+    orchard_flavor::{Flavor, OrchardFlavor, OrchardVanilla, OrchardZSA},
     primitives::redpallas::{self, Binding, SpendAuth},
     swap_bundle::{ActionGroup, ActionGroupAuthorized},
     tree::{Anchor, MerklePath},
@@ -294,7 +294,7 @@ impl SpendInfo {
     ///
     /// Defined in [Transfer and Burn of Zcash Shielded Assets ZIP-0226 § Split Notes (DRAFT PR)][TransferZSA].
     ///
-    /// [TransferZSA]: https://qed-it.github.io/zips/zip-0226.html#split-notes
+    /// [TransferZSA]: https://zips.z.cash/zip-0226#split-notes
     fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
         SpendInfo {
             dummy_sk: None,
@@ -402,7 +402,7 @@ impl ActionInfo {
     fn build<D: OrchardDomainCommon>(
         self,
         mut rng: impl RngCore,
-    ) -> (Action<SigningMetadata, D>, Circuit<D>) {
+    ) -> (Action<SigningMetadata, D>, Witnesses) {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -450,7 +450,7 @@ impl ActionInfo {
                     parts: SigningParts { ak, alpha },
                 },
             ),
-            Circuit::<D>::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
+            Witnesses::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
         )
     }
 }
@@ -458,7 +458,7 @@ impl ActionInfo {
 /// Type alias for an in-progress bundle that has no proofs or signatures.
 ///
 /// This is returned by [`Builder::build`].
-pub type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven<D>, Unauthorized>, V, D>;
+pub type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven, Unauthorized>, V, D>;
 
 /// Metadata about a bundle created by [`bundle`] or [`Builder::build`] that is not
 /// necessarily recoverable from the bundle itself.
@@ -515,7 +515,7 @@ pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, Bun
 
 /// A tuple containing an in-progress action group with no proofs or signatures, and its associated metadata.
 pub type UnauthorizedActionGroupWithMetadata<V> = (
-    ActionGroup<InProgress<Unproven<OrchardZSA>, Unauthorized>, V>,
+    ActionGroup<InProgress<Unproven, Unauthorized>, V>,
     BundleMetadata,
 );
 
@@ -554,7 +554,7 @@ impl Builder {
     /// Returns an error if the given Merkle path does not have the required anchor for
     /// the given note.
     ///
-    /// [`OrchardDomain`]: crate::note_encryption::OrchardDomain
+    /// [`OrchardDomain`]: crate::domain::OrchardDomain
     /// [`MerkleHashOrchard`]: crate::tree::MerkleHashOrchard
     pub fn add_spend(
         &mut self,
@@ -649,7 +649,7 @@ impl Builder {
         &self.outputs
     }
 
-    /// The net value of the bundle to be built. The value of all spends,
+    /// The net native (ZEC) value of the bundle to be built. The value of all spends,
     /// minus the value of all outputs.
     ///
     /// Useful for balancing a transaction, as the value balance of an individual bundle
@@ -663,10 +663,12 @@ impl Builder {
         let value_balance = self
             .spends
             .iter()
+            .filter(|spend| spend.note.asset().is_native().into())
             .map(|spend| spend.note.value() - NoteValue::zero())
             .chain(
                 self.outputs
                     .iter()
+                    .filter(|output| output.asset.is_native().into())
                     .map(|output| NoteValue::zero() - output.value),
             )
             .try_fold(ValueSum::zero(), |acc, note_value| acc + note_value)
@@ -681,7 +683,7 @@ impl Builder {
     pub fn build<V: TryFrom<i64>, FL: OrchardFlavor>(
         self,
         rng: impl RngCore,
-    ) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
+    ) -> Result<UnauthorizedBundleWithMetadata<V, FL>, BuildError> {
         bundle(
             rng,
             self.anchor,
@@ -700,24 +702,24 @@ impl Builder {
         self,
         rng: impl RngCore,
         timelimit: u32,
-    ) -> Result<Option<UnauthorizedActionGroupWithMetadata<V>>, BuildError> {
+    ) -> Result<UnauthorizedActionGroupWithMetadata<V>, BuildError> {
         if !self.burn.is_empty() {
             return Err(BuildError::BurnNotEmptyInActionGroup);
         }
-        Ok(bundle(
+        bundle(
             rng,
             self.anchor,
             self.bundle_type,
             self.spends,
             self.outputs,
             SpecificBuilderParams::ActionGroupParams(self.reference_notes),
-        )?
+        )
         .map(|(action_group, metadata)| {
             (
                 ActionGroup::from_parts(action_group, timelimit, None),
                 metadata,
             )
-        }))
+        })
     }
 }
 
@@ -812,7 +814,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
     specific_params: SpecificBuilderParams,
-) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
+) -> Result<UnauthorizedBundleWithMetadata<V, FL>, BuildError> {
     let flags = bundle_type.flags();
 
     let num_requested_spends = spends.len();
@@ -938,7 +940,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
         .into_bsk();
 
     // Create the actions.
-    let (actions, circuits): (Vec<_>, Vec<_>) =
+    let (actions, witnesses): (Vec<_>, Vec<_>) =
         pre_actions.into_iter().map(|a| a.build(&mut rng)).unzip();
 
     let burn = if let SpecificBuilderParams::BundleParams(ref burn) = specific_params {
@@ -969,28 +971,30 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
         }
     }
 
-    Ok(NonEmpty::from_vec(actions).map(|actions| {
-        (
-            Bundle::from_parts(
-                actions,
-                flags,
-                result_value_balance,
-                burn,
-                anchor,
-                InProgress {
-                    proof: Unproven { circuits },
-                    sigs: Unauthorized { bsk },
+    Ok((
+        Bundle::from_parts(
+            // `actions` is never empty. It contains at least MIN_ACTIONS=2 actions.
+            NonEmpty::from_vec(actions).unwrap(),
+            flags,
+            result_value_balance,
+            burn,
+            anchor,
+            InProgress {
+                proof: Unproven {
+                    witnesses,
+                    circuit_flavor: FL::FLAVOR,
                 },
-            ),
-            bundle_meta,
-        )
-    }))
+                sigs: Unauthorized { bsk },
+            },
+        ),
+        bundle_meta,
+    ))
 }
 
 /// Marker trait representing bundle signatures in the process of being created.
 pub trait InProgressSignatures: fmt::Debug {
     /// The authorization type of an Orchard action in the process of being authorized.
-    type SpendAuth: fmt::Debug;
+    type SpendAuth: fmt::Debug + Clone;
 }
 
 /// Marker for a bundle in the process of being built.
@@ -1021,11 +1025,12 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 ///
 /// This struct contains the private data needed to create a [`Proof`] for a [`Bundle`].
 #[derive(Clone, Debug)]
-pub struct Unproven<C: OrchardCircuit> {
-    circuits: Vec<Circuit<C>>,
+pub struct Unproven {
+    witnesses: Vec<Witnesses>,
+    circuit_flavor: Flavor,
 }
 
-impl<S: InProgressSignatures, C: OrchardCircuit> InProgress<Unproven<C>, S> {
+impl<S: InProgressSignatures> InProgress<Unproven, S> {
     /// Creates the proof for this bundle.
     pub fn create_proof(
         &self,
@@ -1033,11 +1038,36 @@ impl<S: InProgressSignatures, C: OrchardCircuit> InProgress<Unproven<C>, S> {
         instances: &[Instance],
         rng: impl RngCore,
     ) -> Result<Proof, halo2_proofs::plonk::Error> {
-        Proof::create(pk, &self.proof.circuits, instances, rng)
+        match self.proof.circuit_flavor {
+            Flavor::OrchardVanillaFlavor => {
+                let circuits = self
+                    .proof
+                    .witnesses
+                    .iter()
+                    .map(|witnesses| Circuit::<OrchardVanilla> {
+                        witnesses: witnesses.clone(),
+                        phantom: std::marker::PhantomData,
+                    })
+                    .collect::<Vec<Circuit<OrchardVanilla>>>();
+                Proof::create(pk, &circuits, instances, rng)
+            }
+            Flavor::OrchardZSAFlavor => {
+                let circuits = self
+                    .proof
+                    .witnesses
+                    .iter()
+                    .map(|witnesses| Circuit::<OrchardZSA> {
+                        witnesses: witnesses.clone(),
+                        phantom: std::marker::PhantomData,
+                    })
+                    .collect::<Vec<Circuit<OrchardZSA>>>();
+                Proof::create(pk, &circuits, instances, rng)
+            }
+        }
     }
 }
 
-impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven<FL>, S>, V, FL> {
+impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven, S>, V, FL> {
     /// Creates the proof for this bundle.
     pub fn create_proof(
         self,
@@ -1120,7 +1150,7 @@ impl InProgressSignatures for ActionGroupPartiallyAuthorized {
 /// A heisen[`Signature`] for a particular [`Action`].
 ///
 /// [`Signature`]: redpallas::Signature
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MaybeSigned {
     /// The information needed to sign this [`Action`].
     SigningMetadata(SigningParts),
@@ -1431,9 +1461,9 @@ pub mod testing {
         address::testing::arb_address,
         bundle::{Authorized, Bundle},
         circuit::ProvingKey,
+        domain::OrchardDomainCommon,
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
-        note_encryption::OrchardDomainCommon,
         orchard_flavor::OrchardFlavor,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
         value::{testing::arb_positive_note_value, NoteValue, MAX_NOTE_VALUE},
@@ -1483,7 +1513,6 @@ pub mod testing {
             let pk = ProvingKey::build::<FL>();
             builder
                 .build(&mut self.rng)
-                .unwrap()
                 .unwrap()
                 .0
                 .create_proof(&pk, &mut self.rng)
@@ -1615,7 +1644,6 @@ mod tests {
 
         let bundle: Bundle<Authorized, i64, FL> = builder
             .build(&mut rng)
-            .unwrap()
             .unwrap()
             .0
             .create_proof(&pk, &mut rng)

@@ -33,15 +33,15 @@ use super::{
     gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
     note_commit::NoteCommitChip,
     value_commit_orchard::ZsaValueCommitParams,
-    Circuit, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
-    ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+    OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA,
+    NF_OLD, RK_X, RK_Y,
 };
 use crate::{
     circuit::commit_ivk::gadgets::commit_ivk,
     circuit::derive_nullifier::gadgets::derive_nullifier,
     circuit::note_commit::{gadgets::note_commit, ZsaNoteCommitParams},
     circuit::value_commit_orchard::gadgets::value_commit_orchard,
-    circuit::Config,
+    circuit::{Config, Witnesses},
     constants::OrchardFixedBasesFull,
     constants::{OrchardFixedBases, OrchardHashDomains},
     note::AssetBase,
@@ -66,16 +66,22 @@ impl OrchardCircuit for OrchardZSA {
             meta.advice_column(),
         ];
 
+        // The new or updated constraints for OrchardZSA are explained in
+        // [ZIP-226: Transfer and Burn of Zcash Shielded Assets][circuitstatement].
+        //
+        // All OrchardZSA constraints:
         // Constrain split_flag to be boolean
-        // Constrain v_old * (1 - split_flag) - v_new = magnitude * sign    (https://p.z.cash/ZKS:action-cv-net-integrity?partial).
-        // Constrain (v_old = 0 and is_native_asset = 1) or (calculated root = anchor) (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
-        // Constrain v_old = 0 or enable_spends = 1      (https://p.z.cash/ZKS:action-enable-spend).
-        // Constrain v_new = 0 or enable_outputs = 1     (https://p.z.cash/ZKS:action-enable-output).
+        // Constrain v_old * (1 - split_flag) - v_new = magnitude * sign
+        // Constrain (v_old = 0 and is_native_asset = 1) or (calculated root = anchor)
+        // Constrain v_old = 0 or enable_spends = 1
+        // Constrain v_new = 0 or enable_outputs = 1
         // Constrain is_native_asset to be boolean
         // Constraint if is_native_asset = 1 then asset = native_asset else asset != native_asset
         // Constraint if split_flag = 0 then psi_old = psi_nf
         // Constraint if split_flag = 1, then is_native_asset = 0
         // Constraint if enable_zsa = 0, then is_native_asset = 1
+        //
+        // [circuitstatement]: https://zips.z.cash/zip-0226#circuit-statement
         let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
@@ -322,7 +328,7 @@ impl OrchardCircuit for OrchardZSA {
 
     #[allow(non_snake_case)]
     fn synthesize(
-        circuit: &Circuit<Self>,
+        circuit: &Witnesses,
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
@@ -426,7 +432,7 @@ impl OrchardCircuit for OrchardZSA {
             circuit.asset,
         )?;
 
-        // Merkle path validity check (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
+        // Merkle path validity check.
         let root = {
             let path = circuit
                 .path
@@ -441,7 +447,10 @@ impl OrchardCircuit for OrchardZSA {
             merkle_inputs.calculate_root(layouter.namespace(|| "Merkle path"), leaf)?
         };
 
-        // Value commitment integrity (https://p.z.cash/ZKS:action-cv-net-integrity?partial).
+        // Value commitment integrity.
+        // See [ZIP-226: Transfer and Burn of Zcash Shielded Assets][valuecommitcorrectness] for more details.
+        //
+        // [valuecommitcorrectness]: https://zips.z.cash/zip-0226#value-commitment-correctness
         let v_net_magnitude_sign = {
             // Witness the magnitude and sign of v_net = v_old - v_new
             let v_net_magnitude_sign = {
@@ -508,7 +517,10 @@ impl OrchardCircuit for OrchardZSA {
             v_net_magnitude_sign
         };
 
-        // Nullifier integrity (https://p.z.cash/ZKS:action-nullifier-integrity).
+        // Nullifier integrity.
+        // See [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226] for more details.
+        //
+        // [zip226]: https://zips.z.cash/zip-0226
         let nf_old = {
             let nf_old = derive_nullifier(
                 &mut layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_nf, cm_old)"),
@@ -531,7 +543,7 @@ impl OrchardCircuit for OrchardZSA {
             nf_old
         };
 
-        // Spend authority (https://p.z.cash/ZKS:action-spend-authority)
+        // Spend authority
         {
             let alpha = ScalarFixed::new(
                 ecc_chip.clone(),
@@ -554,7 +566,7 @@ impl OrchardCircuit for OrchardZSA {
             layouter.constrain_instance(rk.inner().y().cell(), config.primary, RK_Y)?;
         }
 
-        // Diversified address integrity (https://p.z.cash/ZKS:action-addr-integrity?partial).
+        // Diversified address integrity.
         let pk_d_old = {
             let ivk = {
                 let ak = ak_P.extract_p().inner().clone();
@@ -602,7 +614,10 @@ impl OrchardCircuit for OrchardZSA {
             pk_d_old
         };
 
-        // Old note commitment integrity (https://p.z.cash/ZKS:action-cm-old-integrity?partial).
+        // Old note commitment integrity.
+        // See [ZIP-226: Transfer and Burn of Zcash Shielded Assets][notecommit] for more details.
+        //
+        // [notecommit]: https://zips.z.cash/zip-0226#note-structure-commitment.
         {
             let rcm_old = ScalarFixed::new(
                 ecc_chip.clone(),
@@ -635,7 +650,10 @@ impl OrchardCircuit for OrchardZSA {
             derived_cm_old.constrain_equal(layouter.namespace(|| "cm_old equality"), &cm_old)?;
         }
 
-        // New note commitment integrity (https://p.z.cash/ZKS:action-cmx-new-integrity?partial).
+        // New note commitment integrity.
+        // See [ZIP-226: Transfer and Burn of Zcash Shielded Assets][notecommit] for more details.
+        //
+        // [notecommit]: https://zips.z.cash/zip-0226#note-structure-commitment.
         {
             // Witness g_d_new
             let g_d_new = {
@@ -843,6 +861,7 @@ mod tests {
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, RngCore};
 
+    use crate::circuit::Witnesses;
     use crate::{
         builder::SpendInfo,
         bundle::Flags,
@@ -883,29 +902,31 @@ mod tests {
 
         (
             OrchardCircuitZSA {
-                path: Value::known(path.auth_path()),
-                pos: Value::known(path.position()),
-                g_d_old: Value::known(sender_address.g_d()),
-                pk_d_old: Value::known(*sender_address.pk_d()),
-                v_old: Value::known(spent_note.value()),
-                rho_old: Value::known(spent_note.rho()),
-                psi_old: Value::known(psi_old),
-                rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
-                cm_old: Value::known(spent_note.commitment()),
-                // For non split note, psi_nf is equal to psi_old
-                psi_nf: Value::known(psi_old),
-                alpha: Value::known(alpha),
-                ak: Value::known(ak),
-                nk: Value::known(nk),
-                rivk: Value::known(rivk),
-                g_d_new: Value::known(output_note.recipient().g_d()),
-                pk_d_new: Value::known(*output_note.recipient().pk_d()),
-                v_new: Value::known(output_note.value()),
-                psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
-                rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
-                rcv: Value::known(rcv),
-                asset: Value::known(spent_note.asset()),
-                split_flag: Value::known(false),
+                witnesses: Witnesses {
+                    path: Value::known(path.auth_path()),
+                    pos: Value::known(path.position()),
+                    g_d_old: Value::known(sender_address.g_d()),
+                    pk_d_old: Value::known(*sender_address.pk_d()),
+                    v_old: Value::known(spent_note.value()),
+                    rho_old: Value::known(spent_note.rho()),
+                    psi_old: Value::known(psi_old),
+                    rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
+                    cm_old: Value::known(spent_note.commitment()),
+                    // For non split note, psi_nf is equal to psi_old
+                    psi_nf: Value::known(psi_old),
+                    alpha: Value::known(alpha),
+                    ak: Value::known(ak),
+                    nk: Value::known(nk),
+                    rivk: Value::known(rivk),
+                    g_d_new: Value::known(output_note.recipient().g_d()),
+                    pk_d_new: Value::known(*output_note.recipient().pk_d()),
+                    v_new: Value::known(output_note.value()),
+                    psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
+                    rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
+                    rcv: Value::known(rcv),
+                    asset: Value::known(spent_note.asset()),
+                    split_flag: Value::known(false),
+                },
                 phantom: std::marker::PhantomData,
             },
             Instance {
@@ -1084,28 +1105,7 @@ mod tests {
             .unwrap();
 
         let circuit = OrchardCircuitZSA {
-            path: Value::unknown(),
-            pos: Value::unknown(),
-            g_d_old: Value::unknown(),
-            pk_d_old: Value::unknown(),
-            v_old: Value::unknown(),
-            rho_old: Value::unknown(),
-            psi_old: Value::unknown(),
-            rcm_old: Value::unknown(),
-            cm_old: Value::unknown(),
-            psi_nf: Value::unknown(),
-            alpha: Value::unknown(),
-            ak: Value::unknown(),
-            nk: Value::unknown(),
-            rivk: Value::unknown(),
-            g_d_new: Value::unknown(),
-            pk_d_new: Value::unknown(),
-            v_new: Value::unknown(),
-            psi_new: Value::unknown(),
-            rcm_new: Value::unknown(),
-            rcv: Value::unknown(),
-            asset: Value::unknown(),
-            split_flag: Value::unknown(),
+            witnesses: Witnesses::default(),
             phantom: std::marker::PhantomData,
         };
         halo2_proofs::dev::CircuitLayout::default()
@@ -1222,7 +1222,15 @@ mod tests {
         };
 
         (
-            OrchardCircuitZSA::from_action_context_unchecked(spend_info, output_note, alpha, rcv),
+            OrchardCircuitZSA {
+                witnesses: Witnesses::from_action_context_unchecked(
+                    spend_info,
+                    output_note,
+                    alpha,
+                    rcv,
+                ),
+                phantom: std::marker::PhantomData,
+            },
             Instance {
                 anchor,
                 cv_net,
@@ -1293,28 +1301,30 @@ mod tests {
                 // Set cm_old to be a random NoteCommitment
                 // The proof should fail
                 let circuit_wrong_cm_old = OrchardCircuitZSA {
-                    path: circuit.path,
-                    pos: circuit.pos,
-                    g_d_old: circuit.g_d_old,
-                    pk_d_old: circuit.pk_d_old,
-                    v_old: circuit.v_old,
-                    rho_old: circuit.rho_old,
-                    psi_old: circuit.psi_old,
-                    rcm_old: circuit.rcm_old.clone(),
-                    cm_old: Value::known(random_note_commitment(&mut rng)),
-                    psi_nf: circuit.psi_nf,
-                    alpha: circuit.alpha,
-                    ak: circuit.ak.clone(),
-                    nk: circuit.nk,
-                    rivk: circuit.rivk,
-                    g_d_new: circuit.g_d_new,
-                    pk_d_new: circuit.pk_d_new,
-                    v_new: circuit.v_new,
-                    psi_new: circuit.psi_new,
-                    rcm_new: circuit.rcm_new.clone(),
-                    rcv: circuit.rcv,
-                    asset: circuit.asset,
-                    split_flag: circuit.split_flag,
+                    witnesses: Witnesses {
+                        path: circuit.witnesses.path,
+                        pos: circuit.witnesses.pos,
+                        g_d_old: circuit.witnesses.g_d_old,
+                        pk_d_old: circuit.witnesses.pk_d_old,
+                        v_old: circuit.witnesses.v_old,
+                        rho_old: circuit.witnesses.rho_old,
+                        psi_old: circuit.witnesses.psi_old,
+                        rcm_old: circuit.witnesses.rcm_old.clone(),
+                        cm_old: Value::known(random_note_commitment(&mut rng)),
+                        psi_nf: circuit.witnesses.psi_nf,
+                        alpha: circuit.witnesses.alpha,
+                        ak: circuit.witnesses.ak.clone(),
+                        nk: circuit.witnesses.nk,
+                        rivk: circuit.witnesses.rivk,
+                        g_d_new: circuit.witnesses.g_d_new,
+                        pk_d_new: circuit.witnesses.pk_d_new,
+                        v_new: circuit.witnesses.v_new,
+                        psi_new: circuit.witnesses.psi_new,
+                        rcm_new: circuit.witnesses.rcm_new.clone(),
+                        rcv: circuit.witnesses.rcv,
+                        asset: circuit.witnesses.asset,
+                        split_flag: circuit.witnesses.split_flag,
+                    },
                     phantom: std::marker::PhantomData,
                 };
                 check_proof_of_orchard_circuit(&circuit_wrong_cm_old, &instance, false);
@@ -1351,28 +1361,30 @@ mod tests {
                 // The proof should fail
                 if !split_flag {
                     let circuit_wrong_psi_nf = OrchardCircuitZSA {
-                        path: circuit.path,
-                        pos: circuit.pos,
-                        g_d_old: circuit.g_d_old,
-                        pk_d_old: circuit.pk_d_old,
-                        v_old: circuit.v_old,
-                        rho_old: circuit.rho_old,
-                        psi_old: circuit.psi_old,
-                        rcm_old: circuit.rcm_old.clone(),
-                        cm_old: circuit.cm_old.clone(),
-                        psi_nf: Value::known(pallas::Base::random(&mut rng)),
-                        alpha: circuit.alpha,
-                        ak: circuit.ak.clone(),
-                        nk: circuit.nk,
-                        rivk: circuit.rivk,
-                        g_d_new: circuit.g_d_new,
-                        pk_d_new: circuit.pk_d_new,
-                        v_new: circuit.v_new,
-                        psi_new: circuit.psi_new,
-                        rcm_new: circuit.rcm_new.clone(),
-                        rcv: circuit.rcv,
-                        asset: circuit.asset,
-                        split_flag: circuit.split_flag,
+                        witnesses: Witnesses {
+                            path: circuit.witnesses.path,
+                            pos: circuit.witnesses.pos,
+                            g_d_old: circuit.witnesses.g_d_old,
+                            pk_d_old: circuit.witnesses.pk_d_old,
+                            v_old: circuit.witnesses.v_old,
+                            rho_old: circuit.witnesses.rho_old,
+                            psi_old: circuit.witnesses.psi_old,
+                            rcm_old: circuit.witnesses.rcm_old.clone(),
+                            cm_old: circuit.witnesses.cm_old.clone(),
+                            psi_nf: Value::known(pallas::Base::random(&mut rng)),
+                            alpha: circuit.witnesses.alpha,
+                            ak: circuit.witnesses.ak.clone(),
+                            nk: circuit.witnesses.nk,
+                            rivk: circuit.witnesses.rivk,
+                            g_d_new: circuit.witnesses.g_d_new,
+                            pk_d_new: circuit.witnesses.pk_d_new,
+                            v_new: circuit.witnesses.v_new,
+                            psi_new: circuit.witnesses.psi_new,
+                            rcm_new: circuit.witnesses.rcm_new.clone(),
+                            rcv: circuit.witnesses.rcv,
+                            asset: circuit.witnesses.asset,
+                            split_flag: circuit.witnesses.split_flag,
+                        },
                         phantom: std::marker::PhantomData,
                     };
                     check_proof_of_orchard_circuit(&circuit_wrong_psi_nf, &instance, false);

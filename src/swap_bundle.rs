@@ -5,9 +5,9 @@ use crate::{
     bundle::commitments::{hash_action_group, hash_swap_bundle},
     bundle::{derive_bvk, Authorization, Bundle, BundleCommitment},
     circuit::{ProvingKey, VerifyingKey},
+    domain::OrchardDomainCommon,
     keys::SpendAuthorizingKey,
     note::AssetBase,
-    note_encryption::OrchardDomainCommon,
     orchard_flavor::OrchardZSA,
     primitives::redpallas::{self, Binding, SpendAuth},
     value::{NoteValue, ValueCommitTrapdoor},
@@ -70,7 +70,7 @@ impl<A: Authorization, V> ActionGroup<A, V> {
     }
 }
 
-impl<S: InProgressSignatures, V> ActionGroup<InProgress<Unproven<OrchardZSA>, S>, V> {
+impl<S: InProgressSignatures, V> ActionGroup<InProgress<Unproven, S>, V> {
     /// Creates the proof for this action group.
     pub fn create_proof(
         self,
