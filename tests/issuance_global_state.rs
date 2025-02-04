@@ -34,6 +34,7 @@ struct TestParams {
     first_nullifier: Nullifier,
 }
 
+// For testing global state only - should not be used in an actual setting.
 fn setup_params() -> TestParams {
     use group::{ff::PrimeField, Curve, Group};
     use pasta_curves::{arithmetic::CurveAffine, pallas};
@@ -48,12 +49,12 @@ fn setup_params() -> TestParams {
 
     let sighash = random_bytes(rng);
 
+    // For testing purposes only: replicate the behavior of orchard's `Nullifier::dummy`
+    // and `extract_p` functions, which are marked as `pub(crate)` in orchard and are therefore
+    // not visible here.
     let first_nullifier = {
         let point = pallas::Point::random(rng);
 
-        // For testing purposes only: replicate the behavior of the
-        // `orchard::spec::extract_p` function, which is marked as `pub(crate)` in
-        // `orchard` and is therefore not visible here.
         let base = point
             .to_affine()
             .coordinates()
