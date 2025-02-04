@@ -18,6 +18,12 @@ use orchard::{
     Address, Note,
 };
 
+fn random_bytes<const N: usize>(mut rng: OsRng) -> [u8; N] {
+    let mut bytes = [0; N];
+    rng.fill_bytes(&mut bytes);
+    bytes
+}
+
 #[derive(Clone)]
 struct TestParams {
     rng: OsRng,
@@ -29,18 +35,21 @@ struct TestParams {
 }
 
 fn setup_params() -> TestParams {
-    let mut rng = OsRng;
+    use group::ff::{FromUniformBytes, PrimeField};
+    use pasta_curves::pallas;
 
-    let isk = IssuanceAuthorizingKey::random();
+    let rng = OsRng;
+
+    let isk = IssuanceAuthorizingKey::from_bytes(random_bytes(rng)).unwrap();
     let ik: IssuanceValidatingKey = (&isk).into();
 
-    let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
+    let fvk = FullViewingKey::from(&SpendingKey::from_bytes(random_bytes(rng)).unwrap());
     let recipient = fvk.address_at(0u32, Scope::External);
 
-    let mut sighash = [0u8; 32];
-    rng.fill_bytes(&mut sighash);
+    let sighash = random_bytes(rng);
 
-    let first_nullifier = Nullifier::dummy(&mut rng);
+    let base = pallas::Base::from_uniform_bytes(&random_bytes(rng));
+    let first_nullifier = Nullifier::from_bytes(&base.to_repr()).unwrap();
 
     TestParams {
         rng,
