@@ -304,11 +304,6 @@ impl<T: IssueAuth> IssueBundle<T> {
         }
     }
 
-    /// Returns the reference notes created in this bundle.
-    pub fn reference_notes(&self) -> &HashMap<AssetBase, Note> {
-        &self.reference_notes
-    }
-
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
     pub fn commitment(&self) -> IssueBundleCommitment {
