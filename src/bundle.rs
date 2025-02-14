@@ -191,7 +191,7 @@ pub trait Authorization: fmt::Debug {
 }
 
 /// Defines the authorization type of an Orchard bundle with a proof.
-pub trait AuthorizedWithProof: Authorization {
+pub trait AuthorizedWithProof: Authorization<SpendAuth = redpallas::Signature<SpendAuth>> {
     /// Return the proof component of the authorizing data.
     fn proof(&self) -> &Proof;
 }
