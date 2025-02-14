@@ -130,6 +130,23 @@ pub struct SwapBundle<V> {
     binding_signature: redpallas::Signature<Binding>,
 }
 
+impl<V> SwapBundle<V> {
+
+    /// Constructs a `SwapBundle` from its constituent parts.
+    pub fn from_parts(
+        action_groups: Vec<ActionGroup<ActionGroupAuthorized, V>>,
+        value_balance: V,
+        binding_signature: redpallas::Signature<Binding>,
+    ) -> Self {
+        SwapBundle {
+            action_groups,
+            value_balance,
+            binding_signature,
+        }
+    }
+}
+
+
 impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
     /// Constructs a `SwapBundle` from its action groups.
     pub fn new<R: RngCore + CryptoRng>(
