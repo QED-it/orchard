@@ -7,7 +7,7 @@ use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
 use crate::bundle::commitments::{
     ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION, ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
 };
-use crate::bundle::Authorized;
+use crate::bundle::{Authorized, AuthorizedWithProof};
 use crate::{
     bundle::{
         commitments::{

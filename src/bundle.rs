@@ -190,6 +190,12 @@ pub trait Authorization: fmt::Debug {
     type SpendAuth: fmt::Debug + Clone;
 }
 
+/// Defines the authorization type of an Orchard bundle with a proof.
+pub trait AuthorizedWithProof: Authorization {
+    /// Return the proof component of the authorizing data.
+    fn proof(&self) -> &Proof;
+}
+
 /// A bundle of actions to be applied to the ledger.
 #[derive(Clone)]
 pub struct Bundle<A: Authorization, V, D: OrchardDomainCommon> {
@@ -510,14 +516,16 @@ impl Authorized {
         }
     }
 
-    /// Return the proof component of the authorizing data.
-    pub fn proof(&self) -> &Proof {
-        &self.proof
-    }
-
     /// Return the binding signature.
     pub fn binding_signature(&self) -> &redpallas::Signature<Binding> {
         &self.binding_signature
+    }
+}
+
+impl AuthorizedWithProof for Authorized {
+    /// Return the proof component of the authorizing data.
+    fn proof(&self) -> &Proof {
+        &self.proof
     }
 }
 

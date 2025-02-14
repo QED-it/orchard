@@ -14,6 +14,7 @@ use crate::{
     Proof,
 };
 
+use crate::bundle::AuthorizedWithProof;
 use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
 
 /// An action group.
@@ -131,7 +132,6 @@ pub struct SwapBundle<V> {
 }
 
 impl<V> SwapBundle<V> {
-
     /// Constructs a `SwapBundle` from its constituent parts.
     pub fn from_parts(
         action_groups: Vec<ActionGroup<ActionGroupAuthorized, V>>,
@@ -145,7 +145,6 @@ impl<V> SwapBundle<V> {
         }
     }
 }
-
 
 impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
     /// Constructs a `SwapBundle` from its action groups.
@@ -202,9 +201,11 @@ impl ActionGroupAuthorized {
     pub fn from_parts(proof: Proof) -> Self {
         ActionGroupAuthorized { proof }
     }
+}
 
+impl AuthorizedWithProof for ActionGroupAuthorized {
     /// Return the proof component of the authorizing data.
-    pub fn proof(&self) -> &Proof {
+    fn proof(&self) -> &Proof {
         &self.proof
     }
 }
