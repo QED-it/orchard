@@ -65,10 +65,16 @@ impl BundleType {
         bundle_required: false,
     };
 
+    /// The default bundle with all flags enabled, including Asset Swaps.
+    pub const DEFAULT_SWAP: BundleType = BundleType::Transactional {
+        flags: Flags::ENABLED_WITH_SWAPS,
+        bundle_required: false,
+    };
+
     /// The DISABLED bundle type does not permit any bundle to be produced, and when used in the
     /// builder will prevent any spends or outputs from being added.
     pub const DISABLED: BundleType = BundleType::Transactional {
-        flags: Flags::from_parts(false, false, false),
+        flags: Flags::from_parts(false, false, false, false),
         bundle_required: false,
     };
 
