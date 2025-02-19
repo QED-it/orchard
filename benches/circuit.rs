@@ -6,6 +6,7 @@ use criterion::{BenchmarkId, Criterion};
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 
+use orchard::bundle::AuthorizedWithProof;
 use orchard::{
     builder::{Builder, BundleType},
     circuit::{ProvingKey, VerifyingKey},
