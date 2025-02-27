@@ -3,7 +3,7 @@ use pasta_curves::vesta;
 use rand::{CryptoRng, RngCore};
 use tracing::debug;
 
-use super::{Authorized, Bundle};
+use super::{Authorized, AuthorizedWithProof, Bundle};
 
 use crate::{
     circuit::VerifyingKey,

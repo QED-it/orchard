@@ -65,10 +65,16 @@ impl BundleType {
         bundle_required: false,
     };
 
+    /// The default bundle with all flags enabled, including Asset Swaps.
+    pub const DEFAULT_SWAP: BundleType = BundleType::Transactional {
+        flags: Flags::ENABLED_WITH_SWAPS,
+        bundle_required: false,
+    };
+
     /// The DISABLED bundle type does not permit any bundle to be produced, and when used in the
     /// builder will prevent any spends or outputs from being added.
     pub const DISABLED: BundleType = BundleType::Transactional {
-        flags: Flags::from_parts(false, false, false),
+        flags: Flags::from_parts(false, false, false, false),
         bundle_required: false,
     };
 
@@ -542,6 +548,14 @@ impl Builder {
             anchor,
             reference_notes: HashMap::new(),
         }
+    }
+
+    /// Returns true if the builder is empty.
+    pub fn is_empty(&self) -> bool {
+        self.spends.is_empty()
+            && self.outputs.is_empty()
+            && self.burn.is_empty()
+            && self.reference_notes.is_empty()
     }
 
     /// Adds a note to be spent in this transaction.

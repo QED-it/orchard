@@ -14,10 +14,11 @@ use crate::{
     Proof,
 };
 
+use crate::bundle::AuthorizedWithProof;
 use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
 
 /// An action group.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ActionGroup<A: Authorization, V> {
     /// The action group main content.
     action_group: Bundle<A, V, OrchardZSA>,
@@ -118,7 +119,7 @@ impl<A: Authorization, V: Copy + Into<i64>> ActionGroup<A, V> {
 }
 
 /// A swap bundle to be applied to the ledger.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SwapBundle<V> {
     /// The list of action groups that make up this swap bundle.
     action_groups: Vec<ActionGroup<ActionGroupAuthorized, V>>,
@@ -128,6 +129,21 @@ pub struct SwapBundle<V> {
     value_balance: V,
     /// The binding signature for this swap.
     binding_signature: redpallas::Signature<Binding>,
+}
+
+impl<V> SwapBundle<V> {
+    /// Constructs a `SwapBundle` from its constituent parts.
+    pub fn from_parts(
+        action_groups: Vec<ActionGroup<ActionGroupAuthorized, V>>,
+        value_balance: V,
+        binding_signature: redpallas::Signature<Binding>,
+    ) -> Self {
+        SwapBundle {
+            action_groups,
+            value_balance,
+            binding_signature,
+        }
+    }
 }
 
 impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
@@ -185,9 +201,11 @@ impl ActionGroupAuthorized {
     pub fn from_parts(proof: Proof) -> Self {
         ActionGroupAuthorized { proof }
     }
+}
 
+impl AuthorizedWithProof for ActionGroupAuthorized {
     /// Return the proof component of the authorizing data.
-    pub fn proof(&self) -> &Proof {
+    fn proof(&self) -> &Proof {
         &self.proof
     }
 }
@@ -210,6 +228,13 @@ impl<V> SwapBundle<V> {
     /// Returns the binding signature of this swap bundle.
     pub fn binding_signature(&self) -> &redpallas::Signature<Binding> {
         &self.binding_signature
+    }
+
+    /// The net value moved out of this swap.
+    ///
+    /// This is the sum of Orchard spends minus the sum of Orchard outputs.
+    pub fn value_balance(&self) -> &V {
+        &self.value_balance
     }
 }
 

@@ -4,6 +4,7 @@
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
 
+use crate::bundle::AuthorizedWithProof;
 use crate::{
     bundle::{
         commitments::{
@@ -15,7 +16,6 @@ use crate::{
     orchard_flavor::OrchardVanilla,
     Bundle,
 };
-
 use super::{
     orchard_domain::OrchardDomainCommon,
     zcash_note_encryption_domain::{
