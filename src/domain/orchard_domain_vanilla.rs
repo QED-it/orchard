@@ -4,12 +4,6 @@
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
 
-use super::{
-    orchard_domain::OrchardDomainCommon,
-    zcash_note_encryption_domain::{
-        build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_V2,
-    },
-};
 use crate::bundle::AuthorizedWithProof;
 use crate::{
     bundle::{
@@ -21,6 +15,12 @@ use crate::{
     note::{AssetBase, Note},
     orchard_flavor::OrchardVanilla,
     Bundle,
+};
+use super::{
+    orchard_domain::OrchardDomainCommon,
+    zcash_note_encryption_domain::{
+        build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_V2,
+    },
 };
 
 impl OrchardDomainCommon for OrchardVanilla {
