@@ -8,7 +8,7 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
-    swap_bundle::{ActionGroup, ActionGroupAuthorized, SwapBundle},
+    swap_bundle::{ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
@@ -43,8 +43,6 @@ pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>
     assert_eq!(vks.len(), swap_bundle.action_groups().len());
     for (action_group, vk) in swap_bundle.action_groups().iter().zip(vks.iter()) {
         verify_action_group(action_group, vk);
-        // Verify that bsk is None
-        assert!(action_group.bsk().is_none());
     }
 
     let sighash: [u8; 32] = swap_bundle.commitment().into();
@@ -59,13 +57,12 @@ pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>
 // - verify the proof
 // - verify the signature on each action
 pub fn verify_action_group(
-    action_group: &ActionGroup<ActionGroupAuthorized, i64>,
+    action_group_bundle: &Bundle<ActionGroupAuthorized, i64, OrchardZSA>,
     vk: &VerifyingKey,
 ) {
-    let action_group_bundle = action_group.action_group();
     assert!(matches!(action_group_bundle.verify_proof(vk), Ok(())));
 
-    let action_group_digest: [u8; 32] = action_group.commitment().into();
+    let action_group_digest: [u8; 32] = action_group_bundle.action_group_commitment().into();
     for action in action_group_bundle.actions() {
         assert_eq!(
             action
