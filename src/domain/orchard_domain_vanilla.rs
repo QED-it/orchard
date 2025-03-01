@@ -4,7 +4,6 @@
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
 
-use crate::bundle::AuthorizedWithProof;
 use crate::{
     bundle::{
         commitments::{
@@ -66,7 +65,7 @@ impl OrchardDomainCommon for OrchardVanilla {
     /// [zip244]: https://zips.z.cash/zip-0244
     fn hash_bundle_auth_data<V>(bundle: &Bundle<Authorized, V, OrchardVanilla>) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
-        h.update(bundle.authorization().proof().as_ref());
+        h.update(bundle.authorization().proof().unwrap().as_ref());
         for action in bundle.actions().iter() {
             h.update(&<[u8; 64]>::from(action.authorization()));
         }

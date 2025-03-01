@@ -6,9 +6,9 @@ use criterion::{BenchmarkId, Criterion};
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 
-use orchard::bundle::AuthorizedWithProof;
 use orchard::{
     builder::{Builder, BundleType},
+    bundle::Authorization,
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, Scope, SpendingKey},
     note::AssetBase,
@@ -87,7 +87,13 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 .unwrap();
             assert!(bundle.verify_proof(&vk).is_ok());
             group.bench_function(BenchmarkId::new("bundle", num_recipients), |b| {
-                b.iter(|| bundle.authorization().proof().verify(&vk, &instances));
+                b.iter(|| {
+                    bundle
+                        .authorization()
+                        .proof()
+                        .unwrap()
+                        .verify(&vk, &instances)
+                });
             });
         }
     }

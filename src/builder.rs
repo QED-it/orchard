@@ -1025,6 +1025,10 @@ impl<P, S: InProgressSignatures> InProgress<P, S> {
 
 impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> {
     type SpendAuth = S::SpendAuth;
+
+    fn proof(&self) -> Option<&Proof> {
+        None
+    }
 }
 
 /// Marker for a bundle without a proof.

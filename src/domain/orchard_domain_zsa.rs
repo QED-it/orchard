@@ -7,7 +7,7 @@ use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
 use crate::bundle::commitments::{
     ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION, ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
 };
-use crate::bundle::{Authorized, AuthorizedWithProof};
+use crate::bundle::Authorized;
 use crate::{
     bundle::{
         commitments::{
@@ -91,7 +91,7 @@ impl OrchardDomainCommon for OrchardZSA {
     fn hash_bundle_auth_data<V>(bundle: &Bundle<Authorized, V, OrchardZSA>) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
         let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION);
-        agh.update(bundle.authorization().proof().as_ref());
+        agh.update(bundle.authorization().proof().unwrap().as_ref());
         for action in bundle.actions().iter() {
             agh.update(&<[u8; 64]>::from(action.authorization()));
         }

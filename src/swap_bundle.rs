@@ -12,7 +12,6 @@ use crate::{
     Proof,
 };
 
-use crate::bundle::AuthorizedWithProof;
 use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
 
 /// A swap bundle to be applied to the ledger.
@@ -86,6 +85,11 @@ pub struct ActionGroupAuthorized {
 
 impl Authorization for ActionGroupAuthorized {
     type SpendAuth = redpallas::Signature<SpendAuth>;
+
+    /// Return the proof component of the authorizing data.
+    fn proof(&self) -> Option<&Proof> {
+        Some(&self.proof)
+    }
 }
 
 impl ActionGroupAuthorized {
@@ -95,18 +99,12 @@ impl ActionGroupAuthorized {
     }
 }
 
-impl AuthorizedWithProof for ActionGroupAuthorized {
-    /// Return the proof component of the authorizing data.
-    fn proof(&self) -> &Proof {
-        &self.proof
-    }
-}
-
 impl<V, D: OrchardDomainCommon> Bundle<ActionGroupAuthorized, V, D> {
     /// Verifies the proof for this bundle.
     pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
         self.authorization()
             .proof()
+            .unwrap()
             .verify(vk, &self.to_instances())
     }
 }

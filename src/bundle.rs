@@ -211,12 +211,9 @@ impl Flags {
 pub trait Authorization: fmt::Debug {
     /// The authorization type of an Orchard action.
     type SpendAuth: fmt::Debug + Clone;
-}
 
-/// Defines the authorization type of an Orchard bundle with a proof.
-pub trait AuthorizedWithProof: Authorization<SpendAuth = redpallas::Signature<SpendAuth>> {
     /// Return the proof component of the authorizing data.
-    fn proof(&self) -> &Proof;
+    fn proof(&self) -> Option<&Proof>;
 }
 
 /// A bundle of actions to be applied to the ledger.
@@ -537,6 +534,11 @@ pub struct Authorized {
 
 impl Authorization for Authorized {
     type SpendAuth = redpallas::Signature<SpendAuth>;
+
+    /// Return the proof component of the authorizing data.
+    fn proof(&self) -> Option<&Proof> {
+        Some(&self.proof)
+    }
 }
 
 impl Authorized {
@@ -554,13 +556,6 @@ impl Authorized {
     }
 }
 
-impl AuthorizedWithProof for Authorized {
-    /// Return the proof component of the authorizing data.
-    fn proof(&self) -> &Proof {
-        &self.proof
-    }
-}
-
 impl<V, D: OrchardDomainCommon> Bundle<Authorized, V, D> {
     /// Computes a commitment to the authorizing data within for this bundle.
     ///
@@ -573,6 +568,7 @@ impl<V, D: OrchardDomainCommon> Bundle<Authorized, V, D> {
     pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
         self.authorization()
             .proof()
+            .unwrap()
             .verify(vk, &self.to_instances())
     }
 }
@@ -654,6 +650,11 @@ pub mod testing {
 
     impl Authorization for Unauthorized {
         type SpendAuth = ();
+
+        /// Return the proof component of the authorizing data.
+        fn proof(&self) -> Option<&Proof> {
+            None
+        }
     }
 
     /// `BundleArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol variations
