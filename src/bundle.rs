@@ -16,7 +16,7 @@ use zcash_note_encryption_zsa::{try_note_decryption, try_output_recovery_with_ov
 use crate::{
     action::Action,
     address::Address,
-    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
+    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data, hash_action_group},
     circuit::{Instance, Proof, VerifyingKey},
     domain::{OrchardDomain, OrchardDomainCommon},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
@@ -26,6 +26,7 @@ use crate::{
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };
+use crate::orchard_flavor::OrchardZSA;
 
 impl<A, D: OrchardDomainCommon> Action<A, D> {
     /// Prepares the public instance for this action, for creating and verifying the
@@ -270,6 +271,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
         value_balance: V,
         burn: Vec<(AssetBase, NoteValue)>,
         anchor: Anchor,
+        expiry_height: u32,
         authorization: A,
     ) -> Self {
         Bundle {
@@ -278,7 +280,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
             value_balance,
             burn,
             anchor,
-            expiry_height: 0,
+            expiry_height,
             authorization,
         }
     }
@@ -518,6 +520,14 @@ impl<A: Authorization, V: Copy + Into<i64>, FL: OrchardFlavor> Bundle<A, V, FL> 
     }
 }
 
+impl<A: Authorization, V: Copy + Into<i64>> Bundle<A, V, OrchardZSA> {
+    /// Computes a commitment to the effects of this bundle,
+    /// assuming that the bundle represents an action group inside a swap bundle.
+    pub fn action_group_commitment(&self) -> BundleCommitment {
+        BundleCommitment(hash_action_group(self))
+    }
+}
+
 /// Authorizing data for a bundle of actions, ready to be committed to the ledger.
 #[derive(Debug, Clone)]
 pub struct Authorized {
@@ -753,6 +763,7 @@ pub mod testing {
                     balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
                     burn,
                     anchor,
+                    0,
                     Unauthorized,
                 )
             }
@@ -785,6 +796,7 @@ pub mod testing {
                     balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
                     burn,
                     anchor,
+                    0,
                     Authorized {
                         proof: Proof::new(fake_proof),
                         binding_signature: sk.sign(rng, &fake_sighash),
