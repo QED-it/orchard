@@ -66,34 +66,9 @@ pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
     action_group: &Bundle<A, V, OrchardZSA>,
 ) -> Blake2bHash {
     let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION);
-    let mut ch = hasher(ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION);
-    let mut mh = hasher(ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION);
-    let mut nh = hasher(ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION);
-    for action in action_group.actions().iter() {
-        ch.update(&action.nullifier().to_bytes());
-        ch.update(&action.cmx().to_bytes());
-        ch.update(&action.encrypted_note().epk_bytes);
-        ch.update(
-            &action.encrypted_note().enc_ciphertext.as_ref()[..OrchardZSA::COMPACT_NOTE_SIZE],
-        );
 
-        mh.update(
-            &action.encrypted_note().enc_ciphertext.as_ref()
-                [OrchardZSA::COMPACT_NOTE_SIZE..OrchardZSA::COMPACT_NOTE_SIZE + MEMO_SIZE],
-        );
+    OrchardZSA::update_hash_with_actions(&mut agh, action_group);
 
-        nh.update(&action.cv_net().to_bytes());
-        nh.update(&<[u8; 32]>::from(action.rk()));
-        nh.update(
-            &action.encrypted_note().enc_ciphertext.as_ref()
-                [OrchardZSA::COMPACT_NOTE_SIZE + MEMO_SIZE..],
-        );
-        nh.update(&action.encrypted_note().out_ciphertext);
-    }
-
-    agh.update(ch.finalize().as_bytes());
-    agh.update(mh.finalize().as_bytes());
-    agh.update(nh.finalize().as_bytes());
     agh.update(&[action_group.flags().to_byte()]);
     agh.update(&action_group.anchor().to_bytes());
     agh.update(&action_group.expiry_height().to_le_bytes());

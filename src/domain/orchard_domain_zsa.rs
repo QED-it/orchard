@@ -5,14 +5,14 @@ use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
 
 use crate::bundle::commitments::{
-    ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION, ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
+    hash_action_group, ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION,
+    ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
 };
 use crate::bundle::Authorized;
 use crate::{
     bundle::{
         commitments::{
-            hasher, ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION,
-            ZCASH_ORCHARD_HASH_PERSONALIZATION, ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION,
+            hasher, ZCASH_ORCHARD_HASH_PERSONALIZATION, ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION,
         },
         Authorization,
     },
@@ -63,15 +63,8 @@ impl OrchardDomainCommon for OrchardZSA {
         bundle: &Bundle<A, V, OrchardZSA>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
-        let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION);
-
-        Self::update_hash_with_actions(&mut agh, bundle);
-
-        agh.update(&[bundle.flags().to_byte()]);
-        agh.update(&bundle.anchor().to_bytes());
-        agh.update(&bundle.expiry_height().to_le_bytes());
-
-        h.update(agh.finalize().as_bytes());
+        let action_group_hash = hash_action_group(bundle);
+        h.update(action_group_hash.as_bytes());
 
         let mut burn_hasher = hasher(ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION);
         for burn_item in bundle.burn() {
