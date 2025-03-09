@@ -1,8 +1,7 @@
 //! Structs related to swap bundles.
 
 use crate::{
-    builder::{BuildError, InProgress, InProgressSignatures, Unauthorized, Unproven},
-    bundle::commitments::{hash_action_group, hash_swap_bundle},
+    bundle::commitments::hash_swap_bundle,
     bundle::{derive_bvk, Authorization, Bundle, BundleCommitment},
     circuit::{ProvingKey, VerifyingKey},
     keys::SpendAuthorizingKey,
@@ -118,10 +117,10 @@ impl<A: Authorization, V: Copy + Into<i64>> ActionGroup<A, V> {
 }
 
 /// A swap bundle to be applied to the ledger.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SwapBundle<V> {
     /// The list of action groups that make up this swap bundle.
-    action_groups: Vec<ActionGroup<ActionGroupAuthorized, V>>,
+    action_groups: Vec<Bundle<ActionGroupAuthorized, V, OrchardZSA>>,
     /// The net value moved out of this swap.
     ///
     /// This is the sum of Orchard spends minus the sum of Orchard outputs.
@@ -130,26 +129,36 @@ pub struct SwapBundle<V> {
     binding_signature: redpallas::Signature<Binding>,
 }
 
+impl<V> SwapBundle<V> {
+    /// Constructs a `SwapBundle` from its constituent parts.
+    pub fn from_parts(
+        action_groups: Vec<Bundle<ActionGroupAuthorized, V, OrchardZSA>>,
+        value_balance: V,
+        binding_signature: redpallas::Signature<Binding>,
+    ) -> Self {
+        SwapBundle {
+            action_groups,
+            value_balance,
+            binding_signature,
+        }
+    }
+}
+
 impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
-    /// Constructs a `SwapBundle` from its action groups.
+    /// Constructs a `SwapBundle` from its action groups and respective binding signature keys.
+    /// Keys should go in the same order as the action groups.
     pub fn new<R: RngCore + CryptoRng>(
         rng: R,
-        mut action_groups: Vec<ActionGroup<ActionGroupAuthorized, V>>,
+        action_groups: Vec<Bundle<ActionGroupAuthorized, V, OrchardZSA>>,
+        bsks: Vec<redpallas::SigningKey<Binding>>,
     ) -> Self {
+        assert_eq!(action_groups.len(), bsks.len());
         // Evaluate the swap value balance by summing the value balance of each action group.
-        let value_balance = action_groups
-            .iter()
-            .map(|a| *a.action_group().value_balance())
-            .sum();
+        let value_balance = action_groups.iter().map(|a| *a.value_balance()).sum();
         // Evaluate the swap bsk by summing the bsk of each action group.
-        let bsk = action_groups
-            .iter_mut()
-            .map(|ag| {
-                let bsk = ValueCommitTrapdoor::from_bsk(ag.bsk.unwrap());
-                // Remove the bsk of each action group as it is no longer needed.
-                ag.remove_bsk();
-                bsk
-            })
+        let bsk = bsks
+            .into_iter()
+            .map(ValueCommitTrapdoor::from_bsk)
             .sum::<ValueCommitTrapdoor>()
             .into_bsk();
         // Evaluate the swap sighash
@@ -178,17 +187,17 @@ pub struct ActionGroupAuthorized {
 
 impl Authorization for ActionGroupAuthorized {
     type SpendAuth = redpallas::Signature<SpendAuth>;
+
+    /// Return the proof component of the authorizing data.
+    fn proof(&self) -> Option<&Proof> {
+        Some(&self.proof)
+    }
 }
 
 impl ActionGroupAuthorized {
     /// Constructs the authorizing data for an action group from its proof.
     pub fn from_parts(proof: Proof) -> Self {
         ActionGroupAuthorized { proof }
-    }
-
-    /// Return the proof component of the authorizing data.
-    pub fn proof(&self) -> &Proof {
-        &self.proof
     }
 }
 
@@ -197,19 +206,27 @@ impl<V, D: OrchardDomainCommon> Bundle<ActionGroupAuthorized, V, D> {
     pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
         self.authorization()
             .proof()
+            .unwrap()
             .verify(vk, &self.to_instances())
     }
 }
 
 impl<V> SwapBundle<V> {
     /// Returns the list of action groups that make up this swap bundle.
-    pub fn action_groups(&self) -> &Vec<ActionGroup<ActionGroupAuthorized, V>> {
+    pub fn action_groups(&self) -> &Vec<Bundle<ActionGroupAuthorized, V, OrchardZSA>> {
         &self.action_groups
     }
 
     /// Returns the binding signature of this swap bundle.
     pub fn binding_signature(&self) -> &redpallas::Signature<Binding> {
         &self.binding_signature
+    }
+
+    /// The net value moved out of this swap.
+    ///
+    /// This is the sum of Orchard spends minus the sum of Orchard outputs.
+    pub fn value_balance(&self) -> &V {
+        &self.value_balance
     }
 }
 
@@ -228,7 +245,7 @@ impl<V: Copy + Into<i64>> SwapBundle<V> {
         let actions = self
             .action_groups
             .iter()
-            .flat_map(|ag| ag.action_group().actions())
+            .flat_map(|ag| ag.actions())
             .collect::<Vec<_>>();
         derive_bvk(
             actions,

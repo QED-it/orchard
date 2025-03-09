@@ -5,6 +5,13 @@ use alloc::{collections::BTreeMap, vec::Vec};
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::note_bytes::NoteBytesData;
 
+use super::{
+    orchard_domain::OrchardDomainCommon,
+    zcash_note_encryption_domain::{
+        build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_V2,
+    },
+};
+
 use crate::{
     bundle::{
         commitments::{
@@ -100,7 +107,7 @@ impl OrchardPrimitives for OrchardVanilla {
         _: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
-        h.update(bundle.authorization().proof().as_ref());
+        h.update(bundle.authorization().proof().unwrap().as_ref());
         for action in bundle.actions().iter() {
             h.update(&<[u8; 64]>::from(action.authorization().sig()));
         }

@@ -5,6 +5,11 @@ use alloc::{collections::BTreeMap, vec::Vec};
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::note_bytes::NoteBytesData;
 
+use crate::bundle::commitments::{
+    hash_action_group, ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION,
+    ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
+};
+use crate::bundle::Authorized;
 use crate::{
     bundle::{
         commitments::{

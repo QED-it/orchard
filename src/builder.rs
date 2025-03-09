@@ -75,10 +75,16 @@ impl BundleType {
         bundle_required: false,
     };
 
+    /// The default bundle with all flags enabled, including Asset Swaps.
+    pub const DEFAULT_SWAP: BundleType = BundleType::Transactional {
+        flags: Flags::ENABLED_WITH_SWAPS,
+        bundle_required: false,
+    };
+
     /// The DISABLED bundle type does not permit any bundle to be produced, and when used in the
     /// builder will prevent any spends or outputs from being added.
     pub const DISABLED: BundleType = BundleType::Transactional {
-        flags: Flags::from_parts(false, false, false),
+        flags: Flags::from_parts(false, false, false, false),
         bundle_required: false,
     };
 
@@ -654,6 +660,14 @@ impl Builder {
         }
     }
 
+    /// Returns true if the builder is empty.
+    pub fn is_empty(&self) -> bool {
+        self.spends.is_empty()
+            && self.outputs.is_empty()
+            && self.burn.is_empty()
+            && self.reference_notes.is_empty()
+    }
+
     /// Adds a note to be spent in this transaction.
     ///
     /// - `note` is a spendable note, obtained by trial-decrypting an [`Action`] using the
@@ -803,6 +817,7 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
+            0,
             SpecificBuilderParams::BundleParams(self.burn),
         )
     }
@@ -810,29 +825,24 @@ impl Builder {
     /// Builds an action group containing the given spent and output notes.
     ///
     /// The returned action group will have no proof or signatures; these can be applied with
-    /// [`ActionGroup::create_proof`] and [`ActionGroup::apply_signatures`] respectively.
+    /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
     pub fn build_action_group<V: TryFrom<i64>>(
         self,
         rng: impl RngCore,
-        timelimit: u32,
-    ) -> Result<Option<UnauthorizedActionGroupWithMetadata<V>>, BuildError> {
+        expiry_height: u32,
+    ) -> Result<UnauthorizedBundleWithMetadata<V, OrchardZSA>, BuildError> {
         if !self.burn.is_empty() {
             return Err(BuildError::BurnNotEmptyInActionGroup);
         }
-        Ok(bundle(
+        bundle(
             rng,
             self.anchor,
             self.bundle_type,
             self.spends,
             self.outputs,
+            expiry_height,
             SpecificBuilderParams::ActionGroupParams(self.reference_notes),
-        )?
-        .map(|(action_group, metadata)| {
-            (
-                ActionGroup::from_parts(action_group, timelimit, None),
-                metadata,
-            )
-        }))
+        )
     }
 
     /// Builds a bundle containing the given spent notes and outputs along with their
@@ -1051,6 +1061,7 @@ fn build_bundle<B, R: RngCore>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
+    expiry_height: u32,
     burn: BTreeMap<AssetBase, NoteValue>,
     reference_notes: BTreeMap<AssetBase, SpendInfo>,
     specific_params: SpecificBuilderParams,
@@ -1213,6 +1224,10 @@ pub struct InProgress<P, S: InProgressSignatures> {
 
 impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> {
     type SpendAuth = S::SpendAuth;
+
+    fn proof(&self) -> Option<&Proof> {
+        None
+    }
 }
 
 /// Marker for a bundle without a proof.
@@ -1302,8 +1317,8 @@ pub struct SigningMetadata {
     /// If this action is spending a dummy note, this field holds that note's spend
     /// authorizing key.
     ///
-    /// These keys are used automatically in [`Bundle<Unauthorized>::prepare`] or
-    /// [`Bundle<Unauthorized>::apply_signatures`] to sign dummy spends.
+    /// These keys are used automatically in [`Bundle<Unauthorized, _, _>::prepare`] or
+    /// [`Bundle<Unauthorized, _, _>::apply_signatures`] to sign dummy spends.
     dummy_ask: Option<SpendAuthorizingKey>,
     parts: SigningParts,
 }
@@ -1448,23 +1463,15 @@ impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, P> {
             })
             .finalize()
     }
-}
 
-impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
-    /// Applies signatures to this action group, in order to authorize it.
+    /// Applies signatures to this bundle as an action group, in order to authorize it.
     #[allow(clippy::type_complexity)]
     pub fn apply_signatures_for_action_group<R: RngCore + CryptoRng>(
         self,
         mut rng: R,
         action_group_digest: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
-    ) -> Result<
-        (
-            redpallas::SigningKey<Binding>,
-            Bundle<ActionGroupAuthorized, V, D>,
-        ),
-        BuildError,
-    > {
+    ) -> Result<(Bundle<ActionGroupAuthorized, V, D>, SigningKey<Binding>), BuildError> {
         signing_keys
             .iter()
             .fold(
@@ -1587,20 +1594,14 @@ impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, ActionGroupPartiallyAut
     #[allow(clippy::type_complexity)]
     pub fn finalize(
         self,
-    ) -> Result<
-        (
-            redpallas::SigningKey<Binding>,
-            Bundle<ActionGroupAuthorized, V, D>,
-        ),
-        BuildError,
-    > {
+    ) -> Result<(Bundle<ActionGroupAuthorized, V, D>, SigningKey<Binding>), BuildError> {
         let bsk = self.authorization().sigs.bsk;
         self.try_map_authorization(
             &mut (),
             |_, _, maybe| maybe.finalize(),
             |_, partial| Ok(ActionGroupAuthorized::from_parts(partial.proof)),
         )
-        .map(|bundle| (bsk, bundle))
+        .map(|bundle| (bundle, bsk))
     }
 }
 
