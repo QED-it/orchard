@@ -58,7 +58,7 @@ impl BatchValidator {
 
         bundle
             .authorization()
-            .proof()
+            .proof
             .add_to_batch(&mut self.proofs, bundle.to_instances());
     }
 

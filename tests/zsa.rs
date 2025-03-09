@@ -13,7 +13,8 @@ use orchard::{
     keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
     note::{AssetBase, ExtractedNoteCommitment, Nullifier},
     orchard_flavor::OrchardZSA,
-    swap_bundle::{ActionGroup, ActionGroupAuthorized, SwapBundle},
+    primitives::redpallas::{Binding, SigningKey},
+    swap_bundle::{ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Address, Anchor, Bundle, Note, ReferenceKeys,
@@ -103,13 +104,20 @@ fn build_and_sign_action_group(
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
-) -> ActionGroup<ActionGroupAuthorized, i64> {
+) -> (
+    Bundle<ActionGroupAuthorized, i64, OrchardZSA>,
+    SigningKey<Binding>,
+) {
     let unauthorized = builder.build_action_group(&mut rng, timelimit).unwrap().0;
-    let action_group_digest = unauthorized.commitment().into();
+    let action_group_digest = unauthorized.action_group_commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
 
     proven
-        .apply_signatures(rng, action_group_digest, &[SpendAuthorizingKey::from(sk)])
+        .apply_signatures_for_action_group(
+            rng,
+            action_group_digest,
+            &[SpendAuthorizingKey::from(sk)],
+        )
         .unwrap()
 }
 
@@ -287,6 +295,7 @@ fn build_and_verify_bundle(
     Ok(())
 }
 
+#[allow(clippy::type_complexity)]
 fn build_and_verify_action_group(
     spends: Vec<&TestSpendInfo>,
     outputs: Vec<TestOutputInfo>,
@@ -295,9 +304,15 @@ fn build_and_verify_action_group(
     timelimit: u32,
     expected_num_actions: usize,
     keys: &Keychain,
-) -> Result<ActionGroup<ActionGroupAuthorized, i64>, String> {
+) -> Result<
+    (
+        Bundle<ActionGroupAuthorized, i64, OrchardZSA>,
+        SigningKey<Binding>,
+    ),
+    String,
+> {
     let rng = OsRng;
-    let shielded_action_group: ActionGroup<_, i64> = {
+    let (shielded_action_group, bsk) = {
         let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
 
         spends
@@ -327,14 +342,9 @@ fn build_and_verify_action_group(
     };
 
     verify_action_group(&shielded_action_group, &keys.vk);
-    assert_eq!(
-        shielded_action_group.action_group().actions().len(),
-        expected_num_actions
-    );
-    assert!(verify_unique_spent_nullifiers(
-        shielded_action_group.action_group()
-    ));
-    Ok(shielded_action_group)
+    assert_eq!(shielded_action_group.actions().len(), expected_num_actions);
+    assert!(verify_unique_spent_nullifiers(&shielded_action_group));
+    Ok((shielded_action_group, bsk))
 }
 
 fn verify_unique_spent_nullifiers<A: Authorization>(bundle: &Bundle<A, i64, OrchardZSA>) -> bool {
@@ -792,7 +802,7 @@ fn action_group_and_swap_bundle() {
 
     {
         // 1. Create and verify ActionGroup for user1
-        let action_group1 = build_and_verify_action_group(
+        let (action_group1, bsk1) = build_and_verify_action_group(
             vec![
                 &asset1_spend1,            // 40 asset1
                 &asset1_spend2,            // 2 asset1
@@ -832,7 +842,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 2. Create and verify ActionGroup for user2
-        let action_group2 = build_and_verify_action_group(
+        let (action_group2, bsk2) = build_and_verify_action_group(
             vec![
                 &asset2_spend1,            // 40 asset2
                 &asset2_spend2,            // 2 asset2
@@ -871,7 +881,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 3. Matcher fees action group
-        let action_group_matcher = build_and_verify_action_group(
+        let (action_group_matcher, bsk_matcher) = build_and_verify_action_group(
             // The matcher spends nothing.
             vec![],
             // The matcher receives 5 ZEC as a fee from user1 and user2.
@@ -894,6 +904,7 @@ fn action_group_and_swap_bundle() {
         let swap_bundle = SwapBundle::new(
             OsRng,
             vec![action_group1, action_group2, action_group_matcher],
+            vec![bsk1, bsk2, bsk_matcher],
         );
         verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
     }
@@ -912,7 +923,7 @@ fn action_group_and_swap_bundle() {
 
     {
         // 1. Create and verify ActionGroup for user1
-        let action_group1 = build_and_verify_action_group(
+        let (action_group1, bsk1) = build_and_verify_action_group(
             vec![
                 &asset1_spend1, // 40 asset1
                 &asset1_spend2, // 2 asset1
@@ -942,7 +953,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 2. Create and verify ActionGroup for user2
-        let action_group2 = build_and_verify_action_group(
+        let (action_group2, bsk2) = build_and_verify_action_group(
             vec![
                 &user2_native_note1_spend, // 100 ZEC
                 &user2_native_note2_spend, // 100 ZEC
@@ -973,7 +984,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 3. Matcher fees action group
-        let action_group_matcher = build_and_verify_action_group(
+        let (action_group_matcher, bsk_matcher) = build_and_verify_action_group(
             // The matcher spends nothing.
             vec![],
             // The matcher receives 10 ZEC as a fee from user2.
@@ -996,6 +1007,7 @@ fn action_group_and_swap_bundle() {
         let swap_bundle = SwapBundle::new(
             OsRng,
             vec![action_group1, action_group2, action_group_matcher],
+            vec![bsk1, bsk2, bsk_matcher],
         );
         verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
     }
@@ -1004,7 +1016,7 @@ fn action_group_and_swap_bundle() {
     // User1 would like to send 30 asset1 to User2
     {
         // 1. Create and verify ActionGroup
-        let action_group = build_and_verify_action_group(
+        let (action_group, bsk1) = build_and_verify_action_group(
             vec![
                 &asset1_spend1, // 40 asset1
                 &asset1_spend2, // 2 asset1
@@ -1031,7 +1043,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 2. Create a SwapBundle from the previous ActionGroup
-        let swap_bundle = SwapBundle::new(OsRng, vec![action_group]);
+        let swap_bundle = SwapBundle::new(OsRng, vec![action_group], vec![bsk1]);
         verify_swap_bundle(&swap_bundle, vec![&keys1.vk]);
     }
 }
