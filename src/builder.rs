@@ -706,7 +706,7 @@ impl Builder {
     /// Builds an action group containing the given spent and output notes.
     ///
     /// The returned action group will have no proof or signatures; these can be applied with
-    /// [`ActionGroup::create_proof`] and [`ActionGroup::apply_signatures`] respectively.
+    /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
     pub fn build_action_group<V: TryFrom<i64>>(
         self,
         rng: impl RngCore,
