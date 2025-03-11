@@ -853,6 +853,7 @@ impl OrchardCircuit for OrchardZSA {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
     use core::iter;
 
     use ff::Field;

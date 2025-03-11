@@ -1,9 +1,8 @@
 //! Key structures for Orchard.
 
-use std::{
-    fmt::{Debug, Formatter},
-    io::{self, Read, Write},
-};
+use alloc::vec::Vec;
+use core2::io::{self, Read, Write};
+use std::fmt::{Debug, Formatter};
 
 use aes::Aes256;
 use blake2b_simd::{Hash as Blake2bHash, Params};
@@ -207,12 +206,19 @@ impl SpendValidatingKey {
 
     /// Converts this spend key to its serialized form,
     /// I2LEOSP_256(ak).
+    #[cfg_attr(feature = "unstable-frost", visibility::make(pub))]
     pub(crate) fn to_bytes(&self) -> [u8; 32] {
         // This is correct because the wrapped point must have ỹ = 0, and
         // so the point repr is the same as I2LEOSP of its x-coordinate.
-        <[u8; 32]>::from(&self.0)
+        let b = <[u8; 32]>::from(&self.0);
+        assert!(b[31] & 0x80 == 0);
+        b
     }
 
+    /// Attempts to parse a byte slice as a spend validating key, `I2LEOSP_256(ak)`.
+    ///
+    /// Returns `None` if the given slice does not contain a valid spend validating key.
+    #[cfg_attr(feature = "unstable-frost", visibility::make(pub))]
     pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
         <[u8; 32]>::try_from(bytes)
             .ok()
@@ -541,7 +547,7 @@ impl FullViewingKey {
         Self::from_bytes(&data).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "Unable to deserialize a valid Orchard FullViewingKey from bytes".to_owned(),
+                "Unable to deserialize a valid Orchard FullViewingKey from bytes",
             )
         })
     }
@@ -806,12 +812,18 @@ impl IncomingViewingKey {
     pub fn address(&self, d: Diversifier) -> Address {
         self.ivk.address(d)
     }
+
+    /// Returns the [`PreparedIncomingViewingKey`] for this [`IncomingViewingKey`].
+    pub fn prepare(&self) -> PreparedIncomingViewingKey {
+        PreparedIncomingViewingKey::new(self)
+    }
 }
 
 /// An Orchard incoming viewing key that has been precomputed for trial decryption.
 #[derive(Clone, Debug)]
 pub struct PreparedIncomingViewingKey(PreparedNonZeroScalar);
 
+#[cfg(feature = "std")]
 impl memuse::DynamicUsage for PreparedIncomingViewingKey {
     fn dynamic_usage(&self) -> usize {
         self.0.dynamic_usage()

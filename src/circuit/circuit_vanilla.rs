@@ -613,6 +613,7 @@ impl OrchardCircuit for OrchardVanilla {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
     use core::iter;
 
     use ff::Field;
@@ -727,7 +728,6 @@ mod tests {
                     K,
                     &circuits[0],
                 );
-            println!("{:#?}", circuit_cost);
             assert_eq!(usize::from(circuit_cost.proof_size(1)), 4992);
             assert_eq!(usize::from(circuit_cost.proof_size(2)), 7264);
             usize::from(circuit_cost.proof_size(instances.len()))

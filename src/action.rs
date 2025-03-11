@@ -123,6 +123,7 @@ impl<D: OrchardDomainCommon> DynamicUsage for Action<redpallas::Signature<SpendA
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub(crate) mod testing {
+    use alloc::vec::Vec;
     use rand::{rngs::StdRng, SeedableRng};
     use reddsa::orchard::SpendAuth;
 

@@ -12,6 +12,7 @@
 //! Errors related to issuance, such as invalid signatures or supply overflows,
 //! are handled through the `Error` enum.
 
+use alloc::vec::Vec;
 use blake2b_simd::Hash as Blake2bHash;
 use group::Group;
 use k256::schnorr;
@@ -786,6 +787,8 @@ mod tests {
         value::NoteValue,
         Address, Bundle, Note,
     };
+    use alloc::string::{String, ToString};
+    use alloc::vec::Vec;
     use bridgetree::BridgeTree;
     use group::{Group, GroupEncoding};
     use nonempty::NonEmpty;
@@ -1984,6 +1987,7 @@ pub mod testing {
     use crate::keys::testing::arb_issuance_validating_key;
     use crate::note::asset_base::testing::zsa_asset_base;
     use crate::note::testing::arb_zsa_note;
+    use alloc::vec::Vec;
     use k256::schnorr;
     use nonempty::NonEmpty;
     use proptest::collection::vec;

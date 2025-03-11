@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use group::{Group, GroupEncoding};
 use halo2_proofs::arithmetic::CurveExt;
@@ -132,6 +133,7 @@ impl PartialEq for AssetBase {
 pub mod testing {
     use super::AssetBase;
 
+    use alloc::vec::Vec;
     use proptest::prelude::*;
 
     use crate::keys::{testing::arb_issuance_authorizing_key, IssuanceValidatingKey};

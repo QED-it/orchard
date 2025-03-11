@@ -5,10 +5,14 @@ use core::ops::Deref;
 
 use ff::{Field, FromUniformBytes, PrimeField, PrimeFieldBits};
 use group::{Curve, Group, GroupEncoding, WnafBase, WnafScalar};
+#[cfg(feature = "circuit")]
 use halo2_gadgets::{poseidon::primitives as poseidon, sinsemilla::primitives as sinsemilla};
-use halo2_proofs::arithmetic::{CurveAffine, CurveExt};
+#[cfg(feature = "std")]
 use memuse::DynamicUsage;
-use pasta_curves::pallas;
+use pasta_curves::{
+    arithmetic::{CurveAffine, CurveExt},
+    pallas,
+};
 use subtle::{ConditionallySelectable, CtOption};
 
 use crate::constants::{
@@ -153,6 +157,7 @@ impl PreparedNonIdentityBase {
 #[derive(Clone, Debug)]
 pub(crate) struct PreparedNonZeroScalar(WnafScalar<pallas::Scalar, PREPARED_WINDOW_SIZE>);
 
+#[cfg(feature = "std")]
 impl DynamicUsage for PreparedNonZeroScalar {
     fn dynamic_usage(&self) -> usize {
         self.0.dynamic_usage()
