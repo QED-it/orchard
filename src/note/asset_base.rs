@@ -1,9 +1,8 @@
 use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params};
+use core::hash::{Hash, Hasher};
 use group::{Group, GroupEncoding};
-use halo2_proofs::arithmetic::CurveExt;
-use pasta_curves::pallas;
-use std::hash::{Hash, Hasher};
+use pasta_curves::{arithmetic::CurveExt, pallas};
 
 use subtle::{Choice, ConstantTimeEq, CtOption};
 

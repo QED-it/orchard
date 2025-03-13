@@ -306,7 +306,7 @@ impl IssuanceAuthorizingKey {
 }
 
 impl Debug for IssuanceAuthorizingKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("IssuanceAuthorizingKey")
             .field(&self.0.to_bytes())
             .finish()

@@ -12,10 +12,9 @@ use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
 use zcash_note_encryption_zsa::NoteEncryption;
 
-use crate::builder::BuildError::{BurnNative, BurnZero};
-use crate::orchard_flavor::{OrchardVanilla, OrchardZSA};
 use crate::{
     address::Address,
+    builder::BuildError::{BurnNative, BurnZero},
     bundle::{Authorization, Authorized, Bundle, Flags},
     domain::{OrchardDomain, OrchardDomainCommon},
     keys::{
@@ -35,7 +34,7 @@ use {
         action::Action,
         bundle::derive_bvk,
         circuit::{Circuit, Instance, ProvingKey, Witnesses},
-        orchard_flavor::{Flavor, OrchardFlavor},
+        orchard_flavor::{Flavor, OrchardFlavor, OrchardVanilla, OrchardZSA},
     },
     nonempty::NonEmpty,
 };
@@ -620,6 +619,7 @@ impl BundleMetadata {
 }
 
 /// A tuple containing an in-progress bundle with no proofs or signatures, and its associated metadata.
+#[cfg(feature = "circuit")]
 pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, BundleMetadata);
 
 /// A builder that constructs a [`Bundle`] from a set of notes to be spent, and outputs
