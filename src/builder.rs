@@ -547,7 +547,7 @@ impl ActionInfo {
         );
         let asset = self.spend.note.asset();
         let v_net = self.value_sum();
-        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), asset);
+        let cv_net = ValueCommitment::derive(v_net, self.rcv, asset);
 
         let spend = self.spend.into_pczt(&mut rng);
         let output = self.output.into_pczt(&cv_net, spend.nullifier, &mut rng);

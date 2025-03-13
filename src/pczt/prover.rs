@@ -85,10 +85,7 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
                     .spend
                     .alpha
                     .ok_or(ProverError::MissingSpendAuthRandomizer)?;
-                let rcv = action
-                    .rcv
-                    .clone()
-                    .ok_or(ProverError::MissingValueCommitTrapdoor)?;
+                let rcv = action.rcv.ok_or(ProverError::MissingValueCommitTrapdoor)?;
 
                 Witnesses::from_action_context(spend, output_note, alpha, rcv)
                     .ok_or(ProverError::RhoMismatch)

@@ -16,10 +16,7 @@ impl<D: OrchardDomainCommon> super::Action<D> {
     pub fn verify_cv_net(&self) -> Result<(), VerifyError> {
         let spend_value = self.spend().value.ok_or(VerifyError::MissingValue)?;
         let output_value = self.output().value.ok_or(VerifyError::MissingValue)?;
-        let rcv = self
-            .rcv
-            .clone()
-            .ok_or(VerifyError::MissingValueCommitTrapdoor)?;
+        let rcv = self.rcv.ok_or(VerifyError::MissingValueCommitTrapdoor)?;
 
         let cv_net = ValueCommitment::derive(
             spend_value - output_value,
