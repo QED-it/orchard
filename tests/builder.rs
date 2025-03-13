@@ -12,7 +12,8 @@ use orchard::{
     value::NoteValue,
     Anchor, Bundle, Note,
 };
-use rand::rngs::OsRng;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use zcash_note_encryption_zsa::try_note_decryption;
 
 pub fn verify_bundle<FL: OrchardFlavor>(
@@ -67,8 +68,11 @@ impl BundleOrchardFlavor for OrchardZSA {
     const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED_WITH_ZSA;
 }
 
-fn bundle_chain<FL: BundleOrchardFlavor>() {
-    let mut rng = OsRng;
+fn bundle_chain<FL: BundleOrchardFlavor>(
+    expected_orchard_digest_1: [u8; 32],
+    expected_orchard_digest_2: [u8; 32],
+) {
+    let mut rng = StdRng::seed_from_u64(1u64);
     let pk = ProvingKey::build::<FL>();
     let vk = VerifyingKey::build::<FL>();
 
@@ -108,8 +112,9 @@ fn bundle_chain<FL: BundleOrchardFlavor>() {
         );
 
         let sighash = unauthorized.commitment().into();
+        assert_eq!(expected_orchard_digest_1, sighash);
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
-        proven.apply_signatures(rng, sighash, &[]).unwrap()
+        proven.apply_signatures(rng.clone(), sighash, &[]).unwrap()
     };
 
     // Verify the shielding bundle.
@@ -165,6 +170,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() {
         );
         let (unauthorized, _) = builder.build(&mut rng).unwrap();
         let sighash = unauthorized.commitment().into();
+        assert_eq!(expected_orchard_digest_2, sighash);
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
         proven
             .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
@@ -177,10 +183,30 @@ fn bundle_chain<FL: BundleOrchardFlavor>() {
 
 #[test]
 fn bundle_chain_vanilla() {
-    bundle_chain::<OrchardVanilla>()
+    bundle_chain::<OrchardVanilla>(
+        // `orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`
+        // This ensures backward compatibility.
+        [
+            239, 27, 83, 1, 224, 201, 57, 243, 162, 28, 61, 74, 175, 165, 5, 165, 23, 3, 16, 239,
+            164, 29, 156, 180, 9, 60, 96, 117, 122, 187, 40, 103,
+        ],
+        [
+            145, 227, 149, 34, 67, 111, 65, 185, 177, 236, 106, 137, 179, 71, 80, 137, 26, 12, 12,
+            0, 8, 156, 182, 125, 146, 250, 92, 189, 42, 246, 130, 99,
+        ],
+    )
 }
 
 #[test]
 fn bundle_chain_zsa() {
-    bundle_chain::<OrchardZSA>()
+    bundle_chain::<OrchardZSA>(
+        [
+            183, 144, 252, 84, 122, 85, 49, 92, 222, 26, 48, 167, 119, 46, 202, 16, 232, 238, 88,
+            43, 78, 172, 131, 24, 200, 91, 55, 47, 236, 192, 213, 218,
+        ],
+        [
+            100, 230, 90, 215, 65, 57, 186, 251, 141, 79, 52, 169, 96, 216, 183, 104, 8, 12, 97,
+            221, 232, 57, 97, 184, 158, 105, 235, 73, 79, 173, 32, 15,
+        ],
+    )
 }

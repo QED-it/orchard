@@ -713,7 +713,7 @@ mod tests {
     struct MyCircuit<Lookup: MyLookup> {
         ak: Value<pallas::Base>,
         nk: Value<pallas::Base>,
-        phantom: std::marker::PhantomData<Lookup>,
+        phantom: core::marker::PhantomData<Lookup>,
     }
 
     impl<Lookup: MyLookup> UtilitiesInstructions<pallas::Base> for MyCircuit<Lookup> {
@@ -733,7 +733,7 @@ mod tests {
             Self {
                 ak: Default::default(),
                 nk: Default::default(),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             }
         }
 
@@ -890,43 +890,43 @@ mod tests {
             MyCircuit::<Lookup> {
                 ak: Value::known(pallas::Base::zero()),
                 nk: Value::known(pallas::Base::zero()),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             // `ak` = T_Q - 1, `nk` = T_Q - 1
             MyCircuit::<Lookup> {
                 ak: Value::known(pallas::Base::from_u128(T_Q - 1)),
                 nk: Value::known(pallas::Base::from_u128(T_Q - 1)),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             // `ak` = T_Q, `nk` = T_Q
             MyCircuit::<Lookup> {
                 ak: Value::known(pallas::Base::from_u128(T_Q)),
                 nk: Value::known(pallas::Base::from_u128(T_Q)),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             // `ak` = 2^127 - 1, `nk` = 2^127 - 1
             MyCircuit::<Lookup> {
                 ak: Value::known(pallas::Base::from_u128((1 << 127) - 1)),
                 nk: Value::known(pallas::Base::from_u128((1 << 127) - 1)),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             // `ak` = 2^127, `nk` = 2^127
             MyCircuit::<Lookup> {
                 ak: Value::known(pallas::Base::from_u128(1 << 127)),
                 nk: Value::known(pallas::Base::from_u128(1 << 127)),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             // `ak` = 2^254 - 1, `nk` = 2^254 - 1
             MyCircuit::<Lookup> {
                 ak: Value::known(two_pow_254 - pallas::Base::one()),
                 nk: Value::known(two_pow_254 - pallas::Base::one()),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             // `ak` = 2^254, `nk` = 2^254
             MyCircuit::<Lookup> {
                 ak: Value::known(two_pow_254),
                 nk: Value::known(two_pow_254),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
         ];
 

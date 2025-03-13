@@ -1,8 +1,8 @@
 //! Key structures for Orchard.
 
 use alloc::vec::Vec;
+use core::fmt::{Debug, Formatter};
 use core2::io::{self, Read, Write};
-use std::fmt::{Debug, Formatter};
 
 use aes::Aes256;
 use blake2b_simd::{Hash as Blake2bHash, Params};
@@ -21,7 +21,8 @@ use k256::{
     NonZeroScalar,
 };
 use pasta_curves::{pallas, pallas::Scalar};
-use rand::{rngs::OsRng, RngCore};
+use rand::RngCore;
+use rand_core::CryptoRngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zcash_note_encryption_zsa::EphemeralKeyBytes;
 
@@ -257,8 +258,8 @@ impl IssuanceAuthorizingKey {
     /// Real issuance keys should be derived according to [ZIP 32].
     ///
     /// [ZIP 32]: https://zips.z.cash/zip-0032
-    pub(crate) fn random() -> Self {
-        IssuanceAuthorizingKey(NonZeroScalar::random(&mut OsRng))
+    pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+        IssuanceAuthorizingKey(NonZeroScalar::random(rng))
     }
 
     /// Constructs an Orchard issuance key from uniformly-random bytes.
@@ -306,7 +307,7 @@ impl IssuanceAuthorizingKey {
 }
 
 impl Debug for IssuanceAuthorizingKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("IssuanceAuthorizingKey")
             .field(&self.0.to_bytes())
             .finish()
@@ -1133,6 +1134,7 @@ pub mod testing {
 mod tests {
     use ff::PrimeField;
     use proptest::prelude::*;
+    use rand::rngs::OsRng;
 
     use super::{
         testing::{arb_diversifier_index, arb_diversifier_key, arb_esk, arb_spending_key},
@@ -1170,7 +1172,7 @@ mod tests {
 
     #[test]
     fn issuance_authorizing_key_from_bytes_to_bytes_roundtrip() {
-        let isk = IssuanceAuthorizingKey::random();
+        let isk = IssuanceAuthorizingKey::random(&mut OsRng);
         let isk_bytes = isk.to_bytes();
         let isk_roundtrip = IssuanceAuthorizingKey::from_bytes(isk_bytes).unwrap();
         assert_eq!(isk_bytes, isk_roundtrip.to_bytes());

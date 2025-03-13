@@ -40,6 +40,8 @@
 use core::fmt::{self, Debug};
 use core::iter::Sum;
 use core::ops::{Add, RangeInclusive, Sub};
+
+#[cfg(feature = "std")]
 use std::ops::Neg;
 
 use bitvec::{array::BitArray, order::Lsb0};
@@ -241,6 +243,7 @@ impl<T: Into<i128>> Add<T> for ValueSum {
     }
 }
 
+#[cfg(feature = "std")]
 impl Neg for ValueSum {
     type Output = Option<ValueSum>;
 

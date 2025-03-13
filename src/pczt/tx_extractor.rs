@@ -45,7 +45,6 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
                         .ok_or(TxExtractorError::MissingProof)?,
                     bsk: bundle
                         .bsk
-                        .clone()
                         .ok_or(TxExtractorError::MissingBindingSignatureSigningKey)?,
                 })
             },

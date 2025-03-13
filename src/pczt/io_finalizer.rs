@@ -2,15 +2,11 @@ use alloc::vec::Vec;
 
 use rand::{CryptoRng, RngCore};
 
-use crate::{
-    domain::OrchardDomainCommon,
-    keys::SpendAuthorizingKey,
-    note::AssetBase,
-    primitives::redpallas,
-    value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
-};
-
 use super::SignerError;
+use crate::{
+    bundle::derive_bvk_raw, domain::OrchardDomainCommon, keys::SpendAuthorizingKey,
+    primitives::redpallas, value::ValueCommitTrapdoor,
+};
 
 impl<D: OrchardDomainCommon> super::Bundle<D> {
     /// Finalizes the IO for this bundle.
@@ -32,28 +28,15 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
         let bsk = rcvs.into_iter().sum::<ValueCommitTrapdoor>().into_bsk();
 
         // Verify that bsk and bvk are consistent.
-        let bvk = (self
-            .actions
-            .iter()
-            .map(|a| a.cv_net())
-            .sum::<ValueCommitment>()
-            - ValueCommitment::derive(
-                self.value_sum,
-                ValueCommitTrapdoor::zero(),
-                AssetBase::native(),
-            )
-            - self
-                .burn
+        let bvk = derive_bvk_raw(
+            &self
+                .actions
                 .iter()
-                .map(|(asset, value)| {
-                    ValueCommitment::derive(
-                        ValueSum::from(*value),
-                        ValueCommitTrapdoor::zero(),
-                        *asset,
-                    )
-                })
-                .sum::<ValueCommitment>())
-        .into_bvk();
+                .map(|a| a.cv_net().clone())
+                .collect::<Vec<_>>(),
+            self.value_sum,
+            &self.burn,
+        );
         if redpallas::VerificationKey::from(&bsk) != bvk {
             return Err(IoFinalizerError::ValueCommitMismatch);
         }

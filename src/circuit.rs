@@ -137,7 +137,7 @@ impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
 #[derive(Clone, Debug, Default)]
 pub struct Circuit<D> {
     pub(crate) witnesses: Witnesses,
-    pub(crate) phantom: std::marker::PhantomData<D>,
+    pub(crate) phantom: core::marker::PhantomData<D>,
 }
 
 /// The Orchard Action witnesses

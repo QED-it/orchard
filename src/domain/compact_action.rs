@@ -1,6 +1,6 @@
 //! Defines actions for Orchard shielded outputs and compact action for light clients.
 
-use std::fmt;
+use core::fmt;
 
 use zcash_note_encryption_zsa::{note_bytes::NoteBytes, EphemeralKeyBytes, ShieldedOutput};
 
