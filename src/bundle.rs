@@ -22,11 +22,10 @@ use memuse::DynamicUsage;
 use crate::{
     action::Action,
     address::Address,
-    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
+    bundle::commitments::hash_bundle_auth_data,
     domain::{OrchardDomain, OrchardDomainCommon},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    orchard_flavor::OrchardFlavor,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -34,7 +33,11 @@ use crate::{
 };
 
 #[cfg(feature = "circuit")]
-use crate::circuit::{Instance, VerifyingKey};
+use crate::{
+    bundle::commitments::hash_bundle_txid_data,
+    circuit::{Instance, VerifyingKey},
+    orchard_flavor::OrchardFlavor,
+};
 
 #[cfg(feature = "circuit")]
 impl<A, D: OrchardDomainCommon> Action<A, D> {
@@ -463,28 +466,37 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
     }
 }
 
-pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, FL: 'a + OrchardFlavor>(
-    actions: impl IntoIterator<Item = &'a Action<A, FL>>,
+#[cfg(feature = "circuit")]
+pub(crate) fn derive_bvk<A, V: Clone + Into<i64>, FL: OrchardFlavor>(
+    actions: &NonEmpty<Action<A, FL>>,
     value_balance: V,
-    burn: impl Iterator<Item = (AssetBase, NoteValue)>,
+    burn: &[(AssetBase, NoteValue)],
 ) -> redpallas::VerificationKey<Binding> {
-    (actions
-        .into_iter()
-        .map(|a| a.cv_net())
-        .sum::<ValueCommitment>()
+    let cv_nets: Vec<_> = actions.into_iter().map(|a| a.cv_net().clone()).collect();
+    derive_bvk_raw(&cv_nets, ValueSum::from_raw(value_balance.into()), burn)
+}
+
+pub(crate) fn derive_bvk_raw(
+    cv_nets: &[ValueCommitment],
+    value_balance: ValueSum,
+    burn: &[(AssetBase, NoteValue)],
+) -> redpallas::VerificationKey<Binding> {
+    (cv_nets.iter().sum::<ValueCommitment>()
         - ValueCommitment::derive(
-            ValueSum::from_raw(value_balance.into()),
+            value_balance,
             ValueCommitTrapdoor::zero(),
             AssetBase::native(),
         )
         - burn
+            .iter()
             .map(|(asset, value)| {
-                ValueCommitment::derive(ValueSum::from(value), ValueCommitTrapdoor::zero(), asset)
+                ValueCommitment::derive(ValueSum::from(*value), ValueCommitTrapdoor::zero(), *asset)
             })
             .sum::<ValueCommitment>())
     .into_bvk()
 }
 
+#[cfg(feature = "circuit")]
 impl<A: Authorization, V: Copy + Into<i64>, FL: OrchardFlavor> Bundle<A, V, FL> {
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
@@ -497,7 +509,7 @@ impl<A: Authorization, V: Copy + Into<i64>, FL: OrchardFlavor> Bundle<A, V, FL> 
     /// This can be used to validate the [`Authorized::binding_signature`] returned from
     /// [`Bundle::authorization`].
     pub fn binding_validating_key(&self) -> redpallas::VerificationKey<Binding> {
-        derive_bvk(&self.actions, self.value_balance, self.burn.iter().cloned())
+        derive_bvk(&self.actions, self.value_balance, &self.burn)
     }
 }
 

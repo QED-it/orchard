@@ -156,7 +156,6 @@ mod tests {
     use crate::note::commitment::NoteCommitTrapdoor;
     use alloc::vec::Vec;
     use ff::Field;
-    use halo2_gadgets::sinsemilla::primitives as sinsemilla;
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, Rng};
 

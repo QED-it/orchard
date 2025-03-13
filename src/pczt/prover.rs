@@ -36,7 +36,7 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
                     .clone()
                     .ok_or(ProverError::MissingFullViewingKey)?;
 
-                let asset = action.asset().ok_or(ProverError::MissingAsset)?;
+                let asset = action.spend.asset.ok_or(ProverError::MissingAsset)?;
 
                 let note = Note::from_parts(
                     action
@@ -85,16 +85,13 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
                     .spend
                     .alpha
                     .ok_or(ProverError::MissingSpendAuthRandomizer)?;
-                let rcv = action
-                    .rcv
-                    .clone()
-                    .ok_or(ProverError::MissingValueCommitTrapdoor)?;
+                let rcv = action.rcv.ok_or(ProverError::MissingValueCommitTrapdoor)?;
 
                 Witnesses::from_action_context(spend, output_note, alpha, rcv)
                     .ok_or(ProverError::RhoMismatch)
                     .map(|witnesses| Circuit::<FL> {
                         witnesses,
-                        phantom: std::marker::PhantomData,
+                        phantom: core::marker::PhantomData,
                     })
             })
             .collect::<Result<Vec<_>, ProverError>>()?;

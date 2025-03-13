@@ -31,7 +31,7 @@ impl<D: OrchardDomainCommon> Bundle<D> {
         flags: u8,
         value_sum: (u64, bool),
         anchor: [u8; 32],
-        burn: Vec<(AssetBase, NoteValue)>,
+        burn: Vec<([u8; 32], u64)>,
         expiry_height: u32,
         zkproof: Option<Vec<u8>>,
         bsk: Option<[u8; 32]>,
@@ -53,6 +53,17 @@ impl<D: OrchardDomainCommon> Bundle<D> {
         let anchor = Anchor::from_bytes(anchor)
             .into_option()
             .ok_or(ParseError::InvalidAnchor)?;
+
+        let burn = burn
+            .into_iter()
+            .map(|(burn_asset, burn_value)| {
+                let burn_asset = AssetBase::from_bytes(&burn_asset)
+                    .into_option()
+                    .ok_or(ParseError::InvalidBurn)?;
+                let burn_value = NoteValue::from_raw(burn_value);
+                Ok((burn_asset, burn_value))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         let zkproof = zkproof.map(Proof::new);
 
@@ -80,7 +91,6 @@ impl<D: OrchardDomainCommon> Action<D> {
         cv_net: [u8; 32],
         spend: Spend,
         output: Output<D>,
-        asset: Option<[u8; 32]>,
         rcv: Option<[u8; 32]>,
     ) -> Result<Self, ParseError> {
         let cv_net = ValueCommitment::from_bytes(&cv_net)
@@ -95,14 +105,10 @@ impl<D: OrchardDomainCommon> Action<D> {
             })
             .transpose()?;
 
-        let asset: Option<AssetBase> =
-            asset.and_then(|bytes| AssetBase::from_bytes(&bytes).into_option());
-
         Ok(Self {
             cv_net,
             spend,
             output,
-            asset,
             rcv,
         })
     }
@@ -117,6 +123,7 @@ impl Spend {
         spend_auth_sig: Option<[u8; 64]>,
         recipient: Option<[u8; 43]>,
         value: Option<u64>,
+        asset: Option<[u8; 32]>,
         rho: Option<[u8; 32]>,
         rseed: Option<[u8; 32]>,
         rseed_split_note: Option<[u8; 32]>,
@@ -147,6 +154,9 @@ impl Spend {
             .transpose()?;
 
         let value = value.map(NoteValue::from_raw);
+
+        let asset: Option<AssetBase> =
+            asset.and_then(|bytes| AssetBase::from_bytes(&bytes).into_option());
 
         let rho = rho
             .map(|rho| {
@@ -215,6 +225,7 @@ impl Spend {
             spend_auth_sig,
             recipient,
             value,
+            asset,
             rho,
             rseed,
             rseed_split_note,
@@ -321,6 +332,8 @@ impl Zip32Derivation {
 pub enum ParseError {
     /// An invalid anchor was provided.
     InvalidAnchor,
+    /// An invalid `burn` was provided.
+    InvalidBurn,
     /// An invalid `bsk` was provided.
     InvalidBindingSignatureSigningKey,
     /// An invalid `dummy_sk` was provided.

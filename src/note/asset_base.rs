@@ -1,10 +1,11 @@
 use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params};
-use group::{Group, GroupEncoding};
-use halo2_proofs::arithmetic::CurveExt;
-use pasta_curves::pallas;
-use std::hash::{Hash, Hasher};
-
+use core::cmp::Ordering;
+use core::hash::{Hash, Hasher};
+use group::{Curve, Group, GroupEncoding};
+use pasta_curves::arithmetic::CurveAffine;
+use pasta_curves::{arithmetic::CurveExt, pallas};
+use rand_core::CryptoRngCore;
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
 use crate::constants::fixed_bases::{
@@ -15,6 +16,24 @@ use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 /// Note type identifier.
 #[derive(Clone, Copy, Debug, Eq)]
 pub struct AssetBase(pallas::Point);
+
+// AssetBase must implement PartialOrd and Ord to be used as a key in BTreeMap.
+impl PartialOrd for AssetBase {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for AssetBase {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let self_coord = self.0.to_affine().coordinates().unwrap();
+        let other_coord = other.0.to_affine().coordinates().unwrap();
+        self_coord
+            .x()
+            .cmp(other_coord.x())
+            .then_with(|| self_coord.y().cmp(other_coord.y()))
+    }
+}
 
 pub const MAX_ASSET_DESCRIPTION_SIZE: usize = 512;
 
@@ -101,8 +120,8 @@ impl AssetBase {
     /// Generates a ZSA random asset.
     ///
     /// This is only used in tests.
-    pub(crate) fn random() -> Self {
-        let isk = IssuanceAuthorizingKey::random();
+    pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+        let isk = IssuanceAuthorizingKey::random(rng);
         let ik = IssuanceValidatingKey::from(&isk);
         let asset_descr = b"zsa_asset".to_vec();
         AssetBase::derive(&ik, &asset_descr)

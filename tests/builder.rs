@@ -12,7 +12,8 @@ use orchard::{
     value::NoteValue,
     Anchor, Bundle, Note,
 };
-use rand::rngs::OsRng;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use zcash_note_encryption_zsa::try_note_decryption;
 
 pub fn verify_bundle<FL: OrchardFlavor>(
@@ -67,8 +68,8 @@ impl BundleOrchardFlavor for OrchardZSA {
     const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED_WITH_ZSA;
 }
 
-fn bundle_chain<FL: BundleOrchardFlavor>() {
-    let mut rng = OsRng;
+fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
+    let mut rng = StdRng::seed_from_u64(1u64);
     let pk = ProvingKey::build::<FL>();
     let vk = VerifyingKey::build::<FL>();
 
@@ -77,7 +78,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() {
     let recipient = fvk.address_at(0u32, Scope::External);
 
     // Create a shielding bundle.
-    let shielding_bundle: Bundle<_, i64, FL> = {
+    let (shielding_bundle, orchard_digest_1): (Bundle<_, i64, FL>, [u8; 32]) = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -109,7 +110,10 @@ fn bundle_chain<FL: BundleOrchardFlavor>() {
 
         let sighash = unauthorized.commitment().into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
-        proven.apply_signatures(rng, sighash, &[]).unwrap()
+        (
+            proven.apply_signatures(rng.clone(), sighash, &[]).unwrap(),
+            sighash,
+        )
     };
 
     // Verify the shielding bundle.
@@ -148,7 +152,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() {
     }
 
     // Create a shielded bundle spending the previous output.
-    let shielded_bundle: Bundle<_, i64, FL> = {
+    let (shielded_bundle, orchard_digest_2): (Bundle<_, i64, FL>, [u8; 32]) = {
         let (merkle_path, anchor) = build_merkle_path(&note);
 
         let mut builder = Builder::new(FL::DEFAULT_BUNDLE_TYPE, anchor);
@@ -166,21 +170,59 @@ fn bundle_chain<FL: BundleOrchardFlavor>() {
         let (unauthorized, _) = builder.build(&mut rng).unwrap();
         let sighash = unauthorized.commitment().into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
-        proven
-            .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
-            .unwrap()
+        (
+            proven
+                .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
+                .unwrap(),
+            sighash,
+        )
     };
 
     // Verify the shielded bundle.
     verify_bundle(&shielded_bundle, &vk, true);
+    (orchard_digest_1, orchard_digest_2)
 }
 
 #[test]
 fn bundle_chain_vanilla() {
-    bundle_chain::<OrchardVanilla>()
+    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardVanilla>();
+    assert_eq!(
+        orchard_digest_1,
+        // orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`
+        // This ensures backward compatibility.
+        [
+            239, 27, 83, 1, 224, 201, 57, 243, 162, 28, 61, 74, 175, 165, 5, 165, 23, 3, 16, 239,
+            164, 29, 156, 180, 9, 60, 96, 117, 122, 187, 40, 103,
+        ]
+    );
+    assert_eq!(
+        orchard_digest_2,
+        // orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`
+        // This ensures backward compatibility.
+        [
+            145, 227, 149, 34, 67, 111, 65, 185, 177, 236, 106, 137, 179, 71, 80, 137, 26, 12, 12,
+            0, 8, 156, 182, 125, 146, 250, 92, 189, 42, 246, 130, 99,
+        ]
+    );
 }
 
 #[test]
 fn bundle_chain_zsa() {
-    bundle_chain::<OrchardZSA>()
+    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardZSA>();
+    assert_eq!(
+        orchard_digest_1,
+        // Locks the `orchard_digest` for OrchardZSA
+        [
+            183, 144, 252, 84, 122, 85, 49, 92, 222, 26, 48, 167, 119, 46, 202, 16, 232, 238, 88,
+            43, 78, 172, 131, 24, 200, 91, 55, 47, 236, 192, 213, 218,
+        ]
+    );
+    assert_eq!(
+        orchard_digest_2,
+        // Locks the `orchard_digest` for OrchardZSA
+        [
+            100, 230, 90, 215, 65, 57, 186, 251, 141, 79, 52, 169, 96, 216, 183, 104, 8, 12, 97,
+            221, 232, 57, 97, 184, 158, 105, 235, 73, 79, 173, 32, 15,
+        ]
+    );
 }

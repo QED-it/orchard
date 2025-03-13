@@ -861,6 +861,7 @@ mod tests {
     use halo2_proofs::{circuit::Value, dev::MockProver};
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, RngCore};
+    use rand_core::CryptoRngCore;
 
     use crate::circuit::Witnesses;
     use crate::{
@@ -928,7 +929,7 @@ mod tests {
                     asset: Value::known(spent_note.asset()),
                     split_flag: Value::known(false),
                 },
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             Instance {
                 anchor,
@@ -1107,7 +1108,7 @@ mod tests {
 
         let circuit = OrchardCircuitZSA {
             witnesses: Witnesses::default(),
-            phantom: std::marker::PhantomData,
+            phantom: core::marker::PhantomData,
         };
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)
@@ -1139,7 +1140,7 @@ mod tests {
         }
     }
 
-    fn generate_circuit_instance<R: RngCore>(
+    fn generate_circuit_instance<R: CryptoRngCore>(
         is_native_asset: bool,
         split_flag: bool,
         mut rng: R,
@@ -1148,7 +1149,7 @@ mod tests {
         let asset_base = if is_native_asset {
             AssetBase::native()
         } else {
-            AssetBase::random()
+            AssetBase::random(&mut rng)
         };
 
         // Create spent_note
@@ -1230,7 +1231,7 @@ mod tests {
                     alpha,
                     rcv,
                 ),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             Instance {
                 anchor,
@@ -1245,12 +1246,12 @@ mod tests {
         )
     }
 
-    fn random_note_commitment(mut rng: impl RngCore) -> NoteCommitment {
+    fn random_note_commitment(mut rng: impl CryptoRngCore) -> NoteCommitment {
         NoteCommitment::derive(
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
             NoteValue::from_raw(rng.next_u64()),
-            AssetBase::random(),
+            AssetBase::random(&mut rng),
             pallas::Base::random(&mut rng),
             pallas::Base::random(&mut rng),
             NoteCommitTrapdoor(pallas::Scalar::random(&mut rng)),
@@ -1326,7 +1327,7 @@ mod tests {
                         asset: circuit.witnesses.asset,
                         split_flag: circuit.witnesses.split_flag,
                     },
-                    phantom: std::marker::PhantomData,
+                    phantom: core::marker::PhantomData,
                 };
                 check_proof_of_orchard_circuit(&circuit_wrong_cm_old, &instance, false);
 
@@ -1386,7 +1387,7 @@ mod tests {
                             asset: circuit.witnesses.asset,
                             split_flag: circuit.witnesses.split_flag,
                         },
-                        phantom: std::marker::PhantomData,
+                        phantom: core::marker::PhantomData,
                     };
                     check_proof_of_orchard_circuit(&circuit_wrong_psi_nf, &instance, false);
                 }

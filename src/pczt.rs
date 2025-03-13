@@ -75,6 +75,8 @@ pub struct Bundle<D: OrchardDomainCommon> {
     pub(crate) value_sum: ValueSum,
 
     /// Assets intended for burning
+    ///
+    /// Set by the Constructor.
     pub(crate) burn: Vec<(AssetBase, NoteValue)>,
 
     /// The Orchard anchor for this transaction.
@@ -86,6 +88,8 @@ pub struct Bundle<D: OrchardDomainCommon> {
     ///
     /// For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
     /// This field is reserved for future use.
+    ///
+    /// Set by the Constructor.
     pub(crate) expiry_height: u32,
 
     /// The Orchard bundle proof.
@@ -130,12 +134,6 @@ pub struct Action<D: OrchardDomainCommon> {
     /// The output half of this action.
     pub(crate) output: Output<D>,
 
-    /// The asset id of this Action.
-    ///
-    /// - This is set by the Constructor.
-    /// - This is required by the Prover.
-    pub(crate) asset: Option<AssetBase>,
-
     /// The value commitment randomness.
     ///
     /// - This is set by the Constructor.
@@ -178,6 +176,12 @@ pub struct Spend {
     /// This exposes the input value to all participants. For Signers who don't need this
     /// information, or after signatures have been applied, this can be redacted.
     pub(crate) value: Option<NoteValue>,
+
+    /// The asset id of this Action.
+    ///
+    /// - This is set by the Constructor.
+    /// - This is required by the Prover.
+    pub(crate) asset: Option<AssetBase>,
 
     /// The rho value for the note being spent.
     ///
@@ -362,14 +366,16 @@ impl Zip32Derivation {
 
 #[cfg(test)]
 mod tests {
-    use crate::orchard_flavor::OrchardZSA;
+    use crate::orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA};
+    use blake2b_simd::Hash as Blake2bHash;
     use bridgetree::BridgeTree;
     use ff::{Field, PrimeField};
     use pasta_curves::pallas;
-    use rand::rngs::OsRng;
+    use rand::{rngs::StdRng, SeedableRng};
 
     use crate::{
         builder::{Builder, BundleType},
+        bundle::commitments::hash_bundle_txid_data,
         circuit::ProvingKey,
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
@@ -380,20 +386,16 @@ mod tests {
         Note,
     };
 
-    #[test]
-    fn shielding_bundle() {
-        let pk = ProvingKey::build::<OrchardZSA>();
-        let mut rng = OsRng;
+    fn shielding_bundle<FL: OrchardFlavor>(bundle_type: BundleType) -> Blake2bHash {
+        let pk = ProvingKey::build::<FL>();
+        let mut rng = StdRng::seed_from_u64(1u64);
 
         let sk = SpendingKey::random(&mut rng);
         let fvk = FullViewingKey::from(&sk);
         let recipient = fvk.address_at(0u32, Scope::External);
 
         // Run the Creator and Constructor roles.
-        let mut builder = Builder::new(
-            BundleType::DEFAULT_ZSA,
-            EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
-        );
+        let mut builder = Builder::new(bundle_type, EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into());
         builder
             .add_output(
                 None,
@@ -405,27 +407,66 @@ mod tests {
             .unwrap();
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, -5000);
-        let mut pczt_bundle = builder.build_for_pczt::<OrchardZSA>(&mut rng).unwrap().0;
+        let mut pczt_bundle = builder.build_for_pczt::<FL>(&mut rng).unwrap().0;
 
         // Run the IO Finalizer role.
         let sighash = [0; 32];
-        pczt_bundle.finalize_io(sighash, rng).unwrap();
+        pczt_bundle.finalize_io(sighash, rng.clone()).unwrap();
 
         // Run the Prover role.
-        pczt_bundle.create_proof::<OrchardZSA, _>(&pk, rng).unwrap();
+        pczt_bundle.create_proof::<FL, _>(&pk, rng.clone()).unwrap();
 
         // Run the Transaction Extractor role.
         let bundle = pczt_bundle.extract::<i64>().unwrap().unwrap();
 
+        let orchard_digest = hash_bundle_txid_data(&bundle);
+
         assert_eq!(bundle.value_balance(), &(-5000));
         // We can successfully bind the bundle.
         bundle.apply_binding_signature(sighash, rng).unwrap();
+
+        orchard_digest
     }
 
     #[test]
-    fn shielded_bundle() {
-        let pk = ProvingKey::build::<OrchardZSA>();
-        let mut rng = OsRng;
+    fn shielding_bundle_orchard_zsa() {
+        let orchard_digest = shielding_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA);
+        assert_eq!(
+            orchard_digest.as_bytes(),
+            // Locks the `orchard_digest` for OrchardZSA
+            &[
+                146, 89, 182, 62, 48, 22, 66, 75, 124, 146, 214, 213, 71, 1, 169, 96, 193, 15, 252,
+                196, 8, 98, 145, 8, 106, 38, 43, 223, 196, 124, 203, 62,
+            ],
+        );
+        let orchard_digest = shielding_bundle::<OrchardZSA>(BundleType::DEFAULT_VANILLA);
+        assert_eq!(
+            orchard_digest.as_bytes(),
+            // Locks the `orchard_digest` for OrchardZSA
+            &[
+                8, 139, 205, 192, 124, 253, 22, 161, 58, 85, 197, 195, 50, 247, 63, 8, 27, 241, 74,
+                234, 11, 225, 132, 181, 232, 118, 10, 137, 107, 126, 22, 78,
+            ],
+        );
+    }
+
+    #[test]
+    fn shielding_bundle_orchard_vanilla() {
+        let orchard_digest = shielding_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
+        assert_eq!(
+            orchard_digest.as_bytes(),
+            // `orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`.
+            // This ensures backward compatibility.
+            &[
+                141, 22, 191, 36, 104, 236, 27, 199, 73, 129, 244, 110, 215, 74, 243, 97, 113, 161,
+                227, 211, 136, 251, 164, 64, 252, 202, 28, 35, 243, 122, 36, 115,
+            ],
+        );
+    }
+
+    fn shielded_bundle<FL: OrchardFlavor>(bundle_type: BundleType) -> Blake2bHash {
+        let pk = ProvingKey::build::<FL>();
+        let mut rng = StdRng::seed_from_u64(1u64);
 
         // Pretend we derived the spending key via ZIP 32.
         let zip32_derivation = Zip32Derivation::parse([1; 32], vec![]).unwrap();
@@ -472,7 +513,7 @@ mod tests {
         };
 
         // Run the Creator and Constructor roles.
-        let mut builder = Builder::new(BundleType::DEFAULT_VANILLA, anchor);
+        let mut builder = Builder::new(bundle_type, anchor);
         builder.add_spend(fvk.clone(), note, merkle_path).unwrap();
         builder
             .add_output(
@@ -494,11 +535,11 @@ mod tests {
             .unwrap();
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, 0);
-        let mut pczt_bundle = builder.build_for_pczt::<OrchardZSA>(&mut rng).unwrap().0;
+        let mut pczt_bundle = builder.build_for_pczt::<FL>(&mut rng).unwrap().0;
 
         // Run the IO Finalizer role.
         let sighash = [0; 32];
-        pczt_bundle.finalize_io(sighash, rng).unwrap();
+        pczt_bundle.finalize_io(sighash, rng.clone()).unwrap();
 
         // Run the Updater role.
         for action in pczt_bundle.actions_mut() {
@@ -511,7 +552,7 @@ mod tests {
         }
 
         // Run the Prover role.
-        pczt_bundle.create_proof::<OrchardZSA, _>(&pk, rng).unwrap();
+        pczt_bundle.create_proof::<FL, _>(&pk, rng.clone()).unwrap();
 
         // TODO: Verify that the PCZT contains sufficient information to decrypt and check
         // `enc_ciphertext`.
@@ -519,15 +560,55 @@ mod tests {
         // Run the Signer role.
         for action in pczt_bundle.actions_mut() {
             if action.spend.zip32_derivation.as_ref() == Some(&zip32_derivation) {
-                action.sign(sighash, &ask, rng).unwrap();
+                action.sign(sighash, &ask, rng.clone()).unwrap();
             }
         }
 
         // Run the Transaction Extractor role.
         let bundle = pczt_bundle.extract::<i64>().unwrap().unwrap();
 
+        let orchard_digest = hash_bundle_txid_data(&bundle);
+
         assert_eq!(bundle.value_balance(), &0);
         // We can successfully bind the bundle.
         bundle.apply_binding_signature(sighash, rng).unwrap();
+
+        orchard_digest
+    }
+
+    #[test]
+    fn shielded_bundle_orchard_zsa() {
+        let orchard_digest = shielded_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA);
+        assert_eq!(
+            orchard_digest.as_bytes(),
+            // Locks the `orchard_digest` for OrchardZSA
+            &[
+                101, 129, 254, 177, 201, 15, 190, 9, 223, 95, 188, 237, 169, 232, 107, 155, 12,
+                159, 142, 67, 121, 103, 53, 61, 67, 59, 101, 193, 43, 149, 158, 18,
+            ],
+        );
+        let orchard_digest = shielded_bundle::<OrchardZSA>(BundleType::DEFAULT_VANILLA);
+        assert_eq!(
+            orchard_digest.as_bytes(),
+            // Locks the `orchard_digest` for OrchardZSA
+            &[
+                157, 97, 33, 172, 249, 222, 77, 77, 248, 71, 142, 45, 120, 206, 83, 139, 51, 209,
+                122, 201, 174, 187, 24, 63, 211, 229, 36, 25, 100, 179, 169, 208,
+            ],
+        );
+    }
+
+    #[test]
+    fn shielded_bundle_orchard_vanilla() {
+        let orchard_digest = shielded_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
+        assert_eq!(
+            orchard_digest.as_bytes(),
+            // `orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`.
+            // This ensures backward compatibility.
+            &[
+                242, 194, 88, 245, 254, 162, 20, 177, 69, 161, 200, 89, 88, 227, 105, 167, 38, 249,
+                112, 58, 174, 237, 50, 134, 236, 248, 169, 49, 132, 22, 165, 198,
+            ],
+        );
     }
 }
