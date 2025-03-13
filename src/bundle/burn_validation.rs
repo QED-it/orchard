@@ -2,7 +2,8 @@
 //!
 //! The module provides a function `validate_bundle_burn` that can be used to validate the burn values for the bundle.
 //!
-use std::{collections::HashSet, fmt};
+use core::fmt;
+use std::collections::HashSet;
 
 use crate::{note::AssetBase, value::NoteValue};
 

@@ -69,7 +69,7 @@ struct DecomposeB<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeB<Lookup> {
@@ -117,7 +117,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeB<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -216,7 +216,7 @@ struct DecomposeD<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeD<Lookup> {
@@ -264,7 +264,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeD<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -354,7 +354,7 @@ struct DecomposeE<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeE<Lookup> {
@@ -388,7 +388,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeE<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -474,7 +474,7 @@ struct DecomposeG<Lookup: PallasLookupRangeCheck> {
     q_notecommit_g: Selector,
     col_l: Column<Advice>,
     col_m: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeG<Lookup> {
@@ -515,7 +515,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeG<Lookup> {
             q_notecommit_g,
             col_l,
             col_m,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -600,7 +600,7 @@ struct DecomposeHVanilla<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeHVanilla<Lookup> {
@@ -640,7 +640,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeHVanilla<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -724,7 +724,7 @@ struct DecomposeHZsa<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeHZsa<Lookup> {
@@ -775,7 +775,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeHZsa<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -883,7 +883,7 @@ struct DecomposeJ<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeJ<Lookup> {
@@ -924,7 +924,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeJ<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -996,7 +996,7 @@ struct GdCanonicity<Lookup: PallasLookupRangeCheck> {
     col_m: Column<Advice>,
     col_r: Column<Advice>,
     col_z: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> GdCanonicity<Lookup> {
@@ -1063,7 +1063,7 @@ impl<Lookup: PallasLookupRangeCheck> GdCanonicity<Lookup> {
             col_m,
             col_r,
             col_z,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -1122,7 +1122,7 @@ struct PkdAssetCanonicity<Lookup: PallasLookupRangeCheck> {
     col_m: Column<Advice>,
     col_r: Column<Advice>,
     col_z: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> PkdAssetCanonicity<Lookup> {
@@ -1191,7 +1191,7 @@ impl<Lookup: PallasLookupRangeCheck> PkdAssetCanonicity<Lookup> {
             col_m,
             col_r,
             col_z,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -1324,7 +1324,7 @@ struct RhoCanonicity<Lookup: PallasLookupRangeCheck> {
     col_m: Column<Advice>,
     col_r: Column<Advice>,
     col_z: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> RhoCanonicity<Lookup> {
@@ -1389,7 +1389,7 @@ impl<Lookup: PallasLookupRangeCheck> RhoCanonicity<Lookup> {
             col_m,
             col_r,
             col_z,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 

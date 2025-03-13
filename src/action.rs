@@ -150,7 +150,7 @@ pub(crate) mod testing {
     /// in property-based testing, addressing proptest crate limitations.
     #[derive(Debug)]
     pub struct ActionArb<D: OrchardDomainCommon> {
-        phantom: std::marker::PhantomData<D>,
+        phantom: core::marker::PhantomData<D>,
     }
 
     impl<D: OrchardDomainCommon> ActionArb<D> {

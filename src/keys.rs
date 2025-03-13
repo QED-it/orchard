@@ -1,8 +1,8 @@
 //! Key structures for Orchard.
 
 use alloc::vec::Vec;
+use core::fmt::{Debug, Formatter};
 use core2::io::{self, Read, Write};
-use std::fmt::{Debug, Formatter};
 
 use aes::Aes256;
 use blake2b_simd::{Hash as Blake2bHash, Params};

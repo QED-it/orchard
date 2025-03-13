@@ -16,14 +16,13 @@ use crate::builder::BuildError::{BurnNative, BurnZero};
 use crate::orchard_flavor::{OrchardVanilla, OrchardZSA};
 use crate::{
     address::Address,
-    bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags},
+    bundle::{Authorization, Authorized, Bundle, Flags},
     domain::{OrchardDomain, OrchardDomainCommon},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
-    orchard_flavor::{Flavor, OrchardFlavor},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -34,7 +33,9 @@ use crate::{
 use {
     crate::{
         action::Action,
+        bundle::derive_bvk,
         circuit::{Circuit, Instance, ProvingKey, Witnesses},
+        orchard_flavor::{Flavor, OrchardFlavor},
     },
     nonempty::NonEmpty,
 };
@@ -1150,7 +1151,7 @@ impl<S: InProgressSignatures> InProgress<Unproven, S> {
                     .iter()
                     .map(|witnesses| Circuit::<OrchardVanilla> {
                         witnesses: witnesses.clone(),
-                        phantom: std::marker::PhantomData,
+                        phantom: core::marker::PhantomData,
                     })
                     .collect::<Vec<Circuit<OrchardVanilla>>>();
                 Proof::create(pk, &circuits, instances, rng)
@@ -1162,7 +1163,7 @@ impl<S: InProgressSignatures> InProgress<Unproven, S> {
                     .iter()
                     .map(|witnesses| Circuit::<OrchardZSA> {
                         witnesses: witnesses.clone(),
-                        phantom: std::marker::PhantomData,
+                        phantom: core::marker::PhantomData,
                     })
                     .collect::<Vec<Circuit<OrchardZSA>>>();
                 Proof::create(pk, &circuits, instances, rng)
@@ -1509,7 +1510,7 @@ pub mod testing {
     /// in property-based testing, addressing proptest crate limitations.    
     #[derive(Debug)]
     pub struct BuilderArb<D: OrchardDomainCommon> {
-        phantom: std::marker::PhantomData<D>,
+        phantom: core::marker::PhantomData<D>,
     }
 
     impl<FL: OrchardFlavor> BuilderArb<FL> {

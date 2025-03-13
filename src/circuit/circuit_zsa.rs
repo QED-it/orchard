@@ -928,7 +928,7 @@ mod tests {
                     asset: Value::known(spent_note.asset()),
                     split_flag: Value::known(false),
                 },
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             Instance {
                 anchor,
@@ -1107,7 +1107,7 @@ mod tests {
 
         let circuit = OrchardCircuitZSA {
             witnesses: Witnesses::default(),
-            phantom: std::marker::PhantomData,
+            phantom: core::marker::PhantomData,
         };
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)
@@ -1230,7 +1230,7 @@ mod tests {
                     alpha,
                     rcv,
                 ),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             Instance {
                 anchor,
@@ -1326,7 +1326,7 @@ mod tests {
                         asset: circuit.witnesses.asset,
                         split_flag: circuit.witnesses.split_flag,
                     },
-                    phantom: std::marker::PhantomData,
+                    phantom: core::marker::PhantomData,
                 };
                 check_proof_of_orchard_circuit(&circuit_wrong_cm_old, &instance, false);
 
@@ -1386,7 +1386,7 @@ mod tests {
                             asset: circuit.witnesses.asset,
                             split_flag: circuit.witnesses.split_flag,
                         },
-                        phantom: std::marker::PhantomData,
+                        phantom: core::marker::PhantomData,
                     };
                     check_proof_of_orchard_circuit(&circuit_wrong_psi_nf, &instance, false);
                 }

@@ -14,12 +14,12 @@
 
 use alloc::vec::Vec;
 use blake2b_simd::Hash as Blake2bHash;
+use core::fmt;
 use group::Group;
 use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
 use std::collections::HashMap;
-use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::constants::reference_keys::ReferenceKeys;

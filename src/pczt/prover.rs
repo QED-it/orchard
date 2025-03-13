@@ -91,7 +91,7 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
                     .ok_or(ProverError::RhoMismatch)
                     .map(|witnesses| Circuit::<FL> {
                         witnesses,
-                        phantom: std::marker::PhantomData,
+                        phantom: core::marker::PhantomData,
                     })
             })
             .collect::<Result<Vec<_>, ProverError>>()?;

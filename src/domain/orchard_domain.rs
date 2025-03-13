@@ -127,7 +127,7 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
 pub struct OrchardDomain<D: OrchardDomainCommon> {
     /// A parameter needed to generate the nullifier.
     pub rho: Rho,
-    phantom: std::marker::PhantomData<D>,
+    phantom: core::marker::PhantomData<D>,
 }
 
 impl<D: OrchardDomainCommon> OrchardDomain<D> {
