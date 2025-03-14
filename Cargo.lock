@@ -1141,6 +1141,9 @@ name = "hashbrown"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
+dependencies = [
+ "rustc-std-workspace-alloc",
+]
 
 [[package]]
 name = "hermit-abi"
@@ -1563,6 +1566,7 @@ name = "orchard"
 version = "0.10.1"
 dependencies = [
  "aes",
+ "ahash",
  "bitvec",
  "blake2b_simd",
  "bridgetree",
@@ -1575,6 +1579,7 @@ dependencies = [
  "halo2_gadgets",
  "halo2_poseidon",
  "halo2_proofs",
+ "hashbrown 0.14.0",
  "hex",
  "image",
  "incrementalmerkletree",
@@ -2061,6 +2066,12 @@ name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d626bb9dae77e28219937af045c257c28bfd3f69333c512553507f5f9798cb76"
+
+[[package]]
+name = "rustc-std-workspace-alloc"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9d441c3b2ebf55cebf796bfdc265d67fa09db17b7bb6bd4be75c509e1e8fec3"
 
 [[package]]
 name = "rustc_version"
