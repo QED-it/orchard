@@ -1,11 +1,10 @@
 //! Logic for building Orchard components of transactions.
 
-use ahash::RandomState;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::fmt;
 use core::iter;
-use hashbrown::HashMap;
+use std::collections::HashMap;
 
 use ff::Field;
 use pasta_curves::pallas;
@@ -629,7 +628,7 @@ pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, Bun
 pub struct Builder {
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    burn: HashMap<AssetBase, NoteValue, RandomState>,
+    burn: HashMap<AssetBase, NoteValue>,
     bundle_type: BundleType,
     anchor: Anchor,
 }
@@ -640,7 +639,7 @@ impl Builder {
         Builder {
             spends: vec![],
             outputs: vec![],
-            burn: HashMap::with_hasher(RandomState::new()),
+            burn: HashMap::new(),
             bundle_type,
             anchor,
         }
@@ -703,7 +702,7 @@ impl Builder {
 
     /// Add an instruction to burn a given amount of a specific asset.
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
-        use hashbrown::hash_map::Entry;
+        use std::collections::hash_map::Entry;
 
         if asset.is_native().into() {
             return Err(BurnNative);
@@ -836,9 +835,8 @@ fn partition_by_asset(
         Vec<(SpendInfo, MetadataIdx)>,
         Vec<(OutputInfo, MetadataIdx)>,
     ),
-    RandomState,
 > {
-    let mut hm = HashMap::with_hasher(RandomState::new());
+    let mut hm = HashMap::new();
 
     for (i, s) in spends.iter().enumerate() {
         hm.entry(s.note.asset())
@@ -898,7 +896,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    burn: HashMap<AssetBase, NoteValue, RandomState>,
+    burn: HashMap<AssetBase, NoteValue>,
 ) -> Result<UnauthorizedBundleWithMetadata<V, FL>, BuildError> {
     build_bundle(
         rng,
@@ -957,7 +955,7 @@ fn build_bundle<B, R: RngCore>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    burn: HashMap<AssetBase, NoteValue, RandomState>,
+    burn: HashMap<AssetBase, NoteValue>,
     finisher: impl FnOnce(
         Vec<ActionInfo>,
         Flags,

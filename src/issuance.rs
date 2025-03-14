@@ -12,15 +12,14 @@
 //! Errors related to issuance, such as invalid signatures or supply overflows,
 //! are handled through the `Error` enum.
 
-use ahash::RandomState;
 use alloc::vec::Vec;
 use blake2b_simd::Hash as Blake2bHash;
 use core::fmt;
 use group::Group;
-use hashbrown::HashMap;
 use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
+use std::collections::HashMap;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::constants::reference_keys::ReferenceKeys;
@@ -635,15 +634,16 @@ pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
     get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
-) -> Result<HashMap<AssetBase, AssetRecord, RandomState>, Error> {
+) -> Result<HashMap<AssetBase, AssetRecord>, Error> {
     bundle
         .ik()
         .verify(&sighash, bundle.authorization().signature())
         .map_err(|_| IssueBundleInvalidSignature)?;
 
-    bundle.actions().iter().try_fold(
-        HashMap::with_hasher(RandomState::new()),
-        |mut new_records, action| {
+    bundle
+        .actions()
+        .iter()
+        .try_fold(HashMap::new(), |mut new_records, action| {
             let (asset, amount) = action.verify(bundle.ik())?;
 
             let is_finalized = action.is_finalized();
@@ -676,8 +676,7 @@ pub fn verify_issue_bundle(
             new_records.insert(asset, new_asset_record);
 
             Ok(new_records)
-        },
-    )
+        })
 }
 
 /// Errors produced during the issuance process
@@ -788,16 +787,15 @@ mod tests {
         value::NoteValue,
         Address, Bundle, Note,
     };
-    use ahash::RandomState;
     use alloc::string::{String, ToString};
     use alloc::vec::Vec;
     use bridgetree::BridgeTree;
     use group::{Group, GroupEncoding};
-    use hashbrown::HashMap;
     use nonempty::NonEmpty;
     use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
+    use std::collections::HashMap;
 
     /// Validation for reference note
     ///
@@ -1322,13 +1320,13 @@ mod tests {
         let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
 
         let first_note = *signed.actions().first().notes().first().unwrap();
-
-        let mut target = HashMap::with_hasher(RandomState::new());
-        target.insert(
-            AssetBase::derive(&ik, b"Verify"),
-            AssetRecord::new(NoteValue::from_raw(5), false, first_note),
+        assert_eq!(
+            issued_assets,
+            HashMap::from([(
+                AssetBase::derive(&ik, b"Verify"),
+                AssetRecord::new(NoteValue::from_raw(5), false, first_note)
+            )])
         );
-        assert_eq!(issued_assets, target);
     }
 
     #[test]
@@ -1365,13 +1363,13 @@ mod tests {
         let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
 
         let first_note = *signed.actions().first().notes().first().unwrap();
-
-        let mut target = HashMap::with_hasher(RandomState::new());
-        target.insert(
-            AssetBase::derive(&ik, b"Verify with finalize"),
-            AssetRecord::new(NoteValue::from_raw(7), true, first_note),
+        assert_eq!(
+            issued_assets,
+            HashMap::from([(
+                AssetBase::derive(&ik, b"Verify with finalize"),
+                AssetRecord::new(NoteValue::from_raw(7), true, first_note)
+            )])
         );
-        assert_eq!(issued_assets, target);
     }
 
     #[test]
@@ -1507,7 +1505,7 @@ mod tests {
             ),
         )]
         .into_iter()
-        .collect::<HashMap<_, _, RandomState>>();
+        .collect::<HashMap<_, _>>();
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, |asset| issued_assets.get(asset).copied())
