@@ -25,6 +25,7 @@ pub enum Flavor {
 }
 
 /// A trait binding the common functionality between different Orchard protocol flavors.
+#[cfg(feature = "circuit")]
 pub trait OrchardFlavor: OrchardDomainCommon + OrchardCircuit {
     /// Flavor of the Orchard protocol.
     const FLAVOR: Flavor;
