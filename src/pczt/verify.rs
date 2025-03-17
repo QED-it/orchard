@@ -1,7 +1,7 @@
 use crate::{
     domain::OrchardDomainCommon,
     keys::{FullViewingKey, SpendValidatingKey},
-    note::{AssetBase, ExtractedNoteCommitment, Rho},
+    note::{ExtractedNoteCommitment, Rho},
     value::ValueCommitment,
     Note,
 };
@@ -21,7 +21,7 @@ impl<D: OrchardDomainCommon> super::Action<D> {
         let cv_net = ValueCommitment::derive(
             spend_value - output_value,
             rcv,
-            self.asset.ok_or(VerifyError::MissingAsset)?,
+            self.spend.asset.ok_or(VerifyError::MissingAsset)?,
         );
         if cv_net.to_bytes() == self.cv_net.to_bytes() {
             Ok(())
@@ -64,7 +64,6 @@ impl super::Spend {
     /// Otherwise, it will be checked against the `fvk` field (if both are set).
     pub fn verify_nullifier(
         &self,
-        asset: AssetBase,
         expected_fvk: Option<&FullViewingKey>,
     ) -> Result<(), VerifyError> {
         let fvk = self.fvk_for_validation(expected_fvk)?;
@@ -72,7 +71,7 @@ impl super::Spend {
         let note = Note::from_parts(
             self.recipient.ok_or(VerifyError::MissingRecipient)?,
             self.value.ok_or(VerifyError::MissingValue)?,
-            asset,
+            self.asset.ok_or(VerifyError::MissingAsset)?,
             self.rho.ok_or(VerifyError::MissingRho)?,
             self.rseed.ok_or(VerifyError::MissingRandomSeed)?,
         )
@@ -127,15 +126,11 @@ impl<D: OrchardDomainCommon> super::Output<D> {
     /// - `rseed`
     ///
     /// `spend` must be the Spend from the same Orchard action.
-    pub fn verify_note_commitment(
-        &self,
-        spend: &super::Spend,
-        asset: AssetBase,
-    ) -> Result<(), VerifyError> {
+    pub fn verify_note_commitment(&self, spend: &super::Spend) -> Result<(), VerifyError> {
         let note = Note::from_parts(
             self.recipient.ok_or(VerifyError::MissingRecipient)?,
             self.value.ok_or(VerifyError::MissingValue)?,
-            asset,
+            spend.asset.ok_or(VerifyError::MissingAsset)?,
             Rho::from_nf_old(spend.nullifier),
             self.rseed.ok_or(VerifyError::MissingRandomSeed)?,
         )

@@ -80,7 +80,6 @@ impl<D: OrchardDomainCommon> Action<D> {
         cv_net: [u8; 32],
         spend: Spend,
         output: Output<D>,
-        asset: Option<[u8; 32]>,
         rcv: Option<[u8; 32]>,
     ) -> Result<Self, ParseError> {
         let cv_net = ValueCommitment::from_bytes(&cv_net)
@@ -95,14 +94,10 @@ impl<D: OrchardDomainCommon> Action<D> {
             })
             .transpose()?;
 
-        let asset: Option<AssetBase> =
-            asset.and_then(|bytes| AssetBase::from_bytes(&bytes).into_option());
-
         Ok(Self {
             cv_net,
             spend,
             output,
-            asset,
             rcv,
         })
     }
@@ -117,6 +112,7 @@ impl Spend {
         spend_auth_sig: Option<[u8; 64]>,
         recipient: Option<[u8; 43]>,
         value: Option<u64>,
+        asset: Option<[u8; 32]>,
         rho: Option<[u8; 32]>,
         rseed: Option<[u8; 32]>,
         rseed_split_note: Option<[u8; 32]>,
@@ -147,6 +143,9 @@ impl Spend {
             .transpose()?;
 
         let value = value.map(NoteValue::from_raw);
+
+        let asset: Option<AssetBase> =
+            asset.and_then(|bytes| AssetBase::from_bytes(&bytes).into_option());
 
         let rho = rho
             .map(|rho| {
@@ -215,6 +214,7 @@ impl Spend {
             spend_auth_sig,
             recipient,
             value,
+            asset,
             rho,
             rseed,
             rseed_split_note,

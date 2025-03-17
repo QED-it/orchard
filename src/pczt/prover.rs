@@ -36,7 +36,7 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
                     .clone()
                     .ok_or(ProverError::MissingFullViewingKey)?;
 
-                let asset = action.asset().ok_or(ProverError::MissingAsset)?;
+                let asset = action.spend.asset.ok_or(ProverError::MissingAsset)?;
 
                 let note = Note::from_parts(
                     action

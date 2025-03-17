@@ -130,12 +130,6 @@ pub struct Action<D: OrchardDomainCommon> {
     /// The output half of this action.
     pub(crate) output: Output<D>,
 
-    /// The asset id of this Action.
-    ///
-    /// - This is set by the Constructor.
-    /// - This is required by the Prover.
-    pub(crate) asset: Option<AssetBase>,
-
     /// The value commitment randomness.
     ///
     /// - This is set by the Constructor.
@@ -178,6 +172,12 @@ pub struct Spend {
     /// This exposes the input value to all participants. For Signers who don't need this
     /// information, or after signatures have been applied, this can be redacted.
     pub(crate) value: Option<NoteValue>,
+
+    /// The asset id of this Action.
+    ///
+    /// - This is set by the Constructor.
+    /// - This is required by the Prover.
+    pub(crate) asset: Option<AssetBase>,
 
     /// The rho value for the note being spent.
     ///

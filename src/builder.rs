@@ -357,6 +357,7 @@ impl SpendInfo {
             spend_auth_sig: None,
             recipient: Some(self.note.recipient()),
             value: Some(self.note.value()),
+            asset: Some(self.note.asset()),
             rho: Some(self.note.rho()),
             rseed: Some(*self.note.rseed()),
             rseed_split_note: self.note.rseed_split_note().into(),
@@ -555,7 +556,6 @@ impl ActionInfo {
             cv_net,
             spend,
             output,
-            asset: Some(asset),
             rcv: Some(self.rcv),
         }
     }
