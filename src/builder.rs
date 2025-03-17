@@ -4,7 +4,6 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::fmt;
 use core::iter;
-use std::collections::HashMap;
 
 use ff::Field;
 use pasta_curves::pallas;
@@ -628,7 +627,7 @@ pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, Bun
 pub struct Builder {
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    burn: HashMap<AssetBase, NoteValue>,
+    burn: BTreeMap<AssetBase, NoteValue>,
     bundle_type: BundleType,
     anchor: Anchor,
 }
@@ -639,7 +638,7 @@ impl Builder {
         Builder {
             spends: vec![],
             outputs: vec![],
-            burn: HashMap::new(),
+            burn: BTreeMap::new(),
             bundle_type,
             anchor,
         }
@@ -702,7 +701,7 @@ impl Builder {
 
     /// Add an instruction to burn a given amount of a specific asset.
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
-        use std::collections::hash_map::Entry;
+        use alloc::collections::btree_map::Entry;
 
         if asset.is_native().into() {
             return Err(BurnNative);
@@ -829,14 +828,14 @@ fn partition_by_asset(
     spends: &[SpendInfo],
     outputs: &[OutputInfo],
     rng: &mut impl RngCore,
-) -> HashMap<
+) -> BTreeMap<
     AssetBase,
     (
         Vec<(SpendInfo, MetadataIdx)>,
         Vec<(OutputInfo, MetadataIdx)>,
     ),
 > {
-    let mut hm = HashMap::new();
+    let mut hm = BTreeMap::new();
 
     for (i, s) in spends.iter().enumerate() {
         hm.entry(s.note.asset())
@@ -896,7 +895,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    burn: HashMap<AssetBase, NoteValue>,
+    burn: BTreeMap<AssetBase, NoteValue>,
 ) -> Result<UnauthorizedBundleWithMetadata<V, FL>, BuildError> {
     build_bundle(
         rng,
@@ -955,7 +954,7 @@ fn build_bundle<B, R: RngCore>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    burn: HashMap<AssetBase, NoteValue>,
+    burn: BTreeMap<AssetBase, NoteValue>,
     finisher: impl FnOnce(
         Vec<ActionInfo>,
         Flags,

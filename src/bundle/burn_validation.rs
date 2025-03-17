@@ -2,8 +2,8 @@
 //!
 //! The module provides a function `validate_bundle_burn` that can be used to validate the burn values for the bundle.
 //!
+use alloc::collections::BTreeSet;
 use core::fmt;
-use std::collections::HashSet;
 
 use crate::{note::AssetBase, value::NoteValue};
 
@@ -34,7 +34,7 @@ pub enum BurnError {
 /// * Any asset in the `burn` vector has a zero value (`BurnError::ZeroAmount`).
 /// * Any asset in the `burn` vector is not unique (`BurnError::DuplicateAsset`).
 pub fn validate_bundle_burn(burn: &[(AssetBase, NoteValue)]) -> Result<(), BurnError> {
-    let mut burn_set = HashSet::new();
+    let mut burn_set = BTreeSet::new();
 
     for (asset, value) in burn {
         if asset.is_native().into() {

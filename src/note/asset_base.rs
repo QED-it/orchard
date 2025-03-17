@@ -1,9 +1,10 @@
 use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params};
+use core::cmp::Ordering;
 use core::hash::{Hash, Hasher};
-use group::{Group, GroupEncoding};
+use group::{Curve, Group, GroupEncoding};
+use pasta_curves::arithmetic::CurveAffine;
 use pasta_curves::{arithmetic::CurveExt, pallas};
-
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
 use crate::constants::fixed_bases::{
@@ -14,6 +15,23 @@ use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 /// Note type identifier.
 #[derive(Clone, Copy, Debug, Eq)]
 pub struct AssetBase(pallas::Point);
+
+impl PartialOrd for AssetBase {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for AssetBase {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let self_coord = self.0.to_affine().coordinates().unwrap();
+        let other_coord = other.0.to_affine().coordinates().unwrap();
+        match self_coord.x().cmp(other_coord.x()) {
+            Ordering::Equal => self_coord.y().cmp(other_coord.y()),
+            ord => ord,
+        }
+    }
+}
 
 pub const MAX_ASSET_DESCRIPTION_SIZE: usize = 512;
 
