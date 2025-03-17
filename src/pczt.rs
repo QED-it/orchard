@@ -366,7 +366,7 @@ impl Zip32Derivation {
 
 #[cfg(test)]
 mod tests {
-    use crate::orchard_flavor::OrchardZSA;
+    use crate::orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA};
     use bridgetree::BridgeTree;
     use ff::{Field, PrimeField};
     use pasta_curves::pallas;
@@ -384,9 +384,8 @@ mod tests {
         Note,
     };
 
-    #[test]
-    fn shielding_bundle() {
-        let pk = ProvingKey::build::<OrchardZSA>();
+    fn shielding_bundle<FL: OrchardFlavor>() {
+        let pk = ProvingKey::build::<FL>();
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -409,14 +408,14 @@ mod tests {
             .unwrap();
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, -5000);
-        let mut pczt_bundle = builder.build_for_pczt::<OrchardZSA>(&mut rng).unwrap().0;
+        let mut pczt_bundle = builder.build_for_pczt::<FL>(&mut rng).unwrap().0;
 
         // Run the IO Finalizer role.
         let sighash = [0; 32];
         pczt_bundle.finalize_io(sighash, rng).unwrap();
 
         // Run the Prover role.
-        pczt_bundle.create_proof::<OrchardZSA, _>(&pk, rng).unwrap();
+        pczt_bundle.create_proof::<FL, _>(&pk, rng).unwrap();
 
         // Run the Transaction Extractor role.
         let bundle = pczt_bundle.extract::<i64>().unwrap().unwrap();
@@ -427,8 +426,17 @@ mod tests {
     }
 
     #[test]
-    fn shielded_bundle() {
-        let pk = ProvingKey::build::<OrchardZSA>();
+    fn shielding_bundle_orchard_zsa() {
+        shielding_bundle::<OrchardZSA>();
+    }
+
+    #[test]
+    fn shielding_bundle_orchard_vanilla() {
+        shielding_bundle::<OrchardVanilla>();
+    }
+
+    fn shielded_bundle<FL: OrchardFlavor>() {
+        let pk = ProvingKey::build::<FL>();
         let mut rng = OsRng;
 
         // Pretend we derived the spending key via ZIP 32.
@@ -498,7 +506,7 @@ mod tests {
             .unwrap();
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, 0);
-        let mut pczt_bundle = builder.build_for_pczt::<OrchardZSA>(&mut rng).unwrap().0;
+        let mut pczt_bundle = builder.build_for_pczt::<FL>(&mut rng).unwrap().0;
 
         // Run the IO Finalizer role.
         let sighash = [0; 32];
@@ -515,7 +523,7 @@ mod tests {
         }
 
         // Run the Prover role.
-        pczt_bundle.create_proof::<OrchardZSA, _>(&pk, rng).unwrap();
+        pczt_bundle.create_proof::<FL, _>(&pk, rng).unwrap();
 
         // TODO: Verify that the PCZT contains sufficient information to decrypt and check
         // `enc_ciphertext`.
@@ -533,5 +541,15 @@ mod tests {
         assert_eq!(bundle.value_balance(), &0);
         // We can successfully bind the bundle.
         bundle.apply_binding_signature(sighash, rng).unwrap();
+    }
+
+    #[test]
+    fn shielded_bundle_orchard_zsa() {
+        shielding_bundle::<OrchardZSA>();
+    }
+
+    #[test]
+    fn shielded_bundle_orchard_vanilla() {
+        shielding_bundle::<OrchardVanilla>();
     }
 }
