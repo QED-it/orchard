@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate alloc;
+
 use alloc::collections::BTreeMap;
 
 use rand::{rngs::OsRng, RngCore};
