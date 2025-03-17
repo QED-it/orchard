@@ -28,7 +28,7 @@ use crate::{
     note::{AssetBase, Note},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
-    value::NoteValue,
+    value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
 };
 
@@ -37,7 +37,6 @@ use crate::{
     bundle::commitments::hash_bundle_txid_data,
     circuit::{Instance, VerifyingKey},
     orchard_flavor::OrchardFlavor,
-    value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
 };
 
 #[cfg(feature = "circuit")]
@@ -473,12 +472,21 @@ pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, FL: 'a + OrchardFlavor
     value_balance: V,
     burn: impl Iterator<Item = (AssetBase, NoteValue)>,
 ) -> redpallas::VerificationKey<Binding> {
-    (actions
-        .into_iter()
-        .map(|a| a.cv_net())
-        .sum::<ValueCommitment>()
+    derive_bvk_raw(
+        actions.into_iter().map(|a| a.cv_net()),
+        ValueSum::from_raw(value_balance.into()),
+        burn,
+    )
+}
+
+pub(crate) fn derive_bvk_raw<'a>(
+    cv_nets: impl IntoIterator<Item = &'a ValueCommitment>,
+    value_balance: ValueSum,
+    burn: impl Iterator<Item = (AssetBase, NoteValue)>,
+) -> redpallas::VerificationKey<Binding> {
+    (cv_nets.into_iter().sum::<ValueCommitment>()
         - ValueCommitment::derive(
-            ValueSum::from_raw(value_balance.into()),
+            value_balance,
             ValueCommitTrapdoor::zero(),
             AssetBase::native(),
         )
