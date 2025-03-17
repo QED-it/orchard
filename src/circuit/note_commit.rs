@@ -2253,7 +2253,7 @@ pub(in crate::circuit) mod gadgets {
         )?;
 
         // Finally, assign values to all of the NoteCommit regions.
-        let cfg = note_commit_chip.config.clone();
+        let cfg = &note_commit_chip.config;
 
         let b_1 = cfg
             .b
