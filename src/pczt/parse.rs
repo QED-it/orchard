@@ -31,7 +31,7 @@ impl<D: OrchardDomainCommon> Bundle<D> {
         flags: u8,
         value_sum: (u64, bool),
         anchor: [u8; 32],
-        burn: Vec<(AssetBase, NoteValue)>,
+        burn: Vec<([u8; 32], u64)>,
         expiry_height: u32,
         zkproof: Option<Vec<u8>>,
         bsk: Option<[u8; 32]>,
@@ -53,6 +53,17 @@ impl<D: OrchardDomainCommon> Bundle<D> {
         let anchor = Anchor::from_bytes(anchor)
             .into_option()
             .ok_or(ParseError::InvalidAnchor)?;
+
+        let burn = burn
+            .into_iter()
+            .map(|(burn_asset, burn_value)| {
+                let burn_asset = AssetBase::from_bytes(&burn_asset)
+                    .into_option()
+                    .ok_or(ParseError::InvalidAnchor)?;
+                let burn_value = NoteValue::from_raw(burn_value);
+                Ok((burn_asset, burn_value))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         let zkproof = zkproof.map(Proof::new);
 
