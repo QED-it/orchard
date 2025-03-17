@@ -1,9 +1,7 @@
 //! Defines types and traits for the variations ("flavors") of the Orchard protocol (Vanilla and ZSA).
 
-use crate::domain::OrchardDomainCommon;
-
 #[cfg(feature = "circuit")]
-use crate::circuit::OrchardCircuit;
+use crate::{circuit::OrchardCircuit, domain::OrchardDomainCommon};
 
 /// Represents the "Vanilla" variation ("flavor") of the Orchard protocol.  
 #[derive(Debug, Clone, Default)]
@@ -31,9 +29,12 @@ pub trait OrchardFlavor: OrchardDomainCommon + OrchardCircuit {
     const FLAVOR: Flavor;
 }
 
+#[cfg(feature = "circuit")]
 impl OrchardFlavor for OrchardVanilla {
     const FLAVOR: Flavor = Flavor::OrchardVanillaFlavor;
 }
+
+#[cfg(feature = "circuit")]
 impl OrchardFlavor for OrchardZSA {
     const FLAVOR: Flavor = Flavor::OrchardZSAFlavor;
 }

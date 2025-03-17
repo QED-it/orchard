@@ -22,19 +22,23 @@ use memuse::DynamicUsage;
 use crate::{
     action::Action,
     address::Address,
-    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
+    bundle::commitments::hash_bundle_auth_data,
     domain::{OrchardDomain, OrchardDomainCommon},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    orchard_flavor::OrchardFlavor,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
-    value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
+    value::NoteValue,
     Proof,
 };
 
 #[cfg(feature = "circuit")]
-use crate::circuit::{Instance, VerifyingKey};
+use crate::{
+    bundle::commitments::hash_bundle_txid_data,
+    circuit::{Instance, VerifyingKey},
+    orchard_flavor::OrchardFlavor,
+    value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
+};
 
 #[cfg(feature = "circuit")]
 impl<A, D: OrchardDomainCommon> Action<A, D> {
@@ -463,6 +467,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
     }
 }
 
+#[cfg(feature = "circuit")]
 pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, FL: 'a + OrchardFlavor>(
     actions: impl IntoIterator<Item = &'a Action<A, FL>>,
     value_balance: V,
@@ -485,6 +490,7 @@ pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, FL: 'a + OrchardFlavor
     .into_bvk()
 }
 
+#[cfg(feature = "circuit")]
 impl<A: Authorization, V: Copy + Into<i64>, FL: OrchardFlavor> Bundle<A, V, FL> {
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
