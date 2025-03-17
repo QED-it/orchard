@@ -75,6 +75,8 @@ pub struct Bundle<D: OrchardDomainCommon> {
     pub(crate) value_sum: ValueSum,
 
     /// Assets intended for burning
+    ///
+    /// Set by the Constructor.
     pub(crate) burn: Vec<(AssetBase, NoteValue)>,
 
     /// The Orchard anchor for this transaction.
@@ -86,6 +88,8 @@ pub struct Bundle<D: OrchardDomainCommon> {
     ///
     /// For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
     /// This field is reserved for future use.
+    ///
+    /// Set by the Constructor.
     pub(crate) expiry_height: u32,
 
     /// The Orchard bundle proof.
@@ -472,7 +476,7 @@ mod tests {
         };
 
         // Run the Creator and Constructor roles.
-        let mut builder = Builder::new(BundleType::DEFAULT_VANILLA, anchor);
+        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
         builder.add_spend(fvk.clone(), note, merkle_path).unwrap();
         builder
             .add_output(
