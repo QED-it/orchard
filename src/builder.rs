@@ -157,8 +157,6 @@ pub enum BuildError {
     BurnDuplicateAsset,
     /// There is no available split note for this asset.
     NoSplitNoteAvailable,
-    /// Burning is not allowed in an ActionGroup.
-    BurnNotEmptyInActionGroup,
 }
 
 impl Display for BuildError {
@@ -182,7 +180,6 @@ impl Display for BuildError {
             BurnZero => f.write_str("Burning is not possible for zero values"),
             BurnDuplicateAsset => f.write_str("Duplicate assets are not allowed when burning"),
             NoSplitNoteAvailable => f.write_str("No split note has been provided for this asset"),
-            BurnNotEmptyInActionGroup => f.write_str("Burning is not possible for action group"),
         }
     }
 }
@@ -699,7 +696,9 @@ impl Builder {
             self.spends,
             self.outputs,
             0,
-            SpecificBuilderParams::BundleParams(self.burn),
+            self.burn,
+            self.reference_notes,
+            false,
         )
     }
 
@@ -712,9 +711,6 @@ impl Builder {
         rng: impl RngCore,
         expiry_height: u32,
     ) -> Result<UnauthorizedBundleWithMetadata<V, OrchardZSA>, BuildError> {
-        if !self.burn.is_empty() {
-            return Err(BuildError::BurnNotEmptyInActionGroup);
-        }
         bundle(
             rng,
             self.anchor,
@@ -722,7 +718,9 @@ impl Builder {
             self.spends,
             self.outputs,
             expiry_height,
-            SpecificBuilderParams::ActionGroupParams(self.reference_notes),
+            self.burn,
+            self.reference_notes,
+            true,
         )
     }
 }
@@ -794,23 +792,11 @@ fn pad_spend(
     }
 }
 
-/// Specific parameters for the builder to build a bundle.
-///
-/// If it is a BundleParams, it contains burn info.
-/// If it is an ActionGroupParams, it contains reference notes.
-#[derive(Debug)]
-pub enum SpecificBuilderParams {
-    /// BundleParams contains burn info
-    BundleParams(HashMap<AssetBase, NoteValue>),
-    /// ActionGroupParams contains reference notes
-    ActionGroupParams(HashMap<AssetBase, SpendInfo>),
-}
-
 /// Builds a bundle containing the given spent notes and outputs.
 ///
 /// The returned bundle will have no proof or signatures; these can be applied with
 /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     mut rng: impl RngCore,
     anchor: Anchor,
@@ -818,7 +804,9 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
     expiry_height: u32,
-    specific_params: SpecificBuilderParams,
+    burn: HashMap<AssetBase, NoteValue>,
+    reference_notes: HashMap<AssetBase, SpendInfo>,
+    is_action_group: bool,
 ) -> Result<UnauthorizedBundleWithMetadata<V, FL>, BuildError> {
     let flags = bundle_type.flags();
 
@@ -852,12 +840,8 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                     let num_asset_pre_actions = spends.len().max(outputs.len());
 
                     let mut first_spend = spends.first().map(|(s, _)| s.clone());
-                    if let SpecificBuilderParams::ActionGroupParams(ref reference_notes) =
-                        specific_params
-                    {
-                        if first_spend.is_none() {
-                            first_spend = reference_notes.get(&asset).cloned();
-                        }
+                    if is_action_group && first_spend.is_none() {
+                        first_spend = reference_notes.get(&asset).cloned();
                     }
 
                     let mut indexed_spends = spends
@@ -948,32 +932,23 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     let (actions, witnesses): (Vec<_>, Vec<_>) =
         pre_actions.into_iter().map(|a| a.build(&mut rng)).unzip();
 
-    let burn = if let SpecificBuilderParams::BundleParams(ref burn) = specific_params {
-        burn.iter()
-            .map(|(asset, value)| {
-                Ok((
-                    *asset,
-                    NoteValue::from_raw(
-                        u64::try_from(i128::from(*value))
-                            .map_err(|_| BuildError::ValueSum(OverflowError))?,
-                    ),
-                ))
-            })
-            .collect::<Result<Vec<(AssetBase, NoteValue)>, BuildError>>()?
-    } else {
-        vec![]
-    };
+    let burn = burn
+        .iter()
+        .map(|(asset, value)| {
+            Ok((
+                *asset,
+                NoteValue::from_raw(
+                    u64::try_from(i128::from(*value))
+                        .map_err(|_| BuildError::ValueSum(OverflowError))?,
+                ),
+            ))
+        })
+        .collect::<Result<Vec<(AssetBase, NoteValue)>, BuildError>>()?;
 
-    match specific_params {
-        SpecificBuilderParams::BundleParams(_) => {
-            // Verify that bsk and bvk are consistent
-            let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
-            assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
-        }
-        SpecificBuilderParams::ActionGroupParams(_) => {
-            // Do nothing
-            // bsk and bvk could not be consistent for action group
-        }
+    if !is_action_group {
+        // Verify that bsk and bvk are consistent
+        let bvk = derive_bvk(&actions, native_value_balance, burn.iter().cloned());
+        assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
     }
 
     Ok((
