@@ -40,7 +40,7 @@ reddsa = { version = "0.5", default-features = false }
 nonempty = { version = "0.11", default-features = false }
 poseidon = { package = "halo2_poseidon", version = "0.1" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
-sinsemilla = { git = "https://github.com/QED-it/sinsemilla", branch = "merge_pczt" }
+sinsemilla = { git = "https://github.com/QED-it/sinsemilla", branch = "merge_pczt", features = ["test-dependencies"] }
 subtle = { version = "2.3", default-features = false }
 zcash_note_encryption_zsa = { package = "zcash_note_encryption", version = "0.4", git = "https://github.com/QED-it/zcash_note_encryption", branch = "zsa1" }
 incrementalmerkletree = { version = "0.7", default-features = false }
