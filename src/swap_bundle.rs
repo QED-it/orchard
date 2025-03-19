@@ -1,5 +1,6 @@
 //! Structs related to swap bundles.
 
+use std::collections::HashMap;
 use crate::{
     bundle::commitments::hash_swap_bundle,
     bundle::{derive_bvk, Authorization, Bundle, BundleCommitment},
@@ -148,7 +149,21 @@ impl<V: Copy + Into<i64>> SwapBundle<V> {
         derive_bvk(
             actions,
             self.value_balance,
-            std::iter::empty::<(AssetBase, NoteValue)>(),
+            self.calculate_total_burn().into_iter(),
         )
+    }
+
+    /// Returns the total value of the assets burned in this swap bundle.
+    pub fn calculate_total_burn(&self) -> HashMap<AssetBase, NoteValue> {
+        let mut total_burn: HashMap<AssetBase, NoteValue> = HashMap::new();
+        for action_group in self.action_groups() {
+            for (asset_base, note_value) in action_group.burn() {
+                total_burn
+                    .entry(asset_base.clone())
+                    .and_modify(|total| *total = (*total + *note_value).unwrap())
+                    .or_insert(note_value.clone());
+            }
+        }
+        total_burn
     }
 }
