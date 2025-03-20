@@ -922,7 +922,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                 pre_actions.into_iter().map(|a| a.build(&mut rng)).unzip();
 
             // Verify that bsk and bvk are consistent.
-            let bvk = derive_bvk(&actions, native_value_balance, burn_vec.iter().cloned());
+            let bvk = derive_bvk(&actions, native_value_balance, &burn_vec);
             assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
 
             Ok((

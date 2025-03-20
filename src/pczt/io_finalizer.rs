@@ -31,7 +31,7 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
         let bvk = derive_bvk_raw(
             self.actions.iter().map(|a| a.cv_net()),
             self.value_sum,
-            self.burn.iter().cloned(),
+            &self.burn,
         );
         if redpallas::VerificationKey::from(&bsk) != bvk {
             return Err(IoFinalizerError::ValueCommitMismatch);

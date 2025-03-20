@@ -470,7 +470,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
 pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, FL: 'a + OrchardFlavor>(
     actions: impl IntoIterator<Item = &'a Action<A, FL>>,
     value_balance: V,
-    burn: impl Iterator<Item = (AssetBase, NoteValue)>,
+    burn: &[(AssetBase, NoteValue)],
 ) -> redpallas::VerificationKey<Binding> {
     derive_bvk_raw(
         actions.into_iter().map(|a| a.cv_net()),
@@ -482,7 +482,7 @@ pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, FL: 'a + OrchardFlavor
 pub(crate) fn derive_bvk_raw<'a>(
     cv_nets: impl IntoIterator<Item = &'a ValueCommitment>,
     value_balance: ValueSum,
-    burn: impl Iterator<Item = (AssetBase, NoteValue)>,
+    burn: &[(AssetBase, NoteValue)],
 ) -> redpallas::VerificationKey<Binding> {
     (cv_nets.into_iter().sum::<ValueCommitment>()
         - ValueCommitment::derive(
@@ -490,9 +490,9 @@ pub(crate) fn derive_bvk_raw<'a>(
             ValueCommitTrapdoor::zero(),
             AssetBase::native(),
         )
-        - burn
+        - burn.iter()
             .map(|(asset, value)| {
-                ValueCommitment::derive(ValueSum::from(value), ValueCommitTrapdoor::zero(), asset)
+                ValueCommitment::derive(ValueSum::from(*value), ValueCommitTrapdoor::zero(), *asset)
             })
             .sum::<ValueCommitment>())
     .into_bvk()
@@ -511,7 +511,7 @@ impl<A: Authorization, V: Copy + Into<i64>, FL: OrchardFlavor> Bundle<A, V, FL> 
     /// This can be used to validate the [`Authorized::binding_signature`] returned from
     /// [`Bundle::authorization`].
     pub fn binding_validating_key(&self) -> redpallas::VerificationKey<Binding> {
-        derive_bvk(&self.actions, self.value_balance, self.burn.iter().cloned())
+        derive_bvk(&self.actions, self.value_balance, &self.burn)
     }
 }
 
