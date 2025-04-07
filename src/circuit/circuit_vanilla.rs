@@ -613,6 +613,7 @@ impl OrchardCircuit for OrchardVanilla {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
     use core::iter;
 
     use ff::Field;
@@ -684,7 +685,7 @@ mod tests {
                     asset: Value::known(spent_note.asset()),
                     split_flag: Value::known(false),
                 },
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             Instance {
                 anchor,
@@ -727,7 +728,6 @@ mod tests {
                     K,
                     &circuits[0],
                 );
-            println!("{:#?}", circuit_cost);
             assert_eq!(usize::from(circuit_cost.proof_size(1)), 4992);
             assert_eq!(usize::from(circuit_cost.proof_size(2)), 7264);
             usize::from(circuit_cost.proof_size(instances.len()))
@@ -862,7 +862,7 @@ mod tests {
 
         let circuit = OrchardCircuitVanilla {
             witnesses: Witnesses::default(),
-            phantom: std::marker::PhantomData,
+            phantom: core::marker::PhantomData,
         };
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)

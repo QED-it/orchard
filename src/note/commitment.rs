@@ -1,8 +1,8 @@
 use core::iter;
 
+use alloc::vec::Vec;
 use bitvec::{array::BitArray, order::Lsb0};
 use group::ff::{PrimeField, PrimeFieldBits};
-use halo2_gadgets::sinsemilla::primitives as sinsemilla;
 use pasta_curves::pallas;
 use subtle::{ConditionallySelectable, ConstantTimeEq, CtOption};
 
@@ -154,8 +154,8 @@ mod tests {
         NOTE_COMMITMENT_PERSONALIZATION, NOTE_ZSA_COMMITMENT_PERSONALIZATION,
     };
     use crate::note::commitment::NoteCommitTrapdoor;
+    use alloc::vec::Vec;
     use ff::Field;
-    use halo2_gadgets::sinsemilla::primitives as sinsemilla;
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, Rng};
 
