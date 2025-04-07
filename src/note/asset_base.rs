@@ -8,10 +8,13 @@ use pasta_curves::{arithmetic::CurveExt, pallas};
 use rand_core::CryptoRngCore;
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
-use crate::constants::fixed_bases::{
-    NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
+use crate::{
+    constants::fixed_bases::{
+        NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
+    },
+    issuance::compute_asset_desc_hash,
+    keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
 };
-use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 
 /// Note type identifier.
 #[derive(Clone, Copy, Debug, Eq)]
@@ -73,17 +76,12 @@ impl AssetBase {
     ///
     /// # Panics
     ///
-    /// Panics if `asset_desc` is empty or greater than `MAX_ASSET_DESCRIPTION_SIZE` or if the derived Asset Base is the identity point.
+    /// Panics if the derived Asset Base is the identity point.
     #[allow(non_snake_case)]
-    pub fn derive(ik: &IssuanceValidatingKey, asset_desc: &[u8]) -> Self {
-        assert!(
-            is_asset_desc_of_valid_size(asset_desc),
-            "The asset_desc string is not of valid size"
-        );
-
-        // EncodeAssetId(ik, asset_desc) = version_byte || ik || asset_desc
+    pub fn derive(ik: &IssuanceValidatingKey, asset_desc_hash: &[u8; 32]) -> Self {
+        // EncodeAssetId(ik, asset_desc_hash) = version_byte || ik || asset_desc_hash
         let version_byte = [0x00];
-        let encode_asset_id = [&version_byte[..], &ik.to_bytes(), asset_desc].concat();
+        let encode_asset_id = [&version_byte[..], &ik.to_bytes(), asset_desc_hash].concat();
 
         let asset_digest = asset_digest(encode_asset_id);
 
@@ -123,8 +121,7 @@ impl AssetBase {
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
         let isk = IssuanceAuthorizingKey::random(rng);
         let ik = IssuanceValidatingKey::from(&isk);
-        let asset_descr = b"zsa_asset".to_vec();
-        AssetBase::derive(&ik, &asset_descr)
+        AssetBase::derive(&ik, &compute_asset_desc_hash(b"zsa_asset").unwrap())
     }
 }
 
@@ -152,7 +149,6 @@ impl PartialEq for AssetBase {
 pub mod testing {
     use super::AssetBase;
 
-    use alloc::vec::Vec;
     use proptest::prelude::*;
 
     use crate::keys::{testing::arb_issuance_authorizing_key, IssuanceValidatingKey};
@@ -162,12 +158,12 @@ pub mod testing {
         pub fn arb_asset_base()(
             is_native in prop::bool::ANY,
             isk in arb_issuance_authorizing_key(),
-            asset_desc in prop::collection::vec(any::<u8>(), 1..=511),
+            asset_desc_hash in any::<[u8; 32]>(),
         ) -> AssetBase {
             if is_native {
                 AssetBase::native()
             } else {
-                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc)
+                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc_hash)
             }
         }
     }
@@ -184,19 +180,18 @@ pub mod testing {
         /// Generate an asset ID
         pub fn arb_zsa_asset_base()(
             isk in arb_issuance_authorizing_key(),
-            asset_desc in prop::collection::vec(any::<u8>(), 1..=511),
+            asset_desc_hash in any::<[u8; 32]>(),
         ) -> AssetBase {
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc)
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc_hash)
         }
     }
 
     prop_compose! {
         /// Generate an asset ID using a specific description
-        pub fn zsa_asset_base(asset_desc: Vec<u8>)(
+        pub fn zsa_asset_base(asset_desc_hash: [u8; 32])(
             isk in arb_issuance_authorizing_key(),
         ) -> AssetBase {
-            assert!(super::is_asset_desc_of_valid_size(&asset_desc));
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc)
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc_hash)
         }
     }
 
@@ -205,9 +200,11 @@ pub mod testing {
         let test_vectors = crate::test_vectors::asset_base::test_vectors();
 
         for tv in test_vectors {
+            let asset_desc_hash =
+                crate::issuance::compute_asset_desc_hash(&tv.description).unwrap();
             let calculated_asset_base = AssetBase::derive(
                 &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
-                &tv.description,
+                &asset_desc_hash,
             );
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();
 
