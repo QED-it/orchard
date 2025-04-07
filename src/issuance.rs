@@ -12,13 +12,14 @@
 //! Errors related to issuance, such as invalid signatures or supply overflows,
 //! are handled through the `Error` enum.
 
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use blake2b_simd::Hash as Blake2bHash;
+use core::fmt;
 use group::Group;
 use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
-use std::collections::HashMap;
-use std::fmt;
 
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::constants::reference_keys::ReferenceKeys;
@@ -615,7 +616,7 @@ impl IssueBundle<Signed> {
 ///
 /// # Returns
 ///
-/// A `Result` containing a [`HashMap<AssetBase, AssetRecord>`] upon success, where each key-value
+/// A `Result` containing a [`BTreeMap<AssetBase, AssetRecord>`] upon success, where each key-value
 /// pair represents the new or updated state of an asset. The key is an [`AssetBase`], and the value
 /// is the corresponding updated [`AssetRecord`].
 ///
@@ -633,7 +634,7 @@ pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
     get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
-) -> Result<HashMap<AssetBase, AssetRecord>, Error> {
+) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
     bundle
         .ik()
         .verify(&sighash, bundle.authorization().signature())
@@ -642,7 +643,7 @@ pub fn verify_issue_bundle(
     bundle
         .actions()
         .iter()
-        .try_fold(HashMap::new(), |mut new_records, action| {
+        .try_fold(BTreeMap::new(), |mut new_records, action| {
             let (asset, amount) = action.verify(bundle.ik())?;
 
             let is_finalized = action.is_finalized();
@@ -786,13 +787,15 @@ mod tests {
         value::NoteValue,
         Address, Bundle, Note,
     };
+    use alloc::collections::BTreeMap;
+    use alloc::string::{String, ToString};
+    use alloc::vec::Vec;
     use bridgetree::BridgeTree;
     use group::{Group, GroupEncoding};
     use nonempty::NonEmpty;
     use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
-    use std::collections::HashMap;
 
     /// Validation for reference note
     ///
@@ -818,7 +821,7 @@ mod tests {
     fn setup_params() -> TestParams {
         let mut rng = OsRng;
 
-        let isk = IssuanceAuthorizingKey::random();
+        let isk = IssuanceAuthorizingKey::random(&mut rng);
         let ik: IssuanceValidatingKey = (&isk).into();
 
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
@@ -1212,7 +1215,7 @@ mod tests {
     #[test]
     fn issue_bundle_invalid_isk_for_signature() {
         let TestParams {
-            rng,
+            mut rng,
             ik,
             recipient,
             first_nullifier,
@@ -1231,7 +1234,7 @@ mod tests {
         )
         .unwrap();
 
-        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
+        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random(&mut rng);
 
         let err = bundle
             .update_rho(&first_nullifier)
@@ -1319,7 +1322,7 @@ mod tests {
         let first_note = *signed.actions().first().notes().first().unwrap();
         assert_eq!(
             issued_assets,
-            HashMap::from([(
+            BTreeMap::from([(
                 AssetBase::derive(&ik, b"Verify"),
                 AssetRecord::new(NoteValue::from_raw(5), false, first_note)
             )])
@@ -1362,7 +1365,7 @@ mod tests {
         let first_note = *signed.actions().first().notes().first().unwrap();
         assert_eq!(
             issued_assets,
-            HashMap::from([(
+            BTreeMap::from([(
                 AssetBase::derive(&ik, b"Verify with finalize"),
                 AssetRecord::new(NoteValue::from_raw(7), true, first_note)
             )])
@@ -1502,7 +1505,7 @@ mod tests {
             ),
         )]
         .into_iter()
-        .collect::<HashMap<_, _>>();
+        .collect::<BTreeMap<_, _>>();
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, |asset| issued_assets.get(asset).copied())
@@ -1521,7 +1524,7 @@ mod tests {
         }
 
         let TestParams {
-            rng,
+            mut rng,
             isk,
             ik,
             recipient,
@@ -1541,7 +1544,7 @@ mod tests {
         )
         .unwrap();
 
-        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random();
+        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random(&mut rng);
 
         let mut signed = bundle
             .update_rho(&first_nullifier)
@@ -1672,7 +1675,7 @@ mod tests {
             .sign(&isk)
             .unwrap();
 
-        let incorrect_isk = IssuanceAuthorizingKey::random();
+        let incorrect_isk = IssuanceAuthorizingKey::random(&mut rng);
         let incorrect_ik: IssuanceValidatingKey = (&incorrect_isk).into();
 
         // Add "bad" note
@@ -1984,6 +1987,7 @@ pub mod testing {
     use crate::keys::testing::arb_issuance_validating_key;
     use crate::note::asset_base::testing::zsa_asset_base;
     use crate::note::testing::arb_zsa_note;
+    use alloc::vec::Vec;
     use k256::schnorr;
     use nonempty::NonEmpty;
     use proptest::collection::vec;

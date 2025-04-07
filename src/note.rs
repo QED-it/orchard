@@ -1,4 +1,5 @@
 //! Data structures used for note construction.
+use alloc::vec::Vec;
 use blake2b_simd::Params;
 use core::fmt;
 use memuse::DynamicUsage;
