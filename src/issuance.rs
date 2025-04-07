@@ -32,10 +32,11 @@ use crate::{Address, Note};
 use crate::asset_record::AssetRecord;
 
 use Error::{
-    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
-    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
-    MissingReferenceNoteOnFirstIssuance, ValueOverflow, WrongAssetDescSize,
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, InvalidAssetDescHashLength,
+    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
+    IssueBundleInvalidSignature, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    WrongAssetDescSize,
 };
 
 /// Checks if a given note is a reference note.
@@ -82,20 +83,18 @@ pub struct IssueInfo {
 
 /// Compute the asset description hash for a given asset description.
 pub fn compute_asset_desc_hash(asset_desc: &[u8]) -> Result<[u8; 32], Error> {
-    if is_asset_desc_of_valid_size(asset_desc) {
-        let mut ah = Params::new()
-            .hash_length(32)
-            .personal(b"ZSA-AssetDescCRH")
-            .to_state();
-        ah.update(asset_desc);
-        Ok(ah
-            .finalize()
-            .as_bytes()
-            .try_into()
-            .expect("slice must be exactly 32 bytes"))
-    } else {
-        Err(WrongAssetDescSize)
+    if !is_asset_desc_of_valid_size(asset_desc) {
+        return Err(WrongAssetDescSize);
     }
+    let mut ah = Params::new()
+        .hash_length(32)
+        .personal(b"ZSA-AssetDescCRH")
+        .to_state();
+    ah.update(asset_desc);
+    ah.finalize()
+        .as_bytes()
+        .try_into()
+        .map_err(|_| InvalidAssetDescHashLength)
 }
 
 impl IssueAction {
@@ -672,6 +671,8 @@ pub enum Error {
     IssueBundleIkMismatchAssetBase,
     /// `asset_desc` should be between 1 and 512 bytes.
     WrongAssetDescSize,
+    /// The length of the asset description hash is invalid.
+    InvalidAssetDescHashLength,
     /// The `IssueAction` is not finalized but contains no notes.
     IssueActionWithoutNoteNotFinalized,
     /// The `AssetBase` is the Pallas identity point, which is invalid.
@@ -706,6 +707,9 @@ impl fmt::Display for Error {
             }
             WrongAssetDescSize => {
                 write!(f, "`asset_desc` should be between 1 and 512 bytes")
+            }
+            InvalidAssetDescHashLength => {
+                write!(f, "the length of the asset description hash is invalid")
             }
             IssueActionWithoutNoteNotFinalized => {
                 write!(
