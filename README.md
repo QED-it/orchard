@@ -1,12 +1,19 @@
 # orchard [![Crates.io](https://img.shields.io/crates/v/orchard.svg)](https://crates.io/crates/orchard) [![CI checks](https://github.com/QED-it/orchard/actions/workflows/ci.yml/badge.svg?branch=zsa1)](https://github.com/QED-it/orchard/actions/workflows/ci.yml)
 #
 
-Requires Rust 1.65+.
+Requires Rust 1.66+.
 
 ## Documentation
 
 - [The Orchard Book](https://zcash.github.io/orchard/)
 - [Crate documentation](https://docs.rs/orchard)
+
+## `no_std` compatibility
+
+Downstream users of this crate must enable the `spin_no_std` feature of the
+`lazy_static` crate in order to take advantage of `no_std` builds; this is due
+to the fact that `--no-default-features` builds of `lazy_static` still rely on
+`std`.
 
 ## License
 

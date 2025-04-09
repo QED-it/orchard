@@ -34,15 +34,12 @@ use crate::{
         to_scalar, NonIdentityPallasPoint, NonZeroPallasBase, NonZeroPallasScalar,
         PreparedNonIdentityBase, PreparedNonZeroScalar, PrfExpand,
     },
-    zip32::{
-        self, ExtendedSpendingKey, ZIP32_ORCHARD_PERSONALIZATION,
-        ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE,
-    },
+    zip32::{self, ExtendedSpendingKey},
 };
 
 // Preserve '::' which specifies the EXTERNAL 'zip32' crate
 #[rustfmt::skip]
-pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope};
+pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only};
 
 const KDF_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_OrchardKDF";
 const ZIP32_PURPOSE: u32 = 32;
@@ -121,8 +118,7 @@ impl SpendingKey {
             ChildIndex::hardened(coin_type),
             ChildIndex::hardened(account.into()),
         ];
-        ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION)
-            .map(|esk| esk.sk())
+        ExtendedSpendingKey::<zip32::Orchard>::from_path(seed, path).map(|esk| esk.sk())
     }
 }
 
@@ -291,10 +287,9 @@ impl IssuanceAuthorizingKey {
         ];
 
         // we are reusing zip32 logic for deriving the key, zip32 should be updated as discussed
-        let &isk_bytes =
-            ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE)?
-                .sk()
-                .to_bytes();
+        let &isk_bytes = ExtendedSpendingKey::<zip32::Issuance>::from_path(seed, path)?
+            .sk()
+            .to_bytes();
 
         IssuanceAuthorizingKey::from_bytes(isk_bytes).ok_or(zip32::Error::InvalidSpendingKey)
     }
@@ -463,8 +458,8 @@ impl From<&SpendingKey> for FullViewingKey {
     }
 }
 
-impl From<&ExtendedSpendingKey> for FullViewingKey {
-    fn from(extsk: &ExtendedSpendingKey) -> Self {
+impl<C: hardened_only::Context> From<&ExtendedSpendingKey<C>> for FullViewingKey {
+    fn from(extsk: &ExtendedSpendingKey<C>) -> Self {
         (&extsk.sk()).into()
     }
 }

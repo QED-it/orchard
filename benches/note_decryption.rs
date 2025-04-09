@@ -62,7 +62,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 recipient,
                 NoteValue::from_raw(10),
                 AssetBase::native(),
-                None,
+                [0; 512],
             )
             .unwrap();
         builder
@@ -71,7 +71,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 recipient,
                 NoteValue::from_raw(10),
                 AssetBase::native(),
-                None,
+                [0; 512],
             )
             .unwrap();
         let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().0;
