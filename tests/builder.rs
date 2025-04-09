@@ -195,20 +195,20 @@ fn bundle_chain_vanilla() {
     let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardVanilla>();
     assert_eq!(
         orchard_digest_1,
-        // orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`
+        // orchard_digest` taken from the `zcash/orchard` repository at commit `4ac248d0` (v0.11.0)
         // This ensures backward compatibility.
         [
-            239, 27, 83, 1, 224, 201, 57, 243, 162, 28, 61, 74, 175, 165, 5, 165, 23, 3, 16, 239,
-            164, 29, 156, 180, 9, 60, 96, 117, 122, 187, 40, 103,
+            165, 242, 106, 135, 168, 224, 110, 252, 175, 110, 63, 29, 78, 243, 33, 14, 152, 202,
+            209, 47, 68, 32, 138, 96, 79, 213, 218, 93, 45, 87, 221, 174,
         ]
     );
     assert_eq!(
         orchard_digest_2,
-        // orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`
+        // orchard_digest` taken from the `zcash/orchard` repository at commit `4ac248d0` (v0.11.0)
         // This ensures backward compatibility.
         [
-            145, 227, 149, 34, 67, 111, 65, 185, 177, 236, 106, 137, 179, 71, 80, 137, 26, 12, 12,
-            0, 8, 156, 182, 125, 146, 250, 92, 189, 42, 246, 130, 99,
+            74, 174, 42, 41, 68, 92, 171, 110, 10, 148, 217, 61, 68, 50, 49, 1, 1, 180, 221, 210,
+            97, 237, 25, 198, 195, 77, 19, 160, 186, 172, 8, 26,
         ]
     );
 }
@@ -220,16 +220,16 @@ fn bundle_chain_zsa() {
         orchard_digest_1,
         // Locks the `orchard_digest` for OrchardZSA
         [
-            183, 144, 252, 84, 122, 85, 49, 92, 222, 26, 48, 167, 119, 46, 202, 16, 232, 238, 88,
-            43, 78, 172, 131, 24, 200, 91, 55, 47, 236, 192, 213, 218,
+            137, 20, 108, 223, 186, 231, 12, 214, 4, 14, 124, 107, 116, 143, 128, 74, 194, 6, 3,
+            182, 236, 229, 151, 54, 127, 15, 210, 142, 167, 243, 158, 44,
         ]
     );
     assert_eq!(
         orchard_digest_2,
         // Locks the `orchard_digest` for OrchardZSA
         [
-            100, 230, 90, 215, 65, 57, 186, 251, 141, 79, 52, 169, 96, 216, 183, 104, 8, 12, 97,
-            221, 232, 57, 97, 184, 158, 105, 235, 73, 79, 173, 32, 15,
+            43, 242, 123, 196, 224, 99, 68, 204, 88, 82, 76, 149, 12, 5, 12, 160, 87, 158, 115,
+            133, 65, 73, 172, 114, 230, 72, 78, 39, 205, 197, 152, 195,
         ]
     );
 }

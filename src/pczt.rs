@@ -436,8 +436,8 @@ mod tests {
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
             &[
-                146, 89, 182, 62, 48, 22, 66, 75, 124, 146, 214, 213, 71, 1, 169, 96, 193, 15, 252,
-                196, 8, 98, 145, 8, 106, 38, 43, 223, 196, 124, 203, 62,
+                229, 69, 19, 139, 133, 204, 231, 132, 86, 220, 148, 241, 25, 25, 49, 201, 17, 99,
+                81, 137, 123, 87, 241, 222, 184, 220, 250, 35, 7, 52, 19, 65,
             ],
         );
         let orchard_digest = shielding_bundle::<OrchardZSA>(BundleType::DEFAULT_VANILLA);
@@ -445,8 +445,8 @@ mod tests {
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
             &[
-                8, 139, 205, 192, 124, 253, 22, 161, 58, 85, 197, 195, 50, 247, 63, 8, 27, 241, 74,
-                234, 11, 225, 132, 181, 232, 118, 10, 137, 107, 126, 22, 78,
+                13, 137, 170, 83, 148, 244, 44, 134, 243, 192, 158, 80, 158, 133, 226, 222, 64, 25,
+                21, 135, 54, 28, 239, 34, 48, 20, 105, 19, 96, 46, 199, 230,
             ],
         );
     }
@@ -456,11 +456,11 @@ mod tests {
         let orchard_digest = shielding_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
         assert_eq!(
             orchard_digest.as_bytes(),
-            // `orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`.
+            // `orchard_digest` taken from the `zcash/orchard` repository at commit `4ac248d0` (v0.11.0)
             // This ensures backward compatibility.
             &[
-                141, 22, 191, 36, 104, 236, 27, 199, 73, 129, 244, 110, 215, 74, 243, 97, 113, 161,
-                227, 211, 136, 251, 164, 64, 252, 202, 28, 35, 243, 122, 36, 115,
+                147, 96, 110, 14, 246, 238, 164, 162, 46, 183, 168, 240, 241, 99, 242, 47, 65, 4,
+                166, 175, 174, 171, 39, 39, 15, 59, 147, 85, 20, 220, 202, 205,
             ],
         );
     }
@@ -592,8 +592,8 @@ mod tests {
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
             &[
-                101, 129, 254, 177, 201, 15, 190, 9, 223, 95, 188, 237, 169, 232, 107, 155, 12,
-                159, 142, 67, 121, 103, 53, 61, 67, 59, 101, 193, 43, 149, 158, 18,
+                200, 124, 44, 249, 13, 53, 113, 198, 53, 208, 160, 48, 170, 136, 176, 151, 157, 18,
+                83, 176, 92, 13, 153, 35, 102, 51, 209, 64, 18, 75, 205, 53,
             ],
         );
         let orchard_digest = shielded_bundle::<OrchardZSA>(BundleType::DEFAULT_VANILLA);
@@ -601,8 +601,8 @@ mod tests {
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
             &[
-                157, 97, 33, 172, 249, 222, 77, 77, 248, 71, 142, 45, 120, 206, 83, 139, 51, 209,
-                122, 201, 174, 187, 24, 63, 211, 229, 36, 25, 100, 179, 169, 208,
+                119, 179, 104, 88, 138, 61, 27, 207, 10, 91, 119, 166, 27, 19, 249, 209, 115, 94,
+                142, 43, 127, 81, 208, 190, 243, 102, 40, 42, 244, 139, 131, 56,
             ],
         );
     }
@@ -612,11 +612,11 @@ mod tests {
         let orchard_digest = shielded_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
         assert_eq!(
             orchard_digest.as_bytes(),
-            // `orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`.
+            // `orchard_digest` taken from the `zcash/orchard` repository at commit `4ac248d0` (v0.11.0)
             // This ensures backward compatibility.
             &[
-                242, 194, 88, 245, 254, 162, 20, 177, 69, 161, 200, 89, 88, 227, 105, 167, 38, 249,
-                112, 58, 174, 237, 50, 134, 236, 248, 169, 49, 132, 22, 165, 198,
+                9, 74, 174, 13, 48, 214, 242, 58, 4, 103, 133, 125, 26, 243, 3, 187, 217, 210, 74,
+                140, 230, 197, 66, 29, 83, 183, 241, 127, 14, 103, 105, 110,
             ],
         );
     }
