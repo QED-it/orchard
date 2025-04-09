@@ -1204,7 +1204,7 @@ mod tests {
 
     #[test]
     fn test_vectors() {
-        for tv in crate::test_vectors::keys::test_vectors() {
+        for tv in crate::test_vectors::keys::TEST_VECTORS {
             let sk = SpendingKey::from_bytes(tv.sk).unwrap();
 
             let ask: SpendAuthorizingKey = (&sk).into();
@@ -1266,7 +1266,7 @@ mod tests {
 
     #[test]
     fn issuance_auth_sig_test_vectors() {
-        for tv in crate::test_vectors::issuance_auth_sig::test_vectors() {
+        for tv in crate::test_vectors::issuance_auth_sig::TEST_VECTORS {
             let isk = IssuanceAuthorizingKey::from_bytes(tv.isk).unwrap();
 
             let ik = IssuanceValidatingKey::from(&isk);
