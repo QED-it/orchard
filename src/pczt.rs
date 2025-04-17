@@ -583,8 +583,8 @@ mod tests {
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
             &[
-                101, 129, 254, 177, 201, 15, 190, 9, 223, 95, 188, 237, 169, 232, 107, 155, 12,
-                159, 142, 67, 121, 103, 53, 61, 67, 59, 101, 193, 43, 149, 158, 18,
+                88, 167, 13, 89, 108, 110, 147, 41, 241, 14, 6, 188, 97, 89, 157, 71, 113, 70, 121,
+                254, 85, 171, 2, 22, 70, 152, 217, 150, 129, 118, 228, 17
             ],
         );
         let orchard_digest = shielded_bundle::<OrchardZSA>(BundleType::DEFAULT_VANILLA);
