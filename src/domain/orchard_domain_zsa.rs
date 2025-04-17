@@ -71,14 +71,13 @@ impl OrchardDomainCommon for OrchardZSA {
         agh.update(&bundle.anchor().to_bytes());
         agh.update(&bundle.expiry_height().to_le_bytes());
 
-        h.update(agh.finalize().as_bytes());
-
         let mut burn_hasher = hasher(ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION);
         for burn_item in bundle.burn() {
             burn_hasher.update(&burn_item.0.to_bytes());
             burn_hasher.update(&burn_item.1.to_bytes());
         }
-        h.update(burn_hasher.finalize().as_bytes());
+        agh.update(burn_hasher.finalize().as_bytes());
+        h.update(agh.finalize().as_bytes());
 
         h.update(&(*bundle.value_balance()).into().to_le_bytes());
         h.finalize()
