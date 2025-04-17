@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_commit_in_several_steps() {
-        let mut os_rng = OsRng::default();
+        let mut os_rng = OsRng;
         let msg: Vec<bool> = (0..36).map(|_| os_rng.gen::<bool>()).collect();
 
         let rcm = NoteCommitTrapdoor(pallas::Scalar::random(&mut os_rng));
