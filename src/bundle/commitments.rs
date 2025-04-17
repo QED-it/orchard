@@ -105,7 +105,7 @@ pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>)
             ind.update(note.rseed().as_bytes());
         }
         ia.update(ind.finalize().as_bytes());
-        ia.update(action.asset_desc());
+        ia.update(action.asset_desc_hash());
         ia.update(&[u8::from(action.is_finalized())]);
     }
     h.update(ia.finalize().as_bytes());
@@ -190,7 +190,7 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle);
         assert_eq!(
             sighash.to_hex().as_str(),
-            "43cfaab1ffcd8d4752e5e7479fd619c769e3ab459b6f10bbba80533608f546b0"
+            "9491b1104eb2c6f2437f3b20be84be94f94f98a7a19b7aa3a7bc681f6ceb9664"
         );
     }
 
@@ -228,7 +228,7 @@ mod tests {
         let orchard_auth_digest = hash_bundle_auth_data(&bundle);
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            "c765769582c598930b2825224d5d9246196954fe7cbd3a2be9afa3c542c06387"
+            "4533f1ed5fcc4aa77f9ca3d7352e0f537eaaebb85bc43edc52e6ce33249fcdb3"
         );
     }
 }
