@@ -1,5 +1,7 @@
 // From https://github.com/zcash-hackworks/zcash-test-vectors/ (orchard_zsa_note_encryption)
 
+use alloc::vec::Vec;
+
 pub(crate) struct TestVector {
     pub(crate) incoming_viewing_key: [u8; 64],
     pub(crate) ovk: [u8; 32],

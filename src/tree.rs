@@ -1,5 +1,6 @@
 //! Types related to Orchard note commitment trees and anchors.
 
+use alloc::vec::Vec;
 use core::iter;
 
 use crate::{
@@ -10,9 +11,9 @@ use crate::{
     note::commitment::ExtractedNoteCommitment,
 };
 
-use halo2_gadgets::sinsemilla::primitives::HashDomain;
 use incrementalmerkletree::{Hashable, Level};
 use pasta_curves::pallas;
+use sinsemilla::HashDomain;
 
 use ff::{Field, PrimeField, PrimeFieldBits};
 use lazy_static::lazy_static;
@@ -84,7 +85,7 @@ impl Anchor {
 
 /// The Merkle path from a leaf of the note commitment tree
 /// to its anchor.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct MerklePath {
     position: u32,
     auth_path: [MerkleHashOrchard; MERKLE_DEPTH_ORCHARD],
@@ -159,12 +160,12 @@ impl MerklePath {
     }
 
     /// Returns the position of the leaf using this Merkle path.
-    pub(crate) fn position(&self) -> u32 {
+    pub fn position(&self) -> u32 {
         self.position
     }
 
     /// Returns the authentication path.
-    pub(crate) fn auth_path(&self) -> [MerkleHashOrchard; MERKLE_DEPTH_ORCHARD] {
+    pub fn auth_path(&self) -> [MerkleHashOrchard; MERKLE_DEPTH_ORCHARD] {
         self.auth_path
     }
 }

@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+extern crate alloc;
+
+use alloc::collections::BTreeMap;
 
 use rand::{rngs::OsRng, RngCore};
 
@@ -191,7 +193,7 @@ fn issue_bundle_verify_with_global_state() {
     let asset3_base = AssetBase::derive(&ik, &compute_asset_desc_hash(&asset3_desc).unwrap());
     let asset4_base = AssetBase::derive(&ik, &compute_asset_desc_hash(&asset4_desc).unwrap());
 
-    let mut global_state = HashMap::new();
+    let mut global_state = BTreeMap::new();
 
     // We'll issue and verify a series of bundles. For valid bundles, the global
     // state is updated and must match the expected result. For invalid bundles,
@@ -209,7 +211,7 @@ fn issue_bundle_verify_with_global_state() {
         ],
     );
 
-    let expected_global_state1 = HashMap::from([
+    let expected_global_state1 = BTreeMap::from([
         build_state_entry(&asset1_base, 15, false, get_first_note(&bundle1, 0)),
         build_state_entry(&asset2_base, 10, true, get_first_note(&bundle1, 1)),
         build_state_entry(&asset3_base, 5, false, get_first_note(&bundle1, 2)),
@@ -230,7 +232,7 @@ fn issue_bundle_verify_with_global_state() {
         ],
     );
 
-    let expected_global_state2 = HashMap::from([
+    let expected_global_state2 = BTreeMap::from([
         build_state_entry(&asset1_base, 18, true, get_first_note(&bundle1, 0)),
         build_state_entry(&asset2_base, 10, true, get_first_note(&bundle1, 1)),
         build_state_entry(&asset3_base, 25, false, get_first_note(&bundle1, 2)),
@@ -308,7 +310,7 @@ fn issue_bundle_verify_with_global_state() {
         ],
     );
 
-    let expected_global_state6 = HashMap::from([
+    let expected_global_state6 = BTreeMap::from([
         build_state_entry(&asset1_base, 18, true, get_first_note(&bundle1, 0)),
         build_state_entry(&asset2_base, 10, true, get_first_note(&bundle1, 1)),
         build_state_entry(&asset3_base, 75, true, get_first_note(&bundle1, 2)),

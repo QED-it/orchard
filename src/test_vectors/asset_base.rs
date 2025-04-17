@@ -1,5 +1,7 @@
 // From https://github.com/zcash-hackworks/zcash-test-vectors/ (orchard_zsa_asset_base)
 
+use alloc::vec::Vec;
+
 pub(crate) struct TestVector {
     pub(crate) key: [u8; 32],
     pub(crate) description: [u8; 512],
