@@ -64,6 +64,7 @@ impl fmt::Display for BurnError {
 
 #[cfg(test)]
 mod tests {
+    use crate::issuance::compute_asset_desc_hash;
     use crate::value::NoteValue;
 
     use super::*;
@@ -88,7 +89,10 @@ mod tests {
         let isk = IssuanceAuthorizingKey::from_bytes([1u8; 32]).unwrap();
 
         (
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc),
+            AssetBase::derive(
+                &IssuanceValidatingKey::from(&isk),
+                &compute_asset_desc_hash(asset_desc).unwrap(),
+            ),
             NoteValue::from_raw(value),
         )
     }
