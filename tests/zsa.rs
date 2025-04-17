@@ -4,9 +4,7 @@ use crate::builder::verify_bundle;
 use bridgetree::BridgeTree;
 use incrementalmerkletree::Hashable;
 use orchard::bundle::Authorized;
-use orchard::issuance::{
-    compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo, Signed,
-};
+use orchard::issuance::{verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo, Signed};
 use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 use orchard::note::{AssetBase, ExtractedNoteCommitment, Nullifier};
 
@@ -146,10 +144,9 @@ fn issue_zsa_notes(
 ) -> (Note, Note, Note) {
     let mut rng = OsRng;
     // Create a issuance bundle
-    let asset_desc_hash = compute_asset_desc_hash(asset_descr).unwrap();
-    let (mut awaiting_nullifier_bundle, _) = IssueBundle::new(
+    let awaiting_nullifier_bundle_asset = IssueBundle::new(
         keys.ik().clone(),
-        asset_desc_hash,
+        asset_descr.to_owned(),
         Some(IssueInfo {
             recipient: keys.recipient,
             value: NoteValue::from_raw(40),
@@ -158,9 +155,13 @@ fn issue_zsa_notes(
         &mut rng,
     );
 
+    assert!(awaiting_nullifier_bundle_asset.is_ok());
+
+    let (mut awaiting_nullifier_bundle, _) = awaiting_nullifier_bundle_asset.unwrap();
+
     assert!(awaiting_nullifier_bundle
         .add_recipient(
-            asset_desc_hash,
+            asset_descr,
             keys.recipient,
             NoteValue::from_raw(2),
             false,
@@ -178,7 +179,7 @@ fn issue_zsa_notes(
 
     verify_reference_note(
         reference_note,
-        AssetBase::derive(&keys.ik().clone(), &asset_desc_hash),
+        AssetBase::derive(&keys.ik().clone(), asset_descr),
     );
 
     assert!(verify_issue_bundle(&issue_bundle, issue_bundle.commitment().into(), |_| None).is_ok());

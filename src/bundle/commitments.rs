@@ -105,7 +105,7 @@ pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>)
             ind.update(note.rseed().as_bytes());
         }
         ia.update(ind.finalize().as_bytes());
-        ia.update(action.asset_desc_hash());
+        ia.update(action.asset_desc());
         ia.update(&[u8::from(action.is_finalized())]);
     }
     h.update(ia.finalize().as_bytes());
