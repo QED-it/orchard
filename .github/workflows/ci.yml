@@ -87,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Generate coverage report
-        run: cargo tarpaulin --engine llvm --timeout 600 --out xml --skip-clean --line --release --ignore-tests --packages orchard
+        run: cargo tarpaulin --engine llvm --timeout 600 --out xml --skip-clean --line --ignore-tests --packages orchard
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3.1.4
 
