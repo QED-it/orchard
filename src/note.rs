@@ -24,7 +24,7 @@ pub use self::commitment::{ExtractedNoteCommitment, NoteCommitment};
 pub(crate) mod nullifier;
 pub use self::nullifier::Nullifier;
 
-const ZSA_ISSUE_NOTE_RHO_PERSONALIZATION: &[u8; 16] = b"ZSA_IssueNoteRh0";
+const ZSA_ISSUE_NOTE_RHO_PERSONALIZATION: &[u8; 16] = b"ZSA_IssueNoteRho";
 
 /// The randomness used to construct a note.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
