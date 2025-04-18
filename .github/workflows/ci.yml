@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --verbose --release
       - name: Verify working directory is clean
         run: git diff --exit-code
 
@@ -34,7 +34,7 @@ jobs:
       - name: Remove lockfile to build with latest dependencies
         run: rm Cargo.lock
       - name: Build crate
-        run: cargo build --all-features --verbose --release
+        run: cargo build --all-features --verbose
       - name: Verify working directory is clean (excluding lockfile)
         run: git diff --exit-code ':!Cargo.lock'
 
