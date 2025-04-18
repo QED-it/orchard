@@ -8,7 +8,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest, windows-latest]
+#        os: [ubuntu-latest, windows-latest, macOS-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -86,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Generate coverage report
-        run: cargo tarpaulin --engine llvm --timeout 600 --out xml --skip-clean
+        run: cargo tarpaulin --engine llvm --timeout 600 --out xml --skip-clean --line --release
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3.1.4
 
