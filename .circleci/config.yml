@@ -18,12 +18,22 @@ jobs:
     resource_class: large # specify a resource class
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - rust-cache-v1-{{ checksum "Cargo.lock" }}
+            - rust-cache-v1-
       - run:
           name: "cargo test"
           command: |
             sudo apt update && sudo apt-get install libfontconfig libfontconfig1-dev libfreetype6-dev;
             cargo version;
             cargo test --all --all-features --release;
+      - save_cache:
+          paths:
+            - target
+            - ~/.cargo/registry
+            - ~/.cargo/git
+          key: rust-cache-v1-{{ checksum "Cargo.lock" }}
       - slack/notify:
           event: fail
           template: basic_fail_1
