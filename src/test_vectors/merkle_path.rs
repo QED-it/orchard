@@ -1,4 +1,5 @@
 // From https://github.com/zcash-hackworks/zcash-test-vectors/ (orchard_merkle_tree)
+use alloc::vec::Vec;
 
 pub(crate) struct TestVector {
     pub(crate) leaves: [[u8; 32]; 16],

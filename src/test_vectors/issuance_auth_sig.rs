@@ -1,5 +1,7 @@
 // From https://github.com/zcash-hackworks/zcash-test-vectors/ (orchard_zsa_issuance_auth_sig)
 
+use alloc::vec::Vec;
+
 pub(crate) struct TestVector {
     pub(crate) isk: [u8; 32],
     pub(crate) ik: [u8; 32],
