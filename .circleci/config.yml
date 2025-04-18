@@ -23,7 +23,7 @@ jobs:
           command: |
             sudo apt update && sudo apt-get install libfontconfig libfontconfig1-dev libfreetype6-dev;
             cargo version;
-            cargo test --all --all-features -- --test-threads=$(nproc);
+            cargo test --all --all-features;
       - slack/notify:
           event: fail
           template: basic_fail_1
