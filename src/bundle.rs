@@ -183,6 +183,9 @@ impl Flags {
         if self.zsa_enabled {
             value |= FLAG_ZSA_ENABLED;
         }
+        if self.swaps_enabled {
+            value |= FLAG_SWAPS_ENABLED;
+        }
         value
     }
 
