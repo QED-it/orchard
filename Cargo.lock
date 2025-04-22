@@ -975,18 +975,20 @@ dependencies = [
 
 [[package]]
 name = "halo2_gadgets"
-version = "0.3.0"
-source = "git+https://github.com/QED-it/halo2?branch=improve-backward-compatability-without-zsa#9ecbd6513163175efb4b699f9e80e0a14e70c1e6"
+version = "0.3.1"
+source = "git+https://github.com/QED-it/halo2?rev=ed043bd4f360d97eb0739fd503412416b535f27b#ed043bd4f360d97eb0739fd503412416b535f27b"
 dependencies = [
  "arrayvec",
  "bitvec",
  "ff",
  "group",
+ "halo2_poseidon 0.1.0 (git+https://github.com/QED-it/halo2?rev=ed043bd4f360d97eb0739fd503412416b535f27b)",
  "halo2_proofs",
  "lazy_static",
  "pasta_curves",
  "proptest",
  "rand",
+ "sinsemilla",
  "subtle",
  "uint",
 ]
@@ -1010,9 +1012,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "halo2_poseidon"
+version = "0.1.0"
+source = "git+https://github.com/QED-it/halo2?rev=ed043bd4f360d97eb0739fd503412416b535f27b#ed043bd4f360d97eb0739fd503412416b535f27b"
+dependencies = [
+ "bitvec",
+ "ff",
+ "group",
+ "pasta_curves",
+]
+
+[[package]]
 name = "halo2_proofs"
 version = "0.3.0"
-source = "git+https://github.com/QED-it/halo2?branch=improve-backward-compatability-without-zsa#9ecbd6513163175efb4b699f9e80e0a14e70c1e6"
+source = "git+https://github.com/QED-it/halo2?rev=ed043bd4f360d97eb0739fd503412416b535f27b#ed043bd4f360d97eb0739fd503412416b535f27b"
 dependencies = [
  "blake2b_simd",
  "ff",
@@ -1445,7 +1458,7 @@ dependencies = [
  "getset",
  "group",
  "halo2_gadgets",
- "halo2_poseidon",
+ "halo2_poseidon 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "halo2_proofs",
  "hex",
  "image",
