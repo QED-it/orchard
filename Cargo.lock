@@ -2217,7 +2217,7 @@ checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 [[package]]
 name = "sinsemilla"
 version = "0.1.0"
-source = "git+https://github.com/QED-it/sinsemilla?branch=zsa1#3542e897d42187878ff9da714f3221cc1774caa7"
+source = "git+https://github.com/QED-it/sinsemilla?rev=3542e897d42187878ff9da714f3221cc1774caa7#3542e897d42187878ff9da714f3221cc1774caa7"
 dependencies = [
  "group",
  "pasta_curves",
