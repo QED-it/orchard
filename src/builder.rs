@@ -157,8 +157,6 @@ pub enum BuildError {
     BurnDuplicateAsset,
     /// There is no available split note for this asset.
     NoSplitNoteAvailable,
-    /// Burning is not allowed in an ActionGroup.
-    BurnNotEmptyInActionGroup,
 }
 
 impl Display for BuildError {
@@ -182,7 +180,6 @@ impl Display for BuildError {
             BurnZero => f.write_str("Burning is not possible for zero values"),
             BurnDuplicateAsset => f.write_str("Duplicate assets are not allowed when burning"),
             NoSplitNoteAvailable => f.write_str("No split note has been provided for this asset"),
-            BurnNotEmptyInActionGroup => f.write_str("Burning is not possible for action group"),
         }
     }
 }
@@ -712,9 +709,6 @@ impl Builder {
         rng: impl RngCore,
         expiry_height: u32,
     ) -> Result<UnauthorizedBundleWithMetadata<V, OrchardZSA>, BuildError> {
-        if !self.burn.is_empty() {
-            return Err(BuildError::BurnNotEmptyInActionGroup);
-        }
         bundle(
             rng,
             self.anchor,
