@@ -307,7 +307,7 @@ mod tests {
         let mut tree: ShardTree<MemoryShardStore<MerkleHashOrchard, u32>, 4, 3> =
             ShardTree::new(MemoryShardStore::empty(), 100);
         for (i, tv) in crate::test_vectors::merkle_path::TEST_VECTORS
-            .into_iter()
+            .iter()
             .enumerate()
         {
             let checkpoint_id = u32::try_from(i).unwrap();

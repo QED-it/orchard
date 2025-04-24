@@ -1064,7 +1064,7 @@ mod tests {
 
         let action = awaiting_sighash_bundle.get_action_by_asset(&asset).unwrap();
         assert_eq!(action.notes.len(), 3);
-        let reference_note = action.notes.get(0).unwrap();
+        let reference_note = action.notes.first().unwrap();
         verify_reference_note(reference_note, asset);
         let first_note = action.notes.get(1).unwrap();
         assert_eq!(first_note.value().inner(), 5);
@@ -1080,7 +1080,7 @@ mod tests {
             .get_action_by_desc_hash(&asset_desc_hash_2)
             .unwrap();
         assert_eq!(action2.notes.len(), 2);
-        let reference_note = action2.notes.get(0).unwrap();
+        let reference_note = action2.notes.first().unwrap();
         verify_reference_note(reference_note, AssetBase::derive(&ik, &asset_desc_hash_2));
         let first_note = action2.notes().get(1).unwrap();
         assert_eq!(first_note.value().inner(), 15);
@@ -1778,7 +1778,7 @@ mod tests {
         // Checks for the case of UTF-8 encoded asset description.
         let action = bundle.get_action_by_asset(&asset_base_1).unwrap();
         assert_eq!(action.asset_desc_hash(), &asset_desc_hash_1);
-        let reference_note = action.notes.get(0).unwrap();
+        let reference_note = action.notes.first().unwrap();
         verify_reference_note(reference_note, asset_base_1);
         assert_eq!(action.notes.get(1).unwrap().value().inner(), 5);
         assert_eq!(
@@ -1789,7 +1789,7 @@ mod tests {
         // Checks for the case on non-UTF-8 encoded asset description.
         let action2 = bundle.get_action_by_asset(&asset_base_2).unwrap();
         assert_eq!(action2.asset_desc_hash(), &asset_desc_hash_2);
-        let reference_note = action2.notes.get(0).unwrap();
+        let reference_note = action2.notes.first().unwrap();
         verify_reference_note(reference_note, asset_base_2);
         assert_eq!(action2.notes.get(1).unwrap().value().inner(), 10);
         assert_eq!(

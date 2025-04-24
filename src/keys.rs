@@ -268,9 +268,8 @@ impl IssuanceAuthorizingKey {
     }
 
     /// Returns the raw bytes of the issuance key.
-    /// Unwrap call never fails since the issuance authorizing key is exactly 32 bytes.
     pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.to_bytes().try_into().unwrap()
+        self.0.to_bytes().into()
     }
 
     /// Derives the Orchard-ZSA issuance key for the given seed, coin type, and account.
@@ -334,9 +333,8 @@ impl Eq for IssuanceValidatingKey {}
 impl IssuanceValidatingKey {
     /// Converts this issuance validating key to its serialized form,
     /// in big-endian order as defined in BIP 340.
-    /// Unwrap call never fails since the issuance validating key is exactly 32 bytes.
     pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.to_bytes().try_into().unwrap()
+        self.0.to_bytes().into()
     }
 
     /// Constructs an Orchard issuance validating key from the provided bytes.
