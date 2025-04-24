@@ -4,7 +4,11 @@ use core::fmt;
 
 use blake2b_simd::Params as Blake2bParams;
 use subtle::{Choice, ConstantTimeEq, CtOption};
-use zip32::ChainCode;
+use zcash_spec::VariableLengthSlice;
+use zip32::{
+    hardened_only::{self, HardenedOnlyKey},
+    ChainCode,
+};
 
 use crate::{
     keys::{FullViewingKey, SpendingKey},
@@ -119,44 +123,56 @@ impl KeyIndex {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Orchard;
+
+impl hardened_only::Context for Orchard {
+    const MKG_DOMAIN: [u8; 16] = *ZIP32_ORCHARD_PERSONALIZATION;
+    const CKD_DOMAIN: PrfExpand<([u8; 32], [u8; 4], [u8; 1], VariableLengthSlice)> =
+        PrfExpand::ORCHARD_ZIP32_CHILD;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Issuance;
+
+impl hardened_only::Context for Issuance {
+    const MKG_DOMAIN: [u8; 16] = *ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE;
+    const CKD_DOMAIN: PrfExpand<([u8; 32], [u8; 4], [u8; 1], VariableLengthSlice)> =
+        PrfExpand::ORCHARD_ZIP32_CHILD;
+}
+
 /// An Orchard extended spending key.
 ///
 /// Defined in [ZIP32: Orchard extended keys][orchardextendedkeys].
 ///
 /// [orchardextendedkeys]: https://zips.z.cash/zip-0032#orchard-extended-keys
 #[derive(Debug, Clone)]
-pub(crate) struct ExtendedSpendingKey {
+pub(crate) struct ExtendedSpendingKey<C: hardened_only::Context> {
     depth: u8,
     parent_fvk_tag: FvkTag,
     child_index: KeyIndex,
-    chain_code: ChainCode,
-    sk: SpendingKey,
+    inner: HardenedOnlyKey<C>,
 }
 
-impl ConstantTimeEq for ExtendedSpendingKey {
+impl<C: hardened_only::Context> ConstantTimeEq for ExtendedSpendingKey<C> {
     fn ct_eq(&self, rhs: &Self) -> Choice {
         self.depth.ct_eq(&rhs.depth)
             & self.parent_fvk_tag.0.ct_eq(&rhs.parent_fvk_tag.0)
             & self.child_index.ct_eq(&rhs.child_index)
-            & self.chain_code.ct_eq(&rhs.chain_code)
-            & self.sk.ct_eq(&rhs.sk)
+            & self.inner.ct_eq(&rhs.inner)
     }
 }
 
 #[allow(non_snake_case)]
-impl ExtendedSpendingKey {
+impl<C: hardened_only::Context> ExtendedSpendingKey<C> {
     /// Returns the spending key of the child key corresponding to
     /// the path derived from the master key
     ///
     /// # Panics
     ///
     /// Panics if seed results in invalid spending key.
-    pub fn from_path(
-        seed: &[u8],
-        path: &[ChildIndex],
-        personalization: &[u8; 16],
-    ) -> Result<Self, Error> {
-        let mut xsk = Self::master(seed, personalization)?;
+    pub fn from_path(seed: &[u8], path: &[ChildIndex]) -> Result<Self, Error> {
+        let mut xsk = Self::master(seed)?;
         for i in path {
             xsk = xsk.derive_child(*i)?;
         }
@@ -172,34 +188,20 @@ impl ExtendedSpendingKey {
     /// # Panics
     ///
     /// Panics if the seed is shorter than 32 bytes or longer than 252 bytes.
-    fn master(seed: &[u8], personalization: &[u8; 16]) -> Result<Self, Error> {
-        assert!(seed.len() >= 32 && seed.len() <= 252);
-        // I := BLAKE2b-512("ZcashIP32Orchard", seed)
-        let I: [u8; 64] = {
-            let mut I = Blake2bParams::new()
-                .hash_length(64)
-                .personal(personalization)
-                .to_state();
-            I.update(seed);
-            I.finalize().as_bytes().try_into().unwrap()
-        };
-        // I_L is used as the master spending key sk_m.
-        let sk_m = SpendingKey::from_bytes(I[..32].try_into().unwrap());
-        if sk_m.is_none().into() {
+    fn master(seed: &[u8]) -> Result<Self, Error> {
+        let m_orchard = HardenedOnlyKey::master(&[seed]);
+
+        let sk = SpendingKey::from_bytes(*m_orchard.parts().0);
+        if sk.is_none().into() {
             return Err(Error::InvalidSpendingKey);
         }
-        let sk_m = sk_m.unwrap();
-
-        // I_R is used as the master chain code c_m.
-        let c_m = ChainCode::new(I[32..].try_into().unwrap());
 
         // For the master extended spending key, depth is 0, parent_fvk_tag is 4 zero bytes, and i is 0.
         Ok(Self {
             depth: 0,
             parent_fvk_tag: FvkTag([0; 4]),
             child_index: KeyIndex::master(),
-            chain_code: c_m,
-            sk: sk_m,
+            inner: m_orchard,
         })
     }
 
@@ -211,22 +213,12 @@ impl ExtendedSpendingKey {
     ///
     /// Discards index if it results in an invalid sk
     fn derive_child(&self, index: ChildIndex) -> Result<Self, Error> {
-        // I := PRF^Expand(c_par, [0x81] || sk_par || I2LEOSP(i))
-        let I: [u8; 64] = PrfExpand::ORCHARD_ZIP32_CHILD.with(
-            self.chain_code.as_bytes(),
-            self.sk.to_bytes(),
-            &index.index().to_le_bytes(),
-        );
+        let child_i = self.inner.derive_child(index);
 
-        // I_L is used as the child spending key sk_i.
-        let sk_i = SpendingKey::from_bytes(I[..32].try_into().unwrap());
-        if sk_i.is_none().into() {
+        let sk = SpendingKey::from_bytes(*child_i.parts().0);
+        if sk.is_none().into() {
             return Err(Error::InvalidSpendingKey);
         }
-        let sk_i = sk_i.unwrap();
-
-        // I_R is used as the child chain code c_i.
-        let c_i = ChainCode::new(I[32..].try_into().unwrap());
 
         let fvk: FullViewingKey = self.into();
 
@@ -234,14 +226,18 @@ impl ExtendedSpendingKey {
             depth: self.depth + 1,
             parent_fvk_tag: FvkFingerprint::from(&fvk).tag(),
             child_index: KeyIndex::child(index),
-            chain_code: c_i,
-            sk: sk_i,
+            inner: child_i,
         })
     }
 
     /// Returns sk of this ExtendedSpendingKey.
     pub fn sk(&self) -> SpendingKey {
-        self.sk
+        SpendingKey::from_bytes(*self.inner.parts().0).expect("checked during derivation")
+    }
+
+    /// Returns the chain code for this ExtendedSpendingKey.
+    fn chain_code(&self) -> &ChainCode {
+        self.inner.parts().1
     }
 }
 
@@ -252,7 +248,7 @@ mod tests {
     #[test]
     fn derive_child() {
         let seed = [0; 32];
-        let xsk_m = ExtendedSpendingKey::master(&seed, ZIP32_ORCHARD_PERSONALIZATION).unwrap();
+        let xsk_m = ExtendedSpendingKey::<Orchard>::master(&seed).unwrap();
 
         let i_5 = ChildIndex::hardened(5);
         let xsk_5 = xsk_m.derive_child(i_5);
@@ -263,28 +259,59 @@ mod tests {
     #[test]
     fn path() {
         let seed = [0; 32];
-        let xsk_m = ExtendedSpendingKey::master(&seed, ZIP32_ORCHARD_PERSONALIZATION).unwrap();
+        let xsk_m = ExtendedSpendingKey::<Orchard>::master(&seed).unwrap();
 
         let xsk_5h = xsk_m.derive_child(ChildIndex::hardened(5)).unwrap();
         assert!(bool::from(
-            ExtendedSpendingKey::from_path(
-                &seed,
-                &[ChildIndex::hardened(5)],
-                ZIP32_ORCHARD_PERSONALIZATION
-            )
-            .unwrap()
-            .ct_eq(&xsk_5h)
+            ExtendedSpendingKey::<Orchard>::from_path(&seed, &[ChildIndex::hardened(5)],)
+                .unwrap()
+                .ct_eq(&xsk_5h)
         ));
 
         let xsk_5h_7 = xsk_5h.derive_child(ChildIndex::hardened(7)).unwrap();
         assert!(bool::from(
-            ExtendedSpendingKey::from_path(
+            ExtendedSpendingKey::<Orchard>::from_path(
                 &seed,
                 &[ChildIndex::hardened(5), ChildIndex::hardened(7)],
-                ZIP32_ORCHARD_PERSONALIZATION
             )
             .unwrap()
             .ct_eq(&xsk_5h_7)
         ));
+    }
+
+    #[test]
+    fn test_vectors() {
+        let test_vectors = crate::test_vectors::zip32::TEST_VECTORS;
+
+        let seed = [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31,
+        ];
+
+        let i1h = ChildIndex::hardened(1);
+        let i2h = ChildIndex::hardened(2);
+        let i3h = ChildIndex::hardened(3);
+
+        let m = ExtendedSpendingKey::<Orchard>::master(&seed).unwrap();
+        let m_1h = m.derive_child(i1h).unwrap();
+        let m_1h_2h = ExtendedSpendingKey::<Orchard>::from_path(&seed, &[i1h, i2h]).unwrap();
+        let m_1h_2h_3h = m_1h_2h.derive_child(i3h).unwrap();
+
+        let xsks = [m, m_1h, m_1h_2h, m_1h_2h_3h];
+        assert_eq!(test_vectors.len(), xsks.len());
+
+        for (xsk, tv) in xsks.iter().zip(test_vectors.iter()) {
+            assert_eq!(xsk.sk().to_bytes(), &tv.sk);
+            assert_eq!(xsk.chain_code().as_bytes(), &tv.c);
+
+            assert_eq!(xsk.depth, tv.xsk[0]);
+            assert_eq!(&xsk.parent_fvk_tag.0, &tv.xsk[1..5]);
+            assert_eq!(&xsk.child_index.index().to_le_bytes(), &tv.xsk[5..9]);
+            assert_eq!(xsk.chain_code().as_bytes(), &tv.xsk[9..9 + 32]);
+            assert_eq!(xsk.sk().to_bytes(), &tv.xsk[9 + 32..]);
+
+            let fvk: FullViewingKey = (&xsk.sk()).into();
+            assert_eq!(FvkFingerprint::from(&fvk).0, tv.fp);
+        }
     }
 }

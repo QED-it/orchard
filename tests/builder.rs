@@ -1,5 +1,4 @@
-use bridgetree::BridgeTree;
-use incrementalmerkletree::Hashable;
+use incrementalmerkletree::{Hashable, Marking, Retention};
 use orchard::{
     builder::{Builder, BundleType},
     bundle::{Authorized, Flags},
@@ -14,6 +13,7 @@ use orchard::{
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption_zsa::try_note_decryption;
 
 pub fn verify_bundle<FL: OrchardFlavor>(
@@ -39,18 +39,25 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
     // Use the tree with a single leaf.
     let cmx: ExtractedNoteCommitment = note.commitment().into();
     let leaf = MerkleHashOrchard::from_cmx(&cmx);
-    let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
-    tree.append(leaf);
-    let position = tree.mark().unwrap();
-    let root = tree.root(0).unwrap();
-    let auth_path = tree.witness(position, 0).unwrap();
-    let merkle_path = MerklePath::from_parts(
-        u64::from(position).try_into().unwrap(),
-        auth_path[..].try_into().unwrap(),
-    );
-    let anchor = root.into();
-    assert_eq!(anchor, merkle_path.root(cmx));
-    (merkle_path, anchor)
+    let mut tree: ShardTree<MemoryShardStore<MerkleHashOrchard, u32>, 32, 16> =
+        ShardTree::new(MemoryShardStore::empty(), 100);
+    tree.append(
+        leaf,
+        Retention::Checkpoint {
+            id: 0,
+            marking: Marking::Marked,
+        },
+    )
+    .unwrap();
+    let root = tree.root_at_checkpoint_id(&0).unwrap().unwrap();
+    let position = tree.max_leaf_position(None).unwrap().unwrap();
+    let merkle_path = tree
+        .witness_at_checkpoint_id(position, &0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(root, merkle_path.root(MerkleHashOrchard::from_cmx(&cmx)));
+
+    (merkle_path.into(), root.into())
 }
 
 trait BundleOrchardFlavor: OrchardFlavor {
@@ -91,7 +98,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
         );
         let note_value = NoteValue::from_raw(5000);
         assert_eq!(
-            builder.add_output(None, recipient, note_value, AssetBase::native(), None),
+            builder.add_output(None, recipient, note_value, AssetBase::native(), [0u8; 512]),
             Ok(())
         );
         let (unauthorized, bundle_meta) = builder.build(&mut rng).unwrap();
@@ -163,7 +170,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
                 recipient,
                 NoteValue::from_raw(5000),
                 AssetBase::native(),
-                None
+                [0u8; 512]
             ),
             Ok(())
         );
