@@ -21,7 +21,7 @@ const ZIP32_ORCHARD_FVFP_PERSONALIZATION: &[u8; 16] = b"ZcashOrchardFVFP";
 /// Personalization for the master extended spending key
 pub const ZIP32_ORCHARD_PERSONALIZATION: &[u8; 16] = b"ZcashIP32Orchard";
 /// Personalization for the master extended issuance key
-pub const ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE: &[u8; 16] = b"ZIP32ZSAIssue_V1";
+pub const ZIP32_ORCHARD_ISSUANCE_PERSONALIZATION: &[u8; 16] = b"ZIP32ZSAIssue_V1";
 
 /// Errors produced in derivation of extended spending keys
 #[derive(Debug, PartialEq, Eq)]
@@ -136,7 +136,7 @@ impl hardened_only::Context for Orchard {
 pub(crate) struct Issuance;
 
 impl hardened_only::Context for Issuance {
-    const MKG_DOMAIN: [u8; 16] = *ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE;
+    const MKG_DOMAIN: [u8; 16] = *ZIP32_ORCHARD_ISSUANCE_PERSONALIZATION;
     const CKD_DOMAIN: PrfExpand<([u8; 32], [u8; 4], [u8; 1], VariableLengthSlice)> =
         PrfExpand::ORCHARD_ZIP32_CHILD;
 }
