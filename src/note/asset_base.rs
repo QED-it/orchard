@@ -197,7 +197,7 @@ pub mod testing {
 
     #[test]
     fn test_vectors() {
-        let test_vectors = crate::test_vectors::asset_base::test_vectors();
+        let test_vectors = crate::test_vectors::asset_base::TEST_VECTORS;
 
         for tv in test_vectors {
             let asset_desc_hash =

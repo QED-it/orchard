@@ -1,4 +1,4 @@
-//! Test vectors for Orchard ZIP 32 key derivation.
+// From https://github.com/zcash-hackworks/zcash-test-vectors/blob/master/orchard_zip32.py
 
 pub(crate) struct TestVector {
     pub(crate) sk: [u8; 32],
@@ -7,7 +7,6 @@ pub(crate) struct TestVector {
     pub(crate) fp: [u8; 32],
 }
 
-// From https://github.com/zcash-hackworks/zcash-test-vectors/blob/master/orchard_zip32.py
 pub(crate) const TEST_VECTORS: &[TestVector] = &[
     TestVector {
         sk: [
