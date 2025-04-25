@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
-
+use nonempty::NonEmpty;
 use rand::{rngs::OsRng, RngCore};
 
 use orchard::{
@@ -128,7 +128,9 @@ fn build_issue_bundle(params: &TestParams, data: &[IssueTestNote]) -> IssueBundl
         first_issuance,
     } = data.first().unwrap().clone();
 
-    let asset_desc_hash = compute_asset_desc_hash(&asset_desc).unwrap();
+    let asset_desc_hash = compute_asset_desc_hash(
+        &NonEmpty::from_slice(&asset_desc).expect("asset_desc must not be empty"),
+    );
 
     let (mut bundle, _) = IssueBundle::new(
         ik.clone(),
@@ -152,7 +154,9 @@ fn build_issue_bundle(params: &TestParams, data: &[IssueTestNote]) -> IssueBundl
         first_issuance,
     } in data.iter().skip(1).cloned()
     {
-        let asset_desc_hash = compute_asset_desc_hash(&asset_desc).unwrap();
+        let asset_desc_hash = compute_asset_desc_hash(
+            &NonEmpty::from_slice(&asset_desc).expect("asset_desc must not be empty"),
+        );
         bundle
             .add_recipient(
                 asset_desc_hash,
@@ -188,10 +192,30 @@ fn issue_bundle_verify_with_global_state() {
     let asset3_desc = b"Verify with issued assets 3".to_vec();
     let asset4_desc = b"Verify with issued assets 4".to_vec();
 
-    let asset1_base = AssetBase::derive(&ik, &compute_asset_desc_hash(&asset1_desc).unwrap());
-    let asset2_base = AssetBase::derive(&ik, &compute_asset_desc_hash(&asset2_desc).unwrap());
-    let asset3_base = AssetBase::derive(&ik, &compute_asset_desc_hash(&asset3_desc).unwrap());
-    let asset4_base = AssetBase::derive(&ik, &compute_asset_desc_hash(&asset4_desc).unwrap());
+    let asset1_base = AssetBase::derive(
+        &ik,
+        &compute_asset_desc_hash(
+            &NonEmpty::from_slice(&asset1_desc).expect("asset_desc must not be empty"),
+        ),
+    );
+    let asset2_base = AssetBase::derive(
+        &ik,
+        &compute_asset_desc_hash(
+            &NonEmpty::from_slice(&asset2_desc).expect("asset_desc must not be empty"),
+        ),
+    );
+    let asset3_base = AssetBase::derive(
+        &ik,
+        &compute_asset_desc_hash(
+            &NonEmpty::from_slice(&asset3_desc).expect("asset_desc must not be empty"),
+        ),
+    );
+    let asset4_base = AssetBase::derive(
+        &ik,
+        &compute_asset_desc_hash(
+            &NonEmpty::from_slice(&asset4_desc).expect("asset_desc must not be empty"),
+        ),
+    );
 
     let mut global_state = BTreeMap::new();
 

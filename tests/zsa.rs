@@ -2,6 +2,7 @@ mod builder;
 
 use crate::builder::verify_bundle;
 use incrementalmerkletree::{Hashable, Marking, Retention};
+use nonempty::NonEmpty;
 use orchard::bundle::Authorized;
 use orchard::issuance::{
     compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo, Signed,
@@ -160,7 +161,9 @@ fn issue_zsa_notes(
 ) -> (Note, Note, Note) {
     let mut rng = OsRng;
     // Create a issuance bundle
-    let asset_desc_hash = compute_asset_desc_hash(asset_descr).unwrap();
+    let asset_desc_hash = compute_asset_desc_hash(
+        &NonEmpty::from_slice(asset_descr).expect("asset_desc must not be empty"),
+    );
     let (mut awaiting_nullifier_bundle, _) = IssueBundle::new(
         keys.ik().clone(),
         asset_desc_hash,

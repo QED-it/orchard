@@ -67,6 +67,7 @@ impl fmt::Display for BurnError {
 mod tests {
     use crate::issuance::compute_asset_desc_hash;
     use crate::value::NoteValue;
+    use nonempty::NonEmpty;
 
     use super::*;
 
@@ -92,7 +93,9 @@ mod tests {
         (
             AssetBase::derive(
                 &IssuanceValidatingKey::from(&isk),
-                &compute_asset_desc_hash(asset_desc).unwrap(),
+                &compute_asset_desc_hash(
+                    &NonEmpty::from_slice(asset_desc).expect("asset_desc must not be empty"),
+                ),
             ),
             NoteValue::from_raw(value),
         )
