@@ -1,4 +1,3 @@
-use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use core::cmp::Ordering;
 use core::hash::{Hash, Hasher};
