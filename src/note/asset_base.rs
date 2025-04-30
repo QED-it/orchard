@@ -48,8 +48,7 @@ pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
 ///    Defined in [ZIP-226: Transfer and Burn of Zcash Shielded Assets][assetdigest].
 ///
 ///    [assetdigest]: https://zips.z.cash/zip-0226.html#asset-identifiers
-pub fn asset_digest(asset_id: Vec<u8>) -> Blake2bHash {
-    Params::new()
+pub fn asset_digest(asset_id: [u8; 65]) -> Blake2bHash {    Params::new()
         .hash_length(64)
         .personal(ZSA_ASSET_DIGEST_PERSONALIZATION)
         .to_state()
@@ -79,9 +78,16 @@ impl AssetBase {
     /// Panics if the derived Asset Base is the identity point.
     #[allow(non_snake_case)]
     pub fn derive(ik: &IssuanceValidatingKey, asset_desc_hash: &[u8; 32]) -> Self {
-        // EncodeAssetId(ik, asset_desc_hash) = version_byte || ik || asset_desc_hash
         let version_byte = [0x00];
-        let encode_asset_id = [&version_byte[..], &ik.to_bytes(), asset_desc_hash].concat();
+
+        // EncodeAssetId(ik, asset_desc_hash) = version_byte || ik || asset_desc_hash
+        let encode_asset_id: [u8; 65] = {
+            let mut array = [0u8; 65];
+            array[..1].copy_from_slice(&version_byte);
+            array[1..33].copy_from_slice(&ik.to_bytes());
+            array[33..].copy_from_slice(asset_desc_hash);
+            array
+        };
 
         let asset_digest = asset_digest(encode_asset_id);
 
