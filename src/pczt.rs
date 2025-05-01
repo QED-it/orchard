@@ -368,10 +368,11 @@ impl Zip32Derivation {
 mod tests {
     use crate::orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA};
     use blake2b_simd::Hash as Blake2bHash;
-    use bridgetree::BridgeTree;
     use ff::{Field, PrimeField};
+    use incrementalmerkletree::{Marking, Retention};
     use pasta_curves::pallas;
     use rand::{rngs::StdRng, SeedableRng};
+    use shardtree::{store::memory::MemoryShardStore, ShardTree};
 
     use crate::{
         builder::{Builder, BundleType},
@@ -381,7 +382,7 @@ mod tests {
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
         pczt::Zip32Derivation,
-        tree::{MerkleHashOrchard, MerklePath, EMPTY_ROOTS},
+        tree::{MerkleHashOrchard, EMPTY_ROOTS},
         value::NoteValue,
         Note,
     };
@@ -402,7 +403,7 @@ mod tests {
                 recipient,
                 NoteValue::from_raw(5000),
                 AssetBase::native(),
-                None,
+                [0u8; 512],
             )
             .unwrap();
         let balance: i64 = builder.value_balance().unwrap();
@@ -435,8 +436,8 @@ mod tests {
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
             &[
-                45, 252, 254, 184, 194, 31, 70, 169, 218, 152, 66, 18, 68, 10, 116, 52, 161, 61,
-                63, 45, 222, 71, 88, 217, 180, 128, 198, 106, 105, 85, 171, 209
+                125, 19, 100, 107, 3, 171, 81, 23, 245, 50, 91, 78, 135, 135, 128, 233, 61, 59, 86,
+                202, 19, 166, 109, 180, 142, 91, 142, 247, 193, 115, 62, 124
             ],
         );
         let orchard_digest = shielding_bundle::<OrchardZSA>(BundleType::DEFAULT_VANILLA);
@@ -444,8 +445,8 @@ mod tests {
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
             &[
-                78, 159, 22, 157, 2, 106, 192, 228, 239, 178, 208, 2, 220, 43, 231, 45, 111, 100,
-                66, 31, 155, 132, 35, 180, 255, 168, 2, 142, 73, 82, 142, 153
+                122, 130, 33, 216, 72, 232, 156, 154, 205, 11, 49, 191, 50, 240, 250, 156, 3, 94,
+                1, 155, 155, 196, 165, 101, 32, 229, 39, 31, 254, 231, 17, 240
             ],
         );
     }
@@ -455,11 +456,11 @@ mod tests {
         let orchard_digest = shielding_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
         assert_eq!(
             orchard_digest.as_bytes(),
-            // `orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`.
+            // `orchard_digest` taken from the `zcash/orchard` repository at commit `4ac248d0` (v0.11.0)
             // This ensures backward compatibility.
             &[
-                141, 22, 191, 36, 104, 236, 27, 199, 73, 129, 244, 110, 215, 74, 243, 97, 113, 161,
-                227, 211, 136, 251, 164, 64, 252, 202, 28, 35, 243, 122, 36, 115,
+                147, 96, 110, 14, 246, 238, 164, 162, 46, 183, 168, 240, 241, 99, 242, 47, 65, 4,
+                166, 175, 174, 171, 39, 39, 15, 59, 147, 85, 20, 220, 202, 205,
             ],
         );
     }
@@ -498,30 +499,38 @@ mod tests {
         let (anchor, merkle_path) = {
             let cmx: ExtractedNoteCommitment = note.commitment().into();
             let leaf = MerkleHashOrchard::from_cmx(&cmx);
-            let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
-            tree.append(leaf);
-            let position = tree.mark().unwrap();
-            let root = tree.root(0).unwrap();
-            let auth_path = tree.witness(position, 0).unwrap();
-            let merkle_path = MerklePath::from_parts(
-                u64::from(position).try_into().unwrap(),
-                auth_path[..].try_into().unwrap(),
-            );
-            let anchor = root.into();
-            assert_eq!(anchor, merkle_path.root(cmx));
-            (anchor, merkle_path)
+            let mut tree: ShardTree<MemoryShardStore<MerkleHashOrchard, u32>, 32, 16> =
+                ShardTree::new(MemoryShardStore::empty(), 100);
+            tree.append(
+                leaf,
+                Retention::Checkpoint {
+                    id: 0,
+                    marking: Marking::Marked,
+                },
+            )
+            .unwrap();
+            let root = tree.root_at_checkpoint_id(&0).unwrap().unwrap();
+            let position = tree.max_leaf_position(None).unwrap().unwrap();
+            let merkle_path = tree
+                .witness_at_checkpoint_id(position, &0)
+                .unwrap()
+                .unwrap();
+            assert_eq!(root, merkle_path.root(MerkleHashOrchard::from_cmx(&cmx)));
+            (root.into(), merkle_path)
         };
 
         // Run the Creator and Constructor roles.
         let mut builder = Builder::new(bundle_type, anchor);
-        builder.add_spend(fvk.clone(), note, merkle_path).unwrap();
+        builder
+            .add_spend(fvk.clone(), note, merkle_path.into())
+            .unwrap();
         builder
             .add_output(
                 None,
                 recipient,
                 NoteValue::from_raw(10_000),
                 AssetBase::native(),
-                None,
+                [0u8; 512],
             )
             .unwrap();
         builder
@@ -530,7 +539,7 @@ mod tests {
                 fvk.address_at(0u32, Scope::Internal),
                 NoteValue::from_raw(5_000),
                 AssetBase::native(),
-                None,
+                [0u8; 512],
             )
             .unwrap();
         let balance: i64 = builder.value_balance().unwrap();
@@ -583,8 +592,8 @@ mod tests {
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
             &[
-                88, 167, 13, 89, 108, 110, 147, 41, 241, 14, 6, 188, 97, 89, 157, 71, 113, 70, 121,
-                254, 85, 171, 2, 22, 70, 152, 217, 150, 129, 118, 228, 17
+                38, 232, 168, 144, 71, 125, 130, 148, 116, 103, 34, 131, 164, 109, 139, 147, 41,
+                192, 126, 100, 233, 60, 211, 114, 76, 65, 215, 81, 14, 57, 188, 193
             ],
         );
         let orchard_digest = shielded_bundle::<OrchardZSA>(BundleType::DEFAULT_VANILLA);
@@ -592,8 +601,8 @@ mod tests {
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
             &[
-                254, 246, 32, 227, 238, 129, 249, 72, 49, 157, 246, 42, 41, 131, 23, 169, 90, 0,
-                143, 33, 241, 240, 150, 154, 129, 77, 135, 225, 162, 242, 94, 71
+                104, 208, 148, 246, 233, 132, 23, 228, 222, 115, 216, 13, 187, 217, 180, 170, 227,
+                66, 96, 247, 90, 57, 182, 225, 92, 165, 124, 113, 234, 25, 168, 246
             ],
         );
     }
@@ -603,11 +612,11 @@ mod tests {
         let orchard_digest = shielded_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
         assert_eq!(
             orchard_digest.as_bytes(),
-            // `orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`.
+            // `orchard_digest` taken from the `zcash/orchard` repository at commit `4ac248d0` (v0.11.0)
             // This ensures backward compatibility.
             &[
-                242, 194, 88, 245, 254, 162, 20, 177, 69, 161, 200, 89, 88, 227, 105, 167, 38, 249,
-                112, 58, 174, 237, 50, 134, 236, 248, 169, 49, 132, 22, 165, 198,
+                9, 74, 174, 13, 48, 214, 242, 58, 4, 103, 133, 125, 26, 243, 3, 187, 217, 210, 74,
+                140, 230, 197, 66, 29, 83, 183, 241, 127, 14, 103, 105, 110,
             ],
         );
     }

@@ -7,11 +7,17 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+## [0.11.0] - 2025-02-20
+
 ### Added
 - `orchard::pczt::Zip32Derivation::extract_account_index`
 
 ### Changed
-- Migrated to `nonempty 0.11`.
+- MSRV is now 1.70
+- Migrated to `nonempty 0.11`, `incrementalmerkletree 0.8`, `shardtree 0.6`, 
+  `zcash_spec 0.2`, `zip32 0.2`
+- `orchard::builder::Builder::add_output` now takes a `[u8; 512]` for its
+  `memo` argument instead of an optional value.
 
 ## [0.10.1] - 2024-12-16
 

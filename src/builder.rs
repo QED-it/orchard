@@ -389,18 +389,14 @@ impl OutputInfo {
         recipient: Address,
         value: NoteValue,
         asset: AssetBase,
-        memo: Option<[u8; 512]>,
+        memo: [u8; 512],
     ) -> Self {
         Self {
             ovk,
             recipient,
             value,
             asset,
-            memo: memo.unwrap_or_else(|| {
-                let mut memo = [0; 512];
-                memo[0] = 0xf6;
-                memo
-            }),
+            memo,
         }
     }
 
@@ -411,7 +407,7 @@ impl OutputInfo {
         let fvk: FullViewingKey = (&SpendingKey::random(rng)).into();
         let recipient = fvk.address_at(0u32, Scope::External);
 
-        Self::new(None, recipient, NoteValue::zero(), asset, None)
+        Self::new(None, recipient, NoteValue::zero(), asset, [0u8; 512])
     }
 
     /// Builds the output half of an action.
@@ -685,7 +681,7 @@ impl Builder {
         recipient: Address,
         value: NoteValue,
         asset: AssetBase,
-        memo: Option<[u8; 512]>,
+        memo: [u8; 512],
     ) -> Result<(), OutputError> {
         let flags = self.bundle_type.flags();
         if !flags.outputs_enabled() {
@@ -1095,9 +1091,7 @@ fn build_bundle<B, R: RngCore>(
     let native_value_balance = pre_actions
         .iter()
         .filter(|action| action.spend.note.asset().is_native().into())
-        .fold(Some(ValueSum::zero()), |acc, action| {
-            acc? + action.value_sum()
-        })
+        .try_fold(ValueSum::zero(), |acc, action| acc + action.value_sum())
         .ok_or(OverflowError)?;
 
     let burn_vec = burn
@@ -1455,7 +1449,7 @@ impl OutputView for OutputInfo {
 }
 
 /// Generators for property testing.
-#[cfg(any(test, feature = "test-dependencies"))]
+#[cfg(all(feature = "circuit", any(test, feature = "test-dependencies")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use alloc::vec::Vec;
@@ -1517,7 +1511,7 @@ pub mod testing {
                 let ovk = fvk.to_ovk(scope);
 
                 builder
-                    .add_output(Some(ovk.clone()), addr, value, asset, None)
+                    .add_output(Some(ovk.clone()), addr, value, asset, [0u8; 512])
                     .unwrap();
             }
 
@@ -1647,7 +1641,7 @@ mod tests {
                 recipient,
                 NoteValue::from_raw(5000),
                 AssetBase::native(),
-                None,
+                [0u8; 512],
             )
             .unwrap();
         let balance: i64 = builder.value_balance().unwrap();

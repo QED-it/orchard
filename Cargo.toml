@@ -1,6 +1,6 @@
 [package]
 name = "orchard"
-version = "0.10.1"
+version = "0.11.0"
 authors = [
     "Sean Bowe <sean@electriccoin.co>",
     "Jack Grigg <jack@electriccoin.co>",
@@ -9,7 +9,7 @@ authors = [
     "Kris Nuttycombe <kris@electriccoin.co>",
 ]
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.70"
 description = "The Orchard shielded transaction protocol"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/zcash/orchard"
@@ -30,7 +30,7 @@ ff = { version = "0.13", default-features = false }
 fpe = { version = "0.6", default-features = false, features = ["alloc"] }
 group = "0.13"
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
-k256 = { version = "0.13.0", features = ["arithmetic", "schnorr"] }
+k256 = { version = "0.13.0", default-features = false, features = ["arithmetic", "schnorr"] }
 lazy_static = "1"
 memuse = { version = "0.2.2", default-features = false }
 pasta_curves = "0.5"
@@ -44,9 +44,9 @@ serde = { version = "1.0", default-features = false, features = ["derive"] }
 sinsemilla = { git = "https://github.com/QED-it/sinsemilla", rev = "3542e897d42187878ff9da714f3221cc1774caa7", features = ["test-dependencies"] }
 subtle = { version = "2.3", default-features = false }
 zcash_note_encryption_zsa = { package = "zcash_note_encryption", version = "0.4", git = "https://github.com/QED-it/zcash_note_encryption", branch = "zsa1" }
-incrementalmerkletree = { version = "0.7", default-features = false }
-zcash_spec = "0.1"
-zip32 = { version = "0.1", default-features = false }
+incrementalmerkletree = "0.8.1"
+zcash_spec = "0.2.1"
+zip32 = { version = "0.2.0", default-features = false }
 visibility = "0.1.1"
 
 # Circuit
@@ -67,12 +67,12 @@ image = { version = "0.24", optional = true }
 plotters = { version = "0.3.0", optional = true }
 
 [dev-dependencies]
-bridgetree = "0.6"
 criterion = "0.4" # 0.5 depends on clap 4 which has MSRV 1.70
 halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "zsa1", features = ["test-dependencies"] }
 proptest = "1.0.0"
 zcash_note_encryption_zsa = { package = "zcash_note_encryption", version = "0.4", git = "https://github.com/QED-it/zcash_note_encryption", branch = "zsa1", features = ["pre-zip-212"] }
-incrementalmerkletree = { version = "0.7", features = ["test-dependencies"] }
+incrementalmerkletree = { version = "0.8.1", features = ["test-dependencies"] }
+shardtree = "0.6"
 
 [target.'cfg(unix)'.dev-dependencies]
 inferno = { version = "0.11", default-features = false, features = ["multithreaded", "nameattr"] }
@@ -89,7 +89,7 @@ circuit = ["dep:halo2_gadgets", "dep:halo2_proofs", "std"]
 unstable-frost = []
 multicore = ["halo2_proofs?/multicore"]
 dev-graph = ["halo2_proofs?/dev-graph", "image", "plotters"]
-test-dependencies = ["proptest"]
+test-dependencies = ["proptest", "rand/std"]
 
 [[bench]]
 name = "note_decryption"

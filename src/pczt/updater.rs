@@ -17,7 +17,7 @@ impl<D: OrchardDomainCommon> Bundle<D> {
 #[derive(Debug)]
 pub struct Updater<'a, D: OrchardDomainCommon>(&'a mut Bundle<D>);
 
-impl<'a, D: OrchardDomainCommon> Updater<'a, D> {
+impl<D: OrchardDomainCommon> Updater<'_, D> {
     /// Provides read access to the bundle being updated.
     pub fn bundle(&self) -> &Bundle<D> {
         self.0
@@ -42,7 +42,7 @@ impl<'a, D: OrchardDomainCommon> Updater<'a, D> {
 #[derive(Debug)]
 pub struct ActionUpdater<'a, D: OrchardDomainCommon>(&'a mut Action<D>);
 
-impl<'a, D: OrchardDomainCommon> ActionUpdater<'a, D> {
+impl<D: OrchardDomainCommon> ActionUpdater<'_, D> {
     /// Sets the ZIP 32 derivation path for the spent note's signing key.
     pub fn set_spend_zip32_derivation(&mut self, derivation: Zip32Derivation) {
         self.0.spend.zip32_derivation = Some(derivation);

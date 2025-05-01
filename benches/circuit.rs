@@ -42,7 +42,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                     recipient,
                     NoteValue::from_raw(10),
                     AssetBase::native(),
-                    None,
+                    [0; 512],
                 )
                 .unwrap();
         }

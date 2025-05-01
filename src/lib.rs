@@ -53,7 +53,10 @@ pub use address::Address;
 pub use bundle::Bundle;
 pub use constants::reference_keys::ReferenceKeys;
 pub use constants::MERKLE_DEPTH_ORCHARD as NOTE_COMMITMENT_TREE_DEPTH;
-pub use note::Note;
+pub use note::{
+    commitment::{ExtractedNoteCommitment, NoteCommitment},
+    Note,
+};
 pub use tree::Anchor;
 
 /// A proof of the validity of an Orchard [`Bundle`].

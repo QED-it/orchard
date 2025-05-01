@@ -5,3 +5,4 @@ pub(crate) mod keys;
 pub(crate) mod merkle_path;
 pub(crate) mod note_encryption_vanilla;
 pub(crate) mod note_encryption_zsa;
+pub(crate) mod zip32;

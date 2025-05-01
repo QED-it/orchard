@@ -231,7 +231,7 @@ impl<A: Authorization, V: fmt::Debug, D: OrchardDomainCommon> fmt::Debug for Bun
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         /// Helper struct for debug-printing actions without exposing `NonEmpty`.
         struct Actions<'a, A, D: OrchardDomainCommon>(&'a NonEmpty<Action<A, D>>);
-        impl<'a, A: fmt::Debug, D: OrchardDomainCommon> fmt::Debug for Actions<'a, A, D> {
+        impl<A: fmt::Debug, D: OrchardDomainCommon> fmt::Debug for Actions<'_, A, D> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 f.debug_list().entries(self.0.iter()).finish()
             }

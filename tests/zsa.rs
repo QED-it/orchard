@@ -1,8 +1,7 @@
 mod builder;
 
 use crate::builder::verify_bundle;
-use bridgetree::BridgeTree;
-use incrementalmerkletree::Hashable;
+use incrementalmerkletree::{Hashable, Marking, Retention};
 use orchard::bundle::Authorized;
 use orchard::issuance::{
     compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo, Signed,
@@ -21,6 +20,8 @@ use orchard::{
     Address, Anchor, Bundle, Note,
 };
 use rand::rngs::OsRng;
+use shardtree::store::memory::MemoryShardStore;
+use shardtree::ShardTree;
 use zcash_note_encryption_zsa::try_note_decryption;
 
 #[derive(Debug)]
@@ -103,40 +104,53 @@ pub fn build_merkle_path_with_two_leaves(
     note1: &Note,
     note2: &Note,
 ) -> (MerklePath, MerklePath, Anchor) {
-    let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
+    let mut tree: ShardTree<MemoryShardStore<MerkleHashOrchard, u32>, 32, 16> =
+        ShardTree::new(MemoryShardStore::empty(), 100);
 
     // Add first leaf
     let cmx1: ExtractedNoteCommitment = note1.commitment().into();
     let leaf1 = MerkleHashOrchard::from_cmx(&cmx1);
-    tree.append(leaf1);
-    let position1 = tree.mark().unwrap();
+    tree.append(
+        leaf1,
+        Retention::Checkpoint {
+            id: 0,
+            marking: Marking::Marked,
+        },
+    )
+    .unwrap();
+    let position1 = tree.max_leaf_position(None).unwrap().unwrap();
 
     // Add second leaf
     let cmx2: ExtractedNoteCommitment = note2.commitment().into();
     let leaf2 = MerkleHashOrchard::from_cmx(&cmx2);
-    tree.append(leaf2);
-    let position2 = tree.mark().unwrap();
+    tree.append(
+        leaf2,
+        Retention::Checkpoint {
+            id: 1,
+            marking: Marking::Marked,
+        },
+    )
+    .unwrap();
+    let position2 = tree.max_leaf_position(None).unwrap().unwrap();
 
-    let root = tree.root(0).unwrap();
-    let anchor = root.into();
+    let root = tree.root_at_checkpoint_id(&1).unwrap().unwrap();
 
     // Calculate first path
-    let auth_path1 = tree.witness(position1, 0).unwrap();
-    let merkle_path1 = MerklePath::from_parts(
-        u64::from(position1).try_into().unwrap(),
-        auth_path1[..].try_into().unwrap(),
-    );
+    let merkle_path1 = tree
+        .witness_at_checkpoint_id(position1, &1)
+        .unwrap()
+        .unwrap();
 
     // Calculate second path
-    let auth_path2 = tree.witness(position2, 0).unwrap();
-    let merkle_path2 = MerklePath::from_parts(
-        u64::from(position2).try_into().unwrap(),
-        auth_path2[..].try_into().unwrap(),
-    );
+    let merkle_path2 = tree
+        .witness_at_checkpoint_id(position2, &1)
+        .unwrap()
+        .unwrap();
 
-    assert_eq!(anchor, merkle_path1.root(cmx1));
-    assert_eq!(anchor, merkle_path2.root(cmx2));
-    (merkle_path1, merkle_path2, anchor)
+    assert_eq!(root, merkle_path1.root(MerkleHashOrchard::from_cmx(&cmx1)));
+    assert_eq!(root, merkle_path2.root(MerkleHashOrchard::from_cmx(&cmx2)));
+
+    (merkle_path1.into(), merkle_path2.into(), root.into())
 }
 
 fn issue_zsa_notes(
@@ -200,7 +214,7 @@ fn create_native_note(keys: &Keychain) -> Note {
                 keys.recipient,
                 NoteValue::from_raw(100),
                 AssetBase::native(),
-                None
+                [0u8; 512]
             ),
             Ok(())
         );
@@ -259,7 +273,7 @@ fn build_and_verify_bundle(
         outputs
             .iter()
             .try_for_each(|output| {
-                builder.add_output(None, keys.recipient, output.value, output.asset, None)
+                builder.add_output(None, keys.recipient, output.value, output.asset, [0u8; 512])
             })
             .map_err(|err| err.to_string())?;
         assets_to_burn
