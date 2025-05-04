@@ -75,7 +75,7 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
     ///   with ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION
     /// * \[(cv, rk, enc_ciphertext\[564..\], out_ciphertext)*\] personalized
     ///   with ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION
-    /// as defined in [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+    ///   as defined in [ZIP-244: Transaction Identifier Non-Malleability][zip244]
     ///
     /// [zip244]: https://zips.z.cash/zip-0244
     fn update_hash_with_actions<A: Authorization, V: Copy + Into<i64>>(
