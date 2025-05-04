@@ -1,5 +1,4 @@
-use bridgetree::BridgeTree;
-use incrementalmerkletree::Hashable;
+use incrementalmerkletree::{Hashable, Marking, Retention};
 use orchard::{
     builder::{Builder, BundleType},
     bundle::{Authorized, Flags},
@@ -14,6 +13,7 @@ use orchard::{
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption_zsa::try_note_decryption;
 
 pub fn verify_bundle<FL: OrchardFlavor>(
@@ -39,18 +39,25 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
     // Use the tree with a single leaf.
     let cmx: ExtractedNoteCommitment = note.commitment().into();
     let leaf = MerkleHashOrchard::from_cmx(&cmx);
-    let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
-    tree.append(leaf);
-    let position = tree.mark().unwrap();
-    let root = tree.root(0).unwrap();
-    let auth_path = tree.witness(position, 0).unwrap();
-    let merkle_path = MerklePath::from_parts(
-        u64::from(position).try_into().unwrap(),
-        auth_path[..].try_into().unwrap(),
-    );
-    let anchor = root.into();
-    assert_eq!(anchor, merkle_path.root(cmx));
-    (merkle_path, anchor)
+    let mut tree: ShardTree<MemoryShardStore<MerkleHashOrchard, u32>, 32, 16> =
+        ShardTree::new(MemoryShardStore::empty(), 100);
+    tree.append(
+        leaf,
+        Retention::Checkpoint {
+            id: 0,
+            marking: Marking::Marked,
+        },
+    )
+    .unwrap();
+    let root = tree.root_at_checkpoint_id(&0).unwrap().unwrap();
+    let position = tree.max_leaf_position(None).unwrap().unwrap();
+    let merkle_path = tree
+        .witness_at_checkpoint_id(position, &0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(root, merkle_path.root(MerkleHashOrchard::from_cmx(&cmx)));
+
+    (merkle_path.into(), root.into())
 }
 
 trait BundleOrchardFlavor: OrchardFlavor {
@@ -91,7 +98,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
         );
         let note_value = NoteValue::from_raw(5000);
         assert_eq!(
-            builder.add_output(None, recipient, note_value, AssetBase::native(), None),
+            builder.add_output(None, recipient, note_value, AssetBase::native(), [0u8; 512]),
             Ok(())
         );
         let (unauthorized, bundle_meta) = builder.build(&mut rng).unwrap();
@@ -163,7 +170,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
                 recipient,
                 NoteValue::from_raw(5000),
                 AssetBase::native(),
-                None
+                [0u8; 512]
             ),
             Ok(())
         );
@@ -188,20 +195,20 @@ fn bundle_chain_vanilla() {
     let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardVanilla>();
     assert_eq!(
         orchard_digest_1,
-        // orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`
+        // orchard_digest` taken from the `zcash/orchard` repository at commit `4ac248d0` (v0.11.0)
         // This ensures backward compatibility.
         [
-            239, 27, 83, 1, 224, 201, 57, 243, 162, 28, 61, 74, 175, 165, 5, 165, 23, 3, 16, 239,
-            164, 29, 156, 180, 9, 60, 96, 117, 122, 187, 40, 103,
+            165, 242, 106, 135, 168, 224, 110, 252, 175, 110, 63, 29, 78, 243, 33, 14, 152, 202,
+            209, 47, 68, 32, 138, 96, 79, 213, 218, 93, 45, 87, 221, 174,
         ]
     );
     assert_eq!(
         orchard_digest_2,
-        // orchard_digest` taken from the `zcash/orchard` repository at commit `4fa6d3b`
+        // orchard_digest` taken from the `zcash/orchard` repository at commit `4ac248d0` (v0.11.0)
         // This ensures backward compatibility.
         [
-            145, 227, 149, 34, 67, 111, 65, 185, 177, 236, 106, 137, 179, 71, 80, 137, 26, 12, 12,
-            0, 8, 156, 182, 125, 146, 250, 92, 189, 42, 246, 130, 99,
+            74, 174, 42, 41, 68, 92, 171, 110, 10, 148, 217, 61, 68, 50, 49, 1, 1, 180, 221, 210,
+            97, 237, 25, 198, 195, 77, 19, 160, 186, 172, 8, 26,
         ]
     );
 }
@@ -213,16 +220,16 @@ fn bundle_chain_zsa() {
         orchard_digest_1,
         // Locks the `orchard_digest` for OrchardZSA
         [
-            50, 144, 41, 197, 239, 240, 138, 102, 77, 137, 54, 163, 130, 164, 14, 138, 187, 218,
-            253, 139, 119, 115, 55, 152, 87, 96, 79, 164, 9, 225, 32, 120
+            91, 237, 87, 13, 4, 177, 79, 132, 174, 177, 176, 63, 166, 154, 29, 229, 99, 49, 72,
+            101, 55, 69, 78, 56, 57, 28, 205, 138, 97, 168, 78, 225
         ]
     );
     assert_eq!(
         orchard_digest_2,
         // Locks the `orchard_digest` for OrchardZSA
         [
-            100, 78, 93, 194, 70, 169, 207, 206, 112, 220, 111, 136, 193, 69, 60, 230, 235, 0, 99,
-            187, 31, 50, 192, 10, 46, 240, 144, 98, 180, 213, 236, 71
+            191, 8, 231, 227, 224, 191, 161, 187, 34, 255, 170, 233, 177, 167, 2, 137, 48, 244, 16,
+            204, 168, 182, 96, 243, 82, 138, 63, 106, 129, 251, 188, 181
         ]
     );
 }

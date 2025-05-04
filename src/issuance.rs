@@ -774,17 +774,19 @@ mod tests {
         orchard_flavor::OrchardZSA,
         tree::{MerkleHashOrchard, MerklePath},
         value::NoteValue,
-        Address, Bundle, Note,
+        Address, Anchor, Bundle, Note,
     };
     use alloc::collections::BTreeMap;
     use alloc::string::{String, ToString};
     use alloc::vec::Vec;
-    use bridgetree::BridgeTree;
     use group::{Group, GroupEncoding};
+    use incrementalmerkletree::{Marking, Retention};
     use nonempty::NonEmpty;
     use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
+    use shardtree::store::memory::MemoryShardStore;
+    use shardtree::ShardTree;
 
     /// Validation for reference note
     ///
@@ -1062,7 +1064,7 @@ mod tests {
 
         let action = awaiting_sighash_bundle.get_action_by_asset(&asset).unwrap();
         assert_eq!(action.notes.len(), 3);
-        let reference_note = action.notes.get(0).unwrap();
+        let reference_note = action.notes.first().unwrap();
         verify_reference_note(reference_note, asset);
         let first_note = action.notes.get(1).unwrap();
         assert_eq!(first_note.value().inner(), 5);
@@ -1078,7 +1080,7 @@ mod tests {
             .get_action_by_desc_hash(&asset_desc_hash_2)
             .unwrap();
         assert_eq!(action2.notes.len(), 2);
-        let reference_note = action2.notes.get(0).unwrap();
+        let reference_note = action2.notes.first().unwrap();
         verify_reference_note(reference_note, AssetBase::derive(&ik, &asset_desc_hash_2));
         let first_note = action2.notes().get(1).unwrap();
         assert_eq!(first_note.value().inner(), 15);
@@ -1773,7 +1775,7 @@ mod tests {
         // Checks for the case of UTF-8 encoded asset description.
         let action = bundle.get_action_by_asset(&asset_base_1).unwrap();
         assert_eq!(action.asset_desc_hash(), &asset_desc_hash_1);
-        let reference_note = action.notes.get(0).unwrap();
+        let reference_note = action.notes.first().unwrap();
         verify_reference_note(reference_note, asset_base_1);
         assert_eq!(action.notes.get(1).unwrap().value().inner(), 5);
         assert_eq!(
@@ -1784,7 +1786,7 @@ mod tests {
         // Checks for the case on non-UTF-8 encoded asset description.
         let action2 = bundle.get_action_by_asset(&asset_base_2).unwrap();
         assert_eq!(action2.asset_desc_hash(), &asset_desc_hash_2);
-        let reference_note = action2.notes.get(0).unwrap();
+        let reference_note = action2.notes.first().unwrap();
         verify_reference_note(reference_note, asset_base_2);
         assert_eq!(action2.notes.get(1).unwrap().value().inner(), 10);
         assert_eq!(
@@ -1814,27 +1816,38 @@ mod tests {
             &mut rng,
         );
         // Build the merkle tree with only note1
-        let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
-        let cmx: ExtractedNoteCommitment = note1.commitment().into();
-        let leaf = MerkleHashOrchard::from_cmx(&cmx);
-        tree.append(leaf);
-        let position = tree.mark().unwrap();
-        let root = tree.root(0).unwrap();
-        let anchor = root.into();
-        let auth_path = tree.witness(position, 0).unwrap();
-        let merkle_path = MerklePath::from_parts(
-            u64::from(position).try_into().unwrap(),
-            auth_path[..].try_into().unwrap(),
-        );
+        let (merkle_path, anchor): (MerklePath, Anchor) = {
+            let cmx: ExtractedNoteCommitment = note1.commitment().into();
+            let leaf = MerkleHashOrchard::from_cmx(&cmx);
+            let mut tree: ShardTree<MemoryShardStore<MerkleHashOrchard, u32>, 32, 16> =
+                ShardTree::new(MemoryShardStore::empty(), 100);
+            tree.append(
+                leaf,
+                Retention::Checkpoint {
+                    id: 0,
+                    marking: Marking::Marked,
+                },
+            )
+            .unwrap();
+            let root = tree.root_at_checkpoint_id(&0).unwrap().unwrap();
+            let position = tree.max_leaf_position(None).unwrap().unwrap();
+            let merkle_path = tree
+                .witness_at_checkpoint_id(position, &0)
+                .unwrap()
+                .unwrap();
+            assert_eq!(root, merkle_path.root(MerkleHashOrchard::from_cmx(&cmx)));
+
+            (merkle_path.into(), root.into())
+        };
 
         // Create a transfer bundle
         let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
         builder.add_spend(fvk, note1, merkle_path).unwrap();
         builder
-            .add_output(None, recipient, NoteValue::from_raw(5), asset1, None)
+            .add_output(None, recipient, NoteValue::from_raw(5), asset1, [0u8; 512])
             .unwrap();
         builder
-            .add_output(None, recipient, NoteValue::from_raw(5), asset1, None)
+            .add_output(None, recipient, NoteValue::from_raw(5), asset1, [0u8; 512])
             .unwrap();
         let unauthorized = builder.build(&mut rng).unwrap().0;
         let sighash = unauthorized.commitment().into();

@@ -123,7 +123,7 @@ mod tests {
         fn encoding_roundtrip(
             note in arb_native_note(),
         ) {
-            let memo = &crate::test_vectors::note_encryption_vanilla::test_vectors()[0].memo;
+            let memo = &crate::test_vectors::note_encryption_vanilla::TEST_VECTORS[0].memo;
             let rho = note.rho();
 
             // Encode.
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn test_vectors() {
-        let test_vectors = crate::test_vectors::note_encryption_vanilla::test_vectors();
+        let test_vectors = crate::test_vectors::note_encryption_vanilla::TEST_VECTORS;
 
         for tv in test_vectors {
             //

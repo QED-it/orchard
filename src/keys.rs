@@ -34,15 +34,12 @@ use crate::{
         to_scalar, NonIdentityPallasPoint, NonZeroPallasBase, NonZeroPallasScalar,
         PreparedNonIdentityBase, PreparedNonZeroScalar, PrfExpand,
     },
-    zip32::{
-        self, ExtendedSpendingKey, ZIP32_ORCHARD_PERSONALIZATION,
-        ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE,
-    },
+    zip32::{self, ExtendedSpendingKey},
 };
 
 // Preserve '::' which specifies the EXTERNAL 'zip32' crate
 #[rustfmt::skip]
-pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope};
+pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only};
 
 const KDF_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_OrchardKDF";
 const ZIP32_PURPOSE: u32 = 32;
@@ -121,8 +118,7 @@ impl SpendingKey {
             ChildIndex::hardened(coin_type),
             ChildIndex::hardened(account.into()),
         ];
-        ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION)
-            .map(|esk| esk.sk())
+        ExtendedSpendingKey::<zip32::Orchard>::from_path(seed, path).map(|esk| esk.sk())
     }
 }
 
@@ -272,9 +268,8 @@ impl IssuanceAuthorizingKey {
     }
 
     /// Returns the raw bytes of the issuance key.
-    /// Unwrap call never fails since the issuance authorizing key is exactly 32 bytes.
     pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.to_bytes().try_into().unwrap()
+        self.0.to_bytes().into()
     }
 
     /// Derives the Orchard-ZSA issuance key for the given seed, coin type, and account.
@@ -291,10 +286,9 @@ impl IssuanceAuthorizingKey {
         ];
 
         // we are reusing zip32 logic for deriving the key, zip32 should be updated as discussed
-        let &isk_bytes =
-            ExtendedSpendingKey::from_path(seed, path, ZIP32_ORCHARD_PERSONALIZATION_FOR_ISSUANCE)?
-                .sk()
-                .to_bytes();
+        let &isk_bytes = ExtendedSpendingKey::<zip32::Issuance>::from_path(seed, path)?
+            .sk()
+            .to_bytes();
 
         IssuanceAuthorizingKey::from_bytes(isk_bytes).ok_or(zip32::Error::InvalidSpendingKey)
     }
@@ -339,9 +333,8 @@ impl Eq for IssuanceValidatingKey {}
 impl IssuanceValidatingKey {
     /// Converts this issuance validating key to its serialized form,
     /// in big-endian order as defined in BIP 340.
-    /// Unwrap call never fails since the issuance validating key is exactly 32 bytes.
     pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.to_bytes().try_into().unwrap()
+        self.0.to_bytes().into()
     }
 
     /// Constructs an Orchard issuance validating key from the provided bytes.
@@ -463,8 +456,8 @@ impl From<&SpendingKey> for FullViewingKey {
     }
 }
 
-impl From<&ExtendedSpendingKey> for FullViewingKey {
-    fn from(extsk: &ExtendedSpendingKey) -> Self {
+impl<C: hardened_only::Context> From<&ExtendedSpendingKey<C>> for FullViewingKey {
+    fn from(extsk: &ExtendedSpendingKey<C>) -> Self {
         (&extsk.sk()).into()
     }
 }
@@ -1209,7 +1202,7 @@ mod tests {
 
     #[test]
     fn test_vectors() {
-        for tv in crate::test_vectors::keys::test_vectors() {
+        for tv in crate::test_vectors::keys::TEST_VECTORS {
             let sk = SpendingKey::from_bytes(tv.sk).unwrap();
 
             let ask: SpendAuthorizingKey = (&sk).into();
@@ -1271,7 +1264,7 @@ mod tests {
 
     #[test]
     fn issuance_auth_sig_test_vectors() {
-        for tv in crate::test_vectors::issuance_auth_sig::test_vectors() {
+        for tv in crate::test_vectors::issuance_auth_sig::TEST_VECTORS {
             let isk = IssuanceAuthorizingKey::from_bytes(tv.isk).unwrap();
 
             let ik = IssuanceValidatingKey::from(&isk);
