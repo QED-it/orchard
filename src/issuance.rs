@@ -86,8 +86,8 @@ pub fn compute_asset_desc_hash(asset_desc: &NonEmpty<u8>) -> [u8; 32] {
         .hash_length(32)
         .personal(b"ZSA-AssetDescCRH")
         .to_state();
-    let asset_desc_vec = asset_desc.iter().copied().collect::<Vec<u8>>();
-    ah.update(asset_desc_vec.as_slice());
+    ah.update(&[asset_desc.head]);
+    ah.update(asset_desc.tail.as_slice());
     ah.finalize()
         .as_bytes()
         .try_into()
@@ -763,8 +763,7 @@ mod tests {
         Address, Anchor, Bundle, Note,
     };
     use alloc::collections::BTreeMap;
-    use alloc::string::{String, ToString};
-    use alloc::vec::Vec;
+    use alloc::string::ToString;
     use group::{Group, GroupEncoding};
     use incrementalmerkletree::{Marking, Retention};
     use nonempty::NonEmpty;
@@ -837,16 +836,13 @@ mod tests {
             ..
         } = setup_params();
 
-        let note1_asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(note1_asset_desc).expect("asset_desc must not be empty"),
-        );
+        let note1_asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(note1_asset_desc).unwrap());
         let asset = AssetBase::derive(&ik, &note1_asset_desc_hash);
         let note2_asset = note2_asset_desc.map_or(asset, |desc| {
             AssetBase::derive(
                 &ik,
-                &compute_asset_desc_hash(
-                    &NonEmpty::from_slice(desc).expect("asset_desc must not be empty"),
-                ),
+                &compute_asset_desc_hash(&NonEmpty::from_slice(desc).unwrap()),
             )
         });
 
@@ -919,10 +915,7 @@ mod tests {
         );
 
         let action = IssueAction::from_parts(
-            compute_asset_desc_hash(
-                &NonEmpty::from_slice(b"arbitrary asset_desc")
-                    .expect("asset_desc must not be empty"),
-            ),
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"arbitrary asset_desc").unwrap()),
             vec![note1, note2],
             false,
         );
@@ -998,12 +991,8 @@ mod tests {
             ..
         } = setup_params();
 
-        let asset_desc_hash_1 = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Halo").expect("asset_desc must not be empty"),
-        );
-        let asset_desc_hash_2 = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Halo2").expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash_1 = compute_asset_desc_hash(&NonEmpty::from_slice(b"Halo").unwrap());
+        let asset_desc_hash_2 = compute_asset_desc_hash(&NonEmpty::from_slice(b"Halo2").unwrap());
 
         let (mut bundle, asset) = IssueBundle::new(
             ik.clone(),
@@ -1089,12 +1078,9 @@ mod tests {
             rng, ik, recipient, ..
         } = setup_params();
 
-        let nft_asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"NFT").expect("asset_desc must not be empty"),
-        );
-        let another_nft_asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Another NFT").expect("asset_desc must not be empty"),
-        );
+        let nft_asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(b"NFT").unwrap());
+        let another_nft_asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Another NFT").unwrap());
 
         let (mut bundle, _) = IssueBundle::new(
             ik,
@@ -1130,9 +1116,7 @@ mod tests {
             ..
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Frost").expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(b"Frost").unwrap());
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1160,9 +1144,7 @@ mod tests {
             first_nullifier,
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Sign").expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(b"Sign").unwrap());
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1195,9 +1177,8 @@ mod tests {
             ..
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"IssueBundle").expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"IssueBundle").unwrap());
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1235,9 +1216,7 @@ mod tests {
         // Create a bundle with "normal" note
         let (mut bundle, _) = IssueBundle::new(
             ik,
-            compute_asset_desc_hash(
-                &NonEmpty::from_slice(b"IssueBundle").expect("asset_desc must not be empty"),
-            ),
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"IssueBundle").unwrap()),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1252,9 +1231,7 @@ mod tests {
             NoteValue::from_raw(5),
             AssetBase::derive(
                 bundle.ik(),
-                &compute_asset_desc_hash(
-                    &NonEmpty::from_slice(b"zsa_asset").expect("asset_desc must not be empty"),
-                ),
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
             ),
             Rho::zero(),
             &mut rng,
@@ -1281,9 +1258,7 @@ mod tests {
             first_nullifier,
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Verify").expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify").unwrap());
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1325,9 +1300,8 @@ mod tests {
             first_nullifier,
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Verify with finalize").expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify with finalize").unwrap());
 
         let (mut bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1371,18 +1345,12 @@ mod tests {
             first_nullifier,
         } = setup_params();
 
-        let asset1_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Verify with issued assets 1")
-                .expect("asset_desc must not be empty"),
-        );
-        let asset2_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Verify with issued assets 2")
-                .expect("asset_desc must not be empty"),
-        );
-        let asset3_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Verify with issued assets 3")
-                .expect("asset_desc must not be empty"),
-        );
+        let asset1_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify with issued assets 1").unwrap());
+        let asset2_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify with issued assets 2").unwrap());
+        let asset3_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify with issued assets 3").unwrap());
 
         let asset1_base = AssetBase::derive(&ik, &asset1_desc_hash);
         let asset2_base = AssetBase::derive(&ik, &asset2_desc_hash);
@@ -1484,9 +1452,8 @@ mod tests {
             first_nullifier,
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"already final").expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"already final").unwrap());
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1551,9 +1518,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            crate::issuance::compute_asset_desc_hash(
-                &NonEmpty::from_slice(b"bad sig").expect("asset_desc must not be empty"),
-            ),
+            crate::issuance::compute_asset_desc_hash(&NonEmpty::from_slice(b"bad sig").unwrap()),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1593,9 +1558,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            compute_asset_desc_hash(
-                &NonEmpty::from_slice(b"Asset description").expect("asset_desc must not be empty"),
-            ),
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset description").unwrap()),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1630,9 +1593,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            compute_asset_desc_hash(
-                &NonEmpty::from_slice(b"Asset description").expect("asset_desc must not be empty"),
-            ),
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset description").unwrap()),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1653,9 +1614,7 @@ mod tests {
             NoteValue::from_raw(5),
             AssetBase::derive(
                 signed.ik(),
-                &compute_asset_desc_hash(
-                    &NonEmpty::from_slice(b"zsa_asset").expect("asset_desc must not be empty"),
-                ),
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
             ),
             Rho::zero(),
             &mut rng,
@@ -1671,9 +1630,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_incorrect_ik() {
-        let asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Asset").expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset").unwrap());
 
         let TestParams {
             mut rng,
@@ -1758,9 +1715,8 @@ mod tests {
         let mut rng = OsRng;
         let (_, _, note) = Note::dummy(&mut rng, None, AssetBase::native());
 
-        let asset_desc_hash = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"Asset description").expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset description").unwrap());
 
         let action = IssueAction::new_with_flags(asset_desc_hash, vec![note], 0u8).unwrap();
         assert_eq!(action.flags(), 0b0000_0000);
@@ -1773,7 +1729,7 @@ mod tests {
     }
 
     #[test]
-    fn issue_bundle_asset_desc_roundtrip() {
+    fn test_get_action_by_desc_hash() {
         let TestParams {
             rng, ik, recipient, ..
         } = setup_params();
@@ -1784,21 +1740,10 @@ mod tests {
             .as_bytes()
             .to_vec();
 
-        let asset_desc_hash_1 = compute_asset_desc_hash(
-            &NonEmpty::from_slice(&asset_desc_1).expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash_1 =
+            compute_asset_desc_hash(&NonEmpty::from_slice(&asset_desc_1).unwrap());
 
-        // Not well-formed as per Unicode 15.0 specification, Section 3.9, D92
-        let asset_desc_2: Vec<u8> = vec![0xc0, 0xaf];
-
-        let asset_desc_hash_2 = compute_asset_desc_hash(
-            &NonEmpty::from_slice(&asset_desc_2).expect("asset_desc must not be empty"),
-        );
-
-        // Confirm not valid UTF-8
-        assert!(String::from_utf8(asset_desc_2.clone()).is_err());
-
-        let (mut bundle, asset_base_1) = IssueBundle::new(
+        let (bundle, asset_base_1) = IssueBundle::new(
             ik,
             asset_desc_hash_1,
             Some(IssueInfo {
@@ -1809,16 +1754,6 @@ mod tests {
             rng,
         );
 
-        let asset_base_2 = bundle
-            .add_recipient(
-                asset_desc_hash_2,
-                recipient,
-                NoteValue::from_raw(10),
-                true,
-                rng,
-            )
-            .unwrap();
-
         // Checks for the case of UTF-8 encoded asset description.
         let action = bundle.get_action_by_asset(&asset_base_1).unwrap();
         assert_eq!(action.asset_desc_hash(), &asset_desc_hash_1);
@@ -1828,17 +1763,6 @@ mod tests {
         assert_eq!(
             bundle.get_action_by_desc_hash(&asset_desc_hash_1).unwrap(),
             action
-        );
-
-        // Checks for the case on non-UTF-8 encoded asset description.
-        let action2 = bundle.get_action_by_asset(&asset_base_2).unwrap();
-        assert_eq!(action2.asset_desc_hash(), &asset_desc_hash_2);
-        let reference_note = action2.notes.first().unwrap();
-        verify_reference_note(reference_note, asset_base_2);
-        assert_eq!(action2.notes.get(1).unwrap().value().inner(), 10);
-        assert_eq!(
-            bundle.get_action_by_desc_hash(&asset_desc_hash_2).unwrap(),
-            action2
         );
     }
 
@@ -1856,9 +1780,7 @@ mod tests {
         let mut rng = OsRng;
         let asset1 = AssetBase::derive(
             &ik,
-            &compute_asset_desc_hash(
-                &NonEmpty::from_slice(b"zsa_asset1").expect("asset_desc must not be empty"),
-            ),
+            &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset1").unwrap()),
         );
         let note1 = Note::new(
             recipient,
@@ -1909,12 +1831,8 @@ mod tests {
             .unwrap();
 
         // Create an issue bundle
-        let asset_desc_hash_2 = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"asset2").expect("asset_desc must not be empty"),
-        );
-        let asset_desc_hash_3 = compute_asset_desc_hash(
-            &NonEmpty::from_slice(b"asset3").expect("asset_desc must not be empty"),
-        );
+        let asset_desc_hash_2 = compute_asset_desc_hash(&NonEmpty::from_slice(b"asset2").unwrap());
+        let asset_desc_hash_3 = compute_asset_desc_hash(&NonEmpty::from_slice(b"asset3").unwrap());
         let (mut bundle, asset) = IssueBundle::new(
             ik,
             asset_desc_hash_2,

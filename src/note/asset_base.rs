@@ -122,9 +122,7 @@ impl AssetBase {
         let ik = IssuanceValidatingKey::from(&isk);
         AssetBase::derive(
             &ik,
-            &compute_asset_desc_hash(
-                &NonEmpty::from_slice(b"zsa_asset").expect("asset_desc must not be empty"),
-            ),
+            &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
         )
     }
 }
@@ -200,8 +198,7 @@ pub mod testing {
 
         for tv in test_vectors {
             let asset_desc_hash = crate::issuance::compute_asset_desc_hash(
-                &nonempty::NonEmpty::from_slice(&tv.description)
-                    .expect("asset_desc must not be empty"),
+                &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
             );
             let calculated_asset_base = AssetBase::derive(
                 &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
