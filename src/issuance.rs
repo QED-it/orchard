@@ -13,6 +13,7 @@
 //! are handled through the `Error` enum.
 
 use alloc::collections::BTreeMap;
+use alloc::string::String;
 use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use core::fmt;
@@ -81,7 +82,16 @@ pub struct IssueInfo {
 }
 
 /// Compute the asset description hash for a given asset description.
+///
+/// # Panics
+///
+/// Panics if `asset_desc` is not well-formed as per Unicode 15.0 specification, Section 3.9, D92.
 pub fn compute_asset_desc_hash(asset_desc: &NonEmpty<u8>) -> [u8; 32] {
+    // Check that asset_desc is well-formed as per Unicode 15.0 specification, Section 3.9, D92
+    let asset_desc_vec = asset_desc.iter().copied().collect::<Vec<u8>>();
+    if String::from_utf8(asset_desc_vec).is_err() {
+        panic!("asset_desc is not well-formed as per Unicode 15.0 specification, Section 3.9, D92");
+    }
     let mut ah = Params::new()
         .hash_length(32)
         .personal(b"ZSA-AssetDescCRH")
@@ -763,7 +773,8 @@ mod tests {
         Address, Anchor, Bundle, Note,
     };
     use alloc::collections::BTreeMap;
-    use alloc::string::ToString;
+    use alloc::string::{String, ToString};
+    use alloc::vec::Vec;
     use group::{Group, GroupEncoding};
     use incrementalmerkletree::{Marking, Retention};
     use nonempty::NonEmpty;
@@ -1764,6 +1775,21 @@ mod tests {
             bundle.get_action_by_desc_hash(&asset_desc_hash_1).unwrap(),
             action
         );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "asset_desc is not well-formed as per Unicode 15.0 specification, Section 3.9, D92"
+    )]
+    fn not_well_formed_utf8() {
+        // Not well-formed as per Unicode 15.0 specification, Section 3.9, D92
+        let asset_desc: Vec<u8> = vec![0xc0, 0xaf];
+
+        // Confirm not valid UTF-8
+        assert!(String::from_utf8(asset_desc.clone()).is_err());
+
+        // Should panic
+        compute_asset_desc_hash(&NonEmpty::from_slice(&asset_desc).unwrap());
     }
 
     #[test]
