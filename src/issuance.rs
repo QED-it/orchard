@@ -586,7 +586,7 @@ impl IssueBundle<Signed> {
 /// Validates an [`IssueBundle`] by performing the following checks:
 ///
 /// - **IssueBundle Auth signature verification**:
-///   - Ensures the signature on the provided `sighash` matches the bundle’s authorization.
+///   - Ensures the signature on the provided `sighash` matches the bundle's authorization.
 /// - **Static IssueAction verification**:
 ///   - Runs checks using the `IssueAction::verify` method.
 /// - **Node global state related verification**:
@@ -1743,11 +1743,8 @@ mod tests {
             rng, ik, recipient, ..
         } = setup_params();
 
-        // Generated using https://onlinetools.com/utf8/generate-random-utf8
-        let asset_desc_1 = "󅞞 򬪗YV8𱈇m0{둛򙎠[㷊V֤]9Ծ̖l󾓨2닯򗏟iȰ䣄˃Oߺ񗗼🦄"
-            .to_string()
-            .as_bytes()
-            .to_vec();
+        // UTF heavy test string
+        let asset_desc_1 = "ΩΣ𐐷कあ한🐍★→".to_string().as_bytes().to_vec();
 
         let asset_desc_hash_1 =
             compute_asset_desc_hash(&NonEmpty::from_slice(&asset_desc_1).unwrap());
