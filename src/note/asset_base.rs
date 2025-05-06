@@ -44,9 +44,9 @@ pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
 
 ///    AssetDigest for the ZSA asset
 ///
-///    Defined in [ZIP-226: Transfer and Burn of Zcash Shielded Assets][assetdigest].
+///    Defined in [ZIP-227: Issuance of Zcash Shielded Assets][assetdigest].
 ///
-///    [assetdigest]: https://zips.z.cash/zip-0226.html#asset-identifiers
+///    [assetdigest]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
 pub fn asset_digest(asset_id: [u8; 65]) -> Blake2bHash {
     Params::new()
         .hash_length(64)
@@ -57,12 +57,12 @@ pub fn asset_digest(asset_id: [u8; 65]) -> Blake2bHash {
 }
 
 impl AssetBase {
-    /// Deserialize the asset_id from a byte array.
+    /// Deserialize the AssetBase from a byte array.
     pub fn from_bytes(bytes: &[u8; 32]) -> CtOption<Self> {
         pallas::Point::from_bytes(bytes).map(AssetBase)
     }
 
-    /// Serialize the asset_id to its canonical byte representation.
+    /// Serialize the AssetBase to its canonical byte representation.
     pub fn to_bytes(self) -> [u8; 32] {
         self.0.to_bytes()
     }
@@ -75,7 +75,7 @@ impl AssetBase {
     ///
     /// # Panics
     ///
-    /// Panics if the derived Asset Base is the identity point.
+    /// Panics if the derived AssetBase is the identity point.
     #[allow(non_snake_case)]
     pub fn derive(ik: &IssuanceValidatingKey, asset_desc_hash: &[u8; 32]) -> Self {
         let version_byte = [0x00];
