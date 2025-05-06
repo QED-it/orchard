@@ -168,6 +168,8 @@ pub enum BuildError {
     BurnDuplicateAsset,
     /// There is no available split note for this asset.
     NoSplitNoteAvailable,
+    /// There are no reference notes provided for an action group.
+    NoReferenceNotesAvailable,
 }
 
 impl fmt::Display for BuildError {
@@ -192,6 +194,9 @@ impl fmt::Display for BuildError {
             BurnZero => f.write_str("Burning is not possible for zero values"),
             BurnDuplicateAsset => f.write_str("Duplicate assets are not allowed when burning"),
             NoSplitNoteAvailable => f.write_str("No split note has been provided for this asset"),
+            NoReferenceNotesAvailable => {
+                f.write_str("No reference notes have been provided for action group")
+            }
         }
     }
 }
@@ -815,7 +820,9 @@ impl Builder {
             self.spends,
             self.outputs,
             0,
-            SpecificBuilderParams::BundleParams(self.burn),
+            self.burn,
+            false,
+            None,
         )
     }
 
@@ -835,7 +842,9 @@ impl Builder {
             self.spends,
             self.outputs,
             expiry_height,
-            SpecificBuilderParams::ActionGroupParams(self.reference_notes),
+            self.burn,
+            true,
+            Some(self.reference_notes),
         )
     }
 
@@ -972,19 +981,7 @@ fn pad_spend(
     }
 }
 
-/// Specific parameters for the builder to build a bundle.
-///
-/// If it is a BundleParams, it contains burn info.
-/// If it is an ActionGroupParams, it contains reference notes.
-#[derive(Debug)]
-pub enum SpecificBuilderParams {
-    /// BundleParams contains burn info
-    BundleParams(HashMap<AssetBase, NoteValue>),
-    /// ActionGroupParams contains reference notes
-    ActionGroupParams(HashMap<AssetBase, SpendInfo>),
-}
-
-/// Builds a bundle containing the given spent notes, outputs and burns.
+/// Builds a bundle containing the given spent notes and outputs.
 ///
 /// The returned bundle will have no proof or signatures; these can be applied with
 /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
@@ -1057,8 +1054,8 @@ fn build_bundle<B, R: RngCore>(
     outputs: Vec<OutputInfo>,
     expiry_height: u32,
     burn: BTreeMap<AssetBase, NoteValue>,
+    is_action_group: bool,
     reference_notes: BTreeMap<AssetBase, SpendInfo>,
-    specific_params: SpecificBuilderParams,
     finisher: impl FnOnce(
         Vec<ActionInfo>,             // pre-actions
         Flags,                       // flags
@@ -1100,12 +1097,12 @@ fn build_bundle<B, R: RngCore>(
                 let num_asset_pre_actions = spends.len().max(outputs.len());
 
                     let mut first_spend = spends.first().map(|(s, _)| s.clone());
-                    if let SpecificBuilderParams::ActionGroupParams(ref reference_notes) =
-                        specific_params
-                    {
-                        if first_spend.is_none() {
-                            first_spend = reference_notes.get(&asset).cloned();
-                        }
+                    if is_action_group && first_spend.is_none() {
+                        first_spend = reference_notes
+                            .as_ref()
+                            .expect("Reference notes are required for action group")
+                            .get(&asset)
+                            .cloned();
                     }
 
                 let mut indexed_spends = spends
@@ -1198,6 +1195,7 @@ fn build_bundle<B, R: RngCore>(
         native_value_balance,
         burn_vec,
         timelimit,
+        is_action_group,
         bundle_meta,
         rng,
     )
