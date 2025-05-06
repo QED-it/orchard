@@ -182,7 +182,7 @@ impl ValueSum {
     /// in `Bundle::binding_validating_key`, where we are converting from the user-defined
     /// `valueBalance` type that enforces any additional constraints on the value's valid
     /// range.
-    pub(crate) fn from_raw(value: i64) -> Self {
+    pub fn from_raw(value: i64) -> Self {
         ValueSum(value as i128)
     }
 
@@ -286,6 +286,11 @@ impl ValueCommitTrapdoor {
     /// [orchardbalance]: https://zips.z.cash/protocol/protocol.pdf#orchardbalance
     pub fn from_bytes(bytes: [u8; 32]) -> CtOption<Self> {
         pallas::Scalar::from_repr(bytes).map(ValueCommitTrapdoor)
+    }
+
+    /// Constructs `ValueCommitTrapdoor` from the raw underlying value (`pallas::Scalar`).
+    pub fn from_inner(inner: pallas::Scalar) -> ValueCommitTrapdoor {
+        Self(inner)
     }
 }
 
@@ -410,6 +415,11 @@ impl ValueCommitment {
         } else {
             *self.0.to_affine().coordinates().unwrap().y()
         }
+    }
+
+    /// Returns the raw underlying value.
+    pub fn inner(&self) -> pallas::Point {
+        self.0
     }
 }
 
