@@ -87,10 +87,8 @@ pub struct IssueInfo {
 ///
 /// Panics if `asset_desc` is not well-formed as per Unicode 15.0 specification, Section 3.9, D92.
 pub fn compute_asset_desc_hash(asset_desc: &NonEmpty<u8>) -> [u8; 32] {
-    // Check that asset_desc is well-formed as per Unicode 15.0 specification, Section 3.9, D92
-    let asset_desc_vec = asset_desc.iter().copied().collect::<Vec<u8>>();
-    if String::from_utf8(asset_desc_vec).is_err() {
-        panic!("asset_desc is not well-formed as per Unicode 15.0 specification, Section 3.9, D92");
+    if String::from_utf8(asset_desc.iter().copied().collect::<Vec<u8>>()).is_err() {
+        panic!("asset_desc is not a well-formed Unicode string");
     }
     let mut ah = Params::new()
         .hash_length(32)
@@ -1778,9 +1776,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-        expected = "asset_desc is not well-formed as per Unicode 15.0 specification, Section 3.9, D92"
-    )]
+    #[should_panic(expected = "asset_desc is not a well-formed Unicode string")]
     fn not_well_formed_utf8() {
         // Not well-formed as per Unicode 15.0 specification, Section 3.9, D92
         let asset_desc: Vec<u8> = vec![0xc0, 0xaf];
