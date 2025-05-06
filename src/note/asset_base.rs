@@ -2,6 +2,7 @@ use blake2b_simd::{Hash as Blake2bHash, Params};
 use core::cmp::Ordering;
 use core::hash::{Hash, Hasher};
 use group::{Curve, Group, GroupEncoding};
+use nonempty::NonEmpty;
 use pasta_curves::arithmetic::CurveAffine;
 use pasta_curves::{arithmetic::CurveExt, pallas};
 use rand_core::CryptoRngCore;
@@ -36,8 +37,6 @@ impl Ord for AssetBase {
             .then_with(|| self_coord.y().cmp(other_coord.y()))
     }
 }
-
-pub const MAX_ASSET_DESCRIPTION_SIZE: usize = 512;
 
 /// Personalization for the ZSA asset digest generator
 pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
@@ -127,7 +126,10 @@ impl AssetBase {
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
         let isk = IssuanceAuthorizingKey::random(rng);
         let ik = IssuanceValidatingKey::from(&isk);
-        AssetBase::derive(&ik, &compute_asset_desc_hash(b"zsa_asset").unwrap())
+        AssetBase::derive(
+            &ik,
+            &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
+        )
     }
 }
 
@@ -136,11 +138,6 @@ impl Hash for AssetBase {
         h.write(&self.to_bytes());
         h.finish();
     }
-}
-
-/// Check that `asset_desc` is of valid size.
-pub fn is_asset_desc_of_valid_size(asset_desc: &[u8]) -> bool {
-    !asset_desc.is_empty() && asset_desc.len() <= MAX_ASSET_DESCRIPTION_SIZE
 }
 
 impl PartialEq for AssetBase {
@@ -206,8 +203,9 @@ pub mod testing {
         let test_vectors = crate::test_vectors::asset_base::TEST_VECTORS;
 
         for tv in test_vectors {
-            let asset_desc_hash =
-                crate::issuance::compute_asset_desc_hash(&tv.description).unwrap();
+            let asset_desc_hash = crate::issuance::compute_asset_desc_hash(
+                &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
+            );
             let calculated_asset_base = AssetBase::derive(
                 &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
                 &asset_desc_hash,

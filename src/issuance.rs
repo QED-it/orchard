@@ -13,6 +13,7 @@
 //! are handled through the `Error` enum.
 
 use alloc::collections::BTreeMap;
+use alloc::string::String;
 use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use core::fmt;
@@ -24,7 +25,6 @@ use rand::RngCore;
 use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 use crate::constants::reference_keys::ReferenceKeys;
 use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
-use crate::note::asset_base::is_asset_desc_of_valid_size;
 use crate::note::{AssetBase, Nullifier, Rho};
 
 use crate::value::NoteValue;
@@ -33,11 +33,10 @@ use crate::{Address, Note};
 use crate::asset_record::AssetRecord;
 
 use Error::{
-    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, InvalidAssetDescHashLength,
-    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
-    IssueBundleInvalidSignature, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
-    WrongAssetDescSize,
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
+    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 /// Checks if a given note is a reference note.
@@ -83,19 +82,24 @@ pub struct IssueInfo {
 }
 
 /// Compute the asset description hash for a given asset description.
-pub fn compute_asset_desc_hash(asset_desc: &[u8]) -> Result<[u8; 32], Error> {
-    if !is_asset_desc_of_valid_size(asset_desc) {
-        return Err(WrongAssetDescSize);
+///
+/// # Panics
+///
+/// Panics if `asset_desc` is not well-formed as per Unicode 15.0 specification, Section 3.9, D92.
+pub fn compute_asset_desc_hash(asset_desc: &NonEmpty<u8>) -> [u8; 32] {
+    if String::from_utf8(asset_desc.iter().copied().collect::<Vec<u8>>()).is_err() {
+        panic!("asset_desc is not a well-formed Unicode string");
     }
     let mut ah = Params::new()
         .hash_length(32)
         .personal(b"ZSA-AssetDescCRH")
         .to_state();
-    ah.update(asset_desc);
+    ah.update(&[asset_desc.head]);
+    ah.update(asset_desc.tail.as_slice());
     ah.finalize()
         .as_bytes()
         .try_into()
-        .map_err(|_| InvalidAssetDescHashLength)
+        .expect("Invalid asset description hash length")
 }
 
 impl IssueAction {
@@ -670,10 +674,6 @@ pub enum Error {
     IssueActionNotFound,
     /// The provided `isk` and the derived `ik` does not match at least one note type.
     IssueBundleIkMismatchAssetBase,
-    /// `asset_desc` should be between 1 and 512 bytes.
-    WrongAssetDescSize,
-    /// The length of the asset description hash is invalid.
-    InvalidAssetDescHashLength,
     /// The `IssueAction` is not finalized but contains no notes.
     IssueActionWithoutNoteNotFinalized,
     /// The `AssetBase` is the Pallas identity point, which is invalid.
@@ -705,12 +705,6 @@ impl fmt::Display for Error {
                     f,
                     "the provided `isk` and the derived `ik` do not match at least one note type"
                 )
-            }
-            WrongAssetDescSize => {
-                write!(f, "`asset_desc` should be between 1 and 512 bytes")
-            }
-            InvalidAssetDescHashLength => {
-                write!(f, "the length of the asset description hash is invalid")
             }
             IssueActionWithoutNoteNotFinalized => {
                 write!(
@@ -761,7 +755,7 @@ mod tests {
         issuance::Error::{
             AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
             IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
-            IssueBundleInvalidSignature, WrongAssetDescSize,
+            IssueBundleInvalidSignature,
         },
         issuance::{
             is_reference_note, verify_issue_bundle, AwaitingNullifier, IssueAction, Signed,
@@ -851,10 +845,14 @@ mod tests {
             ..
         } = setup_params();
 
-        let note1_asset_desc_hash = compute_asset_desc_hash(note1_asset_desc).unwrap();
+        let note1_asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(note1_asset_desc).unwrap());
         let asset = AssetBase::derive(&ik, &note1_asset_desc_hash);
         let note2_asset = note2_asset_desc.map_or(asset, |desc| {
-            AssetBase::derive(&ik, &compute_asset_desc_hash(desc).unwrap())
+            AssetBase::derive(
+                &ik,
+                &compute_asset_desc_hash(&NonEmpty::from_slice(desc).unwrap()),
+            )
         });
 
         let note1 = Note::new(
@@ -926,7 +924,7 @@ mod tests {
         );
 
         let action = IssueAction::from_parts(
-            compute_asset_desc_hash(b"arbitrary asset_desc").unwrap(),
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"arbitrary asset_desc").unwrap()),
             vec![note1, note2],
             false,
         );
@@ -1002,15 +1000,8 @@ mod tests {
             ..
         } = setup_params();
 
-        let asset_desc_hash_1 = compute_asset_desc_hash(b"Halo").unwrap();
-        let asset_desc_hash_2 = compute_asset_desc_hash(b"Halo2").unwrap();
-
-        assert_eq!(
-            compute_asset_desc_hash(&vec![b'X'; 513]),
-            Err(WrongAssetDescSize)
-        );
-
-        assert_eq!(compute_asset_desc_hash(b""), Err(WrongAssetDescSize));
+        let asset_desc_hash_1 = compute_asset_desc_hash(&NonEmpty::from_slice(b"Halo").unwrap());
+        let asset_desc_hash_2 = compute_asset_desc_hash(&NonEmpty::from_slice(b"Halo2").unwrap());
 
         let (mut bundle, asset) = IssueBundle::new(
             ik.clone(),
@@ -1096,8 +1087,9 @@ mod tests {
             rng, ik, recipient, ..
         } = setup_params();
 
-        let nft_asset_desc_hash = compute_asset_desc_hash(b"NFT").unwrap();
-        let another_nft_asset_desc_hash = compute_asset_desc_hash(b"Another NFT").unwrap();
+        let nft_asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(b"NFT").unwrap());
+        let another_nft_asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Another NFT").unwrap());
 
         let (mut bundle, _) = IssueBundle::new(
             ik,
@@ -1133,7 +1125,7 @@ mod tests {
             ..
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(b"Frost").unwrap();
+        let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(b"Frost").unwrap());
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1161,7 +1153,7 @@ mod tests {
             first_nullifier,
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(b"Sign").unwrap();
+        let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(b"Sign").unwrap());
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1194,7 +1186,8 @@ mod tests {
             ..
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(b"IssueBundle").unwrap();
+        let asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"IssueBundle").unwrap());
 
         let (bundle, _) = IssueBundle::new(
             ik,
@@ -1232,7 +1225,7 @@ mod tests {
         // Create a bundle with "normal" note
         let (mut bundle, _) = IssueBundle::new(
             ik,
-            compute_asset_desc_hash(b"IssueBundle").unwrap(),
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"IssueBundle").unwrap()),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1245,7 +1238,10 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            AssetBase::derive(bundle.ik(), &compute_asset_desc_hash(b"zsa_asset").unwrap()),
+            AssetBase::derive(
+                bundle.ik(),
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
+            ),
             Rho::zero(),
             &mut rng,
         );
@@ -1271,7 +1267,7 @@ mod tests {
             first_nullifier,
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(b"Verify").unwrap();
+        let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify").unwrap());
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1313,7 +1309,8 @@ mod tests {
             first_nullifier,
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(b"Verify with finalize").unwrap();
+        let asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify with finalize").unwrap());
 
         let (mut bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1357,9 +1354,12 @@ mod tests {
             first_nullifier,
         } = setup_params();
 
-        let asset1_desc_hash = compute_asset_desc_hash(b"Verify with issued assets 1").unwrap();
-        let asset2_desc_hash = compute_asset_desc_hash(b"Verify with issued assets 2").unwrap();
-        let asset3_desc_hash = compute_asset_desc_hash(b"Verify with issued assets 3").unwrap();
+        let asset1_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify with issued assets 1").unwrap());
+        let asset2_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify with issued assets 2").unwrap());
+        let asset3_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify with issued assets 3").unwrap());
 
         let asset1_base = AssetBase::derive(&ik, &asset1_desc_hash);
         let asset2_base = AssetBase::derive(&ik, &asset2_desc_hash);
@@ -1461,7 +1461,8 @@ mod tests {
             first_nullifier,
         } = setup_params();
 
-        let asset_desc_hash = compute_asset_desc_hash(b"already final").unwrap();
+        let asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"already final").unwrap());
 
         let (bundle, _) = IssueBundle::new(
             ik.clone(),
@@ -1526,7 +1527,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            crate::issuance::compute_asset_desc_hash(b"bad sig").unwrap(),
+            crate::issuance::compute_asset_desc_hash(&NonEmpty::from_slice(b"bad sig").unwrap()),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1566,7 +1567,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            compute_asset_desc_hash(b"Asset description").unwrap(),
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset description").unwrap()),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1601,7 +1602,7 @@ mod tests {
 
         let (bundle, _) = IssueBundle::new(
             ik,
-            compute_asset_desc_hash(b"Asset description").unwrap(),
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset description").unwrap()),
             Some(IssueInfo {
                 recipient,
                 value: NoteValue::from_raw(5),
@@ -1620,7 +1621,10 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            AssetBase::derive(signed.ik(), &compute_asset_desc_hash(b"zsa_asset").unwrap()),
+            AssetBase::derive(
+                signed.ik(),
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
+            ),
             Rho::zero(),
             &mut rng,
         );
@@ -1635,7 +1639,7 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_incorrect_ik() {
-        let asset_desc_hash = compute_asset_desc_hash(b"Asset").unwrap();
+        let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset").unwrap());
 
         let TestParams {
             mut rng,
@@ -1720,7 +1724,8 @@ mod tests {
         let mut rng = OsRng;
         let (_, _, note) = Note::dummy(&mut rng, None, AssetBase::native());
 
-        let asset_desc_hash = compute_asset_desc_hash(b"Asset description").unwrap();
+        let asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset description").unwrap());
 
         let action = IssueAction::new_with_flags(asset_desc_hash, vec![note], 0u8).unwrap();
         assert_eq!(action.flags(), 0b0000_0000);
@@ -1733,7 +1738,7 @@ mod tests {
     }
 
     #[test]
-    fn issue_bundle_asset_desc_roundtrip() {
+    fn test_get_action_by_desc_hash() {
         let TestParams {
             rng, ik, recipient, ..
         } = setup_params();
@@ -1741,17 +1746,10 @@ mod tests {
         // UTF heavy test string
         let asset_desc_1 = "ΩΣ𐐷कあ한🐍★→".to_string().as_bytes().to_vec();
 
-        let asset_desc_hash_1 = compute_asset_desc_hash(&asset_desc_1).unwrap();
+        let asset_desc_hash_1 =
+            compute_asset_desc_hash(&NonEmpty::from_slice(&asset_desc_1).unwrap());
 
-        // Not well-formed as per Unicode 15.0 specification, Section 3.9, D92
-        let asset_desc_2: Vec<u8> = vec![0xc0, 0xaf];
-
-        let asset_desc_hash_2 = compute_asset_desc_hash(&asset_desc_2).unwrap();
-
-        // Confirm not valid UTF-8
-        assert!(String::from_utf8(asset_desc_2.clone()).is_err());
-
-        let (mut bundle, asset_base_1) = IssueBundle::new(
+        let (bundle, asset_base_1) = IssueBundle::new(
             ik,
             asset_desc_hash_1,
             Some(IssueInfo {
@@ -1761,16 +1759,6 @@ mod tests {
             true,
             rng,
         );
-
-        let asset_base_2 = bundle
-            .add_recipient(
-                asset_desc_hash_2,
-                recipient,
-                NoteValue::from_raw(10),
-                true,
-                rng,
-            )
-            .unwrap();
 
         // Checks for the case of UTF-8 encoded asset description.
         let action = bundle.get_action_by_asset(&asset_base_1).unwrap();
@@ -1782,17 +1770,19 @@ mod tests {
             bundle.get_action_by_desc_hash(&asset_desc_hash_1).unwrap(),
             action
         );
+    }
 
-        // Checks for the case on non-UTF-8 encoded asset description.
-        let action2 = bundle.get_action_by_asset(&asset_base_2).unwrap();
-        assert_eq!(action2.asset_desc_hash(), &asset_desc_hash_2);
-        let reference_note = action2.notes.first().unwrap();
-        verify_reference_note(reference_note, asset_base_2);
-        assert_eq!(action2.notes.get(1).unwrap().value().inner(), 10);
-        assert_eq!(
-            bundle.get_action_by_desc_hash(&asset_desc_hash_2).unwrap(),
-            action2
-        );
+    #[test]
+    #[should_panic(expected = "asset_desc is not a well-formed Unicode string")]
+    fn not_well_formed_utf8() {
+        // Not well-formed as per Unicode 15.0 specification, Section 3.9, D92
+        let asset_desc: Vec<u8> = vec![0xc0, 0xaf];
+
+        // Confirm not valid UTF-8
+        assert!(String::from_utf8(asset_desc.clone()).is_err());
+
+        // Should panic
+        compute_asset_desc_hash(&NonEmpty::from_slice(&asset_desc).unwrap());
     }
 
     #[test]
@@ -1807,7 +1797,10 @@ mod tests {
 
         // Setup note and merkle tree
         let mut rng = OsRng;
-        let asset1 = AssetBase::derive(&ik, &compute_asset_desc_hash(b"zsa_asset1").unwrap());
+        let asset1 = AssetBase::derive(
+            &ik,
+            &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset1").unwrap()),
+        );
         let note1 = Note::new(
             recipient,
             NoteValue::from_raw(10),
@@ -1857,8 +1850,8 @@ mod tests {
             .unwrap();
 
         // Create an issue bundle
-        let asset_desc_hash_2 = compute_asset_desc_hash(b"asset2").unwrap();
-        let asset_desc_hash_3 = compute_asset_desc_hash(b"asset3").unwrap();
+        let asset_desc_hash_2 = compute_asset_desc_hash(&NonEmpty::from_slice(b"asset2").unwrap());
+        let asset_desc_hash_3 = compute_asset_desc_hash(&NonEmpty::from_slice(b"asset3").unwrap());
         let (mut bundle, asset) = IssueBundle::new(
             ik,
             asset_desc_hash_2,
