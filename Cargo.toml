@@ -89,7 +89,7 @@ bench = false
 crate-type = ["rlib", "cdylib"]
 
 [features]
-default = ["std"]
+default = ["std", "circuit"]
 std = ["core2/std", "group/wnaf-memuse", "reddsa/std"]
 circuit = ["dep:halo2_gadgets", "dep:halo2_proofs", "std"]
 unstable-frost = []
