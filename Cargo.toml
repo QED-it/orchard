@@ -79,11 +79,16 @@ inferno = { version = "0.11", default-features = false, features = ["multithread
 #clap = "=4.2.0" #Pinned: Used by inferno. Later version requires Rust 1.70
 pprof = { version = "0.11", features = ["criterion", "flamegraph"] }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+getrandom = { version = "0.2", features = ["js"] }
+
 [lib]
 bench = false
+crate-type = ["cdylib"]
 
 [features]
-default = ["circuit", "multicore", "std"]
+default = ["std"]
 std = ["core2/std", "group/wnaf-memuse", "reddsa/std"]
 circuit = ["dep:halo2_gadgets", "dep:halo2_proofs", "std"]
 unstable-frost = []
