@@ -1,3 +1,6 @@
+// Allow dead code, as this file provides utilities for other benchmarks but isn't
+// a standalone benchmark target.
+#![allow(dead_code)]
 use criterion::{measurement::Measurement, BenchmarkGroup, Criterion};
 
 use orchard::orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA};

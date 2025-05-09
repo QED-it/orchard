@@ -85,7 +85,8 @@ getrandom = { version = "0.2", features = ["js"] }
 
 [lib]
 bench = false
-crate-type = ["cdylib"]
+# Build both rlib (for Rust linkage) and cdylib (for WASM target)
+crate-type = ["rlib", "cdylib"]
 
 [features]
 default = ["std"]

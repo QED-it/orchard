@@ -1,15 +1,15 @@
 #![cfg(target_arch = "wasm32")]
 
-use wasm_bindgen::prelude::*;
+use crate::keys::{AccountId, FullViewingKey, Scope, SpendingKey};
 use alloc::vec::Vec;
 use core::convert::TryFrom;
-use crate::keys::{SpendingKey, FullViewingKey, AccountId, Scope};
+use wasm_bindgen::prelude::*;
 
 /// Derive an Orchard spending key from a ZIP32 seed.
 #[wasm_bindgen]
 pub fn derive_spending_key(seed: &[u8], coin_type: u32, account: u32) -> Result<Vec<u8>, JsValue> {
-    let account_id = AccountId::try_from(account)
-        .map_err(|_| JsValue::from_str("Invalid account index"))?;
+    let account_id =
+        AccountId::try_from(account).map_err(|_| JsValue::from_str("Invalid account index"))?;
     let sk = SpendingKey::from_zip32_seed(seed, coin_type, account_id)
         .map_err(|e| JsValue::from_str(&format!("ZIP32 error: {:?}", e)))?;
     Ok(sk.to_bytes().to_vec())
@@ -73,8 +73,13 @@ pub fn derive_incoming_viewing_key(fvk_bytes: &[u8], scope: u8) -> Result<Vec<u8
     }
     let mut arr = [0u8; 96];
     arr.copy_from_slice(fvk_bytes);
-    let fvk = FullViewingKey::from_bytes(&arr).ok_or(JsValue::from_str("Invalid full viewing key"))?;
-    let scope = if scope == 0 { Scope::External } else { Scope::Internal };
+    let fvk =
+        FullViewingKey::from_bytes(&arr).ok_or(JsValue::from_str("Invalid full viewing key"))?;
+    let scope = if scope == 0 {
+        Scope::External
+    } else {
+        Scope::Internal
+    };
     let ivk = fvk.to_ivk(scope);
     Ok(ivk.to_bytes().to_vec())
 }
@@ -87,8 +92,13 @@ pub fn derive_outgoing_viewing_key(fvk_bytes: &[u8], scope: u8) -> Result<Vec<u8
     }
     let mut arr = [0u8; 96];
     arr.copy_from_slice(fvk_bytes);
-    let fvk = FullViewingKey::from_bytes(&arr).ok_or(JsValue::from_str("Invalid full viewing key"))?;
-    let scope = if scope == 0 { Scope::External } else { Scope::Internal };
+    let fvk =
+        FullViewingKey::from_bytes(&arr).ok_or(JsValue::from_str("Invalid full viewing key"))?;
+    let scope = if scope == 0 {
+        Scope::External
+    } else {
+        Scope::Internal
+    };
     let ovk = fvk.to_ovk(scope);
     Ok(ovk.as_ref().to_vec())
 }
@@ -103,7 +113,8 @@ pub fn derive_address(fvk_bytes: &[u8], diversifier_index: u32) -> Result<Vec<u8
     }
     let mut arr = [0u8; 96];
     arr.copy_from_slice(fvk_bytes);
-    let fvk = FullViewingKey::from_bytes(&arr).ok_or(JsValue::from_str("Invalid full viewing key"))?;
+    let fvk =
+        FullViewingKey::from_bytes(&arr).ok_or(JsValue::from_str("Invalid full viewing key"))?;
     let address = fvk.address_at(diversifier_index, Scope::External);
     Ok(address.to_raw_address_bytes().to_vec())
 }

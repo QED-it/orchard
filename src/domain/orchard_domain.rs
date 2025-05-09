@@ -70,12 +70,12 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
     ///
     /// More precisely, write disjoint parts of each Orchard shielded action as 3 separate hashes:
     /// * \[(nullifier, cmx, ephemeral_key, enc_ciphertext\[..52\])*\] personalized
-    ///   with ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION
+    ///    with ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION
     /// * \[enc_ciphertext\[52..564\]*\] (memo ciphertexts) personalized
-    ///   with ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION
+    ///    with ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION
     /// * \[(cv, rk, enc_ciphertext\[564..\], out_ciphertext)*\] personalized
-    ///   with ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION
-    ///   as defined in [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+    ///    with ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION
+    ///    as defined in [ZIP-244: Transaction Identifier Non-Malleability][zip244]
     ///
     /// [zip244]: https://zips.z.cash/zip-0244
     fn update_hash_with_actions<A: Authorization, V: Copy + Into<i64>>(
