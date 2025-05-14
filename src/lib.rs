@@ -100,3 +100,11 @@ impl Proof {
         Proof(bytes)
     }
 }
+#[cfg(test)]
+mod key_test;
+
+// WASM-bindgen: derive Orchard address from a spending key
+#[cfg(feature = "wasm")]
+mod wasm_bindings;
+#[cfg(feature = "wasm")]
+pub use wasm_bindings::derive_orchard_address;

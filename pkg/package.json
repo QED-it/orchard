@@ -1,0 +1,38 @@
+{
+  "name": "orchard",
+  "type": "module",
+  "collaborators": [
+    "Sean Bowe <sean@electriccoin.co>",
+    "Jack Grigg <jack@electriccoin.co>",
+    "Daira-Emma Hopwood <daira@jacaranda.org>",
+    "Ying Tong Lai",
+    "Kris Nuttycombe <kris@electriccoin.co>"
+  ],
+  "description": "The Orchard shielded transaction protocol",
+  "version": "0.11.0",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zcash/orchard"
+  },
+  "files": [
+    "orchard_bg.wasm",
+    "orchard.js",
+    "orchard_bg.js",
+    "orchard.d.ts",
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
+  ],
+  "main": "orchard.js",
+  "types": "orchard.d.ts",
+  "sideEffects": [
+    "./orchard.js",
+    "./snippets/*"
+  ],
+  "keywords": [
+    "zcash"
+  ],
+  "dependencies": {
+    "bip39": "^3.0.4"
+  }
+}
