@@ -450,6 +450,7 @@ impl OutputInfo {
             encrypted_note,
             recipient: Some(self.recipient),
             value: Some(self.value),
+            asset: Some(self.asset),
             rseed: Some(*note.rseed()),
             // TODO: Extract ock from the encryptor and save it so
             // Signers can check `out_ciphertext`.

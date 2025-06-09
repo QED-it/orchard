@@ -278,6 +278,15 @@ pub struct Output<D: OrchardDomainCommon> {
     /// information, we can drop the values and compress the rcvs into the bsk global.
     pub(crate) value: Option<NoteValue>,
 
+    /// The asset id of the output.
+    ///
+    /// This may be used by Signers to verify that the value matches `cv`, and to confirm
+    /// the values and change involved in the transaction.
+    ///
+    /// This exposes the value to all participants. For Signers who don't need this
+    /// information, we can drop the values and compress the rcvs into the bsk global.
+    pub(crate) asset: Option<AssetBase>,
+
     /// The seed randomness for the output.
     ///
     /// - This is set by the Constructor.

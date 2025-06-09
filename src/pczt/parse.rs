@@ -252,6 +252,7 @@ impl<D: OrchardDomainCommon> Output<D> {
         out_ciphertext: Vec<u8>,
         recipient: Option<[u8; 43]>,
         value: Option<u64>,
+        asset: Option<[u8; 32]>,
         rseed: Option<[u8; 32]>,
         ock: Option<[u8; 32]>,
         zip32_derivation: Option<Zip32Derivation>,
@@ -283,6 +284,14 @@ impl<D: OrchardDomainCommon> Output<D> {
 
         let value = value.map(NoteValue::from_raw);
 
+        let asset = asset
+            .map(|bytes| {
+                AssetBase::from_bytes(&bytes)
+                    .into_option()
+                    .ok_or(ParseError::InvalidAsset)
+            })
+            .transpose()?;
+
         let rseed = rseed
             .map(|rseed| {
                 let rho = Rho::from_nf_old(spend_nullifier);
@@ -299,6 +308,7 @@ impl<D: OrchardDomainCommon> Output<D> {
             encrypted_note,
             recipient,
             value,
+            asset,
             rseed,
             ock,
             zip32_derivation,
@@ -334,6 +344,8 @@ pub enum ParseError {
     InvalidAnchor,
     /// An invalid `burn` was provided.
     InvalidBurn,
+    /// An invalid `asset` was provided.
+    InvalidAsset,
     /// An invalid `bsk` was provided.
     InvalidBindingSignatureSigningKey,
     /// An invalid `dummy_sk` was provided.
