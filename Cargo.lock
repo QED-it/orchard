@@ -976,13 +976,13 @@ dependencies = [
 [[package]]
 name = "halo2_gadgets"
 version = "0.3.1"
-source = "git+https://github.com/QED-it/halo2?rev=db3628ca6eb3a8931b7cd430d1c0bd9f568f448c#db3628ca6eb3a8931b7cd430d1c0bd9f568f448c"
+source = "git+https://github.com/zcash/halo2?rev=3b4f2cb792bddf795d706401285476f8c6b981a3#3b4f2cb792bddf795d706401285476f8c6b981a3"
 dependencies = [
  "arrayvec",
  "bitvec",
  "ff",
  "group",
- "halo2_poseidon 0.1.0 (git+https://github.com/QED-it/halo2?rev=db3628ca6eb3a8931b7cd430d1c0bd9f568f448c)",
+ "halo2_poseidon 0.1.0 (git+https://github.com/zcash/halo2?rev=3b4f2cb792bddf795d706401285476f8c6b981a3)",
  "halo2_proofs",
  "lazy_static",
  "pasta_curves",
@@ -1014,7 +1014,7 @@ dependencies = [
 [[package]]
 name = "halo2_poseidon"
 version = "0.1.0"
-source = "git+https://github.com/QED-it/halo2?rev=db3628ca6eb3a8931b7cd430d1c0bd9f568f448c#db3628ca6eb3a8931b7cd430d1c0bd9f568f448c"
+source = "git+https://github.com/zcash/halo2?rev=3b4f2cb792bddf795d706401285476f8c6b981a3#3b4f2cb792bddf795d706401285476f8c6b981a3"
 dependencies = [
  "bitvec",
  "ff",
@@ -1025,7 +1025,7 @@ dependencies = [
 [[package]]
 name = "halo2_proofs"
 version = "0.3.0"
-source = "git+https://github.com/QED-it/halo2?rev=db3628ca6eb3a8931b7cd430d1c0bd9f568f448c#db3628ca6eb3a8931b7cd430d1c0bd9f568f448c"
+source = "git+https://github.com/zcash/halo2?rev=3b4f2cb792bddf795d706401285476f8c6b981a3#3b4f2cb792bddf795d706401285476f8c6b981a3"
 dependencies = [
  "blake2b_simd",
  "ff",
