@@ -6,13 +6,12 @@ use rand::{CryptoRng, RngCore};
 use crate::{
     builder::SpendInfo,
     circuit::{Circuit, Instance, ProvingKey, Witnesses},
-    domain::OrchardDomainCommon,
     note::Rho,
     orchard_flavor::OrchardFlavor,
     Note, Proof,
 };
 
-impl<D: OrchardDomainCommon> super::Bundle<D> {
+impl super::Bundle {
     /// Adds a proof to this PCZT bundle.
     pub fn create_proof<FL: OrchardFlavor, R: RngCore + CryptoRng>(
         &mut self,

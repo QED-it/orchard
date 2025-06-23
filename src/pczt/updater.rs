@@ -1,13 +1,12 @@
 use super::{Action, Bundle, Zip32Derivation};
-use crate::domain::OrchardDomainCommon;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-impl<D: OrchardDomainCommon> Bundle<D> {
+impl Bundle {
     /// Updates the bundle with information provided in the given closure.
     pub fn update_with<F>(&mut self, f: F) -> Result<(), UpdaterError>
     where
-        F: FnOnce(Updater<'_, D>) -> Result<(), UpdaterError>,
+        F: FnOnce(Updater<'_>) -> Result<(), UpdaterError>,
     {
         f(Updater(self))
     }
@@ -15,11 +14,11 @@ impl<D: OrchardDomainCommon> Bundle<D> {
 
 /// An updater for an Orchard PCZT bundle.
 #[derive(Debug)]
-pub struct Updater<'a, D: OrchardDomainCommon>(&'a mut Bundle<D>);
+pub struct Updater<'a>(&'a mut Bundle);
 
-impl<D: OrchardDomainCommon> Updater<'_, D> {
+impl Updater<'_> {
     /// Provides read access to the bundle being updated.
-    pub fn bundle(&self) -> &Bundle<D> {
+    pub fn bundle(&self) -> &Bundle {
         self.0
     }
 
@@ -27,7 +26,7 @@ impl<D: OrchardDomainCommon> Updater<'_, D> {
     /// closure.
     pub fn update_action_with<F>(&mut self, index: usize, f: F) -> Result<(), UpdaterError>
     where
-        F: FnOnce(ActionUpdater<'_, D>) -> Result<(), UpdaterError>,
+        F: FnOnce(ActionUpdater<'_>) -> Result<(), UpdaterError>,
     {
         f(ActionUpdater(
             self.0
@@ -40,9 +39,9 @@ impl<D: OrchardDomainCommon> Updater<'_, D> {
 
 /// An updater for an Orchard PCZT action.
 #[derive(Debug)]
-pub struct ActionUpdater<'a, D: OrchardDomainCommon>(&'a mut Action<D>);
+pub struct ActionUpdater<'a>(&'a mut Action);
 
-impl<D: OrchardDomainCommon> ActionUpdater<'_, D> {
+impl ActionUpdater<'_> {
     /// Sets the ZIP 32 derivation path for the spent note's signing key.
     pub fn set_spend_zip32_derivation(&mut self, derivation: Zip32Derivation) {
         self.0.spend.zip32_derivation = Some(derivation);

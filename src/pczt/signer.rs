@@ -1,8 +1,8 @@
 use rand::{CryptoRng, RngCore};
 
-use crate::{domain::OrchardDomainCommon, keys::SpendAuthorizingKey, primitives::redpallas};
+use crate::{keys::SpendAuthorizingKey, primitives::redpallas};
 
-impl<D: OrchardDomainCommon> super::Action<D> {
+impl super::Action {
     /// Signs the Orchard spend with the given spend authorizing key.
     ///
     /// It is the caller's responsibility to perform any semantic validity checks on the

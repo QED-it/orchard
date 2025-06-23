@@ -1,12 +1,11 @@
 use crate::{
-    domain::OrchardDomainCommon,
     keys::{FullViewingKey, SpendValidatingKey},
     note::{ExtractedNoteCommitment, Rho},
     value::ValueCommitment,
     Note,
 };
 
-impl<D: OrchardDomainCommon> super::Action<D> {
+impl super::Action {
     /// Verifies that the `cv_net` field is consistent with the note fields.
     ///
     /// Requires that the following optional fields are set:
@@ -117,7 +116,7 @@ impl super::Spend {
     }
 }
 
-impl<D: OrchardDomainCommon> super::Output<D> {
+impl super::Output {
     /// Verifies that the `cmx` field is consistent with the note fields.
     ///
     /// Requires that the following optional fields are set:

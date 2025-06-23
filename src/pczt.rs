@@ -7,6 +7,7 @@ use core::fmt;
 
 use getset::Getters;
 use pasta_curves::pallas;
+use zcash_note_encryption_zsa::note_bytes::NoteBytes;
 use zcash_note_encryption_zsa::OutgoingCipherKey;
 use zip32::ChildIndex;
 
@@ -15,7 +16,7 @@ use crate::{
     domain::OrchardDomainCommon,
     keys::{FullViewingKey, SpendingKey},
     note::{
-        AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
+        AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho,
     },
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::MerklePath,
@@ -45,6 +46,7 @@ pub use signer::SignerError;
 
 mod tx_extractor;
 pub use tx_extractor::{TxExtractorError, Unbound};
+use crate::note::TransmittedNoteCiphertext;
 
 /// PCZT fields that are specific to producing the transaction's Orchard bundle (if any).
 ///
@@ -54,12 +56,12 @@ pub use tx_extractor::{TxExtractorError, Unbound};
 /// [the regular `Bundle` struct]: crate::Bundle
 #[derive(Debug, Getters)]
 #[getset(get = "pub")]
-pub struct Bundle<D: OrchardDomainCommon> {
+pub struct Bundle {
     /// The Orchard actions in this bundle.
     ///
     /// Entries are added by the Constructor, and modified by an Updater, IO Finalizer,
     /// Signer, Combiner, or Spend Finalizer.
-    pub(crate) actions: Vec<Action<D>>,
+    pub(crate) actions: Vec<Action>,
 
     /// The flags for the Orchard bundle.
     ///
@@ -104,14 +106,14 @@ pub struct Bundle<D: OrchardDomainCommon> {
     pub(crate) bsk: Option<redpallas::SigningKey<Binding>>,
 }
 
-impl<D: OrchardDomainCommon> Bundle<D> {
+impl Bundle {
     /// Returns a mutable reference to the actions in this bundle.
     ///
     /// This is used by Signers to apply signatures with [`Action::sign`].
     ///
     /// Note: updating the `Action`s via the returned slice will not update other
     /// fields of the bundle dependent on them, such as `value_sum` and `bsk`.
-    pub fn actions_mut(&mut self) -> &mut [Action<D>] {
+    pub fn actions_mut(&mut self) -> &mut [Action] {
         &mut self.actions
     }
 }
@@ -124,7 +126,7 @@ impl<D: OrchardDomainCommon> Bundle<D> {
 /// [the regular `Action` struct]: crate::Action
 #[derive(Debug, Getters)]
 #[getset(get = "pub")]
-pub struct Action<D: OrchardDomainCommon> {
+pub struct Action {
     /// A commitment to the net value created or consumed by this action.
     pub(crate) cv_net: ValueCommitment,
 
@@ -132,7 +134,7 @@ pub struct Action<D: OrchardDomainCommon> {
     pub(crate) spend: Spend,
 
     /// The output half of this action.
-    pub(crate) output: Output<D>,
+    pub(crate) output: Output,
 
     /// The value commitment randomness.
     ///
@@ -248,7 +250,7 @@ pub struct Spend {
 /// Information about an Orchard output within a transaction.
 #[derive(Getters)]
 #[getset(get = "pub")]
-pub struct Output<D: OrchardDomainCommon> {
+pub struct Output {
     /// A commitment to the new note being created.
     pub(crate) cmx: ExtractedNoteCommitment,
 
@@ -258,7 +260,7 @@ pub struct Output<D: OrchardDomainCommon> {
     /// - `ephemeral_key`
     /// - `enc_ciphertext`
     /// - `out_ciphertext`
-    pub(crate) encrypted_note: TransmittedNoteCiphertext<D>,
+    pub(crate) encrypted_note: PcztTransmittedNoteCiphertext,
 
     /// The address that will receive the output.
     ///
@@ -309,7 +311,7 @@ pub struct Output<D: OrchardDomainCommon> {
     pub(crate) proprietary: BTreeMap<String, Vec<u8>>,
 }
 
-impl<D: OrchardDomainCommon> fmt::Debug for Output<D> {
+impl fmt::Debug for Output {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Output")
             .field("cmx", &self.cmx)
@@ -360,6 +362,39 @@ impl Zip32Derivation {
             }
         } else {
             None
+        }
+    }
+}
+
+/// An encrypted note.
+#[derive(Clone, Debug)]
+pub struct PcztTransmittedNoteCiphertext {
+    /// The serialization of the ephemeral public key
+    pub epk_bytes: [u8; 32],
+    /// The encrypted note ciphertext
+    pub enc_ciphertext: Vec<u8>,
+    /// An encrypted value that allows the holder of the outgoing cipher
+    /// key for the note to recover the note plaintext.
+    pub out_ciphertext: [u8; 80],
+}
+
+impl PcztTransmittedNoteCiphertext {
+    
+    /// Converts `TransmittedNoteCiphertext` into `PcztTransmittedNoteCiphertext`
+    pub fn from_transmitted_note_ciphertext<D: OrchardDomainCommon>(transmitted: TransmittedNoteCiphertext<D>) -> Self {
+        PcztTransmittedNoteCiphertext {
+            epk_bytes: transmitted.epk_bytes,
+            enc_ciphertext: transmitted.enc_ciphertext.as_ref().to_vec(),
+            out_ciphertext: transmitted.out_ciphertext,
+        }
+    }
+
+    /// Converts `PcztTransmittedNoteCiphertext` into `TransmittedNoteCiphertext`
+    pub fn into_transmitted_note_ciphertext<D: OrchardDomainCommon>(self) -> TransmittedNoteCiphertext<D> {
+        TransmittedNoteCiphertext {
+            epk_bytes: self.epk_bytes,
+            enc_ciphertext: D::NoteCiphertextBytes::from_slice(self.enc_ciphertext.as_ref()).expect("enc_ciphertext is corrupt"),
+            out_ciphertext: self.out_ciphertext,
         }
     }
 }
@@ -418,7 +453,7 @@ mod tests {
         pczt_bundle.create_proof::<FL, _>(&pk, rng.clone()).unwrap();
 
         // Run the Transaction Extractor role.
-        let bundle = pczt_bundle.extract::<i64>().unwrap().unwrap();
+        let bundle = pczt_bundle.extract::<i64, FL>().unwrap().unwrap();
 
         let orchard_digest = hash_bundle_txid_data(&bundle);
 
@@ -574,7 +609,7 @@ mod tests {
         }
 
         // Run the Transaction Extractor role.
-        let bundle = pczt_bundle.extract::<i64>().unwrap().unwrap();
+        let bundle = pczt_bundle.extract::<i64, FL>().unwrap().unwrap();
 
         let orchard_digest = hash_bundle_txid_data(&bundle);
 

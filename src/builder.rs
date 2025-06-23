@@ -15,12 +15,12 @@ use crate::{
     address::Address,
     builder::BuildError::{BurnNative, BurnZero},
     bundle::{Authorization, Authorized, Bundle, Flags},
-    domain::{OrchardDomain, OrchardDomainCommon},
+    domain::OrchardDomain,
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
     },
-    note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
+    note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -37,6 +37,9 @@ use {
     },
     nonempty::NonEmpty,
 };
+use crate::domain::OrchardDomainCommon;
+use crate::note::TransmittedNoteCiphertext;
+use crate::pczt::PcztTransmittedNoteCiphertext;
 
 const MIN_ACTIONS: usize = 2;
 
@@ -442,9 +445,11 @@ impl OutputInfo {
         cv_net: &ValueCommitment,
         nf_old: Nullifier,
         rng: impl RngCore,
-    ) -> crate::pczt::Output<D> {
-        let (note, cmx, encrypted_note) = self.build(cv_net, nf_old, rng);
+    ) -> crate::pczt::Output {
+        let (note, cmx, encrypted_note) = self.build::<D>(cv_net, nf_old, rng);
 
+        let encrypted_note = PcztTransmittedNoteCiphertext::from_transmitted_note_ciphertext(encrypted_note);
+        
         crate::pczt::Output {
             cmx,
             encrypted_note,
@@ -535,7 +540,7 @@ impl ActionInfo {
     fn build_for_pczt<D: OrchardDomainCommon>(
         self,
         mut rng: impl RngCore,
-    ) -> crate::pczt::Action<D> {
+    ) -> crate::pczt::Action {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -545,7 +550,7 @@ impl ActionInfo {
         let cv_net = ValueCommitment::derive(v_net, self.rcv, self.spend.note.asset());
 
         let spend = self.spend.into_pczt(&mut rng);
-        let output = self.output.into_pczt(&cv_net, spend.nullifier, &mut rng);
+        let output = self.output.into_pczt::<D>(&cv_net, spend.nullifier, &mut rng);
 
         crate::pczt::Action {
             cv_net,
@@ -778,7 +783,7 @@ impl Builder {
     pub fn build_for_pczt<D: OrchardDomainCommon>(
         self,
         rng: impl RngCore,
-    ) -> Result<(crate::pczt::Bundle<D>, BundleMetadata), BuildError> {
+    ) -> Result<(crate::pczt::Bundle, BundleMetadata), BuildError> {
         build_bundle(
             rng,
             self.anchor,
@@ -790,7 +795,7 @@ impl Builder {
                 // Create the actions.
                 let actions = pre_actions
                     .into_iter()
-                    .map(|a| a.build_for_pczt(&mut rng))
+                    .map(|a| a.build_for_pczt::<D>(&mut rng))
                     .collect::<Vec<_>>();
 
                 Ok((
