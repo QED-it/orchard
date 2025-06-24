@@ -110,6 +110,15 @@ pub trait OrchardCircuit: Sized + Default {
         config: Self::Config,
         layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error>;
+
+    /// Builds the ZSA-specific witnesses for the circuit.
+    /// For OrchardVanilla circuits, all fields in `ZsaWitnesses` are `Unknown`.
+    #[allow(clippy::type_complexity)]
+    fn build_zsa_witnesses(
+        psi_nf: pallas::Base,
+        asset: AssetBase,
+        split_flag: bool,
+    ) -> ZsaWitnesses;
 }
 
 impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
@@ -135,9 +144,18 @@ impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
 
 /// The Orchard Action circuit.
 #[derive(Clone, Debug, Default)]
-pub struct Circuit<D> {
+pub struct Circuit<C: OrchardCircuit> {
     pub(crate) witnesses: Witnesses,
-    pub(crate) phantom: core::marker::PhantomData<D>,
+    pub(crate) phantom: core::marker::PhantomData<C>,
+}
+
+/// The ZSA-specific witnesses.
+/// For OrchardVanilla circuits, all fields in `ZsaWitnesses` are `Unknown`.
+#[derive(Clone, Debug, Default)]
+pub struct ZsaWitnesses {
+    pub(crate) psi_nf: Value<pallas::Base>,
+    pub(crate) asset: Value<AssetBase>,
+    pub(crate) split_flag: Value<bool>,
 }
 
 /// The Orchard Action witnesses
@@ -152,7 +170,6 @@ pub struct Witnesses {
     pub(crate) psi_old: Value<pallas::Base>,
     pub(crate) rcm_old: Value<NoteCommitTrapdoor>,
     pub(crate) cm_old: Value<NoteCommitment>,
-    pub(crate) psi_nf: Value<pallas::Base>,
     pub(crate) alpha: Value<pallas::Scalar>,
     pub(crate) ak: Value<SpendValidatingKey>,
     pub(crate) nk: Value<NullifierDerivingKey>,
@@ -163,8 +180,10 @@ pub struct Witnesses {
     pub(crate) psi_new: Value<pallas::Base>,
     pub(crate) rcm_new: Value<NoteCommitTrapdoor>,
     pub(crate) rcv: Value<ValueCommitTrapdoor>,
-    pub(crate) asset: Value<AssetBase>,
-    pub(crate) split_flag: Value<bool>,
+
+    // The fields inside `zsa_witnesses` are only populated for OrchardZSA circuits.
+    // They are `Unknown` in OrchardVanilla circuits.
+    pub(crate) zsa_witnesses: ZsaWitnesses,
 }
 
 impl Witnesses {
@@ -183,17 +202,17 @@ impl Witnesses {
     ///
     /// [`SpendInfo`]: crate::builder::SpendInfo
     /// [`Builder`]: crate::builder::Builder
-    pub fn from_action_context(
+    pub fn from_action_context<C: OrchardCircuit>(
         spend: SpendInfo,
         output_note: Note,
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
     ) -> Option<Self> {
         (Rho::from_nf_old(spend.note.nullifier(&spend.fvk)) == output_note.rho())
-            .then(|| Self::from_action_context_unchecked(spend, output_note, alpha, rcv))
+            .then(|| Self::from_action_context_unchecked::<C>(spend, output_note, alpha, rcv))
     }
 
-    pub(crate) fn from_action_context_unchecked(
+    pub(crate) fn from_action_context_unchecked<C: OrchardCircuit>(
         spend: SpendInfo,
         output_note: Note,
         alpha: pallas::Scalar,
@@ -211,6 +230,8 @@ impl Witnesses {
         let psi_new = output_note.rseed().psi(&rho_new);
         let rcm_new = output_note.rseed().rcm(&rho_new);
 
+        let zsa_witnesses = C::build_zsa_witnesses(psi_nf, spend.note.asset(), spend.split_flag);
+
         Witnesses {
             path: Value::known(spend.merkle_path.auth_path()),
             pos: Value::known(spend.merkle_path.position()),
@@ -221,7 +242,6 @@ impl Witnesses {
             psi_old: Value::known(psi_old),
             rcm_old: Value::known(rcm_old),
             cm_old: Value::known(spend.note.commitment()),
-            psi_nf: Value::known(psi_nf),
             alpha: Value::known(alpha),
             ak: Value::known(spend.fvk.clone().into()),
             nk: Value::known(*spend.fvk.nk()),
@@ -232,8 +252,8 @@ impl Witnesses {
             psi_new: Value::known(psi_new),
             rcm_new: Value::known(rcm_new),
             rcv: Value::known(rcv),
-            asset: Value::known(spend.note.asset()),
-            split_flag: Value::known(spend.split_flag),
+
+            zsa_witnesses,
         }
     }
 }

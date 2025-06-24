@@ -32,8 +32,8 @@ use {
     crate::{
         action::Action,
         bundle::derive_bvk,
-        circuit::{Circuit, Instance, ProvingKey, Witnesses},
-        orchard_flavor::{Flavor, OrchardFlavor, OrchardVanilla, OrchardZSA},
+        circuit::{Circuit, Instance, OrchardCircuit, ProvingKey, Witnesses},
+        orchard_flavor::OrchardFlavor,
     },
     nonempty::NonEmpty,
 };
@@ -500,10 +500,10 @@ impl ActionInfo {
     ///
     /// Panics if the asset types of the spent and output notes do not match.
     #[cfg(feature = "circuit")]
-    fn build<D: OrchardDomainCommon>(
+    fn build<FL: OrchardFlavor>(
         self,
         mut rng: impl RngCore,
-    ) -> (Action<SigningMetadata, D>, Witnesses) {
+    ) -> (Action<SigningMetadata, FL>, Witnesses) {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -528,7 +528,7 @@ impl ActionInfo {
                     parts: SigningParts { ak, alpha },
                 },
             ),
-            Witnesses::from_action_context_unchecked(self.spend, note, alpha, self.rcv),
+            Witnesses::from_action_context_unchecked::<FL>(self.spend, note, alpha, self.rcv),
         )
     }
 
@@ -931,10 +931,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                     burn_vec,
                     anchor,
                     InProgress {
-                        proof: Unproven {
-                            witnesses,
-                            circuit_flavor: FL::FLAVOR,
-                        },
+                        proof: Unproven { witnesses },
                         sigs: Unauthorized { bsk },
                     },
                 ),
@@ -1153,44 +1150,27 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 #[derive(Clone, Debug)]
 pub struct Unproven {
     witnesses: Vec<Witnesses>,
-    circuit_flavor: Flavor,
 }
 
 #[cfg(feature = "circuit")]
 impl<S: InProgressSignatures> InProgress<Unproven, S> {
     /// Creates the proof for this bundle.
-    pub fn create_proof(
+    pub fn create_proof<C: OrchardCircuit>(
         &self,
         pk: &ProvingKey,
         instances: &[Instance],
         rng: impl RngCore,
     ) -> Result<Proof, halo2_proofs::plonk::Error> {
-        match self.proof.circuit_flavor {
-            Flavor::OrchardVanillaFlavor => {
-                let circuits = self
-                    .proof
-                    .witnesses
-                    .iter()
-                    .map(|witnesses| Circuit::<OrchardVanilla> {
-                        witnesses: witnesses.clone(),
-                        phantom: core::marker::PhantomData,
-                    })
-                    .collect::<Vec<Circuit<OrchardVanilla>>>();
-                Proof::create(pk, &circuits, instances, rng)
-            }
-            Flavor::OrchardZSAFlavor => {
-                let circuits = self
-                    .proof
-                    .witnesses
-                    .iter()
-                    .map(|witnesses| Circuit::<OrchardZSA> {
-                        witnesses: witnesses.clone(),
-                        phantom: core::marker::PhantomData,
-                    })
-                    .collect::<Vec<Circuit<OrchardZSA>>>();
-                Proof::create(pk, &circuits, instances, rng)
-            }
-        }
+        let circuits = self
+            .proof
+            .witnesses
+            .iter()
+            .map(|witnesses| Circuit::<C> {
+                witnesses: witnesses.clone(),
+                phantom: core::marker::PhantomData,
+            })
+            .collect::<Vec<Circuit<C>>>();
+        Proof::create(pk, &circuits, instances, rng)
     }
 }
 
@@ -1211,7 +1191,7 @@ impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven, 
             &mut (),
             |_, _, a| Ok(a),
             |_, auth| {
-                let proof = auth.create_proof(pk, &instances, &mut rng)?;
+                let proof = auth.create_proof::<FL>(pk, &instances, &mut rng)?;
                 Ok(InProgress {
                     proof,
                     sigs: auth.sigs,
