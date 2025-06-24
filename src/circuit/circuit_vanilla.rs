@@ -37,9 +37,10 @@ use super::{
     commit_ivk::CommitIvkChip,
     gadget::{add_chip::AddChip, assign_free_advice},
     note_commit::NoteCommitChip,
-    OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X,
-    RK_Y,
+    OrchardCircuit, ZsaWitnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
+    NF_OLD, RK_X, RK_Y,
 };
+use crate::note::AssetBase;
 
 impl OrchardCircuit for OrchardVanilla {
     type Config = Config<PallasLookupRangeCheckConfig>;
@@ -609,6 +610,20 @@ impl OrchardCircuit for OrchardVanilla {
 
         Ok(())
     }
+
+    fn build_zsa_witnesses(_: pallas::Base, asset: AssetBase, split_flag: bool) -> ZsaWitnesses {
+        if !(bool::from(asset.is_native())) {
+            panic!("asset must be native asset in OrchardVanilla circuit");
+        }
+        if split_flag {
+            panic!("split_flag must be false in OrchardVanilla circuit");
+        }
+        ZsaWitnesses {
+            psi_nf: Value::unknown(),
+            asset: Value::unknown(),
+            split_flag: Value::unknown(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -621,7 +636,7 @@ mod tests {
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, RngCore};
 
-    use crate::circuit::Witnesses;
+    use crate::circuit::{Witnesses, ZsaWitnesses};
     use crate::{
         bundle::Flags,
         circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K},
@@ -656,8 +671,6 @@ mod tests {
         let path = MerklePath::dummy(&mut rng);
         let anchor = path.root(spent_note.commitment().into());
 
-        let psi_old = spent_note.rseed().psi(&spent_note.rho());
-
         (
             OrchardCircuitVanilla {
                 witnesses: Witnesses {
@@ -670,8 +683,6 @@ mod tests {
                     psi_old: Value::known(spent_note.rseed().psi(&spent_note.rho())),
                     rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
                     cm_old: Value::known(spent_note.commitment()),
-                    // For non split note, psi_nf is equal to psi_old
-                    psi_nf: Value::known(psi_old),
                     alpha: Value::known(alpha),
                     ak: Value::known(ak),
                     nk: Value::known(nk),
@@ -682,8 +693,12 @@ mod tests {
                     psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
                     rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
                     rcv: Value::known(rcv),
-                    asset: Value::known(spent_note.asset()),
-                    split_flag: Value::known(false),
+
+                    zsa_witnesses: ZsaWitnesses {
+                        psi_nf: Value::unknown(),
+                        asset: Value::unknown(),
+                        split_flag: Value::unknown(),
+                    },
                 },
                 phantom: core::marker::PhantomData,
             },
