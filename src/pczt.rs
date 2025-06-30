@@ -15,7 +15,9 @@ use crate::{
     bundle::Flags,
     domain::OrchardDomainCommon,
     keys::{FullViewingKey, SpendingKey},
-    note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
+    note::{
+        AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
+    },
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -43,7 +45,6 @@ mod signer;
 pub use signer::SignerError;
 
 mod tx_extractor;
-use crate::note::TransmittedNoteCiphertext;
 pub use tx_extractor::{TxExtractorError, Unbound};
 
 /// PCZT fields that are specific to producing the transaction's Orchard bundle (if any).

@@ -15,21 +15,19 @@ use crate::{
     address::Address,
     builder::BuildError::{BurnNative, BurnZero},
     bundle::{Authorization, Authorized, Bundle, Flags},
-    domain::OrchardDomain,
+    domain::{OrchardDomain, OrchardDomainCommon},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
     },
-    note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho},
+    note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
+    pczt::PcztTransmittedNoteCiphertext,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
 };
 
-use crate::domain::OrchardDomainCommon;
-use crate::note::TransmittedNoteCiphertext;
-use crate::pczt::PcztTransmittedNoteCiphertext;
 #[cfg(feature = "circuit")]
 use {
     crate::{
