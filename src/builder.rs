@@ -27,6 +27,9 @@ use crate::{
     Proof,
 };
 
+use crate::domain::OrchardDomainCommon;
+use crate::note::TransmittedNoteCiphertext;
+use crate::pczt::PcztTransmittedNoteCiphertext;
 #[cfg(feature = "circuit")]
 use {
     crate::{
@@ -37,9 +40,6 @@ use {
     },
     nonempty::NonEmpty,
 };
-use crate::domain::OrchardDomainCommon;
-use crate::note::TransmittedNoteCiphertext;
-use crate::pczt::PcztTransmittedNoteCiphertext;
 
 const MIN_ACTIONS: usize = 2;
 
@@ -448,8 +448,9 @@ impl OutputInfo {
     ) -> crate::pczt::Output {
         let (note, cmx, encrypted_note) = self.build::<D>(cv_net, nf_old, rng);
 
-        let encrypted_note = PcztTransmittedNoteCiphertext::from_transmitted_note_ciphertext(encrypted_note);
-        
+        let encrypted_note =
+            PcztTransmittedNoteCiphertext::from_transmitted_note_ciphertext(encrypted_note);
+
         crate::pczt::Output {
             cmx,
             encrypted_note,
@@ -537,10 +538,7 @@ impl ActionInfo {
         )
     }
 
-    fn build_for_pczt<D: OrchardDomainCommon>(
-        self,
-        mut rng: impl RngCore,
-    ) -> crate::pczt::Action {
+    fn build_for_pczt<D: OrchardDomainCommon>(self, mut rng: impl RngCore) -> crate::pczt::Action {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -550,7 +548,9 @@ impl ActionInfo {
         let cv_net = ValueCommitment::derive(v_net, self.rcv, self.spend.note.asset());
 
         let spend = self.spend.into_pczt(&mut rng);
-        let output = self.output.into_pczt::<D>(&cv_net, spend.nullifier, &mut rng);
+        let output = self
+            .output
+            .into_pczt::<D>(&cv_net, spend.nullifier, &mut rng);
 
         crate::pczt::Action {
             cv_net,

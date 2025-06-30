@@ -63,7 +63,7 @@ impl super::Bundle {
         F: Fn(&Action) -> Result<<A as Authorization>::SpendAuth, E>,
         G: FnOnce(&Self) -> Result<A, E>,
         V: TryFrom<i64>,
-        D: OrchardDomainCommon
+        D: OrchardDomainCommon,
     {
         let actions = self
             .actions
@@ -75,7 +75,11 @@ impl super::Bundle {
                     action.spend.nullifier,
                     action.spend.rk.clone(),
                     action.output.cmx,
-                    action.output.encrypted_note.clone().into_transmitted_note_ciphertext(),
+                    action
+                        .output
+                        .encrypted_note
+                        .clone()
+                        .into_transmitted_note_ciphertext(),
                     action.cv_net.clone(),
                     authorization,
                 ))

@@ -15,9 +15,7 @@ use crate::{
     bundle::Flags,
     domain::OrchardDomainCommon,
     keys::{FullViewingKey, SpendingKey},
-    note::{
-        AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho,
-    },
+    note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -45,8 +43,8 @@ mod signer;
 pub use signer::SignerError;
 
 mod tx_extractor;
-pub use tx_extractor::{TxExtractorError, Unbound};
 use crate::note::TransmittedNoteCiphertext;
+pub use tx_extractor::{TxExtractorError, Unbound};
 
 /// PCZT fields that are specific to producing the transaction's Orchard bundle (if any).
 ///
@@ -379,9 +377,10 @@ pub struct PcztTransmittedNoteCiphertext {
 }
 
 impl PcztTransmittedNoteCiphertext {
-    
     /// Converts `TransmittedNoteCiphertext` into `PcztTransmittedNoteCiphertext`
-    pub fn from_transmitted_note_ciphertext<D: OrchardDomainCommon>(transmitted: TransmittedNoteCiphertext<D>) -> Self {
+    pub fn from_transmitted_note_ciphertext<D: OrchardDomainCommon>(
+        transmitted: TransmittedNoteCiphertext<D>,
+    ) -> Self {
         PcztTransmittedNoteCiphertext {
             epk_bytes: transmitted.epk_bytes,
             enc_ciphertext: transmitted.enc_ciphertext.as_ref().to_vec(),
@@ -390,10 +389,13 @@ impl PcztTransmittedNoteCiphertext {
     }
 
     /// Converts `PcztTransmittedNoteCiphertext` into `TransmittedNoteCiphertext`
-    pub fn into_transmitted_note_ciphertext<D: OrchardDomainCommon>(self) -> TransmittedNoteCiphertext<D> {
+    pub fn into_transmitted_note_ciphertext<D: OrchardDomainCommon>(
+        self,
+    ) -> TransmittedNoteCiphertext<D> {
         TransmittedNoteCiphertext {
             epk_bytes: self.epk_bytes,
-            enc_ciphertext: D::NoteCiphertextBytes::from_slice(self.enc_ciphertext.as_ref()).expect("enc_ciphertext is corrupt"),
+            enc_ciphertext: D::NoteCiphertextBytes::from_slice(self.enc_ciphertext.as_ref())
+                .expect("enc_ciphertext is corrupt"),
             out_ciphertext: self.out_ciphertext,
         }
     }
