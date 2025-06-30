@@ -2,6 +2,7 @@ use nonempty::NonEmpty;
 use rand::{CryptoRng, RngCore};
 
 use super::Action;
+use crate::orchard_flavor::OrchardFlavor;
 use crate::{
     bundle::{Authorization, Authorized, EffectsOnly},
     domain::OrchardDomainCommon,
@@ -9,7 +10,7 @@ use crate::{
     Proof,
 };
 
-impl<D: OrchardDomainCommon> super::Bundle<D> {
+impl<FL: OrchardFlavor> super::Bundle<FL> {
     /// Extracts the effects of this PCZT bundle as a [regular `Bundle`].
     ///
     /// This is used by the Signer role to produce the transaction sighash.
@@ -17,7 +18,7 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
     /// [regular `Bundle`]: crate::Bundle
     pub fn extract_effects<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::Bundle<EffectsOnly, V, D>>, TxExtractorError> {
+    ) -> Result<Option<crate::Bundle<EffectsOnly, V, FL>>, TxExtractorError> {
         self.to_tx_data(|_| Ok(()), |_| Ok(EffectsOnly))
     }
 
@@ -28,7 +29,7 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
     /// [regular `Bundle`]: crate::Bundle
     pub fn extract<V: TryFrom<i64>>(
         self,
-    ) -> Result<Option<crate::Bundle<Unbound, V, D>>, TxExtractorError> {
+    ) -> Result<Option<crate::Bundle<Unbound, V, FL>>, TxExtractorError> {
         self.to_tx_data(
             |action| {
                 action
@@ -56,11 +57,11 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
         &self,
         action_auth: F,
         bundle_auth: G,
-    ) -> Result<Option<crate::Bundle<A, V, D>>, E>
+    ) -> Result<Option<crate::Bundle<A, V, FL>>, E>
     where
         A: Authorization,
         E: From<TxExtractorError>,
-        F: Fn(&Action<D>) -> Result<<A as Authorization>::SpendAuth, E>,
+        F: Fn(&Action<FL>) -> Result<<A as Authorization>::SpendAuth, E>,
         G: FnOnce(&Self) -> Result<A, E>,
         V: TryFrom<i64>,
     {

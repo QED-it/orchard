@@ -775,10 +775,10 @@ impl Builder {
 
     /// Builds a bundle containing the given spent notes and outputs along with their
     /// metadata, for inclusion in a PCZT.
-    pub fn build_for_pczt<D: OrchardDomainCommon>(
+    pub fn build_for_pczt<FL: OrchardFlavor>(
         self,
         rng: impl RngCore,
-    ) -> Result<(crate::pczt::Bundle<D>, BundleMetadata), BuildError> {
+    ) -> Result<(crate::pczt::Bundle<FL>, BundleMetadata), BuildError> {
         build_bundle(
             rng,
             self.anchor,

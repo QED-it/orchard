@@ -1,13 +1,14 @@
 use super::{Action, Bundle, Zip32Derivation};
 use crate::domain::OrchardDomainCommon;
+use crate::orchard_flavor::OrchardFlavor;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-impl<D: OrchardDomainCommon> Bundle<D> {
+impl<FL: OrchardFlavor> Bundle<FL> {
     /// Updates the bundle with information provided in the given closure.
     pub fn update_with<F>(&mut self, f: F) -> Result<(), UpdaterError>
     where
-        F: FnOnce(Updater<'_, D>) -> Result<(), UpdaterError>,
+        F: FnOnce(Updater<'_, FL>) -> Result<(), UpdaterError>,
     {
         f(Updater(self))
     }
@@ -15,11 +16,11 @@ impl<D: OrchardDomainCommon> Bundle<D> {
 
 /// An updater for an Orchard PCZT bundle.
 #[derive(Debug)]
-pub struct Updater<'a, D: OrchardDomainCommon>(&'a mut Bundle<D>);
+pub struct Updater<'a, FL: OrchardFlavor>(&'a mut Bundle<FL>);
 
-impl<D: OrchardDomainCommon> Updater<'_, D> {
+impl<FL: OrchardFlavor> Updater<'_, FL> {
     /// Provides read access to the bundle being updated.
-    pub fn bundle(&self) -> &Bundle<D> {
+    pub fn bundle(&self) -> &Bundle<FL> {
         self.0
     }
 
@@ -27,7 +28,7 @@ impl<D: OrchardDomainCommon> Updater<'_, D> {
     /// closure.
     pub fn update_action_with<F>(&mut self, index: usize, f: F) -> Result<(), UpdaterError>
     where
-        F: FnOnce(ActionUpdater<'_, D>) -> Result<(), UpdaterError>,
+        F: FnOnce(ActionUpdater<'_, FL>) -> Result<(), UpdaterError>,
     {
         f(ActionUpdater(
             self.0

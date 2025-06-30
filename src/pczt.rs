@@ -17,6 +17,7 @@ use crate::{
     note::{
         AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
     },
+    orchard_flavor::OrchardFlavor,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -54,12 +55,12 @@ pub use tx_extractor::{TxExtractorError, Unbound};
 /// [the regular `Bundle` struct]: crate::Bundle
 #[derive(Debug, Getters)]
 #[getset(get = "pub")]
-pub struct Bundle<D: OrchardDomainCommon> {
+pub struct Bundle<FL: OrchardFlavor> {
     /// The Orchard actions in this bundle.
     ///
     /// Entries are added by the Constructor, and modified by an Updater, IO Finalizer,
     /// Signer, Combiner, or Spend Finalizer.
-    pub(crate) actions: Vec<Action<D>>,
+    pub(crate) actions: Vec<Action<FL>>,
 
     /// The flags for the Orchard bundle.
     ///
@@ -104,14 +105,14 @@ pub struct Bundle<D: OrchardDomainCommon> {
     pub(crate) bsk: Option<redpallas::SigningKey<Binding>>,
 }
 
-impl<D: OrchardDomainCommon> Bundle<D> {
+impl<FL: OrchardFlavor> Bundle<FL> {
     /// Returns a mutable reference to the actions in this bundle.
     ///
     /// This is used by Signers to apply signatures with [`Action::sign`].
     ///
     /// Note: updating the `Action`s via the returned slice will not update other
     /// fields of the bundle dependent on them, such as `value_sum` and `bsk`.
-    pub fn actions_mut(&mut self) -> &mut [Action<D>] {
+    pub fn actions_mut(&mut self) -> &mut [Action<FL>] {
         &mut self.actions
     }
 }
@@ -415,7 +416,7 @@ mod tests {
         pczt_bundle.finalize_io(sighash, rng.clone()).unwrap();
 
         // Run the Prover role.
-        pczt_bundle.create_proof::<FL, _>(&pk, rng.clone()).unwrap();
+        pczt_bundle.create_proof::<_>(&pk, rng.clone()).unwrap();
 
         // Run the Transaction Extractor role.
         let bundle = pczt_bundle.extract::<i64>().unwrap().unwrap();
@@ -561,7 +562,7 @@ mod tests {
         }
 
         // Run the Prover role.
-        pczt_bundle.create_proof::<FL, _>(&pk, rng.clone()).unwrap();
+        pczt_bundle.create_proof::<_>(&pk, rng.clone()).unwrap();
 
         // TODO: Verify that the PCZT contains sufficient information to decrypt and check
         // `enc_ciphertext`.

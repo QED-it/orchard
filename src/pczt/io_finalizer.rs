@@ -3,12 +3,13 @@ use alloc::vec::Vec;
 use rand::{CryptoRng, RngCore};
 
 use super::SignerError;
+use crate::orchard_flavor::OrchardFlavor;
 use crate::{
-    bundle::derive_bvk_raw, domain::OrchardDomainCommon, keys::SpendAuthorizingKey,
-    primitives::redpallas, value::ValueCommitTrapdoor,
+    bundle::derive_bvk_raw, keys::SpendAuthorizingKey, primitives::redpallas,
+    value::ValueCommitTrapdoor,
 };
 
-impl<D: OrchardDomainCommon> super::Bundle<D> {
+impl<FL: OrchardFlavor> super::Bundle<FL> {
     /// Finalizes the IO for this bundle.
     pub fn finalize_io<R: RngCore + CryptoRng>(
         &mut self,

@@ -16,18 +16,19 @@ use crate::{
     note::{
         AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
     },
+    orchard_flavor::OrchardFlavor,
     primitives::redpallas::{self, SpendAuth},
     tree::{MerkleHashOrchard, MerklePath},
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof, NOTE_COMMITMENT_TREE_DEPTH,
 };
 
-impl<D: OrchardDomainCommon> Bundle<D> {
+impl<FL: OrchardFlavor> Bundle<FL> {
     /// Parses a PCZT bundle from its component parts.
     /// `value_sum` is represented as `(magnitude, is_negative)`.
     #[allow(clippy::too_many_arguments)]
     pub fn parse(
-        actions: Vec<Action<D>>,
+        actions: Vec<Action<FL>>,
         flags: u8,
         value_sum: (u64, bool),
         anchor: [u8; 32],
