@@ -66,8 +66,9 @@ core2 = { version = "0.3", default-features = false, features = ["alloc"] }
 image = { version = "0.24", optional = true }
 plotters = { version = "0.3.0", optional = true }
 
-font-kit = "=0.11.0"
-half = "=2.2.1"
+# Pinned to versions that still build on MSRV 1.70 (font-kit + half)
+font-kit = { version = "=0.11.0", optional = true }
+half     = { version = "=2.2.1", optional = true }
 
 [dev-dependencies]
 criterion = "0.4" # 0.5 depends on clap 4 which has MSRV 1.70
@@ -91,7 +92,7 @@ std = ["core2/std", "group/wnaf-memuse", "reddsa/std"]
 circuit = ["dep:halo2_gadgets", "dep:halo2_proofs", "std"]
 unstable-frost = []
 multicore = ["halo2_proofs?/multicore"]
-dev-graph = ["halo2_proofs?/dev-graph", "image", "plotters"]
+dev-graph = ["halo2_proofs?/dev-graph", "image", "plotters", "font-kit", "half"]
 test-dependencies = ["proptest", "rand/std"]
 
 [[bench]]
