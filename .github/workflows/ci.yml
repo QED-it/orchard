@@ -93,8 +93,6 @@ jobs:
     name: Bitrot check
     runs-on: ubuntu-latest
     steps:
-      - name: Install dependencies (needed for yeslogic-fontconfig-sys crate)
-        run: sudo apt update && sudo apt install -y libfontconfig1-dev
       - uses: actions/checkout@v4
       # Build benchmarks to prevent bitrot
       - name: Build benchmarks
@@ -131,6 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install dependencies (needed for yeslogic-fontconfig-sys crate)
+        if: runner.os == 'Linux'
         run: sudo apt update && sudo apt install -y libfontconfig1-dev
       - uses: actions/checkout@v4
       - run: cargo fetch
