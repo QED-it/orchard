@@ -377,27 +377,23 @@ pub struct PcztTransmittedNoteCiphertext {
     pub out_ciphertext: [u8; 80],
 }
 
-impl PcztTransmittedNoteCiphertext {
-    /// Converts `TransmittedNoteCiphertext` into `PcztTransmittedNoteCiphertext`
-    pub fn from_transmitted_note_ciphertext<D: OrchardDomainCommon>(
-        transmitted: TransmittedNoteCiphertext<D>,
-    ) -> Self {
+impl<D: OrchardDomainCommon> From<TransmittedNoteCiphertext<D>> for PcztTransmittedNoteCiphertext {
+    fn from(transmitted: TransmittedNoteCiphertext<D>) -> Self {
         PcztTransmittedNoteCiphertext {
             epk_bytes: transmitted.epk_bytes,
             enc_ciphertext: transmitted.enc_ciphertext.as_ref().to_vec(),
             out_ciphertext: transmitted.out_ciphertext,
         }
     }
+}
 
-    /// Converts `PcztTransmittedNoteCiphertext` into `TransmittedNoteCiphertext`
-    pub fn into_transmitted_note_ciphertext<D: OrchardDomainCommon>(
-        self,
-    ) -> TransmittedNoteCiphertext<D> {
+impl<D: OrchardDomainCommon> From<PcztTransmittedNoteCiphertext> for TransmittedNoteCiphertext<D> {
+    fn from(ciphertext: PcztTransmittedNoteCiphertext) -> Self {
         TransmittedNoteCiphertext {
-            epk_bytes: self.epk_bytes,
-            enc_ciphertext: D::NoteCiphertextBytes::from_slice(self.enc_ciphertext.as_ref())
-                .expect("enc_ciphertext is corrupt"),
-            out_ciphertext: self.out_ciphertext,
+            epk_bytes: ciphertext.epk_bytes,
+            enc_ciphertext: D::NoteCiphertextBytes::from_slice(&ciphertext.enc_ciphertext)
+                .expect("Failed to parse enc_ciphertext: data may be corrupt or incorrect size"),
+            out_ciphertext: ciphertext.out_ciphertext,
         }
     }
 }

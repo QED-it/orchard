@@ -75,11 +75,7 @@ impl super::Bundle {
                     action.spend.nullifier,
                     action.spend.rk.clone(),
                     action.output.cmx,
-                    action
-                        .output
-                        .encrypted_note
-                        .clone()
-                        .into_transmitted_note_ciphertext(),
+                    action.output.encrypted_note.clone().into(),
                     action.cv_net.clone(),
                     authorization,
                 ))

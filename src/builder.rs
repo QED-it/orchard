@@ -21,7 +21,6 @@ use crate::{
         SpendingKey,
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
-    pczt::PcztTransmittedNoteCiphertext,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -446,12 +445,9 @@ impl OutputInfo {
     ) -> crate::pczt::Output {
         let (note, cmx, encrypted_note) = self.build::<D>(cv_net, nf_old, rng);
 
-        let encrypted_note =
-            PcztTransmittedNoteCiphertext::from_transmitted_note_ciphertext(encrypted_note);
-
         crate::pczt::Output {
             cmx,
-            encrypted_note,
+            encrypted_note: encrypted_note.into(),
             recipient: Some(self.recipient),
             value: Some(self.value),
             rseed: Some(*note.rseed()),
