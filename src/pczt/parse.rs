@@ -5,29 +5,26 @@ use alloc::vec::Vec;
 use ff::PrimeField;
 use incrementalmerkletree::Hashable;
 use pasta_curves::pallas;
-use zcash_note_encryption_zsa::{note_bytes::NoteBytes, OutgoingCipherKey};
+use zcash_note_encryption_zsa::OutgoingCipherKey;
 use zip32::ChildIndex;
 
-use super::{Action, Bundle, Output, Spend, Zip32Derivation};
+use super::{Action, Bundle, Output, PcztTransmittedNoteCiphertext, Spend, Zip32Derivation};
 use crate::{
     bundle::Flags,
-    domain::OrchardDomainCommon,
     keys::{FullViewingKey, SpendingKey},
-    note::{
-        AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
-    },
+    note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
     primitives::redpallas::{self, SpendAuth},
     tree::{MerkleHashOrchard, MerklePath},
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof, NOTE_COMMITMENT_TREE_DEPTH,
 };
 
-impl<D: OrchardDomainCommon> Bundle<D> {
+impl Bundle {
     /// Parses a PCZT bundle from its component parts.
     /// `value_sum` is represented as `(magnitude, is_negative)`.
     #[allow(clippy::too_many_arguments)]
     pub fn parse(
-        actions: Vec<Action<D>>,
+        actions: Vec<Action>,
         flags: u8,
         value_sum: (u64, bool),
         anchor: [u8; 32],
@@ -85,12 +82,12 @@ impl<D: OrchardDomainCommon> Bundle<D> {
     }
 }
 
-impl<D: OrchardDomainCommon> Action<D> {
+impl Action {
     /// Parses a PCZT action from its component parts.
     pub fn parse(
         cv_net: [u8; 32],
         spend: Spend,
-        output: Output<D>,
+        output: Output,
         rcv: Option<[u8; 32]>,
     ) -> Result<Self, ParseError> {
         let cv_net = ValueCommitment::from_bytes(&cv_net)
@@ -240,7 +237,7 @@ impl Spend {
     }
 }
 
-impl<D: OrchardDomainCommon> Output<D> {
+impl Output {
     /// Parses a PCZT output from its component parts, and the corresponding `Spend`'s
     /// nullifier.
     #[allow(clippy::too_many_arguments)]
@@ -262,10 +259,9 @@ impl<D: OrchardDomainCommon> Output<D> {
             .into_option()
             .ok_or(ParseError::InvalidExtractedNoteCommitment)?;
 
-        let encrypted_note = TransmittedNoteCiphertext {
+        let encrypted_note = PcztTransmittedNoteCiphertext {
             epk_bytes: ephemeral_key,
-            enc_ciphertext: D::NoteCiphertextBytes::from_slice(enc_ciphertext.as_slice())
-                .ok_or(ParseError::InvalidEncCiphertext)?,
+            enc_ciphertext: enc_ciphertext.to_vec(),
             out_ciphertext: out_ciphertext
                 .as_slice()
                 .try_into()

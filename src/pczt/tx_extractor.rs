@@ -9,13 +9,13 @@ use crate::{
     Proof,
 };
 
-impl<D: OrchardDomainCommon> super::Bundle<D> {
+impl super::Bundle {
     /// Extracts the effects of this PCZT bundle as a [regular `Bundle`].
     ///
     /// This is used by the Signer role to produce the transaction sighash.
     ///
     /// [regular `Bundle`]: crate::Bundle
-    pub fn extract_effects<V: TryFrom<i64>>(
+    pub fn extract_effects<V: TryFrom<i64>, D: OrchardDomainCommon>(
         &self,
     ) -> Result<Option<crate::Bundle<EffectsOnly, V, D>>, TxExtractorError> {
         self.to_tx_data(|_| Ok(()), |_| Ok(EffectsOnly))
@@ -26,7 +26,7 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
     /// This is used by the Transaction Extractor role to produce the final transaction.
     ///
     /// [regular `Bundle`]: crate::Bundle
-    pub fn extract<V: TryFrom<i64>>(
+    pub fn extract<V: TryFrom<i64>, D: OrchardDomainCommon>(
         self,
     ) -> Result<Option<crate::Bundle<Unbound, V, D>>, TxExtractorError> {
         self.to_tx_data(
@@ -52,7 +52,7 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
     }
 
     /// Converts this PCZT bundle into a regular bundle with the given authorizations.
-    fn to_tx_data<A, V, E, F, G>(
+    fn to_tx_data<A, V, E, F, G, D>(
         &self,
         action_auth: F,
         bundle_auth: G,
@@ -60,9 +60,10 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
     where
         A: Authorization,
         E: From<TxExtractorError>,
-        F: Fn(&Action<D>) -> Result<<A as Authorization>::SpendAuth, E>,
+        F: Fn(&Action) -> Result<<A as Authorization>::SpendAuth, E>,
         G: FnOnce(&Self) -> Result<A, E>,
         V: TryFrom<i64>,
+        D: OrchardDomainCommon,
     {
         let actions = self
             .actions
@@ -74,7 +75,7 @@ impl<D: OrchardDomainCommon> super::Bundle<D> {
                     action.spend.nullifier,
                     action.spend.rk.clone(),
                     action.output.cmx,
-                    action.output.encrypted_note.clone(),
+                    action.output.encrypted_note.clone().into(),
                     action.cv_net.clone(),
                     authorization,
                 ))

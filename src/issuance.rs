@@ -217,6 +217,12 @@ impl IssueAction {
 /// Defines the authorization type of an Issue bundle.
 pub trait IssueAuth: fmt::Debug + Clone {}
 
+/// Marker type for a bundle that contains no authorizing data.
+#[derive(Clone, Debug)]
+pub struct EffectsOnly;
+
+impl IssueAuth for EffectsOnly {}
+
 /// Marker for an unsigned bundle with no nullifier and no sighash injected.
 #[derive(Debug, Clone)]
 pub struct AwaitingNullifier;
