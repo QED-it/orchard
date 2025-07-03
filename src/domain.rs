@@ -5,7 +5,7 @@
 //! variantion, with different implementations for each. The different implementations are
 //! organized into separate submodules.
 
-mod compact_action;
+pub mod compact_action;
 mod orchard_domain;
 mod orchard_domain_vanilla;
 mod orchard_domain_zsa;
