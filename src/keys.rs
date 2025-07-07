@@ -16,7 +16,7 @@ use k256::{
     schnorr,
     schnorr::{
         signature::hazmat::{PrehashSigner, PrehashVerifier},
-        Signature, VerifyingKey,
+        Signature,
     },
     NonZeroScalar,
 };
@@ -40,6 +40,7 @@ use crate::{
 // Preserve '::' which specifies the EXTERNAL 'zip32' crate
 #[rustfmt::skip]
 pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only};
+use crate::keys::IssuanceAuthSigScheme::ZIP227;
 
 const KDF_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_OrchardKDF";
 const ZIP32_PURPOSE: u32 = 32;
@@ -239,6 +240,15 @@ fn check_structural_validity(
     }
 }
 
+/// An enum of the supported scheme used for issuance authorization signatures.
+#[derive(Debug, Clone)]
+pub enum IssuanceAuthSigScheme {
+    /// The signature scheme specified in [ZIP 227][issuanceauthsig].
+    ///
+    /// [issuanceauthsig]: https://zips.z.cash/zip-0227#orchard-zsa-issuance-authorization-signature-scheme
+    ZIP227,
+}
+
 /// An issuance key, from which all key material is derived.
 ///
 /// $\mathsf{isk}$ as defined in [ZIP 227][issuancekeycomponents].
@@ -314,11 +324,17 @@ impl Debug for IssuanceAuthorizingKey {
 ///
 /// [IssuanceZSA]: https://zips.z.cash/zip-0227#issuance-key-derivation
 #[derive(Debug, Clone)]
-pub struct IssuanceValidatingKey(schnorr::VerifyingKey);
+pub struct IssuanceValidatingKey {
+    scheme: IssuanceAuthSigScheme,
+    key: schnorr::VerifyingKey,
+}
 
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
-        IssuanceValidatingKey(*schnorr::SigningKey::from(isk.0).verifying_key())
+        IssuanceValidatingKey {
+            scheme: ZIP227,
+            key: *schnorr::SigningKey::from(isk.0).verifying_key(),
+        }
     }
 }
 
@@ -331,10 +347,15 @@ impl PartialEq for IssuanceValidatingKey {
 impl Eq for IssuanceValidatingKey {}
 
 impl IssuanceValidatingKey {
-    /// Converts this issuance validating key to its serialized form,
-    /// in big-endian order as defined in BIP 340.
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.to_bytes().into()
+    /// Converts this issuance validating key to its serialized form, with a scheme byte prefix,
+    /// and the key in big-endian order as defined in BIP 340.
+    pub fn to_bytes(&self) -> [u8; 33] {
+        let mut bytes = [0u8; 33];
+        match self.scheme {
+            ZIP227 => bytes[0] = 0x00,
+        }
+        bytes[1..].copy_from_slice(&self.key.to_bytes());
+        bytes
     }
 
     /// Constructs an Orchard issuance validating key from the provided bytes.
@@ -342,14 +363,21 @@ impl IssuanceValidatingKey {
     ///
     /// Returns `None` if the bytes do not correspond to a valid key.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        VerifyingKey::from_bytes(bytes)
-            .ok()
-            .map(IssuanceValidatingKey)
+        if bytes.first() == Some(&0x00) {
+            schnorr::VerifyingKey::from_bytes(&bytes[1..])
+                .ok()
+                .map(|key| IssuanceValidatingKey {
+                    scheme: ZIP227,
+                    key,
+                })
+        } else {
+            None
+        }
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
     pub fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), schnorr::Error> {
-        self.0.verify_prehash(msg, signature)
+        self.key.verify_prehash(msg, signature)
     }
 }
 
@@ -1213,7 +1241,9 @@ mod tests {
             assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
 
             let ik: IssuanceValidatingKey = (&isk).into();
-            assert_eq!(ik.to_bytes(), tv.ik);
+            let mut key_bytes = [0u8; 33];
+            key_bytes[1..].copy_from_slice(&tv.ik);
+            assert_eq!(ik.to_bytes(), key_bytes); //TODO: VA: Fix this test vector
 
             let nk: NullifierDerivingKey = (&sk).into();
             assert_eq!(nk.0.to_repr(), tv.nk);
@@ -1267,7 +1297,9 @@ mod tests {
             let isk = IssuanceAuthorizingKey::from_bytes(tv.isk).unwrap();
 
             let ik = IssuanceValidatingKey::from(&isk);
-            assert_eq!(ik.to_bytes(), tv.ik);
+            let mut key_bytes = [0u8; 33];
+            key_bytes[1..].copy_from_slice(&tv.ik);
+            assert_eq!(ik.to_bytes(), key_bytes); //TODO: VA: Fix this test vector
 
             let message = tv.msg;
 

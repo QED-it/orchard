@@ -46,7 +46,7 @@ pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
 ///    Defined in [ZIP-227: Issuance of Zcash Shielded Assets][assetdigest].
 ///
 ///    [assetdigest]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
-pub fn asset_digest(encode_asset_id: [u8; 65]) -> Blake2bHash {
+pub fn asset_digest(encode_asset_id: [u8; 66]) -> Blake2bHash {
     Params::new()
         .hash_length(64)
         .personal(ZSA_ASSET_DIGEST_PERSONALIZATION)
@@ -80,11 +80,11 @@ impl AssetBase {
         let version_byte = [0x00];
 
         // EncodeAssetId(ik, asset_desc_hash) = version_byte || ik || asset_desc_hash
-        let encode_asset_id: [u8; 65] = {
-            let mut array = [0u8; 65];
+        let encode_asset_id: [u8; 66] = {
+            let mut array = [0u8; 66];
             array[..1].copy_from_slice(&version_byte);
-            array[1..33].copy_from_slice(&ik.to_bytes());
-            array[33..].copy_from_slice(asset_desc_hash);
+            array[1..34].copy_from_slice(&ik.to_bytes());
+            array[34..].copy_from_slice(asset_desc_hash);
             array
         };
 
@@ -206,8 +206,10 @@ pub mod testing {
             let asset_desc_hash = crate::issuance::compute_asset_desc_hash(
                 &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
             );
+            let mut key_bytes = [0u8; 33];
+            key_bytes[1..].copy_from_slice(&tv.key);
             let calculated_asset_base = AssetBase::derive(
-                &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
+                &IssuanceValidatingKey::from_bytes(&key_bytes).unwrap(), // TODO: VA: fix test vector
                 &asset_desc_hash,
             );
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();
