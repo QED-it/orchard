@@ -7,8 +7,7 @@ use core::fmt;
 
 use getset::Getters;
 use pasta_curves::pallas;
-use zcash_note_encryption_zsa::note_bytes::NoteBytes;
-use zcash_note_encryption_zsa::OutgoingCipherKey;
+use zcash_note_encryption::{note_bytes::NoteBytes, OutgoingCipherKey};
 use zip32::ChildIndex;
 
 use crate::{

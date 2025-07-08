@@ -129,7 +129,7 @@ pub(crate) mod testing {
 
     use proptest::prelude::*;
 
-    use zcash_note_encryption_zsa::NoteEncryption;
+    use zcash_note_encryption::NoteEncryption;
 
     use crate::{
         domain::{OrchardDomain, OrchardDomainCommon},

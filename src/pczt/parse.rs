@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use ff::PrimeField;
 use incrementalmerkletree::Hashable;
 use pasta_curves::pallas;
-use zcash_note_encryption_zsa::OutgoingCipherKey;
+use zcash_note_encryption::OutgoingCipherKey;
 use zip32::ChildIndex;
 
 use super::{Action, Bundle, Output, PcztTransmittedNoteCiphertext, Spend, Zip32Derivation};

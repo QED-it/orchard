@@ -24,7 +24,7 @@ use pasta_curves::{pallas, pallas::Scalar};
 use rand::RngCore;
 use rand_core::CryptoRngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
-use zcash_note_encryption_zsa::EphemeralKeyBytes;
+use zcash_note_encryption::EphemeralKeyBytes;
 
 use crate::{
     address::Address,
