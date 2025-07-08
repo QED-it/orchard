@@ -14,10 +14,7 @@ use group::{
 };
 use k256::{
     schnorr,
-    schnorr::{
-        signature::hazmat::{PrehashSigner, PrehashVerifier},
-        Signature,
-    },
+    schnorr::signature::hazmat::{PrehashSigner, PrehashVerifier},
     NonZeroScalar,
 };
 use pasta_curves::{pallas, pallas::Scalar};
@@ -28,6 +25,7 @@ use zcash_note_encryption::EphemeralKeyBytes;
 
 use crate::{
     address::Address,
+    issuance,
     primitives::redpallas::{self, SpendAuth, VerificationKey},
     spec::{
         commit_ivk, diversify_hash, extract_p, ka_orchard, ka_orchard_prepared, prf_nf, to_base,
@@ -40,6 +38,7 @@ use crate::{
 // Preserve '::' which specifies the EXTERNAL 'zip32' crate
 #[rustfmt::skip]
 pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only};
+use crate::issuance::IssuanceAuthorizationSignature;
 use crate::keys::IssuanceAuthSigScheme::ZIP227;
 
 const KDF_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_OrchardKDF";
@@ -241,7 +240,7 @@ fn check_structural_validity(
 }
 
 /// An enum of the supported scheme used for issuance authorization signatures.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IssuanceAuthSigScheme {
     /// The signature scheme specified in [ZIP 227][issuanceauthsig].
     ///
@@ -305,8 +304,17 @@ impl IssuanceAuthorizingKey {
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
     /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign 32 byte SIGHASH values.
-    pub fn try_sign(&self, msg: &[u8; 32]) -> Result<Signature, schnorr::Error> {
-        schnorr::SigningKey::from(self.0).sign_prehash(msg)
+    pub fn try_sign(
+        &self,
+        msg: &[u8; 32],
+    ) -> Result<IssuanceAuthorizationSignature, issuance::Error> {
+        let signature = schnorr::SigningKey::from(self.0)
+            .sign_prehash(msg)
+            .map_err(|_| issuance::Error::IssueAuthSigGenerationFailed)?;
+        Ok(IssuanceAuthorizationSignature::new(
+            IssuanceAuthSigScheme::ZIP227,
+            signature,
+        ))
     }
 }
 
@@ -376,8 +384,14 @@ impl IssuanceValidatingKey {
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
-    pub fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), schnorr::Error> {
-        self.key.verify_prehash(msg, signature)
+    pub fn verify(
+        &self,
+        msg: &[u8],
+        sig: &IssuanceAuthorizationSignature,
+    ) -> Result<(), issuance::Error> {
+        self.key
+            .verify_prehash(msg, sig.signature())
+            .map_err(|_| issuance::Error::IssueBundleInvalidSignature)
     }
 }
 
@@ -1304,8 +1318,10 @@ mod tests {
             let message = tv.msg;
 
             let signature = isk.try_sign(&message).unwrap();
-            let sig_bytes: [u8; 64] = signature.to_bytes();
-            assert_eq!(sig_bytes, tv.sig);
+            let mut tv_sig_bytes = [0u8; 65];
+            tv_sig_bytes[1..].copy_from_slice(&tv.sig);
+            let sig_bytes: [u8; 65] = signature.to_bytes();
+            assert_eq!(sig_bytes, tv_sig_bytes);
 
             assert!(ik.verify(&message, &signature).is_ok());
         }

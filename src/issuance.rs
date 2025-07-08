@@ -33,7 +33,7 @@ use crate::{
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
     IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
+    IssueAuthSigGenerationFailed, IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
     MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
@@ -77,6 +77,53 @@ pub struct IssueInfo {
     pub recipient: Address,
     /// The value of this note.
     pub value: NoteValue,
+}
+
+/// The type of an Issuance Authorization Signature
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssuanceAuthorizationSignature {
+    scheme: IssuanceAuthSigScheme,
+    signature: schnorr::Signature,
+}
+
+impl IssuanceAuthorizationSignature {
+    /// Constructs a new `IssuanceAuthorizationSignature`.
+    pub fn new(scheme: IssuanceAuthSigScheme, signature: schnorr::Signature) -> Self {
+        IssuanceAuthorizationSignature { scheme, signature }
+    }
+
+    /// Returns the scheme of the signature.
+    pub fn scheme(&self) -> &IssuanceAuthSigScheme {
+        &self.scheme
+    }
+
+    /// Returns the signature.
+    pub fn signature(&self) -> &schnorr::Signature {
+        &self.signature
+    }
+
+    /// Returns the byte encoding of the signature.
+    pub fn to_bytes(&self) -> [u8; 65] {
+        let mut bytes = [0u8; 65];
+        match &self.scheme {
+            IssuanceAuthSigScheme::ZIP227 => bytes[0] = 0x00,
+        }
+        bytes[1..].copy_from_slice(&self.signature.to_bytes());
+        bytes
+    }
+
+    /// Constructs an `IssuanceAuthorizationSignature` from a byte array.
+    pub fn from_bytes(bytes: &[u8; 65]) -> Result<Self, Error> {
+        if bytes.first() != Some(&0x00) {
+            return Err(IssueBundleInvalidSignature);
+        }
+        let signature =
+            schnorr::Signature::try_from(&bytes[1..]).map_err(|_| IssueBundleInvalidSignature)?;
+        Ok(IssuanceAuthorizationSignature {
+            scheme: IssuanceAuthSigScheme::ZIP227,
+            signature,
+        })
+    }
 }
 
 /// Compute the asset description hash for a given asset description.
@@ -240,19 +287,19 @@ pub struct Prepared {
 /// Marker for an authorized bundle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Signed {
-    signature: schnorr::Signature,
+    signature: IssuanceAuthorizationSignature,
 }
 
 impl Signed {
     /// Returns the signature for this authorization.
-    pub fn signature(&self) -> &schnorr::Signature {
+    pub fn signature(&self) -> &IssuanceAuthorizationSignature {
         &self.signature
     }
 
     /// Constructs a `Signed` from a byte array containing Schnorr signature bytes.
-    pub fn from_data(data: [u8; 64]) -> Self {
+    pub fn from_data(data: [u8; 65]) -> Self {
         Signed {
-            signature: schnorr::Signature::try_from(data.as_ref()).unwrap(),
+            signature: IssuanceAuthorizationSignature::from_bytes(&data).unwrap(),
         }
     }
 }
@@ -687,6 +734,9 @@ pub enum Error {
     /// It cannot be first issuance because we have already some notes for this asset.
     CannotBeFirstIssuance,
 
+    /// The generation of the Issuance Authorization Signature failed.
+    IssueAuthSigGenerationFailed, //TODO: VA: This does not propagate the schnorr::Error, fix it.
+
     /// Verification errors:
     /// Invalid signature.
     IssueBundleInvalidSignature,
@@ -729,6 +779,9 @@ impl fmt::Display for Error {
                     f,
                     "it cannot be first issuance because we have already some notes for this asset."
                 )
+            }
+            IssueAuthSigGenerationFailed => {
+                write!(f, "failed to generate the Issuance Authorization Signature")
             }
             IssueBundleInvalidSignature => {
                 write!(f, "invalid signature")
@@ -1848,8 +1901,12 @@ mod tests {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use crate::{
-        issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed},
+        issuance::{
+            AwaitingNullifier, IssuanceAuthorizationSignature, IssueAction, IssueBundle, Prepared,
+            Signed,
+        },
         keys::testing::arb_issuance_validating_key,
+        keys::IssuanceAuthSigScheme::ZIP227,
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
     };
@@ -1863,8 +1920,11 @@ pub mod testing {
         /// Generate a uniformly distributed signature
         pub(crate) fn arb_signature()(
             sig_bytes in vec(prop::num::u8::ANY, 64)
-        ) -> schnorr::Signature {
-            schnorr::Signature::try_from(sig_bytes.as_slice()).unwrap()
+        ) -> IssuanceAuthorizationSignature {
+            IssuanceAuthorizationSignature::new(
+                ZIP227,
+                schnorr::Signature::try_from(sig_bytes.as_slice()).unwrap()
+            )
         }
     }
 
