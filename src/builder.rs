@@ -1155,6 +1155,9 @@ pub struct Unproven {
 #[cfg(feature = "circuit")]
 impl<S: InProgressSignatures> InProgress<Unproven, S> {
     /// Creates the proof for this bundle.
+    ///
+    /// The `OrchardCircuit` type parameter must match the circuit used when generating the witnesses
+    /// contained in this `Unproven` structure to ensure consistency and correctness of the proof.
     pub fn create_proof<C: OrchardCircuit>(
         &self,
         pk: &ProvingKey,
