@@ -30,6 +30,7 @@ use crate::{
     circuit::value_commit_orchard::gadgets::value_commit_orchard,
     circuit::{Config, Witnesses},
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
+    note::AssetBase,
     orchard_flavor::OrchardVanilla,
 };
 
@@ -40,7 +41,6 @@ use super::{
     OrchardCircuit, ZsaWitnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
     NF_OLD, RK_X, RK_Y,
 };
-use crate::note::AssetBase;
 
 impl OrchardCircuit for OrchardVanilla {
     type Config = Config<PallasLookupRangeCheckConfig>;
@@ -611,6 +611,11 @@ impl OrchardCircuit for OrchardVanilla {
         Ok(())
     }
 
+    /// For OrchardVanilla circuits, `build_zsa_witnesses` returns a `ZsaWitnesses` with `Unknown`
+    /// values.
+    ///
+    /// # Panics
+    /// Panics if the asset is not a native asset or if `split_flag` is true.
     fn build_zsa_witnesses(_: pallas::Base, asset: AssetBase, split_flag: bool) -> ZsaWitnesses {
         if !(bool::from(asset.is_native())) {
             panic!("asset must be native asset in OrchardVanilla circuit");
