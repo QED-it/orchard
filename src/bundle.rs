@@ -14,7 +14,7 @@ use core::fmt;
 
 use blake2b_simd::Hash as Blake2bHash;
 use nonempty::NonEmpty;
-use zcash_note_encryption_zsa::{try_note_decryption, try_output_recovery_with_ovk};
+use zcash_note_encryption::{try_note_decryption, try_output_recovery_with_ovk};
 
 #[cfg(feature = "std")]
 use memuse::DynamicUsage;

@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-use zcash_note_encryption_zsa::{note_bytes::NoteBytes, EphemeralKeyBytes, ShieldedOutput};
+use zcash_note_encryption::{note_bytes::NoteBytes, EphemeralKeyBytes, ShieldedOutput};
 
 use crate::{
     action::Action,
@@ -116,7 +116,7 @@ impl<D: OrchardDomainCommon> CompactAction<D> {
 pub mod testing {
     use rand::RngCore;
 
-    use zcash_note_encryption_zsa::{note_bytes::NoteBytes, Domain, NoteEncryption};
+    use zcash_note_encryption::{note_bytes::NoteBytes, Domain, NoteEncryption};
 
     use crate::{
         address::Address,

@@ -9,7 +9,7 @@ use ff::Field;
 use pasta_curves::pallas;
 use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
-use zcash_note_encryption_zsa::NoteEncryption;
+use zcash_note_encryption::NoteEncryption;
 
 use crate::{
     address::Address,
@@ -641,7 +641,7 @@ impl Builder {
     /// Adds a note to be spent in this transaction.
     ///
     /// - `note` is a spendable note, obtained by trial-decrypting an [`Action`] using the
-    ///   [`zcash_note_encryption_zsa`] crate instantiated with [`OrchardDomain`].
+    ///   [`zcash_note_encryption`] crate instantiated with [`OrchardDomain`].
     /// - `merkle_path` can be obtained using the [`incrementalmerkletree`] crate
     ///   instantiated with [`MerkleHashOrchard`].
     ///

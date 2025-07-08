@@ -4,7 +4,7 @@
 use core::fmt;
 
 use blake2b_simd::{Hash as Blake2bHash, State};
-use zcash_note_encryption_zsa::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
+use zcash_note_encryption::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
 
 use crate::{
     action::Action,

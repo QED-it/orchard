@@ -2,7 +2,7 @@
 //! flavor.
 
 use blake2b_simd::Hash as Blake2bHash;
-use zcash_note_encryption_zsa::note_bytes::NoteBytesData;
+use zcash_note_encryption::note_bytes::NoteBytesData;
 
 use crate::bundle::commitments::{
     ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION, ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
@@ -108,7 +108,7 @@ mod tests {
 
     use rand::rngs::OsRng;
 
-    use zcash_note_encryption_zsa::{
+    use zcash_note_encryption::{
         note_bytes::NoteBytesData, try_compact_note_decryption, try_note_decryption,
         try_output_recovery_with_ovk, Domain, EphemeralKeyBytes,
     };
@@ -141,7 +141,7 @@ mod tests {
 
     /// Implementation of in-band secret distribution for Orchard bundles.
     pub type OrchardDomainCommonryptionZSA =
-        zcash_note_encryption_zsa::NoteEncryption<OrchardDomainZSA>;
+        zcash_note_encryption::NoteEncryption<OrchardDomainZSA>;
 
     proptest! {
         #[test]

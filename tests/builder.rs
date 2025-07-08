@@ -14,7 +14,7 @@ use orchard::{
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
-use zcash_note_encryption_zsa::try_note_decryption;
+use zcash_note_encryption::try_note_decryption;
 
 pub fn verify_bundle<FL: OrchardFlavor>(
     bundle: &Bundle<Authorized, i64, FL>,

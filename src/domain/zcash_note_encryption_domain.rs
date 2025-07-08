@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use blake2b_simd::{Hash, Params};
 use group::ff::PrimeField;
 
-use zcash_note_encryption_zsa::{
+use zcash_note_encryption::{
     note_bytes::NoteBytes, BatchDomain, Domain, EphemeralKeyBytes, OutPlaintextBytes,
     OutgoingCipherKey, OUT_PLAINTEXT_SIZE,
 };
