@@ -26,6 +26,7 @@ use zcash_note_encryption::EphemeralKeyBytes;
 use crate::{
     address::Address,
     issuance,
+    issuance::IssuanceAuthorizationSignature,
     primitives::redpallas::{self, SpendAuth, VerificationKey},
     spec::{
         commit_ivk, diversify_hash, extract_p, ka_orchard, ka_orchard_prepared, prf_nf, to_base,
@@ -38,8 +39,6 @@ use crate::{
 // Preserve '::' which specifies the EXTERNAL 'zip32' crate
 #[rustfmt::skip]
 pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only};
-use crate::issuance::IssuanceAuthorizationSignature;
-use crate::keys::IssuanceAuthSigScheme::ZIP227;
 
 const KDF_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_OrchardKDF";
 const ZIP32_PURPOSE: u32 = 32;
@@ -340,7 +339,7 @@ pub struct IssuanceValidatingKey {
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
         IssuanceValidatingKey {
-            scheme: ZIP227,
+            scheme: IssuanceAuthSigScheme::ZIP227,
             key: *schnorr::SigningKey::from(isk.0).verifying_key(),
         }
     }
@@ -360,7 +359,7 @@ impl IssuanceValidatingKey {
     pub fn to_bytes(&self) -> [u8; 33] {
         let mut bytes = [0u8; 33];
         match self.scheme {
-            ZIP227 => bytes[0] = 0x00,
+            IssuanceAuthSigScheme::ZIP227 => bytes[0] = 0x00,
         }
         bytes[1..].copy_from_slice(&self.key.to_bytes());
         bytes
@@ -375,7 +374,7 @@ impl IssuanceValidatingKey {
             schnorr::VerifyingKey::from_bytes(&bytes[1..])
                 .ok()
                 .map(|key| IssuanceValidatingKey {
-                    scheme: ZIP227,
+                    scheme: IssuanceAuthSigScheme::ZIP227,
                     key,
                 })
         } else {
