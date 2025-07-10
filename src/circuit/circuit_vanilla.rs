@@ -380,7 +380,7 @@ impl OrchardCircuit for OrchardVanilla {
         // Nullifier integrity (https://p.z.cash/ZKS:action-nullifier-integrity).
         let nf_old = {
             let nf_old = derive_nullifier(
-                &mut layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_old, cm_old)"),
+                layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_old, cm_old)"),
                 config.poseidon_chip(),
                 config.add_chip(),
                 ecc_chip.clone(),
@@ -652,9 +652,7 @@ mod tests {
         value::{ValueCommitTrapdoor, ValueCommitment},
     };
 
-    type OrchardCircuitVanilla = Circuit<OrchardVanilla>;
-
-    fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (OrchardCircuitVanilla, Instance) {
+    fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit<OrchardVanilla>, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
 
         let sender_address = spent_note.recipient();
@@ -677,7 +675,7 @@ mod tests {
         let anchor = path.root(spent_note.commitment().into());
 
         (
-            OrchardCircuitVanilla {
+            Circuit::<OrchardVanilla> {
                 witnesses: Witnesses {
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),
@@ -880,7 +878,7 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = OrchardCircuitVanilla {
+        let circuit = Circuit::<OrchardVanilla> {
             witnesses: Witnesses::default(),
             phantom: core::marker::PhantomData,
         };

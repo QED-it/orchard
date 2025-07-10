@@ -40,7 +40,7 @@ pub(in crate::circuit) mod gadgets {
             Var = AssignedCell<pallas::Base, pallas::Base>,
         >,
     >(
-        layouter: &mut impl Layouter<pallas::Base>,
+        mut layouter: impl Layouter<pallas::Base>,
         poseidon_chip: PoseidonChip,
         add_chip: AddChip,
         ecc_chip: EccChip,

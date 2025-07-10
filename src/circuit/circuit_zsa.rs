@@ -526,7 +526,7 @@ impl OrchardCircuit for OrchardZSA {
         // [zip226]: https://zips.z.cash/zip-0226
         let nf_old = {
             let nf_old = derive_nullifier(
-                &mut layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_nf, cm_old)"),
+                layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_nf, cm_old)"),
                 config.poseidon_chip(),
                 config.add_chip(),
                 ecc_chip.clone(),
@@ -878,11 +878,10 @@ mod tests {
     use rand::{rngs::OsRng, RngCore};
     use rand_core::CryptoRngCore;
 
-    use crate::circuit::Witnesses;
     use crate::{
         builder::SpendInfo,
         bundle::Flags,
-        circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, ZsaWitnesses, K},
+        circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, Witnesses, ZsaWitnesses, K},
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
@@ -891,9 +890,7 @@ mod tests {
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
-    type OrchardCircuitZSA = Circuit<OrchardZSA>;
-
-    fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (OrchardCircuitZSA, Instance) {
+    fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit<OrchardZSA>, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
 
         let sender_address = spent_note.recipient();
@@ -918,7 +915,7 @@ mod tests {
         let psi_old = spent_note.rseed().psi(&spent_note.rho());
 
         (
-            OrchardCircuitZSA {
+            Circuit::<OrchardZSA> {
                 witnesses: Witnesses {
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),
@@ -1125,7 +1122,7 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = OrchardCircuitZSA {
+        let circuit = Circuit::<OrchardZSA> {
             witnesses: Witnesses::default(),
             phantom: core::marker::PhantomData,
         };
@@ -1137,7 +1134,7 @@ mod tests {
     }
 
     fn check_proof_of_orchard_circuit(
-        circuit: &OrchardCircuitZSA,
+        circuit: &Circuit<OrchardZSA>,
         instance: &Instance,
         should_pass: bool,
     ) {
@@ -1163,7 +1160,7 @@ mod tests {
         is_native_asset: bool,
         split_flag: bool,
         mut rng: R,
-    ) -> (OrchardCircuitZSA, Instance) {
+    ) -> (Circuit<OrchardZSA>, Instance) {
         // Create asset
         let asset_base = if is_native_asset {
             AssetBase::native()
@@ -1243,7 +1240,7 @@ mod tests {
         };
 
         (
-            OrchardCircuitZSA {
+            Circuit::<OrchardZSA> {
                 witnesses: Witnesses::from_action_context_unchecked::<OrchardZSA>(
                     spend_info,
                     output_note,
@@ -1321,7 +1318,7 @@ mod tests {
 
                 // Set cm_old to be a random NoteCommitment
                 // The proof should fail
-                let circuit_wrong_cm_old = OrchardCircuitZSA {
+                let circuit_wrong_cm_old = Circuit::<OrchardZSA> {
                     witnesses: Witnesses {
                         path: circuit.witnesses.path,
                         pos: circuit.witnesses.pos,
@@ -1384,7 +1381,7 @@ mod tests {
                 // If split_flag = 0 , set psi_nf to be a random Pallas base element
                 // The proof should fail
                 if !split_flag {
-                    let circuit_wrong_psi_nf = OrchardCircuitZSA {
+                    let circuit_wrong_psi_nf = Circuit::<OrchardZSA> {
                         witnesses: Witnesses {
                             path: circuit.witnesses.path,
                             pos: circuit.witnesses.pos,
