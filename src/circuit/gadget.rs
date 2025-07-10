@@ -3,8 +3,8 @@
 use ff::Field;
 use pasta_curves::pallas;
 
+use super::{commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, Config};
 use crate::{
-    circuit::{commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, Config},
     constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
     note::AssetBase,
 };
@@ -15,8 +15,7 @@ use halo2_gadgets::{
     utilities::{cond_swap::CondSwapChip, lookup_range_check::PallasLookupRangeCheck},
 };
 use halo2_proofs::{
-    circuit::Value,
-    circuit::{AssignedCell, Chip, Layouter},
+    circuit::{AssignedCell, Chip, Layouter, Value},
     plonk::{self, Advice, Assigned, Column},
 };
 

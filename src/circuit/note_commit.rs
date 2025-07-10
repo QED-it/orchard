@@ -2049,7 +2049,6 @@ pub(in crate::circuit) mod gadgets {
             g_d.y(),
             b_2,
         )?;
-
         // Check decomposition of `y(pk_d)`.
         let d_1 = y_canonicity(
             &lookup_config,
@@ -2613,9 +2612,10 @@ mod tests {
     use core::iter;
 
     use crate::{
-        circuit::gadget::{assign_free_advice, assign_is_native_asset},
-        circuit::note_commit::gadgets,
-        circuit::note_commit::{NoteCommitChip, NoteCommitConfig, ZsaNoteCommitParams},
+        circuit::{
+            gadget::{assign_free_advice, assign_is_native_asset},
+            note_commit::{gadgets, NoteCommitChip, NoteCommitConfig, ZsaNoteCommitParams},
+        },
         constants::{
             fixed_bases::NOTE_COMMITMENT_PERSONALIZATION, OrchardCommitDomains, OrchardFixedBases,
             OrchardHashDomains, L_ORCHARD_BASE, L_VALUE, T_Q,
@@ -2747,10 +2747,10 @@ mod tests {
 
                 // Load the Sinsemilla generator lookup table used by the whole circuit.
                 SinsemillaChip::<
-                    OrchardHashDomains,
-                    OrchardCommitDomains,
-                    OrchardFixedBases,
-                >::load(note_commit_config.sinsemilla_config.clone(), &mut layouter)?;
+                OrchardHashDomains,
+                OrchardCommitDomains,
+                OrchardFixedBases,
+            >::load(note_commit_config.sinsemilla_config.clone(), &mut layouter)?;
 
                 // Construct a Sinsemilla chip
                 let sinsemilla_chip =
