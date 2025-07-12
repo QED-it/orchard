@@ -206,10 +206,8 @@ pub mod testing {
             let asset_desc_hash = crate::issuance::compute_asset_desc_hash(
                 &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
             );
-            let mut key_bytes = [0u8; 33];
-            key_bytes[1..].copy_from_slice(&tv.key);
             let calculated_asset_base = AssetBase::derive(
-                &IssuanceValidatingKey::from_bytes(&key_bytes).unwrap(), // TODO: VA: fix test vector
+                &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
                 &asset_desc_hash,
             );
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();

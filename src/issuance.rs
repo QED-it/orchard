@@ -106,7 +106,7 @@ impl IssuanceAuthorizationSignature {
     pub fn to_bytes(&self) -> [u8; 65] {
         let mut bytes = [0u8; 65];
         match &self.scheme {
-            IssuanceAuthSigScheme::ZIP227 => bytes[0] = 0x00,
+            IssuanceAuthSigScheme::Zip227 => bytes[0] = 0x00,
         }
         bytes[1..].copy_from_slice(&self.signature.to_bytes());
         bytes
@@ -120,7 +120,7 @@ impl IssuanceAuthorizationSignature {
         let signature =
             schnorr::Signature::try_from(&bytes[1..]).map_err(|_| IssueBundleInvalidSignature)?;
         Ok(IssuanceAuthorizationSignature {
-            scheme: IssuanceAuthSigScheme::ZIP227,
+            scheme: IssuanceAuthSigScheme::Zip227,
             signature,
         })
     }
@@ -1906,7 +1906,7 @@ pub mod testing {
             Signed,
         },
         keys::testing::arb_issuance_validating_key,
-        keys::IssuanceAuthSigScheme::ZIP227,
+        keys::IssuanceAuthSigScheme::Zip227,
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
     };
@@ -1922,7 +1922,7 @@ pub mod testing {
             sig_bytes in vec(prop::num::u8::ANY, 64)
         ) -> IssuanceAuthorizationSignature {
             IssuanceAuthorizationSignature::new(
-                ZIP227,
+                Zip227,
                 schnorr::Signature::try_from(sig_bytes.as_slice()).unwrap()
             )
         }
