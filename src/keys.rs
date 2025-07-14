@@ -238,13 +238,42 @@ fn check_structural_validity(
     }
 }
 
-/// An enum of the supported scheme used for issuance authorization signatures.
+/// A struct containing details of an issuance authorization signature scheme
+/// that every signature scheme must expose.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IssuanceAuthSigDetails {
+    key_algorithm_byte: u8,
+    key_length: usize,
+    sig_algorithm_byte: u8,
+    sig_length: usize,
+}
+
+/// An enum of supported schemes for issuance authorization signatures.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IssuanceAuthSigScheme {
     /// The signature scheme specified in [ZIP 227][issuanceauthsig].
     ///
     /// [issuanceauthsig]: https://zips.z.cash/zip-0227#orchard-zsa-issuance-authorization-signature-scheme
     Zip227,
+}
+
+impl IssuanceAuthSigScheme {
+    /// These are the constants of the [ZIP 227][issuanceauthsig] Schnorr signature scheme based on BIP 340.
+    ///
+    /// [issuanceauthsig]: https://zips.z.cash/zip-0227#orchard-zsa-issuance-authorization-signature-scheme
+    pub const ZIP227_DETAILS: IssuanceAuthSigDetails = IssuanceAuthSigDetails {
+        key_algorithm_byte: 0x00,
+        key_length: 33,
+        sig_algorithm_byte: 0x00,
+        sig_length: 65,
+    };
+
+    /// Returns the details of the specific issuance authorization signature scheme.
+    pub const fn scheme_details(self) -> IssuanceAuthSigDetails {
+        match self {
+            IssuanceAuthSigScheme::Zip227 => Self::ZIP227_DETAILS,
+        }
+    }
 }
 
 /// An issuance key, from which all key material is derived.
