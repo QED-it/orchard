@@ -15,3 +15,6 @@ pub use {
     compact_action::CompactAction,
     orchard_domain::{OrchardDomain, OrchardDomainCommon},
 };
+
+#[cfg(feature = "test-dependencies")]
+pub use compact_action::testing::fake_compact_action;
