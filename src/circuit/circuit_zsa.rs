@@ -33,8 +33,8 @@ use super::{
     gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
     note_commit::NoteCommitChip,
     value_commit_orchard::ZsaValueCommitParams,
-    OrchardCircuit, ZsaWitnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
-    ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+    OrchardCircuit, ZsaAdditionalWitnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
+    ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
 use crate::{
     circuit::commit_ivk::gadgets::commit_ivk,
@@ -335,16 +335,12 @@ impl OrchardCircuit for OrchardZSA {
         // Load the Sinsemilla generator lookup table used by the whole circuit.
         SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
-        let (psi_nf_value, asset_value, split_flag_value) =
-            if let Some(zsa_values) = circuit.zsa_witnesses.clone() {
-                (
-                    Value::known(zsa_values.psi_nf),
-                    Value::known(zsa_values.asset),
-                    Value::known(zsa_values.split_flag),
-                )
-            } else {
-                (Value::unknown(), Value::unknown(), Value::unknown())
-            };
+        // Unzip the ZSA witnesses.
+        let (psi_nf_value, asset_value, split_flag_value) = {
+            let (psi_nf_asset_value, split_flag_value) = circuit.zsa_additional_witnesses.unzip();
+            let (psi_nf_value, asset_value) = psi_nf_asset_value.unzip();
+            (psi_nf_value, asset_value, split_flag_value)
+        };
 
         // Construct the ECC chip.
         let ecc_chip = config.ecc_chip();
@@ -865,12 +861,8 @@ impl OrchardCircuit for OrchardZSA {
         psi_nf: pallas::Base,
         asset: AssetBase,
         split_flag: bool,
-    ) -> Option<ZsaWitnesses> {
-        Some(ZsaWitnesses {
-            psi_nf,
-            asset,
-            split_flag,
-        })
+    ) -> Value<ZsaAdditionalWitnesses> {
+        Value::known(((psi_nf, asset), split_flag))
     }
 }
 
@@ -889,7 +881,7 @@ mod tests {
     use crate::{
         builder::SpendInfo,
         bundle::Flags,
-        circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, Witnesses, ZsaWitnesses, K},
+        circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, Witnesses, K},
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
@@ -945,13 +937,7 @@ mod tests {
                     rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
                     rcv: Value::known(rcv),
 
-                    zsa_witnesses: Some(ZsaWitnesses {
-                        // For non split note, psi_nf is equal to psi_old
-                        psi_nf: psi_old,
-                        asset: spent_note.asset(),
-                        // For non-split note, split_flag is false
-                        split_flag: false,
-                    }),
+                    zsa_additional_witnesses: Value::known(((psi_old, spent_note.asset()), false)),
                 },
                 phantom: core::marker::PhantomData,
             },
@@ -1348,7 +1334,7 @@ mod tests {
                         rcm_new: circuit.witnesses.rcm_new.clone(),
                         rcv: circuit.witnesses.rcv,
 
-                        zsa_witnesses: circuit.witnesses.zsa_witnesses.clone(),
+                        zsa_additional_witnesses: circuit.witnesses.zsa_additional_witnesses,
                     },
                     phantom: core::marker::PhantomData,
                 };
@@ -1407,16 +1393,12 @@ mod tests {
                             rcm_new: circuit.witnesses.rcm_new.clone(),
                             rcv: circuit.witnesses.rcv,
 
-                            zsa_witnesses: Some(ZsaWitnesses {
-                                psi_nf: pallas::Base::random(&mut rng),
-                                asset: circuit.witnesses.zsa_witnesses.clone().unwrap().asset,
-                                split_flag: circuit
-                                    .witnesses
-                                    .zsa_witnesses
-                                    .clone()
-                                    .unwrap()
-                                    .split_flag,
-                            }),
+                            zsa_additional_witnesses: circuit
+                                .witnesses
+                                .zsa_additional_witnesses
+                                .map(|((_, asset), split_flag)| {
+                                    ((pallas::Base::random(&mut rng), asset), split_flag)
+                                }),
                         },
                         phantom: core::marker::PhantomData,
                     };

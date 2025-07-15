@@ -112,12 +112,12 @@ pub trait OrchardCircuit: Sized + Default {
     ) -> Result<(), plonk::Error>;
 
     /// Builds the ZSA-specific witnesses for the circuit.
-    /// For OrchardVanilla circuits, all fields in `ZsaWitnesses` are `Unknown`.
+    /// For OrchardVanilla circuits, it should return `Unknown`.
     fn build_zsa_witnesses(
         psi_nf: pallas::Base,
         asset: AssetBase,
         split_flag: bool,
-    ) -> Option<ZsaWitnesses>;
+    ) -> Value<ZsaAdditionalWitnesses>;
 }
 
 impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
@@ -149,12 +149,12 @@ pub struct Circuit<C: OrchardCircuit> {
 }
 
 /// The ZSA-specific witnesses.
-#[derive(Clone, Debug)]
-pub struct ZsaWitnesses {
-    pub(crate) psi_nf: pallas::Base,
-    pub(crate) asset: AssetBase,
-    pub(crate) split_flag: bool,
-}
+///
+/// `ZsaAdditionalWitnesses` is a tuple containing:
+/// - psi_nf
+/// - asset
+/// -split_flag
+pub(crate) type ZsaAdditionalWitnesses = ((pallas::Base, AssetBase), bool);
 
 /// The Orchard Action witnesses
 #[derive(Clone, Debug, Default)]
@@ -179,8 +179,9 @@ pub struct Witnesses {
     pub(crate) rcm_new: Value<NoteCommitTrapdoor>,
     pub(crate) rcv: Value<ValueCommitTrapdoor>,
 
-    // TODO
-    pub(crate) zsa_witnesses: Option<ZsaWitnesses>,
+    // The ZSA-specific witnesses.
+    // For OrchardVanilla circuits, this field is `Unknown`.
+    pub(crate) zsa_additional_witnesses: Value<ZsaAdditionalWitnesses>,
 }
 
 impl Witnesses {
@@ -227,7 +228,8 @@ impl Witnesses {
         let psi_new = output_note.rseed().psi(&rho_new);
         let rcm_new = output_note.rseed().rcm(&rho_new);
 
-        let zsa_witnesses = C::build_zsa_witnesses(psi_nf, spend.note.asset(), spend.split_flag);
+        let zsa_additional_witnesses =
+            C::build_zsa_witnesses(psi_nf, spend.note.asset(), spend.split_flag);
 
         Witnesses {
             path: Value::known(spend.merkle_path.auth_path()),
@@ -250,7 +252,7 @@ impl Witnesses {
             rcm_new: Value::known(rcm_new),
             rcv: Value::known(rcv),
 
-            zsa_witnesses,
+            zsa_additional_witnesses,
         }
     }
 }
