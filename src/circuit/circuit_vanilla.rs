@@ -611,23 +611,22 @@ impl OrchardCircuit for OrchardVanilla {
         Ok(())
     }
 
-    /// For OrchardVanilla circuits, `build_zsa_witnesses` returns a `ZsaWitnesses` with `Unknown`
-    /// values.
+    /// For OrchardVanilla circuits, `build_zsa_witnesses` returns None.
     ///
     /// # Panics
     /// Panics if the asset is not a native asset or if `split_flag` is true.
-    fn build_zsa_witnesses(_: pallas::Base, asset: AssetBase, split_flag: bool) -> ZsaWitnesses {
+    fn build_zsa_witnesses(
+        _: pallas::Base,
+        asset: AssetBase,
+        split_flag: bool,
+    ) -> Option<ZsaWitnesses> {
         if !(bool::from(asset.is_native())) {
             panic!("asset must be native asset in OrchardVanilla circuit");
         }
         if split_flag {
             panic!("split_flag must be false in OrchardVanilla circuit");
         }
-        ZsaWitnesses {
-            psi_nf: Value::unknown(),
-            asset: Value::unknown(),
-            split_flag: Value::unknown(),
-        }
+        None
     }
 }
 
@@ -641,7 +640,7 @@ mod tests {
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, RngCore};
 
-    use crate::circuit::{Witnesses, ZsaWitnesses};
+    use crate::circuit::Witnesses;
     use crate::{
         bundle::Flags,
         circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K},
@@ -697,11 +696,7 @@ mod tests {
                     rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
                     rcv: Value::known(rcv),
 
-                    zsa_witnesses: ZsaWitnesses {
-                        psi_nf: Value::unknown(),
-                        asset: Value::unknown(),
-                        split_flag: Value::unknown(),
-                    },
+                    zsa_witnesses: None,
                 },
                 phantom: core::marker::PhantomData,
             },

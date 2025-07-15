@@ -117,7 +117,7 @@ pub trait OrchardCircuit: Sized + Default {
         psi_nf: pallas::Base,
         asset: AssetBase,
         split_flag: bool,
-    ) -> ZsaWitnesses;
+    ) -> Option<ZsaWitnesses>;
 }
 
 impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
@@ -149,12 +149,11 @@ pub struct Circuit<C: OrchardCircuit> {
 }
 
 /// The ZSA-specific witnesses.
-/// For OrchardVanilla circuits, all fields in `ZsaWitnesses` are `Unknown`.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ZsaWitnesses {
-    pub(crate) psi_nf: Value<pallas::Base>,
-    pub(crate) asset: Value<AssetBase>,
-    pub(crate) split_flag: Value<bool>,
+    pub(crate) psi_nf: pallas::Base,
+    pub(crate) asset: AssetBase,
+    pub(crate) split_flag: bool,
 }
 
 /// The Orchard Action witnesses
@@ -180,9 +179,8 @@ pub struct Witnesses {
     pub(crate) rcm_new: Value<NoteCommitTrapdoor>,
     pub(crate) rcv: Value<ValueCommitTrapdoor>,
 
-    // The fields inside `zsa_witnesses` are only populated for OrchardZSA circuits.
-    // They are `Unknown` in OrchardVanilla circuits.
-    pub(crate) zsa_witnesses: ZsaWitnesses,
+    // TODO
+    pub(crate) zsa_witnesses: Option<ZsaWitnesses>,
 }
 
 impl Witnesses {
