@@ -22,7 +22,7 @@ use memuse::DynamicUsage;
 use crate::{
     action::Action,
     address::Address,
-    bundle::commitments::hash_bundle_auth_data,
+    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     domain::{OrchardDomain, OrchardDomainCommon},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
@@ -33,10 +33,7 @@ use crate::{
 };
 
 #[cfg(feature = "circuit")]
-use crate::{
-    bundle::commitments::hash_bundle_txid_data,
-    circuit::{Instance, VerifyingKey},
-};
+use crate::circuit::{Instance, VerifyingKey};
 
 #[cfg(feature = "circuit")]
 impl<A, D: OrchardDomainCommon> Action<A, D> {
