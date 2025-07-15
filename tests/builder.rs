@@ -3,7 +3,7 @@ use orchard::{
     builder::{Builder, BundleType},
     bundle::{Authorized, Flags},
     circuit::{ProvingKey, VerifyingKey},
-    domain::OrchardDomain,
+    domain::{OrchardDomain, OrchardDomainCommon},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
@@ -16,8 +16,8 @@ use rand::SeedableRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
 
-pub fn verify_bundle<FL: OrchardFlavor>(
-    bundle: &Bundle<Authorized, i64, FL>,
+pub fn verify_bundle<D: OrchardDomainCommon>(
+    bundle: &Bundle<Authorized, i64, D>,
     vk: &VerifyingKey,
     verify_proof: bool,
 ) {

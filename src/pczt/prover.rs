@@ -5,15 +5,14 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     builder::SpendInfo,
-    circuit::{Circuit, Instance, ProvingKey, Witnesses},
+    circuit::{Circuit, Instance, OrchardCircuit, ProvingKey, Witnesses},
     note::Rho,
-    orchard_flavor::OrchardFlavor,
     Note, Proof,
 };
 
 impl super::Bundle {
     /// Adds a proof to this PCZT bundle.
-    pub fn create_proof<FL: OrchardFlavor, R: RngCore + CryptoRng>(
+    pub fn create_proof<C: OrchardCircuit, R: RngCore + CryptoRng>(
         &mut self,
         pk: &ProvingKey,
         rng: R,
@@ -86,9 +85,9 @@ impl super::Bundle {
                     .ok_or(ProverError::MissingSpendAuthRandomizer)?;
                 let rcv = action.rcv.ok_or(ProverError::MissingValueCommitTrapdoor)?;
 
-                Witnesses::from_action_context::<FL>(spend, output_note, alpha, rcv)
+                Witnesses::from_action_context::<C>(spend, output_note, alpha, rcv)
                     .ok_or(ProverError::RhoMismatch)
-                    .map(|witnesses| Circuit::<FL> {
+                    .map(|witnesses| Circuit::<C> {
                         witnesses,
                         phantom: core::marker::PhantomData,
                     })
