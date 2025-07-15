@@ -113,7 +113,6 @@ pub trait OrchardCircuit: Sized + Default {
 
     /// Builds the ZSA-specific witnesses for the circuit.
     /// For OrchardVanilla circuits, all fields in `ZsaWitnesses` are `Unknown`.
-    #[allow(clippy::type_complexity)]
     fn build_zsa_witnesses(
         psi_nf: pallas::Base,
         asset: AssetBase,
