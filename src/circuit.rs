@@ -6,12 +6,6 @@
 use alloc::vec::Vec;
 
 use group::{Curve, GroupEncoding};
-use halo2_gadgets::{
-    ecc::chip::EccConfig,
-    poseidon::Pow5Config as PoseidonConfig,
-    sinsemilla::{chip::SinsemillaConfig, merkle::chip::MerkleConfig},
-    utilities::lookup_range_check::PallasLookupRangeCheck,
-};
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
     plonk::{
@@ -43,6 +37,12 @@ use crate::{
     spec::NonIdentityPallasPoint,
     tree::{Anchor, MerkleHashOrchard},
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
+};
+use halo2_gadgets::{
+    ecc::chip::EccConfig,
+    poseidon::Pow5Config as PoseidonConfig,
+    sinsemilla::{chip::SinsemillaConfig, merkle::chip::MerkleConfig},
+    utilities::lookup_range_check::PallasLookupRangeCheck,
 };
 
 mod circuit_vanilla;
