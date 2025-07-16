@@ -238,41 +238,65 @@ fn check_structural_validity(
     }
 }
 
-/// A struct containing details of an issuance authorization signature scheme
-/// that every signature scheme must expose.
+/// Complete, immutable description of a supported scheme.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IssuanceAuthSigDetails {
-    key_algorithm_byte: u8,
-    key_length: usize,
-    sig_algorithm_byte: u8,
-    sig_length: usize,
+    /// The byte that identifies the key algorithm.
+    pub key_algorithm_byte: u8,
+    /// The length of the issuance validating key for the scheme.
+    pub key_length: usize,
+    /// The length of the issuance authorization signature for the scheme.
+    pub sig_length: usize,
 }
 
-/// An enum of supported schemes for issuance authorization signatures.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Enumeration of schemes.
+///
+/// `#[repr(u8)]` makes the discriminant *equal* to `key_algorithm_byte`,
+/// so the mapping is just a cast.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum IssuanceAuthSigScheme {
-    /// The signature scheme specified in [ZIP 227][issuanceauthsig].
-    ///
-    /// [issuanceauthsig]: https://zips.z.cash/zip-0227#orchard-zsa-issuance-authorization-signature-scheme
-    Zip227,
+    /// OrchardZSA Schnorr/BIP-340 (ZIP-227), version 1.
+    ZsaSchnorrSigV1 = 0x00,
 }
 
 impl IssuanceAuthSigScheme {
+    /* ─────  associated constants  ───── */
+
     /// These are the constants of the [ZIP 227][issuanceauthsig] Schnorr signature scheme based on BIP 340.
     ///
     /// [issuanceauthsig]: https://zips.z.cash/zip-0227#orchard-zsa-issuance-authorization-signature-scheme
-    pub const ZIP227_DETAILS: IssuanceAuthSigDetails = IssuanceAuthSigDetails {
-        key_algorithm_byte: 0x00,
+    pub const ZSA_SCHNORR_SIG_V1_DETAILS: IssuanceAuthSigDetails = IssuanceAuthSigDetails {
+        key_algorithm_byte: Self::ZsaSchnorrSigV1 as u8,
         key_length: 33,
-        sig_algorithm_byte: 0x00,
         sig_length: 65,
     };
 
     /// Returns the details of the specific issuance authorization signature scheme.
-    pub const fn scheme_details(self) -> IssuanceAuthSigDetails {
+    pub const fn details(self) -> &'static IssuanceAuthSigDetails {
         match self {
-            IssuanceAuthSigScheme::Zip227 => Self::ZIP227_DETAILS,
+            Self::ZsaSchnorrSigV1 => &Self::ZSA_SCHNORR_SIG_V1_DETAILS,
         }
+    }
+
+    /// Returns the signature scheme being used based on the value of the key algorithm byte.
+    pub const fn from_key_algorithm_byte(b: u8) -> Option<Self> {
+        match b {
+            x if x == Self::ZsaSchnorrSigV1 as u8 => Some(Self::ZsaSchnorrSigV1),
+            _ => None,
+        }
+    }
+}
+impl TryFrom<u8> for IssuanceAuthSigScheme {
+    type Error = ();
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        IssuanceAuthSigScheme::from_key_algorithm_byte(value).ok_or(())
+    }
+}
+
+impl From<IssuanceAuthSigScheme> for u8 {
+    fn from(s: IssuanceAuthSigScheme) -> Self {
+        s.details().key_algorithm_byte
     }
 }
 
@@ -340,7 +364,7 @@ impl IssuanceAuthorizingKey {
             .sign_prehash(msg)
             .map_err(|_| issuance::Error::IssueAuthSigGenerationFailed)?;
         Ok(IssuanceAuthorizationSignature::new(
-            IssuanceAuthSigScheme::Zip227,
+            IssuanceAuthSigScheme::ZsaSchnorrSigV1,
             signature,
         ))
     }
@@ -368,7 +392,7 @@ pub struct IssuanceValidatingKey {
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
         IssuanceValidatingKey {
-            scheme: IssuanceAuthSigScheme::Zip227,
+            scheme: IssuanceAuthSigScheme::ZsaSchnorrSigV1,
             key: *schnorr::SigningKey::from(isk.0).verifying_key(),
         }
     }
@@ -387,9 +411,7 @@ impl IssuanceValidatingKey {
     /// and the key in big-endian order as defined in BIP 340.
     pub fn to_bytes(&self) -> [u8; 33] {
         let mut bytes = [0u8; 33];
-        match self.scheme {
-            IssuanceAuthSigScheme::Zip227 => bytes[0] = 0x00,
-        }
+        bytes[0] = self.scheme as u8;
         bytes[1..].copy_from_slice(&self.key.to_bytes());
         bytes
     }
@@ -399,16 +421,11 @@ impl IssuanceValidatingKey {
     ///
     /// Returns `None` if the bytes do not correspond to a valid key.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.first() == Some(&0x00) {
+        IssuanceAuthSigScheme::from_key_algorithm_byte(bytes[0]).and_then(|scheme| {
             schnorr::VerifyingKey::from_bytes(&bytes[1..])
                 .ok()
-                .map(|key| IssuanceValidatingKey {
-                    scheme: IssuanceAuthSigScheme::Zip227,
-                    key,
-                })
-        } else {
-            None
-        }
+                .map(|key| IssuanceValidatingKey { scheme, key })
+        })
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
