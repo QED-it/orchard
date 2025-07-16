@@ -105,24 +105,18 @@ impl IssuanceAuthorizationSignature {
     /// Returns the byte encoding of the signature.
     pub fn to_bytes(&self) -> [u8; 65] {
         let mut bytes = [0u8; 65];
-        match &self.scheme {
-            IssuanceAuthSigScheme::ZsaSchnorrSigV1 => bytes[0] = 0x00,
-        }
+        bytes[0] = self.scheme as u8;
         bytes[1..].copy_from_slice(&self.signature.to_bytes());
         bytes
     }
 
     /// Constructs an `IssuanceAuthorizationSignature` from a byte array.
     pub fn from_bytes(bytes: &[u8; 65]) -> Result<Self, Error> {
-        if bytes.first() != Some(&0x00) {
-            return Err(IssueBundleInvalidSignature);
-        }
+        let scheme = IssuanceAuthSigScheme::from_key_algorithm_byte(bytes[0])
+            .ok_or(IssueBundleInvalidSignature)?;
         let signature =
             schnorr::Signature::try_from(&bytes[1..]).map_err(|_| IssueBundleInvalidSignature)?;
-        Ok(IssuanceAuthorizationSignature {
-            scheme: IssuanceAuthSigScheme::ZsaSchnorrSigV1,
-            signature,
-        })
+        Ok(IssuanceAuthorizationSignature { scheme, signature })
     }
 }
 
