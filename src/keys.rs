@@ -409,10 +409,10 @@ impl Eq for IssuanceValidatingKey {}
 impl IssuanceValidatingKey {
     /// Converts this issuance validating key to its serialized form, with a scheme byte prefix,
     /// and the key in big-endian order as defined in BIP 340.
-    pub fn to_bytes(&self) -> [u8; 33] {
-        let mut bytes = [0u8; 33];
-        bytes[0] = self.scheme as u8;
-        bytes[1..].copy_from_slice(&self.key.to_bytes());
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![self.scheme as u8];
+        bytes.extend(self.key.to_bytes());
+        assert_eq!(bytes.len(), self.scheme.details().key_length);
         bytes
     }
 
@@ -1359,8 +1359,7 @@ mod tests {
             let message = tv.msg;
 
             let signature = isk.try_sign(&message).unwrap();
-            let sig_bytes: [u8; 65] = signature.to_bytes();
-            assert_eq!(sig_bytes, tv.sig);
+            assert_eq!(signature.to_bytes().as_slice(), &tv.sig);
 
             assert!(ik.verify(&message, &signature).is_ok());
         }

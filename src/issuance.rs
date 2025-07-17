@@ -103,10 +103,10 @@ impl IssuanceAuthorizationSignature {
     }
 
     /// Returns the byte encoding of the signature.
-    pub fn to_bytes(&self) -> [u8; 65] {
-        let mut bytes = [0u8; 65];
-        bytes[0] = self.scheme as u8;
-        bytes[1..].copy_from_slice(&self.signature.to_bytes());
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![self.scheme as u8];
+        bytes.extend(self.signature.to_bytes());
+        assert_eq!(bytes.len(), self.scheme.details().sig_length);
         bytes
     }
 
