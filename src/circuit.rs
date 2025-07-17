@@ -156,7 +156,7 @@ pub struct ZsaAdditionalWitnesses {
     pub(crate) split_flag: bool,
 }
 
-pub(crate) fn unpack_zsa_additional_witnesses(
+fn unpack_zsa_additional_witnesses(
     zsa_values: Value<ZsaAdditionalWitnesses>,
 ) -> (Value<pallas::Base>, Value<AssetBase>, Value<bool>) {
     (
