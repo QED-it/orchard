@@ -113,7 +113,7 @@ pub trait OrchardCircuit: Sized + Default {
 
     /// Builds the ZSA-specific witnesses for the circuit.
     /// For OrchardVanilla circuits, it should return `Unknown`.
-    fn build_zsa_witnesses(
+    fn build_zsa_additional_witnesses(
         psi_nf: pallas::Base,
         asset: AssetBase,
         split_flag: bool,
@@ -156,7 +156,7 @@ pub struct ZsaAdditionalWitnesses {
     pub(crate) split_flag: bool,
 }
 
-pub(crate) fn get_zsa_witnesses_values(
+pub(crate) fn unpack_zsa_additional_witnesses(
     zsa_values: Value<ZsaAdditionalWitnesses>,
 ) -> (Value<pallas::Base>, Value<AssetBase>, Value<bool>) {
     (
@@ -239,7 +239,7 @@ impl Witnesses {
         let rcm_new = output_note.rseed().rcm(&rho_new);
 
         let zsa_additional_witnesses =
-            C::build_zsa_witnesses(psi_nf, spend.note.asset(), spend.split_flag);
+            C::build_zsa_additional_witnesses(psi_nf, spend.note.asset(), spend.split_flag);
 
         Witnesses {
             path: Value::known(spend.merkle_path.auth_path()),

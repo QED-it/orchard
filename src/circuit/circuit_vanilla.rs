@@ -611,11 +611,11 @@ impl OrchardCircuit for OrchardVanilla {
         Ok(())
     }
 
-    /// For OrchardVanilla circuits, `build_zsa_witnesses` returns `Unknown`.
+    /// For OrchardVanilla circuits, `build_zsa_additional_witnesses` returns `Unknown`.
     ///
     /// # Panics
     /// Panics if the asset is not a native asset or if `split_flag` is true.
-    fn build_zsa_witnesses(
+    fn build_zsa_additional_witnesses(
         _: pallas::Base,
         asset: AssetBase,
         split_flag: bool,

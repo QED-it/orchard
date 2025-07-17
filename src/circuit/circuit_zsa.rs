@@ -31,8 +31,8 @@ use super::{
     commit_ivk::CommitIvkChip,
     derive_nullifier::ZsaNullifierParams,
     gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
-    get_zsa_witnesses_values,
     note_commit::NoteCommitChip,
+    unpack_zsa_additional_witnesses,
     value_commit_orchard::ZsaValueCommitParams,
     OrchardCircuit, ZsaAdditionalWitnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
     ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
@@ -338,7 +338,7 @@ impl OrchardCircuit for OrchardZSA {
 
         // Unzip the ZSA witnesses.
         let (psi_nf_value, asset_value, split_flag_value) =
-            get_zsa_witnesses_values(circuit.zsa_additional_witnesses.clone());
+            unpack_zsa_additional_witnesses(circuit.zsa_additional_witnesses.clone());
 
         // Construct the ECC chip.
         let ecc_chip = config.ecc_chip();
@@ -855,7 +855,7 @@ impl OrchardCircuit for OrchardZSA {
         Ok(())
     }
 
-    fn build_zsa_witnesses(
+    fn build_zsa_additional_witnesses(
         psi_nf: pallas::Base,
         asset: AssetBase,
         split_flag: bool,
