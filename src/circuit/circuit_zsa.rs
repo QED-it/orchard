@@ -336,7 +336,7 @@ impl OrchardCircuit for OrchardZSA {
         // Load the Sinsemilla generator lookup table used by the whole circuit.
         SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
-        // Unzip the ZSA witnesses.
+        // Unpack the ZSA witnesses.
         let (psi_nf_value, asset_value, split_flag_value) =
             unpack_zsa_additional_witnesses(circuit.zsa_additional_witnesses.clone());
 
