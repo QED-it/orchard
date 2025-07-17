@@ -31,6 +31,7 @@ use super::{
     commit_ivk::CommitIvkChip,
     derive_nullifier::ZsaNullifierParams,
     gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
+    get_zsa_witnesses_values,
     note_commit::NoteCommitChip,
     value_commit_orchard::ZsaValueCommitParams,
     OrchardCircuit, ZsaAdditionalWitnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
@@ -336,11 +337,8 @@ impl OrchardCircuit for OrchardZSA {
         SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
         // Unzip the ZSA witnesses.
-        let (psi_nf_value, asset_value, split_flag_value) = {
-            let (psi_nf_asset_value, split_flag_value) = circuit.zsa_additional_witnesses.unzip();
-            let (psi_nf_value, asset_value) = psi_nf_asset_value.unzip();
-            (psi_nf_value, asset_value, split_flag_value)
-        };
+        let (psi_nf_value, asset_value, split_flag_value) =
+            get_zsa_witnesses_values(circuit.zsa_additional_witnesses.clone());
 
         // Construct the ECC chip.
         let ecc_chip = config.ecc_chip();
@@ -862,7 +860,11 @@ impl OrchardCircuit for OrchardZSA {
         asset: AssetBase,
         split_flag: bool,
     ) -> Value<ZsaAdditionalWitnesses> {
-        Value::known(((psi_nf, asset), split_flag))
+        Value::known(ZsaAdditionalWitnesses {
+            psi_nf,
+            asset,
+            split_flag,
+        })
     }
 }
 
@@ -878,6 +880,7 @@ mod tests {
     use rand::{rngs::OsRng, RngCore};
     use rand_core::CryptoRngCore;
 
+    use crate::circuit::ZsaAdditionalWitnesses;
     use crate::{
         builder::SpendInfo,
         bundle::Flags,
@@ -937,7 +940,11 @@ mod tests {
                     rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
                     rcv: Value::known(rcv),
 
-                    zsa_additional_witnesses: Value::known(((psi_old, spent_note.asset()), false)),
+                    zsa_additional_witnesses: Value::known(ZsaAdditionalWitnesses {
+                        psi_nf: psi_old,
+                        asset: spent_note.asset(),
+                        split_flag: false,
+                    }),
                 },
                 phantom: core::marker::PhantomData,
             },
@@ -1334,7 +1341,10 @@ mod tests {
                         rcm_new: circuit.witnesses.rcm_new.clone(),
                         rcv: circuit.witnesses.rcv,
 
-                        zsa_additional_witnesses: circuit.witnesses.zsa_additional_witnesses,
+                        zsa_additional_witnesses: circuit
+                            .witnesses
+                            .zsa_additional_witnesses
+                            .clone(),
                     },
                     phantom: core::marker::PhantomData,
                 };
@@ -1396,8 +1406,11 @@ mod tests {
                             zsa_additional_witnesses: circuit
                                 .witnesses
                                 .zsa_additional_witnesses
-                                .map(|((_, asset), split_flag)| {
-                                    ((pallas::Base::random(&mut rng), asset), split_flag)
+                                .clone()
+                                .map(|zsa_values| ZsaAdditionalWitnesses {
+                                    psi_nf: pallas::Base::random(&mut rng),
+                                    asset: zsa_values.asset,
+                                    split_flag: zsa_values.split_flag,
                                 }),
                         },
                         phantom: core::marker::PhantomData,

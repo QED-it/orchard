@@ -149,12 +149,22 @@ pub struct Circuit<C: OrchardCircuit> {
 }
 
 /// The ZSA-specific witnesses.
-///
-/// `ZsaAdditionalWitnesses` is a tuple containing:
-/// - psi_nf
-/// - asset
-/// -split_flag
-pub(crate) type ZsaAdditionalWitnesses = ((pallas::Base, AssetBase), bool);
+#[derive(Clone, Debug)]
+pub struct ZsaAdditionalWitnesses {
+    pub(crate) psi_nf: pallas::Base,
+    pub(crate) asset: AssetBase,
+    pub(crate) split_flag: bool,
+}
+
+pub(crate) fn get_zsa_witnesses_values(
+    zsa_values: Value<ZsaAdditionalWitnesses>,
+) -> (Value<pallas::Base>, Value<AssetBase>, Value<bool>) {
+    (
+        zsa_values.clone().map(|values| values.psi_nf),
+        zsa_values.clone().map(|values| values.asset),
+        zsa_values.clone().map(|values| values.split_flag),
+    )
+}
 
 /// The Orchard Action witnesses
 #[derive(Clone, Debug, Default)]
