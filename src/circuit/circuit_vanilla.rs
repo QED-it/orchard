@@ -38,7 +38,7 @@ use super::{
     commit_ivk::CommitIvkChip,
     gadget::{add_chip::AddChip, assign_free_advice},
     note_commit::NoteCommitChip,
-    OrchardCircuit, ZsaAdditionalWitnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
+    AdditionalZsaWitnesses, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
     ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
 };
 
@@ -611,15 +611,15 @@ impl OrchardCircuit for OrchardVanilla {
         Ok(())
     }
 
-    /// For OrchardVanilla circuits, `build_zsa_additional_witnesses` returns `Unknown`.
+    /// For OrchardVanilla circuits, `build_additional_zsa_witnesses` returns `Value::unknown()`.
     ///
     /// # Panics
     /// Panics if the asset is not a native asset or if `split_flag` is true.
-    fn build_zsa_additional_witnesses(
+    fn build_additional_zsa_witnesses(
         _: pallas::Base,
         asset: AssetBase,
         split_flag: bool,
-    ) -> Value<ZsaAdditionalWitnesses> {
+    ) -> Value<AdditionalZsaWitnesses> {
         if !(bool::from(asset.is_native())) {
             panic!("asset must be native asset in OrchardVanilla circuit");
         }
@@ -696,7 +696,7 @@ mod tests {
                     rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
                     rcv: Value::known(rcv),
 
-                    zsa_additional_witnesses: Value::unknown(),
+                    ..Witnesses::default()
                 },
                 phantom: core::marker::PhantomData,
             },

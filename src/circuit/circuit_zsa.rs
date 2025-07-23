@@ -32,9 +32,9 @@ use super::{
     derive_nullifier::ZsaNullifierParams,
     gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
     note_commit::NoteCommitChip,
-    unpack_zsa_additional_witnesses,
+    unpack,
     value_commit_orchard::ZsaValueCommitParams,
-    OrchardCircuit, ZsaAdditionalWitnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
+    AdditionalZsaWitnesses, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
     ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
 };
 use crate::{
@@ -338,7 +338,7 @@ impl OrchardCircuit for OrchardZSA {
 
         // Unpack the ZSA witnesses.
         let (psi_nf_value, asset_value, split_flag_value) =
-            unpack_zsa_additional_witnesses(circuit.zsa_additional_witnesses.clone());
+            unpack(circuit.additional_zsa_witnesses.clone());
 
         // Construct the ECC chip.
         let ecc_chip = config.ecc_chip();
@@ -855,12 +855,12 @@ impl OrchardCircuit for OrchardZSA {
         Ok(())
     }
 
-    fn build_zsa_additional_witnesses(
+    fn build_additional_zsa_witnesses(
         psi_nf: pallas::Base,
         asset: AssetBase,
         split_flag: bool,
-    ) -> Value<ZsaAdditionalWitnesses> {
-        Value::known(ZsaAdditionalWitnesses {
+    ) -> Value<AdditionalZsaWitnesses> {
+        Value::known(AdditionalZsaWitnesses {
             psi_nf,
             asset,
             split_flag,
@@ -880,11 +880,13 @@ mod tests {
     use rand::{rngs::OsRng, RngCore};
     use rand_core::CryptoRngCore;
 
-    use crate::circuit::ZsaAdditionalWitnesses;
     use crate::{
         builder::SpendInfo,
         bundle::Flags,
-        circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, Witnesses, K},
+        circuit::{
+            AdditionalZsaWitnesses, Circuit, Instance, Proof, ProvingKey, VerifyingKey, Witnesses,
+            K,
+        },
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
@@ -940,7 +942,7 @@ mod tests {
                     rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
                     rcv: Value::known(rcv),
 
-                    zsa_additional_witnesses: Value::known(ZsaAdditionalWitnesses {
+                    additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
                         psi_nf: psi_old,
                         asset: spent_note.asset(),
                         split_flag: false,
@@ -1241,7 +1243,7 @@ mod tests {
         };
 
         (
-            Circuit::<OrchardZSA> {
+            Circuit {
                 witnesses: Witnesses::from_action_context_unchecked::<OrchardZSA>(
                     spend_info,
                     output_note,
@@ -1319,7 +1321,7 @@ mod tests {
 
                 // Set cm_old to be a random NoteCommitment
                 // The proof should fail
-                let circuit_wrong_cm_old = Circuit::<OrchardZSA> {
+                let circuit_wrong_cm_old = Circuit {
                     witnesses: Witnesses {
                         path: circuit.witnesses.path,
                         pos: circuit.witnesses.pos,
@@ -1341,9 +1343,9 @@ mod tests {
                         rcm_new: circuit.witnesses.rcm_new.clone(),
                         rcv: circuit.witnesses.rcv,
 
-                        zsa_additional_witnesses: circuit
+                        additional_zsa_witnesses: circuit
                             .witnesses
-                            .zsa_additional_witnesses
+                            .additional_zsa_witnesses
                             .clone(),
                     },
                     phantom: core::marker::PhantomData,
@@ -1381,7 +1383,7 @@ mod tests {
                 // If split_flag = 0 , set psi_nf to be a random Pallas base element
                 // The proof should fail
                 if !split_flag {
-                    let circuit_wrong_psi_nf = Circuit::<OrchardZSA> {
+                    let circuit_wrong_psi_nf = Circuit {
                         witnesses: Witnesses {
                             path: circuit.witnesses.path,
                             pos: circuit.witnesses.pos,
@@ -1403,14 +1405,13 @@ mod tests {
                             rcm_new: circuit.witnesses.rcm_new.clone(),
                             rcv: circuit.witnesses.rcv,
 
-                            zsa_additional_witnesses: circuit
+                            additional_zsa_witnesses: circuit
                                 .witnesses
-                                .zsa_additional_witnesses
+                                .additional_zsa_witnesses
                                 .clone()
-                                .map(|zsa_values| ZsaAdditionalWitnesses {
+                                .map(|zsa_values| AdditionalZsaWitnesses {
                                     psi_nf: pallas::Base::random(&mut rng),
-                                    asset: zsa_values.asset,
-                                    split_flag: zsa_values.split_flag,
+                                    ..zsa_values
                                 }),
                         },
                         phantom: core::marker::PhantomData,

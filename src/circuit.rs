@@ -112,12 +112,12 @@ pub trait OrchardCircuit: Sized + Default {
     ) -> Result<(), plonk::Error>;
 
     /// Builds the ZSA-specific witnesses for the circuit.
-    /// For OrchardVanilla circuits, it should return `Unknown`.
-    fn build_zsa_additional_witnesses(
+    /// For OrchardVanilla circuits, it should return `Value::Unknown()`.
+    fn build_additional_zsa_witnesses(
         psi_nf: pallas::Base,
         asset: AssetBase,
         split_flag: bool,
-    ) -> Value<ZsaAdditionalWitnesses>;
+    ) -> Value<AdditionalZsaWitnesses>;
 }
 
 impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
@@ -150,19 +150,19 @@ pub struct Circuit<C: OrchardCircuit> {
 
 /// The ZSA-specific witnesses.
 #[derive(Clone, Debug)]
-pub struct ZsaAdditionalWitnesses {
+pub struct AdditionalZsaWitnesses {
     pub(crate) psi_nf: pallas::Base,
     pub(crate) asset: AssetBase,
     pub(crate) split_flag: bool,
 }
 
-fn unpack_zsa_additional_witnesses(
-    zsa_values: Value<ZsaAdditionalWitnesses>,
+fn unpack(
+    zsa_values: Value<AdditionalZsaWitnesses>,
 ) -> (Value<pallas::Base>, Value<AssetBase>, Value<bool>) {
     (
         zsa_values.clone().map(|values| values.psi_nf),
         zsa_values.clone().map(|values| values.asset),
-        zsa_values.clone().map(|values| values.split_flag),
+        zsa_values.map(|values| values.split_flag),
     )
 }
 
@@ -190,8 +190,8 @@ pub struct Witnesses {
     pub(crate) rcv: Value<ValueCommitTrapdoor>,
 
     // The ZSA-specific witnesses.
-    // For OrchardVanilla circuits, this field is `Unknown`.
-    pub(crate) zsa_additional_witnesses: Value<ZsaAdditionalWitnesses>,
+    // For OrchardVanilla circuits, this field should be initialized to `Value::unknown()`.
+    pub(crate) additional_zsa_witnesses: Value<AdditionalZsaWitnesses>,
 }
 
 impl Witnesses {
@@ -231,15 +231,14 @@ impl Witnesses {
         let psi_old = spend.note.rseed().psi(&rho_old);
         let rcm_old = spend.note.rseed().rcm(&rho_old);
 
-        let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
-        let psi_nf = nf_rseed.psi(&rho_old);
-
         let rho_new = output_note.rho();
         let psi_new = output_note.rseed().psi(&rho_new);
         let rcm_new = output_note.rseed().rcm(&rho_new);
 
-        let zsa_additional_witnesses =
-            C::build_zsa_additional_witnesses(psi_nf, spend.note.asset(), spend.split_flag);
+        let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
+        let psi_nf = nf_rseed.psi(&rho_old);
+        let additional_zsa_witnesses =
+            C::build_additional_zsa_witnesses(psi_nf, spend.note.asset(), spend.split_flag);
 
         Witnesses {
             path: Value::known(spend.merkle_path.auth_path()),
@@ -262,7 +261,7 @@ impl Witnesses {
             rcm_new: Value::known(rcm_new),
             rcv: Value::known(rcv),
 
-            zsa_additional_witnesses,
+            additional_zsa_witnesses,
         }
     }
 }
