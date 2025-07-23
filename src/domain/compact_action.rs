@@ -9,7 +9,7 @@ use crate::{
     note::{ExtractedNoteCommitment, Nullifier, Rho},
 };
 
-use super::orchard_domain::{OrchardDomain, OrchardPrimitives};
+use super::orchard_primitives::{OrchardDomain, OrchardPrimitives};
 
 impl<A, P: OrchardPrimitives> ShieldedOutput<OrchardDomain<P>> for Action<A, P> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {

@@ -20,7 +20,7 @@ use crate::{
     value::{NoteValue, ValueCommitment},
 };
 
-use super::orchard_domain::{OrchardDomain, OrchardPrimitives};
+use super::orchard_primitives::{OrchardDomain, OrchardPrimitives};
 
 const PRF_OCK_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_Orchardock";
 

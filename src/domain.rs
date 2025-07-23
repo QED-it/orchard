@@ -6,14 +6,14 @@
 //! organized into separate submodules.
 
 mod compact_action;
-mod orchard_domain;
-mod orchard_domain_vanilla;
-mod orchard_domain_zsa;
+mod orchard_primitives;
+mod orchard_primitives_vanilla;
+mod orchard_primitives_zsa;
 mod zcash_note_encryption_domain;
 
 pub use {
     compact_action::CompactAction,
-    orchard_domain::{OrchardDomain, OrchardPrimitives},
+    orchard_primitives::{OrchardDomain, OrchardPrimitives},
 };
 
 #[cfg(feature = "test-dependencies")]

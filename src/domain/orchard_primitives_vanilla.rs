@@ -17,7 +17,7 @@ use crate::{
 };
 
 use super::{
-    orchard_domain::OrchardPrimitives,
+    orchard_primitives::OrchardPrimitives,
     zcash_note_encryption_domain::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_V2,
     },
@@ -106,17 +106,13 @@ mod tests {
 
     use super::super::{
         compact_action::CompactAction,
-        orchard_domain::OrchardDomain,
+        orchard_primitives::OrchardDomain,
         zcash_note_encryption_domain::{
             parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
         },
     };
 
     type OrchardDomainVanilla = OrchardDomain<OrchardVanilla>;
-
-    /// Implementation of in-band secret distribution for Orchard bundles.
-    pub type OrchardDomainCommonryptionVanilla =
-        zcash_note_encryption::NoteEncryption<OrchardDomainVanilla>;
 
     proptest! {
         #[test]
@@ -251,7 +247,12 @@ mod tests {
             // Test encryption
             //
 
-            let ne = OrchardDomainCommonryptionVanilla::new_with_esk(esk, Some(ovk), note, tv.memo);
+            let ne = zcash_note_encryption::NoteEncryption::<OrchardDomainVanilla>::new_with_esk(
+                esk,
+                Some(ovk),
+                note,
+                tv.memo,
+            );
 
             assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
             assert_eq!(
