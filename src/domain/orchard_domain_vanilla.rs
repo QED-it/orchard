@@ -17,13 +17,13 @@ use crate::{
 };
 
 use super::{
-    orchard_domain::OrchardDomainCommon,
+    orchard_domain::OrchardPrimitives,
     zcash_note_encryption_domain::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_V2,
     },
 };
 
-impl OrchardDomainCommon for OrchardVanilla {
+impl OrchardPrimitives for OrchardVanilla {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_VANILLA;
 
     type NotePlaintextBytes = NoteBytesData<{ Self::NOTE_PLAINTEXT_SIZE }>;

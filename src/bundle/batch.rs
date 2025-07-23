@@ -9,7 +9,7 @@ use super::{Authorized, Bundle};
 
 use crate::{
     circuit::VerifyingKey,
-    domain::OrchardDomainCommon,
+    domain::OrchardPrimitives,
     primitives::redpallas::{self, Binding, SpendAuth},
 };
 
@@ -39,9 +39,9 @@ impl BatchValidator {
     }
 
     /// Adds the proof and RedPallas signatures from the given bundle to the validator.
-    pub fn add_bundle<V: Copy + Into<i64>, D: OrchardDomainCommon>(
+    pub fn add_bundle<V: Copy + Into<i64>, P: OrchardPrimitives>(
         &mut self,
-        bundle: &Bundle<Authorized, V, D>,
+        bundle: &Bundle<Authorized, V, P>,
         sighash: [u8; 32],
     ) {
         for action in bundle.actions().iter() {

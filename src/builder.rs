@@ -15,7 +15,7 @@ use crate::{
     address::Address,
     builder::BuildError::{BurnNative, BurnZero},
     bundle::{Authorization, Authorized, Bundle, Flags},
-    domain::{OrchardDomain, OrchardDomainCommon},
+    domain::{OrchardDomain, OrchardPrimitives},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
@@ -415,18 +415,18 @@ impl OutputInfo {
     /// Defined in [Zcash Protocol Spec § 4.7.3: Sending Notes (Orchard)][orchardsend].
     ///
     /// [orchardsend]: https://zips.z.cash/protocol/nu5.pdf#orchardsend
-    fn build<D: OrchardDomainCommon>(
+    fn build<P: OrchardPrimitives>(
         &self,
         cv_net: &ValueCommitment,
         nf_old: Nullifier,
         mut rng: impl RngCore,
-    ) -> (Note, ExtractedNoteCommitment, TransmittedNoteCiphertext<D>) {
+    ) -> (Note, ExtractedNoteCommitment, TransmittedNoteCiphertext<P>) {
         let rho = Rho::from_nf_old(nf_old);
         let note = Note::new(self.recipient, self.value, self.asset, rho, &mut rng);
         let cm_new = note.commitment();
         let cmx = cm_new.into();
 
-        let encryptor = NoteEncryption::<OrchardDomain<D>>::new(self.ovk.clone(), note, self.memo);
+        let encryptor = NoteEncryption::<OrchardDomain<P>>::new(self.ovk.clone(), note, self.memo);
 
         let encrypted_note = TransmittedNoteCiphertext {
             epk_bytes: encryptor.epk().to_bytes().0,
@@ -437,13 +437,13 @@ impl OutputInfo {
         (note, cmx, encrypted_note)
     }
 
-    fn into_pczt<D: OrchardDomainCommon>(
+    fn into_pczt<P: OrchardPrimitives>(
         self,
         cv_net: &ValueCommitment,
         nf_old: Nullifier,
         rng: impl RngCore,
     ) -> crate::pczt::Output {
-        let (note, cmx, encrypted_note) = self.build::<D>(cv_net, nf_old, rng);
+        let (note, cmx, encrypted_note) = self.build::<P>(cv_net, nf_old, rng);
 
         crate::pczt::Output {
             cmx,
@@ -532,7 +532,7 @@ impl ActionInfo {
         )
     }
 
-    fn build_for_pczt<D: OrchardDomainCommon>(self, mut rng: impl RngCore) -> crate::pczt::Action {
+    fn build_for_pczt<P: OrchardPrimitives>(self, mut rng: impl RngCore) -> crate::pczt::Action {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -544,7 +544,7 @@ impl ActionInfo {
         let spend = self.spend.into_pczt(&mut rng);
         let output = self
             .output
-            .into_pczt::<D>(&cv_net, spend.nullifier, &mut rng);
+            .into_pczt::<P>(&cv_net, spend.nullifier, &mut rng);
 
         crate::pczt::Action {
             cv_net,
@@ -774,7 +774,7 @@ impl Builder {
 
     /// Builds a bundle containing the given spent notes and outputs along with their
     /// metadata, for inclusion in a PCZT.
-    pub fn build_for_pczt<D: OrchardDomainCommon>(
+    pub fn build_for_pczt<P: OrchardPrimitives>(
         self,
         rng: impl RngCore,
     ) -> Result<(crate::pczt::Bundle, BundleMetadata), BuildError> {
@@ -789,7 +789,7 @@ impl Builder {
                 // Create the actions.
                 let actions = pre_actions
                     .into_iter()
-                    .map(|a| a.build_for_pczt::<D>(&mut rng))
+                    .map(|a| a.build_for_pczt::<P>(&mut rng))
                     .collect::<Vec<_>>();
 
                 Ok((
@@ -1267,7 +1267,7 @@ impl MaybeSigned {
     }
 }
 
-impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized>, V, D> {
+impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, P> {
     /// Loads the sighash into this bundle, preparing it for signing.
     ///
     /// This API ensures that all signatures are created over the same sighash.
@@ -1275,7 +1275,7 @@ impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized
         self,
         mut rng: R,
         sighash: [u8; 32],
-    ) -> Bundle<InProgress<P, PartiallyAuthorized>, V, D> {
+    ) -> Bundle<InProgress<Proof, PartiallyAuthorized>, V, P> {
         self.map_authorization(
             &mut rng,
             |rng, _, SigningMetadata { dummy_ask, parts }| {
@@ -1296,7 +1296,7 @@ impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, Unauthorized
     }
 }
 
-impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
+impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, P> {
     /// Applies signatures to this bundle, in order to authorize it.
     ///
     /// This is a helper method that wraps [`Bundle::prepare`], [`Bundle::sign`], and
@@ -1306,7 +1306,7 @@ impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
         mut rng: R,
         sighash: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
-    ) -> Result<Bundle<Authorized, V, D>, BuildError> {
+    ) -> Result<Bundle<Authorized, V, P>, BuildError> {
         signing_keys
             .iter()
             .fold(self.prepare(&mut rng, sighash), |partial, ask| {
@@ -1316,7 +1316,9 @@ impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, Unauthorized>, V, D> {
     }
 }
 
-impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, PartiallyAuthorized>, V, D> {
+impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
+    Bundle<InProgress<Proof, PartiallyAuthorized>, V, P>
+{
     /// Signs this bundle with the given [`SpendAuthorizingKey`].
     ///
     /// This will apply signatures for all notes controlled by this spending key.
@@ -1379,11 +1381,11 @@ impl<P: fmt::Debug, V, D: OrchardDomainCommon> Bundle<InProgress<P, PartiallyAut
     }
 }
 
-impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, PartiallyAuthorized>, V, D> {
+impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, PartiallyAuthorized>, V, P> {
     /// Finalizes this bundle, enabling it to be included in a transaction.
     ///
     /// Returns an error if any signatures are missing.
-    pub fn finalize(self) -> Result<Bundle<Authorized, V, D>, BuildError> {
+    pub fn finalize(self) -> Result<Bundle<Authorized, V, P>, BuildError> {
         self.try_map_authorization(
             &mut (),
             |_, _, maybe| maybe.finalize(),
@@ -1448,7 +1450,7 @@ pub mod testing {
         address::testing::arb_address,
         bundle::{Authorized, Bundle},
         circuit::ProvingKey,
-        domain::OrchardDomainCommon,
+        domain::OrchardPrimitives,
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::testing::arb_note,
         orchard_flavor::OrchardFlavor,
@@ -1514,8 +1516,8 @@ pub mod testing {
     /// `BuilderArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol variations
     /// in property-based testing, addressing proptest crate limitations.    
     #[derive(Debug)]
-    pub struct BuilderArb<D: OrchardDomainCommon> {
-        phantom: core::marker::PhantomData<D>,
+    pub struct BuilderArb<P: OrchardPrimitives> {
+        phantom: core::marker::PhantomData<P>,
     }
 
     impl<FL: OrchardFlavor> BuilderArb<FL> {

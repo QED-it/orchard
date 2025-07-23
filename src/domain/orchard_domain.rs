@@ -1,4 +1,4 @@
-//! The OrchardDomain trait represents the difference between the `OrchardVanilla` and the
+//! The OrchardPrimitives trait represents the difference between the `OrchardVanilla` and the
 //! `OrchardZSA` commitment, encryption and decryption procedures.
 
 use core::fmt;
@@ -24,8 +24,9 @@ use crate::{
     Bundle, Note,
 };
 
-/// Represents the Orchard protocol domain specifics required for note encryption and decryption.
-pub trait OrchardDomainCommon: fmt::Debug + Clone {
+/// Represents the Orchard protocol domain specifics required for commitment, note encryption and
+/// decryption.
+pub trait OrchardPrimitives: fmt::Debug + Clone {
     /// The size of a compact note, specific to the Orchard protocol.
     const COMPACT_NOTE_SIZE: usize;
 
@@ -124,15 +125,15 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
 
 /// Orchard-specific note encryption logic.
 #[derive(Debug, Clone)]
-pub struct OrchardDomain<D: OrchardDomainCommon> {
+pub struct OrchardDomain<P: OrchardPrimitives> {
     /// A parameter needed to generate the nullifier.
     pub rho: Rho,
-    phantom: core::marker::PhantomData<D>,
+    phantom: core::marker::PhantomData<P>,
 }
 
-impl<D: OrchardDomainCommon> OrchardDomain<D> {
+impl<P: OrchardPrimitives> OrchardDomain<P> {
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
-    pub fn for_action<T>(act: &Action<T, D>) -> Self {
+    pub fn for_action<T>(act: &Action<T, P>) -> Self {
         Self {
             rho: act.rho(),
             phantom: Default::default(),
@@ -140,7 +141,7 @@ impl<D: OrchardDomainCommon> OrchardDomain<D> {
     }
 
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
-    pub fn for_compact_action(act: &CompactAction<D>) -> Self {
+    pub fn for_compact_action(act: &CompactAction<P>) -> Self {
         Self {
             rho: act.rho(),
             phantom: Default::default(),

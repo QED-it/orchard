@@ -4,7 +4,7 @@ use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::{
     bundle::{Authorization, Authorized, Bundle},
-    domain::OrchardDomainCommon,
+    domain::OrchardPrimitives,
     issuance::{IssueAuth, IssueBundle, Signed},
 };
 
@@ -37,14 +37,10 @@ pub(crate) fn hasher(personal: &[u8; 16]) -> State {
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip226]: https://zips.z.cash/zip-0226
-pub(crate) fn hash_bundle_txid_data<
-    A: Authorization,
-    V: Copy + Into<i64>,
-    D: OrchardDomainCommon,
->(
-    bundle: &Bundle<A, V, D>,
+pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>, P: OrchardPrimitives>(
+    bundle: &Bundle<A, V, P>,
 ) -> Blake2bHash {
-    D::hash_bundle_txid_data(bundle)
+    P::hash_bundle_txid_data(bundle)
 }
 
 /// Construct the commitment for the absent bundle as defined in
@@ -60,10 +56,10 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 /// Identifier Non-Malleability][zip244]
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
-pub(crate) fn hash_bundle_auth_data<V, D: OrchardDomainCommon>(
-    bundle: &Bundle<Authorized, V, D>,
+pub(crate) fn hash_bundle_auth_data<V, P: OrchardPrimitives>(
+    bundle: &Bundle<Authorized, V, P>,
 ) -> Blake2bHash {
-    D::hash_bundle_auth_data(bundle)
+    P::hash_bundle_auth_data(bundle)
 }
 
 /// Construct the commitment for an absent bundle as defined in

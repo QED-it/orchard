@@ -13,7 +13,7 @@ mod zcash_note_encryption_domain;
 
 pub use {
     compact_action::CompactAction,
-    orchard_domain::{OrchardDomain, OrchardDomainCommon},
+    orchard_domain::{OrchardDomain, OrchardPrimitives},
 };
 
 #[cfg(feature = "test-dependencies")]

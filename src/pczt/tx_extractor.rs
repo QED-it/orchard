@@ -4,7 +4,7 @@ use rand::{CryptoRng, RngCore};
 use super::Action;
 use crate::{
     bundle::{Authorization, Authorized, EffectsOnly},
-    domain::OrchardDomainCommon,
+    domain::OrchardPrimitives,
     primitives::redpallas::{self, Binding, SpendAuth},
     Proof,
 };
@@ -15,9 +15,9 @@ impl super::Bundle {
     /// This is used by the Signer role to produce the transaction sighash.
     ///
     /// [regular `Bundle`]: crate::Bundle
-    pub fn extract_effects<V: TryFrom<i64>, D: OrchardDomainCommon>(
+    pub fn extract_effects<V: TryFrom<i64>, P: OrchardPrimitives>(
         &self,
-    ) -> Result<Option<crate::Bundle<EffectsOnly, V, D>>, TxExtractorError> {
+    ) -> Result<Option<crate::Bundle<EffectsOnly, V, P>>, TxExtractorError> {
         self.to_tx_data(|_| Ok(()), |_| Ok(EffectsOnly))
     }
 
@@ -26,9 +26,9 @@ impl super::Bundle {
     /// This is used by the Transaction Extractor role to produce the final transaction.
     ///
     /// [regular `Bundle`]: crate::Bundle
-    pub fn extract<V: TryFrom<i64>, D: OrchardDomainCommon>(
+    pub fn extract<V: TryFrom<i64>, P: OrchardPrimitives>(
         self,
-    ) -> Result<Option<crate::Bundle<Unbound, V, D>>, TxExtractorError> {
+    ) -> Result<Option<crate::Bundle<Unbound, V, P>>, TxExtractorError> {
         self.to_tx_data(
             |action| {
                 action
@@ -52,18 +52,18 @@ impl super::Bundle {
     }
 
     /// Converts this PCZT bundle into a regular bundle with the given authorizations.
-    fn to_tx_data<A, V, E, F, G, D>(
+    fn to_tx_data<A, V, E, F, G, P>(
         &self,
         action_auth: F,
         bundle_auth: G,
-    ) -> Result<Option<crate::Bundle<A, V, D>>, E>
+    ) -> Result<Option<crate::Bundle<A, V, P>>, E>
     where
         A: Authorization,
         E: From<TxExtractorError>,
         F: Fn(&Action) -> Result<<A as Authorization>::SpendAuth, E>,
         G: FnOnce(&Self) -> Result<A, E>,
         V: TryFrom<i64>,
-        D: OrchardDomainCommon,
+        P: OrchardPrimitives,
     {
         let actions = self
             .actions
@@ -128,7 +128,7 @@ impl Authorization for Unbound {
     type SpendAuth = redpallas::Signature<SpendAuth>;
 }
 
-impl<D: OrchardDomainCommon, V> crate::Bundle<Unbound, V, D> {
+impl<P: OrchardPrimitives, V> crate::Bundle<Unbound, V, P> {
     /// Verifies the given sighash with every `spend_auth_sig`, and then binds the bundle.
     ///
     /// Returns `None` if the given sighash does not validate against every `spend_auth_sig`.
@@ -136,7 +136,7 @@ impl<D: OrchardDomainCommon, V> crate::Bundle<Unbound, V, D> {
         self,
         sighash: [u8; 32],
         rng: R,
-    ) -> Option<crate::Bundle<Authorized, V, D>> {
+    ) -> Option<crate::Bundle<Authorized, V, P>> {
         if self
             .actions()
             .iter()
