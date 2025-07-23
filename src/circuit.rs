@@ -112,7 +112,7 @@ pub trait OrchardCircuit: Sized + Default {
     ) -> Result<(), plonk::Error>;
 
     /// Builds the ZSA-specific witnesses for the circuit.
-    /// For OrchardVanilla circuits, it should return `Value::Unknown()`.
+    /// For OrchardVanilla circuits, it should return `Value::unknown()`.
     fn build_additional_zsa_witnesses(
         psi_nf: pallas::Base,
         asset: AssetBase,

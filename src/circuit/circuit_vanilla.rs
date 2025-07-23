@@ -674,7 +674,7 @@ mod tests {
         let anchor = path.root(spent_note.commitment().into());
 
         (
-            Circuit::<OrchardVanilla> {
+            Circuit {
                 witnesses: Witnesses {
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),

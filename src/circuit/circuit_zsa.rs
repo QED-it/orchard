@@ -920,7 +920,7 @@ mod tests {
         let psi_old = spent_note.rseed().psi(&spent_note.rho());
 
         (
-            Circuit::<OrchardZSA> {
+            Circuit {
                 witnesses: Witnesses {
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),
