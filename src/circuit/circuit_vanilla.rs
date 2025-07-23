@@ -30,6 +30,7 @@ use crate::{
     circuit::value_commit_orchard::gadgets::value_commit_orchard,
     circuit::{Config, Witnesses},
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
+    note::AssetBase,
     orchard_flavor::OrchardVanilla,
 };
 
@@ -37,8 +38,8 @@ use super::{
     commit_ivk::CommitIvkChip,
     gadget::{add_chip::AddChip, assign_free_advice},
     note_commit::NoteCommitChip,
-    OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X,
-    RK_Y,
+    AdditionalZsaWitnesses, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
+    ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
 };
 
 impl OrchardCircuit for OrchardVanilla {
@@ -379,7 +380,7 @@ impl OrchardCircuit for OrchardVanilla {
         // Nullifier integrity (https://p.z.cash/ZKS:action-nullifier-integrity).
         let nf_old = {
             let nf_old = derive_nullifier(
-                &mut layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_old, cm_old)"),
+                layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_old, cm_old)"),
                 config.poseidon_chip(),
                 config.add_chip(),
                 ecc_chip.clone(),
@@ -609,6 +610,24 @@ impl OrchardCircuit for OrchardVanilla {
 
         Ok(())
     }
+
+    /// For OrchardVanilla circuits, `build_additional_zsa_witnesses` returns `Value::unknown()`.
+    ///
+    /// # Panics
+    /// Panics if the asset is not a native asset or if `split_flag` is true.
+    fn build_additional_zsa_witnesses(
+        _: pallas::Base,
+        asset: AssetBase,
+        split_flag: bool,
+    ) -> Value<AdditionalZsaWitnesses> {
+        if !(bool::from(asset.is_native())) {
+            panic!("asset must be native asset in OrchardVanilla circuit");
+        }
+        if split_flag {
+            panic!("split_flag must be false in OrchardVanilla circuit");
+        }
+        Value::unknown()
+    }
 }
 
 #[cfg(test)]
@@ -632,9 +651,7 @@ mod tests {
         value::{ValueCommitTrapdoor, ValueCommitment},
     };
 
-    type OrchardCircuitVanilla = Circuit<OrchardVanilla>;
-
-    fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (OrchardCircuitVanilla, Instance) {
+    fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit<OrchardVanilla>, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
 
         let sender_address = spent_note.recipient();
@@ -656,10 +673,8 @@ mod tests {
         let path = MerklePath::dummy(&mut rng);
         let anchor = path.root(spent_note.commitment().into());
 
-        let psi_old = spent_note.rseed().psi(&spent_note.rho());
-
         (
-            OrchardCircuitVanilla {
+            Circuit {
                 witnesses: Witnesses {
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),
@@ -670,8 +685,6 @@ mod tests {
                     psi_old: Value::known(spent_note.rseed().psi(&spent_note.rho())),
                     rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
                     cm_old: Value::known(spent_note.commitment()),
-                    // For non split note, psi_nf is equal to psi_old
-                    psi_nf: Value::known(psi_old),
                     alpha: Value::known(alpha),
                     ak: Value::known(ak),
                     nk: Value::known(nk),
@@ -682,8 +695,8 @@ mod tests {
                     psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
                     rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
                     rcv: Value::known(rcv),
-                    asset: Value::known(spent_note.asset()),
-                    split_flag: Value::known(false),
+
+                    ..Witnesses::default()
                 },
                 phantom: core::marker::PhantomData,
             },
@@ -860,7 +873,7 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = OrchardCircuitVanilla {
+        let circuit = Circuit::<OrchardVanilla> {
             witnesses: Witnesses::default(),
             phantom: core::marker::PhantomData,
         };

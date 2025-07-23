@@ -1,11 +1,19 @@
 //! Note commitment logic for the Orchard circuit.
 
+use core::iter;
+
+use group::ff::PrimeField;
+use halo2_proofs::{
+    circuit::{AssignedCell, Chip, Layouter, Value},
+    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
+    poly::Rotation,
+};
+use pasta_curves::pallas;
+
 use crate::{
     constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P},
     value::NoteValue,
 };
-use core::iter;
-use group::ff::PrimeField;
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, NonIdentityEccPoint},
@@ -20,12 +28,6 @@ use halo2_gadgets::{
         FieldValue, RangeConstrained,
     },
 };
-use halo2_proofs::{
-    circuit::{AssignedCell, Chip, Layouter, Value},
-    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
-    poly::Rotation,
-};
-use pasta_curves::pallas;
 
 type NoteCommitPiece<Lookup> = MessagePiece<
     pallas::Affine,
@@ -1755,7 +1757,7 @@ pub struct NoteCommitConfigForZsaCircuit<Lookup: PallasLookupRangeCheck> {
 
 #[derive(Clone, Debug)]
 pub struct NoteCommitChip<Lookup: PallasLookupRangeCheck> {
-    pub config: NoteCommitConfig<Lookup>,
+    config: NoteCommitConfig<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> NoteCommitChip<Lookup> {
@@ -2047,7 +2049,6 @@ pub(in crate::circuit) mod gadgets {
             g_d.y(),
             b_2,
         )?;
-
         // Check decomposition of `y(pk_d)`.
         let d_1 = y_canonicity(
             &lookup_config,
@@ -2611,9 +2612,10 @@ mod tests {
     use core::iter;
 
     use crate::{
-        circuit::gadget::{assign_free_advice, assign_is_native_asset},
-        circuit::note_commit::gadgets,
-        circuit::note_commit::{NoteCommitChip, NoteCommitConfig},
+        circuit::{
+            gadget::{assign_free_advice, assign_is_native_asset},
+            note_commit::{gadgets, NoteCommitChip, NoteCommitConfig, ZsaNoteCommitParams},
+        },
         constants::{
             fixed_bases::NOTE_COMMITMENT_PERSONALIZATION, OrchardCommitDomains, OrchardFixedBases,
             OrchardHashDomains, L_ORCHARD_BASE, L_VALUE, T_Q,
@@ -2645,7 +2647,6 @@ mod tests {
     };
     use pasta_curves::{arithmetic::CurveAffine, pallas, EpAffine};
 
-    use crate::circuit::note_commit::ZsaNoteCommitParams;
     use rand::{rngs::OsRng, RngCore};
 
     #[test]
@@ -2746,10 +2747,10 @@ mod tests {
 
                 // Load the Sinsemilla generator lookup table used by the whole circuit.
                 SinsemillaChip::<
-                    OrchardHashDomains,
-                    OrchardCommitDomains,
-                    OrchardFixedBases,
-                >::load(note_commit_config.sinsemilla_config.clone(), &mut layouter)?;
+                OrchardHashDomains,
+                OrchardCommitDomains,
+                OrchardFixedBases,
+            >::load(note_commit_config.sinsemilla_config.clone(), &mut layouter)?;
 
                 // Construct a Sinsemilla chip
                 let sinsemilla_chip =

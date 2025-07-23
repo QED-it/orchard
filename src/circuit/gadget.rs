@@ -1,37 +1,25 @@
 //! Common gadgets and functions used in the Orchard circuit.
 
 use ff::Field;
+use pasta_curves::pallas;
+
+use super::{commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, Config};
+use crate::{
+    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
+    note::AssetBase,
+};
 use halo2_gadgets::{
     ecc::chip::EccChip,
     poseidon::Pow5Chip as PoseidonChip,
     sinsemilla::{chip::SinsemillaChip, merkle::chip::MerkleChip},
     utilities::{cond_swap::CondSwapChip, lookup_range_check::PallasLookupRangeCheck},
 };
-use pasta_curves::pallas;
-
-use crate::{
-    circuit::{commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, Config},
-    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
-    note::AssetBase,
-};
 use halo2_proofs::{
-    circuit::Value,
-    circuit::{AssignedCell, Chip, Layouter},
+    circuit::{AssignedCell, Chip, Layouter, Value},
     plonk::{self, Advice, Assigned, Column},
 };
 
 pub(in crate::circuit) mod add_chip;
-
-/// An instruction set for adding two circuit words (field elements).
-pub(in crate::circuit) trait AddInstruction<F: Field>: Chip<F> {
-    /// Constraints `a + b` and returns the sum.
-    fn add(
-        &self,
-        layouter: impl Layouter<F>,
-        a: &AssignedCell<F, F>,
-        b: &AssignedCell<F, F>,
-    ) -> Result<AssignedCell<F, F>, plonk::Error>;
-}
 
 impl<Lookup: PallasLookupRangeCheck> Config<Lookup> {
     pub(super) fn add_chip(&self) -> add_chip::AddChip {
@@ -85,6 +73,17 @@ impl<Lookup: PallasLookupRangeCheck> Config<Lookup> {
     pub(super) fn cond_swap_chip(&self) -> CondSwapChip<pallas::Base> {
         CondSwapChip::construct(self.merkle_config_1.cond_swap_config.clone())
     }
+}
+
+/// An instruction set for adding two circuit words (field elements).
+pub(in crate::circuit) trait AddInstruction<F: Field>: Chip<F> {
+    /// Constraints `a + b` and returns the sum.
+    fn add(
+        &self,
+        layouter: impl Layouter<F>,
+        a: &AssignedCell<F, F>,
+        b: &AssignedCell<F, F>,
+    ) -> Result<AssignedCell<F, F>, plonk::Error>;
 }
 
 /// Witnesses the given value in a standalone region.

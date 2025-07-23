@@ -86,7 +86,7 @@ impl super::Bundle {
                     .ok_or(ProverError::MissingSpendAuthRandomizer)?;
                 let rcv = action.rcv.ok_or(ProverError::MissingValueCommitTrapdoor)?;
 
-                Witnesses::from_action_context(spend, output_note, alpha, rcv)
+                Witnesses::from_action_context::<FL>(spend, output_note, alpha, rcv)
                     .ok_or(ProverError::RhoMismatch)
                     .map(|witnesses| Circuit::<FL> {
                         witnesses,
