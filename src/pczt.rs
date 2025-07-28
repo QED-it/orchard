@@ -12,12 +12,12 @@ use zip32::ChildIndex;
 
 use crate::{
     bundle::Flags,
-    domain::OrchardDomainCommon,
     keys::{FullViewingKey, SpendingKey},
     note::{
         AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
     },
     primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::OrchardPrimitives,
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof,
@@ -376,8 +376,8 @@ pub struct PcztTransmittedNoteCiphertext {
     pub out_ciphertext: [u8; 80],
 }
 
-impl<D: OrchardDomainCommon> From<TransmittedNoteCiphertext<D>> for PcztTransmittedNoteCiphertext {
-    fn from(transmitted: TransmittedNoteCiphertext<D>) -> Self {
+impl<P: OrchardPrimitives> From<TransmittedNoteCiphertext<P>> for PcztTransmittedNoteCiphertext {
+    fn from(transmitted: TransmittedNoteCiphertext<P>) -> Self {
         PcztTransmittedNoteCiphertext {
             epk_bytes: transmitted.epk_bytes,
             enc_ciphertext: transmitted.enc_ciphertext.as_ref().to_vec(),
@@ -386,11 +386,11 @@ impl<D: OrchardDomainCommon> From<TransmittedNoteCiphertext<D>> for PcztTransmit
     }
 }
 
-impl<D: OrchardDomainCommon> From<PcztTransmittedNoteCiphertext> for TransmittedNoteCiphertext<D> {
+impl<P: OrchardPrimitives> From<PcztTransmittedNoteCiphertext> for TransmittedNoteCiphertext<P> {
     fn from(ciphertext: PcztTransmittedNoteCiphertext) -> Self {
         TransmittedNoteCiphertext {
             epk_bytes: ciphertext.epk_bytes,
-            enc_ciphertext: D::NoteCiphertextBytes::from_slice(&ciphertext.enc_ciphertext)
+            enc_ciphertext: P::NoteCiphertextBytes::from_slice(&ciphertext.enc_ciphertext)
                 .expect("Failed to parse enc_ciphertext: data may be corrupt or incorrect size"),
             out_ciphertext: ciphertext.out_ciphertext,
         }

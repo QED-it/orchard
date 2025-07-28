@@ -33,7 +33,6 @@ pub mod bundle;
 #[cfg(feature = "circuit")]
 pub mod circuit;
 mod constants;
-pub mod domain;
 pub mod issuance;
 pub mod keys;
 pub mod note;

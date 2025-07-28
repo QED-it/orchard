@@ -11,8 +11,8 @@ use rand::RngCore;
 use subtle::{Choice, ConditionallySelectable, CtOption};
 
 use crate::{
-    domain::OrchardDomainCommon,
     keys::{EphemeralSecretKey, FullViewingKey, Scope, SpendingKey},
+    primitives::OrchardPrimitives,
     spec::{to_base, to_scalar, NonZeroPallasScalar, PrfExpand},
     value::NoteValue,
     Address,
@@ -41,7 +41,7 @@ impl Rho {
     /// value otherwise.
     ///
     /// [`Action::rho`]: crate::action::Action::rho
-    /// [`CompactAction::rho`]: crate::domain::CompactAction::rho
+    /// [`CompactAction::rho`]: crate::primitives::CompactAction::rho
     pub fn from_bytes(bytes: &[u8; 32]) -> CtOption<Self> {
         pallas::Base::from_repr(*bytes).map(Rho)
     }
@@ -397,17 +397,17 @@ pub(crate) fn rho_for_issuance_note(
 
 /// An encrypted note.
 #[derive(Clone)]
-pub struct TransmittedNoteCiphertext<D: OrchardDomainCommon> {
+pub struct TransmittedNoteCiphertext<P: OrchardPrimitives> {
     /// The serialization of the ephemeral public key
     pub epk_bytes: [u8; 32],
     /// The encrypted note ciphertext
-    pub enc_ciphertext: D::NoteCiphertextBytes,
+    pub enc_ciphertext: P::NoteCiphertextBytes,
     /// An encrypted value that allows the holder of the outgoing cipher
     /// key for the note to recover the note plaintext.
     pub out_ciphertext: [u8; 80],
 }
 
-impl<D: OrchardDomainCommon> fmt::Debug for TransmittedNoteCiphertext<D> {
+impl<P: OrchardPrimitives> fmt::Debug for TransmittedNoteCiphertext<P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TransmittedNoteCiphertext")
             .field("epk_bytes", &self.epk_bytes)

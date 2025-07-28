@@ -1,4 +1,4 @@
-//! The OrchardDomain trait represents the difference between the `OrchardVanilla` and the
+//! The OrchardPrimitives trait represents the difference between the `OrchardVanilla` and the
 //! `OrchardZSA` commitment, encryption and decryption procedures.
 
 use core::fmt;
@@ -7,7 +7,6 @@ use blake2b_simd::{Hash as Blake2bHash, State};
 use zcash_note_encryption::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
 
 use crate::{
-    action::Action,
     bundle::{
         commitments::{
             hasher, ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION,
@@ -16,16 +15,14 @@ use crate::{
         },
         Authorization, Authorized,
     },
-    domain::{
-        compact_action::CompactAction,
-        zcash_note_encryption_domain::{Memo, MEMO_SIZE},
-    },
-    note::{AssetBase, Rho},
+    note::AssetBase,
+    primitives::zcash_note_encryption_domain::{Memo, MEMO_SIZE},
     Bundle, Note,
 };
 
-/// Represents the Orchard protocol domain specifics required for note encryption and decryption.
-pub trait OrchardDomainCommon: fmt::Debug + Clone {
+/// Represents the Orchard protocol domain specifics required for commitment, note encryption and
+/// decryption.
+pub trait OrchardPrimitives: fmt::Debug + Clone {
     /// The size of a compact note, specific to the Orchard protocol.
     const COMPACT_NOTE_SIZE: usize;
 
@@ -120,39 +117,4 @@ pub trait OrchardDomainCommon: fmt::Debug + Clone {
     /// [zip244]: https://zips.z.cash/zip-0244
     /// [zip226]: https://zips.z.cash/zip-0226
     fn hash_bundle_auth_data<V>(bundle: &Bundle<Authorized, V, Self>) -> Blake2bHash;
-}
-
-/// Orchard-specific note encryption logic.
-#[derive(Debug, Clone)]
-pub struct OrchardDomain<D: OrchardDomainCommon> {
-    /// A parameter needed to generate the nullifier.
-    pub rho: Rho,
-    phantom: core::marker::PhantomData<D>,
-}
-
-impl<D: OrchardDomainCommon> OrchardDomain<D> {
-    /// Constructs a domain that can be used to trial-decrypt this action's output note.
-    pub fn for_action<T>(act: &Action<T, D>) -> Self {
-        Self {
-            rho: act.rho(),
-            phantom: Default::default(),
-        }
-    }
-
-    /// Constructs a domain that can be used to trial-decrypt this action's output note.
-    pub fn for_compact_action(act: &CompactAction<D>) -> Self {
-        Self {
-            rho: act.rho(),
-            phantom: Default::default(),
-        }
-    }
-
-    /// Constructs a domain from a rho.
-    #[cfg(test)]
-    pub fn for_rho(rho: Rho) -> Self {
-        Self {
-            rho,
-            phantom: Default::default(),
-        }
-    }
 }
