@@ -648,7 +648,7 @@ impl Builder {
     /// Returns an error if the given Merkle path does not have the required anchor for
     /// the given note.
     ///
-    /// [`OrchardDomain`]: crate::domain::OrchardDomain
+    /// [`OrchardDomain`]: crate::primitives::OrchardDomain
     /// [`MerkleHashOrchard`]: crate::tree::MerkleHashOrchard
     pub fn add_spend(
         &mut self,

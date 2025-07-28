@@ -41,7 +41,7 @@ impl Rho {
     /// value otherwise.
     ///
     /// [`Action::rho`]: crate::action::Action::rho
-    /// [`CompactAction::rho`]: crate::domain::CompactAction::rho
+    /// [`CompactAction::rho`]: crate::primitives::CompactAction::rho
     pub fn from_bytes(bytes: &[u8; 32]) -> CtOption<Self> {
         pallas::Base::from_repr(*bytes).map(Rho)
     }
