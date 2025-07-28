@@ -304,7 +304,7 @@ impl<A: Authorization, V, P: OrchardPrimitives> Bundle<A, V, P> {
     }
 
     /// Construct a new bundle by applying a transformation that might fail
-    /// to the value balance and balances of assets to burn.
+    /// to the value balance.
     pub fn try_map_value_balance<V0, E, F: Fn(V) -> Result<V0, E>>(
         self,
         f: F,

@@ -56,9 +56,9 @@ impl OrchardPrimitives for OrchardZSA {
     }
 
     /// Evaluate `orchard_digest` for the bundle as defined in
-    /// [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226]
+    /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
     ///
-    /// [zip226]: https://zips.z.cash/zip-0226
+    /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         bundle: &Bundle<A, V, OrchardZSA>,
     ) -> Blake2bHash {
@@ -84,9 +84,9 @@ impl OrchardPrimitives for OrchardZSA {
     }
 
     /// Evaluate `orchard_auth_digest` for the bundle as defined in
-    /// [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226]
+    /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
     ///
-    /// [zip226]: https://zips.z.cash/zip-0226
+    /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_auth_data<V>(bundle: &Bundle<Authorized, V, OrchardZSA>) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
         let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION);
