@@ -10,6 +10,8 @@ use zcash_note_encryption::{
     OutgoingCipherKey, OUT_PLAINTEXT_SIZE,
 };
 
+use super::orchard_primitives::OrchardPrimitives;
+use crate::primitives::CompactAction;
 use crate::{
     address::Address,
     keys::{
@@ -18,9 +20,8 @@ use crate::{
     },
     note::{ExtractedNoteCommitment, Note, RandomSeed, Rho},
     value::{NoteValue, ValueCommitment},
+    Action,
 };
-
-use super::orchard_primitives::{OrchardDomain, OrchardPrimitives};
 
 const PRF_OCK_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_Orchardock";
 
@@ -144,6 +145,41 @@ pub(super) fn build_base_note_plaintext_bytes<const NOTE_PLAINTEXT_SIZE: usize>(
     np[NOTE_RSEED_OFFSET..COMPACT_NOTE_SIZE_VANILLA].copy_from_slice(note.rseed().as_bytes());
 
     np
+}
+
+/// Orchard-specific note encryption logic.
+#[derive(Debug, Clone)]
+pub struct OrchardDomain<P: OrchardPrimitives> {
+    /// A parameter needed to generate the nullifier.
+    pub rho: Rho,
+    phantom: core::marker::PhantomData<P>,
+}
+
+impl<P: OrchardPrimitives> OrchardDomain<P> {
+    /// Constructs a domain that can be used to trial-decrypt this action's output note.
+    pub fn for_action<T>(act: &Action<T, P>) -> Self {
+        Self {
+            rho: act.rho(),
+            phantom: Default::default(),
+        }
+    }
+
+    /// Constructs a domain that can be used to trial-decrypt this action's output note.
+    pub fn for_compact_action(act: &CompactAction<P>) -> Self {
+        Self {
+            rho: act.rho(),
+            phantom: Default::default(),
+        }
+    }
+
+    /// Constructs a domain from a rho.
+    #[cfg(test)]
+    pub fn for_rho(rho: Rho) -> Self {
+        Self {
+            rho,
+            phantom: Default::default(),
+        }
+    }
 }
 
 impl<P: OrchardPrimitives> Domain for OrchardDomain<P> {

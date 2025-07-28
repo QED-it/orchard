@@ -4,8 +4,8 @@ use rand::{CryptoRng, RngCore};
 use super::Action;
 use crate::{
     bundle::{Authorization, Authorized, EffectsOnly},
-    domain::OrchardPrimitives,
-    primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::OrchardPrimitives,
+    redpallas::{self, Binding, SpendAuth},
     Proof,
 };
 

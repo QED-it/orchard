@@ -4,8 +4,7 @@ use rand::{CryptoRng, RngCore};
 
 use super::SignerError;
 use crate::{
-    bundle::derive_bvk_raw, keys::SpendAuthorizingKey, primitives::redpallas,
-    value::ValueCommitTrapdoor,
+    bundle::derive_bvk_raw, keys::SpendAuthorizingKey, redpallas, value::ValueCommitTrapdoor,
 };
 
 impl super::Bundle {

@@ -1,9 +1,9 @@
 use memuse::DynamicUsage;
 
 use crate::{
-    domain::OrchardPrimitives,
     note::{ExtractedNoteCommitment, Nullifier, Rho, TransmittedNoteCiphertext},
-    primitives::redpallas::{self, SpendAuth},
+    primitives::OrchardPrimitives,
+    redpallas::{self, SpendAuth},
     value::ValueCommitment,
 };
 
@@ -132,12 +132,12 @@ pub(crate) mod testing {
     use zcash_note_encryption::NoteEncryption;
 
     use crate::{
-        domain::{OrchardDomain, OrchardPrimitives},
         note::{
             asset_base::testing::arb_asset_base, commitment::ExtractedNoteCommitment,
             nullifier::testing::arb_nullifier, testing::arb_note, Note, TransmittedNoteCiphertext,
         },
-        primitives::redpallas::{
+        primitives::{OrchardDomain, OrchardPrimitives},
+        redpallas::{
             self,
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
         },

@@ -100,15 +100,14 @@ mod tests {
             RandomSeed, Rho, TransmittedNoteCiphertext,
         },
         orchard_flavor::OrchardVanilla,
-        primitives::redpallas,
+        redpallas,
         value::{NoteValue, ValueCommitment},
     };
 
     use super::super::{
         compact_action::CompactAction,
-        orchard_primitives::OrchardDomain,
         zcash_note_encryption_domain::{
-            parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
+            parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard, OrchardDomain,
         },
     };
 

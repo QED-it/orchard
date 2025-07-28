@@ -11,8 +11,8 @@ use rand::RngCore;
 use subtle::{Choice, ConditionallySelectable, CtOption};
 
 use crate::{
-    domain::OrchardPrimitives,
     keys::{EphemeralSecretKey, FullViewingKey, Scope, SpendingKey},
+    primitives::OrchardPrimitives,
     spec::{to_base, to_scalar, NonZeroPallasScalar, PrfExpand},
     value::NoteValue,
     Address,

@@ -23,10 +23,10 @@ use crate::{
     action::Action,
     address::Address,
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
-    domain::{OrchardDomain, OrchardPrimitives},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::{OrchardDomain, OrchardPrimitives},
+    redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -623,7 +623,7 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::{
-        primitives::redpallas::{self, testing::arb_binding_signing_key},
+        redpallas::{self, testing::arb_binding_signing_key},
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, Proof,
     };
@@ -631,9 +631,9 @@ pub mod testing {
     use super::{Action, Authorized, Bundle, Flags};
 
     pub use crate::action::testing::ActionArb;
-    use crate::domain::OrchardPrimitives;
     use crate::note::asset_base::testing::arb_zsa_asset_base;
     use crate::note::AssetBase;
+    use crate::primitives::OrchardPrimitives;
     use crate::value::testing::arb_note_value;
 
     /// Marker type for a bundle that contains no authorizing data.

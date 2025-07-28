@@ -9,7 +9,7 @@ use crate::{
     note::{ExtractedNoteCommitment, Nullifier, Rho},
 };
 
-use super::orchard_primitives::{OrchardDomain, OrchardPrimitives};
+use super::{orchard_primitives::OrchardPrimitives, zcash_note_encryption_domain::OrchardDomain};
 
 impl<A, P: OrchardPrimitives> ShieldedOutput<OrchardDomain<P>> for Action<A, P> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
@@ -120,9 +120,9 @@ pub mod testing {
 
     use crate::{
         address::Address,
-        domain::zcash_note_encryption_domain::MEMO_SIZE,
         keys::OutgoingViewingKey,
         note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, RandomSeed, Rho},
+        primitives::zcash_note_encryption_domain::MEMO_SIZE,
         value::NoteValue,
     };
 

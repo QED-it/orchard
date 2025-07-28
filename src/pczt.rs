@@ -12,12 +12,12 @@ use zip32::ChildIndex;
 
 use crate::{
     bundle::Flags,
-    domain::OrchardPrimitives,
     keys::{FullViewingKey, SpendingKey},
     note::{
         AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
     },
-    primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::OrchardPrimitives,
+    redpallas::{self, Binding, SpendAuth},
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof,

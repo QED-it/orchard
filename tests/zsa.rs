@@ -14,9 +14,9 @@ use orchard::tree::{MerkleHashOrchard, MerklePath};
 use orchard::{
     builder::{Builder, BundleType},
     circuit::{ProvingKey, VerifyingKey},
-    domain::OrchardDomain,
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     orchard_flavor::OrchardZSA,
+    primitives::OrchardDomain,
     value::NoteValue,
     Address, Anchor, Bundle, Note,
 };
