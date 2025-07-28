@@ -100,7 +100,7 @@ mod tests {
             RandomSeed, Rho, TransmittedNoteCiphertext,
         },
         orchard_flavor::OrchardVanilla,
-        redpallas,
+        primitives::redpallas,
         value::{NoteValue, ValueCommitment},
     };
 

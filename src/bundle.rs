@@ -25,8 +25,8 @@ use crate::{
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
+    primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
-    redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -623,7 +623,7 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::{
-        redpallas::{self, testing::arb_binding_signing_key},
+        primitives::redpallas::{self, testing::arb_binding_signing_key},
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, Proof,
     };

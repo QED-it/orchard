@@ -125,7 +125,7 @@ mod tests {
             Rho, TransmittedNoteCiphertext,
         },
         orchard_flavor::OrchardZSA,
-        redpallas,
+        primitives::redpallas,
         value::{NoteValue, ValueCommitment},
     };
 

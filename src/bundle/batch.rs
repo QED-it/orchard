@@ -9,8 +9,8 @@ use super::{Authorized, Bundle};
 
 use crate::{
     circuit::VerifyingKey,
+    primitives::redpallas::{self, Binding, SpendAuth},
     primitives::OrchardPrimitives,
-    redpallas::{self, Binding, SpendAuth},
 };
 
 /// A signature within an authorized Orchard bundle.

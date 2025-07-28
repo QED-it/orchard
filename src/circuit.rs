@@ -33,7 +33,7 @@ use crate::{
         nullifier::Nullifier,
         AssetBase, ExtractedNoteCommitment, Note, Rho,
     },
-    redpallas::{SpendAuth, VerificationKey},
+    primitives::redpallas::{SpendAuth, VerificationKey},
     spec::NonIdentityPallasPoint,
     tree::{Anchor, MerkleHashOrchard},
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},

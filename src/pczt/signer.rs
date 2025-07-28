@@ -1,6 +1,6 @@
 use rand::{CryptoRng, RngCore};
 
-use crate::{keys::SpendAuthorizingKey, redpallas};
+use crate::{keys::SpendAuthorizingKey, primitives::redpallas};
 
 impl super::Action {
     /// Signs the Orchard spend with the given spend authorizing key.

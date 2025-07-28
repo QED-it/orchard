@@ -58,7 +58,7 @@ use subtle::CtOption;
 
 use crate::{
     constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_R_BYTES},
-    redpallas::{self, Binding},
+    primitives::redpallas::{self, Binding},
 };
 
 use crate::builder::BuildError;
@@ -526,7 +526,7 @@ mod tests {
         testing::{arb_note_value_bounded, arb_trapdoor, arb_value_sum_bounded},
         OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum, MAX_NOTE_VALUE,
     };
-    use crate::{note::AssetBase, redpallas};
+    use crate::{note::AssetBase, primitives::redpallas};
 
     fn check_binding_signature(
         native_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
