@@ -106,8 +106,9 @@ mod tests {
 
     use super::super::{
         compact_action::CompactAction,
+        orchard_domain::OrchardDomain,
         zcash_note_encryption_domain::{
-            parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard, OrchardDomain,
+            parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
         },
     };
 

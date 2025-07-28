@@ -9,6 +9,7 @@
 //! organized into separate submodules.
 
 mod compact_action;
+mod orchard_domain;
 mod orchard_primitives;
 mod orchard_primitives_vanilla;
 mod orchard_primitives_zsa;
@@ -16,8 +17,8 @@ pub mod redpallas;
 mod zcash_note_encryption_domain;
 
 pub use {
-    compact_action::CompactAction, orchard_primitives::OrchardPrimitives,
-    zcash_note_encryption_domain::OrchardDomain,
+    compact_action::CompactAction, orchard_domain::OrchardDomain,
+    orchard_primitives::OrchardPrimitives,
 };
 
 #[cfg(feature = "test-dependencies")]
