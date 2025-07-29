@@ -57,12 +57,11 @@ use rand::RngCore;
 use subtle::CtOption;
 
 use crate::{
+    builder::BuildError,
     constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_R_BYTES},
+    note::AssetBase,
     primitives::redpallas::{self, Binding},
 };
-
-use crate::builder::BuildError;
-use crate::note::AssetBase;
 
 /// Maximum note value.
 pub const MAX_NOTE_VALUE: u64 = u64::MAX;
@@ -123,11 +122,6 @@ impl NoteValue {
 
     pub(crate) fn to_le_bits(self) -> BitArray<[u8; 8], Lsb0> {
         BitArray::<_, Lsb0>::new(self.0.to_le_bytes())
-    }
-
-    /// The minimum, greater than zero, note value that can not be split further.
-    pub fn unsplittable() -> Self {
-        NoteValue(1u64)
     }
 }
 
