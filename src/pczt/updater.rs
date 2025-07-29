@@ -1,6 +1,7 @@
-use super::{Action, Bundle, Zip32Derivation};
 use alloc::string::String;
 use alloc::vec::Vec;
+
+use super::{Action, Bundle, Zip32Derivation};
 
 impl Bundle {
     /// Updates the bundle with information provided in the given closure.

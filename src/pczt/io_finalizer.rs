@@ -2,11 +2,12 @@ use alloc::vec::Vec;
 
 use rand::{CryptoRng, RngCore};
 
-use super::SignerError;
 use crate::{
     bundle::derive_bvk_raw, keys::SpendAuthorizingKey, primitives::redpallas,
     value::ValueCommitTrapdoor,
 };
+
+use super::SignerError;
 
 impl super::Bundle {
     /// Finalizes the IO for this bundle.
