@@ -276,7 +276,7 @@ impl<T: IssueAuth> IssueBundle<T> {
         self.actions.iter().flat_map(|a| a.notes.iter()).collect()
     }
 
-    /// Returns the authorization for this action.
+    /// Returns the authorization for this issue bundle.
     pub fn authorization(&self) -> &T {
         &self.authorization
     }
