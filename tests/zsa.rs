@@ -3,26 +3,25 @@ mod builder;
 use crate::builder::verify_bundle;
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use nonempty::NonEmpty;
-use orchard::bundle::Authorized;
-use orchard::issuance::{
-    compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo, Signed,
-};
-use orchard::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
-use orchard::note::{AssetBase, ExtractedNoteCommitment, Nullifier};
-
-use orchard::tree::{MerkleHashOrchard, MerklePath};
 use orchard::{
     builder::{Builder, BundleType},
+    bundle::Authorized,
     circuit::{ProvingKey, VerifyingKey},
+    issuance::{
+        compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo,
+        Signed,
+    },
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
+    keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    note::{AssetBase, ExtractedNoteCommitment, Nullifier},
     orchard_flavor::OrchardZSA,
     primitives::OrchardDomain,
+    tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Address, Anchor, Bundle, Note,
 };
 use rand::rngs::OsRng;
-use shardtree::store::memory::MemoryShardStore;
-use shardtree::ShardTree;
+use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
 
 #[derive(Debug)]
@@ -54,16 +53,15 @@ impl Keychain {
     }
 }
 
-fn prepare_keys() -> Keychain {
-    // FIXME: consider adding test for OrchardDomainVanilla as well
+fn prepare_keys(seed: u8) -> Keychain {
     let pk = ProvingKey::build::<OrchardZSA>();
     let vk = VerifyingKey::build::<OrchardZSA>();
 
-    let sk = SpendingKey::from_bytes([0; 32]).unwrap();
+    let sk = SpendingKey::from_bytes([seed; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
-    let isk = IssuanceAuthorizingKey::from_bytes([1u8; 32]).unwrap();
+    let isk = IssuanceAuthorizingKey::from_bytes([seed + 1; 32]).unwrap();
     let ik = IssuanceValidatingKey::from(&isk);
     Keychain {
         pk,
@@ -101,57 +99,50 @@ fn build_and_sign_bundle(
         .unwrap()
 }
 
-pub fn build_merkle_path_with_two_leaves(
-    note1: &Note,
-    note2: &Note,
-) -> (MerklePath, MerklePath, Anchor) {
+fn build_merkle_paths(notes: Vec<&Note>) -> (Vec<MerklePath>, Anchor) {
     let mut tree: ShardTree<MemoryShardStore<MerkleHashOrchard, u32>, 32, 16> =
         ShardTree::new(MemoryShardStore::empty(), 100);
 
-    // Add first leaf
-    let cmx1: ExtractedNoteCommitment = note1.commitment().into();
-    let leaf1 = MerkleHashOrchard::from_cmx(&cmx1);
-    tree.append(
-        leaf1,
-        Retention::Checkpoint {
-            id: 0,
-            marking: Marking::Marked,
-        },
-    )
-    .unwrap();
-    let position1 = tree.max_leaf_position(None).unwrap().unwrap();
+    let max_index = (notes.len() as u32) - 1;
 
-    // Add second leaf
-    let cmx2: ExtractedNoteCommitment = note2.commitment().into();
-    let leaf2 = MerkleHashOrchard::from_cmx(&cmx2);
-    tree.append(
-        leaf2,
-        Retention::Checkpoint {
-            id: 1,
-            marking: Marking::Marked,
-        },
-    )
-    .unwrap();
-    let position2 = tree.max_leaf_position(None).unwrap().unwrap();
+    let mut commitments = vec![];
+    let mut positions = vec![];
 
-    let root = tree.root_at_checkpoint_id(&1).unwrap().unwrap();
-
-    // Calculate first path
-    let merkle_path1 = tree
-        .witness_at_checkpoint_id(position1, &1)
-        .unwrap()
+    // Add leaves
+    for (index, note) in notes.iter().enumerate() {
+        let cmx: ExtractedNoteCommitment = note.commitment().into();
+        commitments.push(cmx);
+        let leaf = MerkleHashOrchard::from_cmx(&cmx);
+        tree.append(
+            leaf,
+            Retention::Checkpoint {
+                id: index as u32,
+                marking: Marking::Marked,
+            },
+        )
         .unwrap();
+        positions.push(tree.max_leaf_position(None).unwrap().unwrap());
+    }
 
-    // Calculate second path
-    let merkle_path2 = tree
-        .witness_at_checkpoint_id(position2, &1)
-        .unwrap()
-        .unwrap();
+    let root = tree.root_at_checkpoint_id(&(max_index)).unwrap().unwrap();
 
-    assert_eq!(root, merkle_path1.root(MerkleHashOrchard::from_cmx(&cmx1)));
-    assert_eq!(root, merkle_path2.root(MerkleHashOrchard::from_cmx(&cmx2)));
+    // Calculate paths
+    let mut merkle_paths: Vec<MerklePath> = vec![];
+    for (position, commitment) in positions.iter().zip(commitments.iter()) {
+        let merkle_path = tree
+            .witness_at_checkpoint_id(*position, &max_index)
+            .unwrap()
+            .unwrap();
 
-    (merkle_path1.into(), merkle_path2.into(), root.into())
+        assert_eq!(
+            root,
+            merkle_path.root(MerkleHashOrchard::from_cmx(commitment))
+        );
+
+        merkle_paths.push(merkle_path.into());
+    }
+
+    (merkle_paths, root.into())
 }
 
 fn issue_zsa_notes(
@@ -251,6 +242,7 @@ impl TestSpendInfo {
 struct TestOutputInfo {
     value: NoteValue,
     asset: AssetBase,
+    recipient: Address,
 }
 
 fn build_and_verify_bundle(
@@ -274,7 +266,13 @@ fn build_and_verify_bundle(
         outputs
             .iter()
             .try_for_each(|output| {
-                builder.add_output(None, keys.recipient, output.value, output.asset, [0u8; 512])
+                builder.add_output(
+                    None,
+                    output.recipient,
+                    output.value,
+                    output.asset,
+                    [0u8; 512],
+                )
             })
             .map_err(|err| err.to_string())?;
         assets_to_burn
@@ -326,47 +324,58 @@ fn verify_reference_note(note: &Note, asset: AssetBase) {
 fn zsa_issue_and_transfer() {
     // --------------------------- Setup -----------------------------------------
 
-    let keys = prepare_keys();
-    let asset_descr = b"zsa_asset".to_vec();
+    let keys = prepare_keys(5);
+    let keys2 = prepare_keys(10);
+    let keys3 = prepare_keys(15);
 
     let native_note = create_native_note(&keys);
 
     // Prepare ZSA
-    let (reference_note, zsa_note_1, zsa_note_2) =
-        issue_zsa_notes(&asset_descr, &keys, &native_note.nullifier(keys.fvk()));
-    verify_reference_note(&reference_note, zsa_note_1.asset());
+    let (reference_note, zsa_note1_asset1, zsa_note2_asset1) =
+        issue_zsa_notes(b"zsa_asset", &keys, &native_note.nullifier(keys.fvk()));
+    verify_reference_note(&reference_note, zsa_note1_asset1.asset());
 
-    let (merkle_path1, merkle_path2, anchor) =
-        build_merkle_path_with_two_leaves(&zsa_note_1, &zsa_note_2);
+    let (reference_note_asset2, zsa_note_asset2, _) =
+        issue_zsa_notes(b"zsa_asset2", &keys, &native_note.nullifier(keys.fvk()));
+    verify_reference_note(&reference_note_asset2, zsa_note_asset2.asset());
 
-    let zsa_spend_1 = TestSpendInfo {
-        note: zsa_note_1,
-        merkle_path: merkle_path1,
+    let asset1 = zsa_note1_asset1.asset();
+    let asset2 = zsa_note_asset2.asset();
+
+    // Create Merkle tree
+    let (merkle_paths, anchor) = build_merkle_paths(vec![
+        &zsa_note1_asset1,
+        &zsa_note2_asset1,
+        &native_note,
+        &zsa_note_asset2,
+    ]);
+
+    let zsa_spend1_asset1 = TestSpendInfo {
+        note: zsa_note1_asset1,
+        merkle_path: merkle_paths.get(0).unwrap().clone(),
     };
-    let zsa_spend_2 = TestSpendInfo {
-        note: zsa_note_2,
-        merkle_path: merkle_path2,
+    let zsa_spend2_asset1 = TestSpendInfo {
+        note: zsa_note2_asset1,
+        merkle_path: merkle_paths.get(1).unwrap().clone(),
     };
-
-    let (native_merkle_path_1, native_merkle_path_2, native_anchor) =
-        build_merkle_path_with_two_leaves(&native_note, &zsa_note_1);
     let native_spend: TestSpendInfo = TestSpendInfo {
         note: native_note,
-        merkle_path: native_merkle_path_1,
+        merkle_path: merkle_paths.get(2).unwrap().clone(),
     };
-    let zsa_spend_with_native: TestSpendInfo = TestSpendInfo {
-        note: zsa_note_1,
-        merkle_path: native_merkle_path_2,
+    let zsa_spend_asset2 = TestSpendInfo {
+        note: zsa_note_asset2,
+        merkle_path: merkle_paths.get(3).unwrap().clone(),
     };
 
     // --------------------------- Tests -----------------------------------------
 
     // 1. Spend single ZSA note
     build_and_verify_bundle(
-        vec![&zsa_spend_1],
+        vec![&zsa_spend1_asset1],
         vec![TestOutputInfo {
-            value: zsa_spend_1.note.value(),
-            asset: zsa_spend_1.note.asset(),
+            value: zsa_spend1_asset1.note.value(),
+            asset: asset1,
+            recipient: keys2.recipient,
         }],
         vec![],
         anchor,
@@ -379,19 +388,24 @@ fn zsa_issue_and_transfer() {
     let delta_1 = 2; // arbitrary number for value manipulation
     let delta_2 = 5; // arbitrary number for value manipulation
     build_and_verify_bundle(
-        vec![&zsa_spend_1],
+        vec![&zsa_spend1_asset1],
         vec![
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta_1 - delta_2),
-                asset: zsa_spend_1.note.asset(),
+                value: NoteValue::from_raw(
+                    zsa_spend1_asset1.note.value().inner() - delta_1 - delta_2,
+                ),
+                asset: asset1,
+                recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_1),
-                asset: zsa_spend_1.note.asset(),
+                asset: asset1,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_2),
-                asset: zsa_spend_1.note.asset(),
+                asset: asset1,
+                recipient: keys3.recipient,
             },
         ],
         vec![],
@@ -403,12 +417,13 @@ fn zsa_issue_and_transfer() {
 
     // 3. Join 2 ZSA notes into a single note
     build_and_verify_bundle(
-        vec![&zsa_spend_1, &zsa_spend_2],
+        vec![&zsa_spend1_asset1, &zsa_spend2_asset1],
         vec![TestOutputInfo {
             value: NoteValue::from_raw(
-                zsa_spend_1.note.value().inner() + zsa_spend_2.note.value().inner(),
+                zsa_spend1_asset1.note.value().inner() + zsa_spend2_asset1.note.value().inner(),
             ),
-            asset: zsa_spend_1.note.asset(),
+            asset: asset1,
+            recipient: keys2.recipient,
         }],
         vec![],
         anchor,
@@ -419,15 +434,17 @@ fn zsa_issue_and_transfer() {
 
     // 4. Take 2 ZSA notes and send them as 2 notes with different denomination
     build_and_verify_bundle(
-        vec![&zsa_spend_1, &zsa_spend_2],
+        vec![&zsa_spend1_asset1, &zsa_spend2_asset1],
         vec![
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_1.note.value().inner() - delta_1),
-                asset: zsa_spend_1.note.asset(),
+                value: NoteValue::from_raw(zsa_spend1_asset1.note.value().inner() - delta_1),
+                asset: asset1,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
-                value: NoteValue::from_raw(zsa_spend_2.note.value().inner() + delta_1),
-                asset: zsa_spend_2.note.asset(),
+                value: NoteValue::from_raw(zsa_spend2_asset1.note.value().inner() + delta_1),
+                asset: asset1,
+                recipient: keys.recipient,
             },
         ],
         vec![],
@@ -439,15 +456,17 @@ fn zsa_issue_and_transfer() {
 
     // 5. Spend single ZSA note, mixed with native note (shielding)
     build_and_verify_bundle(
-        vec![&zsa_spend_1],
+        vec![&zsa_spend1_asset1],
         vec![
             TestOutputInfo {
-                value: zsa_spend_1.note.value(),
-                asset: zsa_spend_1.note.asset(),
+                value: zsa_spend1_asset1.note.value(),
+                asset: asset1,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(100),
                 asset: AssetBase::native(),
+                recipient: keys2.recipient,
             },
         ],
         vec![],
@@ -459,61 +478,53 @@ fn zsa_issue_and_transfer() {
 
     // 6. Spend single ZSA note, mixed with native note (shielded to shielded)
     build_and_verify_bundle(
-        vec![&zsa_spend_with_native, &native_spend],
+        vec![&zsa_spend1_asset1, &native_spend],
         vec![
             TestOutputInfo {
-                value: zsa_spend_1.note.value(),
-                asset: zsa_spend_1.note.asset(),
+                value: zsa_spend1_asset1.note.value(),
+                asset: asset1,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(native_spend.note.value().inner() - delta_1 - delta_2),
                 asset: AssetBase::native(),
+                recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_1),
                 asset: AssetBase::native(),
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_2),
                 asset: AssetBase::native(),
+                recipient: keys3.recipient,
             },
         ],
         vec![],
-        native_anchor,
+        anchor,
         4,
         &keys,
     )
     .unwrap();
 
     // 7. Spend ZSA notes of different asset types
-    let (reference_note, zsa_note_t7, _) =
-        issue_zsa_notes(b"zsa_asset2", &keys, &native_note.nullifier(keys.fvk()));
-    verify_reference_note(&reference_note, zsa_note_t7.asset());
-    let (merkle_path_t7_1, merkle_path_t7_2, anchor_t7) =
-        build_merkle_path_with_two_leaves(&zsa_note_t7, &zsa_note_2);
-    let zsa_spend_t7_1: TestSpendInfo = TestSpendInfo {
-        note: zsa_note_t7,
-        merkle_path: merkle_path_t7_1,
-    };
-    let zsa_spend_t7_2: TestSpendInfo = TestSpendInfo {
-        note: zsa_note_2,
-        merkle_path: merkle_path_t7_2,
-    };
-
     build_and_verify_bundle(
-        vec![&zsa_spend_t7_1, &zsa_spend_t7_2],
+        vec![&zsa_spend_asset2, &zsa_spend2_asset1],
         vec![
             TestOutputInfo {
-                value: zsa_spend_t7_1.note.value(),
-                asset: zsa_spend_t7_1.note.asset(),
+                value: zsa_spend_asset2.note.value(),
+                asset: asset2,
+                recipient: keys2.recipient,
             },
             TestOutputInfo {
-                value: zsa_spend_t7_2.note.value(),
-                asset: zsa_spend_t7_2.note.asset(),
+                value: zsa_spend2_asset1.note.value(),
+                asset: asset1,
+                recipient: keys2.recipient,
             },
         ],
         vec![],
-        anchor_t7,
+        anchor,
         2,
         &keys,
     )
@@ -522,19 +533,21 @@ fn zsa_issue_and_transfer() {
     // 8. Same but wrong denomination
     let result = std::panic::catch_unwind(|| {
         build_and_verify_bundle(
-            vec![&zsa_spend_t7_1, &zsa_spend_t7_2],
+            vec![&zsa_spend_asset2, &zsa_spend2_asset1],
             vec![
                 TestOutputInfo {
-                    value: NoteValue::from_raw(zsa_spend_t7_1.note.value().inner() + delta_1),
-                    asset: zsa_spend_t7_1.note.asset(),
+                    value: NoteValue::from_raw(zsa_spend_asset2.note.value().inner() + delta_1),
+                    asset: asset2,
+                    recipient: keys2.recipient,
                 },
                 TestOutputInfo {
-                    value: NoteValue::from_raw(zsa_spend_t7_2.note.value().inner() - delta_1),
-                    asset: zsa_spend_t7_2.note.asset(),
+                    value: NoteValue::from_raw(zsa_spend2_asset1.note.value().inner() - delta_1),
+                    asset: asset1,
+                    recipient: keys2.recipient,
                 },
             ],
             vec![],
-            anchor_t7,
+            anchor,
             2,
             &keys,
         )
@@ -544,9 +557,9 @@ fn zsa_issue_and_transfer() {
 
     // 9. Burn ZSA assets
     build_and_verify_bundle(
-        vec![&zsa_spend_1],
+        vec![&zsa_spend1_asset1],
         vec![],
-        vec![(zsa_spend_1.note.asset(), zsa_spend_1.note.value())],
+        vec![(asset1, zsa_spend1_asset1.note.value())],
         anchor,
         2,
         &keys,
@@ -555,15 +568,19 @@ fn zsa_issue_and_transfer() {
 
     // 10. Burn a partial amount of the ZSA assets
     let value_to_burn = 3;
-    let value_to_transfer = zsa_spend_1.note.value().inner() - value_to_burn;
+    let value_to_transfer = zsa_spend1_asset1.note.value().inner() - value_to_burn;
 
     build_and_verify_bundle(
-        vec![&zsa_spend_1],
+        vec![&zsa_spend1_asset1],
         vec![TestOutputInfo {
             value: NoteValue::from_raw(value_to_transfer),
-            asset: zsa_spend_1.note.asset(),
+            asset: asset1,
+            recipient: keys.recipient,
         }],
-        vec![(zsa_spend_1.note.asset(), NoteValue::from_raw(value_to_burn))],
+        vec![(
+            zsa_spend1_asset1.note.asset(),
+            NoteValue::from_raw(value_to_burn),
+        )],
         anchor,
         2,
         &keys,
@@ -575,7 +592,7 @@ fn zsa_issue_and_transfer() {
         vec![&native_spend],
         vec![],
         vec![(AssetBase::native(), native_spend.note.value())],
-        native_anchor,
+        anchor,
         2,
         &keys,
     );
@@ -586,12 +603,13 @@ fn zsa_issue_and_transfer() {
 
     // 12. Try to burn zero value - should fail
     let result = build_and_verify_bundle(
-        vec![&zsa_spend_1],
+        vec![&zsa_spend1_asset1],
         vec![TestOutputInfo {
-            value: zsa_spend_1.note.value(),
-            asset: zsa_spend_1.note.asset(),
+            value: zsa_spend1_asset1.note.value(),
+            asset: asset1,
+            recipient: keys.recipient,
         }],
-        vec![(zsa_spend_1.note.asset(), NoteValue::from_raw(0))],
+        vec![(asset1, NoteValue::from_raw(0))],
         anchor,
         2,
         &keys,
