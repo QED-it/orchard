@@ -50,26 +50,20 @@ impl NoteCommitment {
         psi: pallas::Base,
         rcm: NoteCommitTrapdoor,
     ) -> CtOption<Self> {
-        let g_d_bits = BitArray::<_, Lsb0>::new(g_d);
-        let pk_d_bits = BitArray::<_, Lsb0>::new(pk_d);
-        let v_bits = v.to_le_bits();
-        let rho_bits = rho.to_le_bits();
-        let psi_bits = psi.to_le_bits();
-
         let common_note_bits = iter::empty()
-            .chain(g_d_bits.iter().by_vals())
-            .chain(pk_d_bits.iter().by_vals())
-            .chain(v_bits.iter().by_vals())
-            .chain(rho_bits.iter().by_vals().take(L_ORCHARD_BASE))
-            .chain(psi_bits.iter().by_vals().take(L_ORCHARD_BASE))
+            .chain(BitArray::<_, Lsb0>::new(g_d).iter().by_vals())
+            .chain(BitArray::<_, Lsb0>::new(pk_d).iter().by_vals())
+            .chain(v.to_le_bits().iter().by_vals())
+            .chain(rho.to_le_bits().iter().by_vals().take(L_ORCHARD_BASE))
+            .chain(psi.to_le_bits().iter().by_vals().take(L_ORCHARD_BASE))
             .collect::<Vec<bool>>();
 
         let zec_note_bits = common_note_bits.clone().into_iter();
 
-        let type_bits = BitArray::<_, Lsb0>::new(asset.to_bytes());
+        let asset_bits = BitArray::<_, Lsb0>::new(asset.to_bytes());
         let zsa_note_bits = common_note_bits
             .into_iter()
-            .chain(type_bits.iter().by_vals());
+            .chain(asset_bits.iter().by_vals());
 
         // Evaluate ZEC note commitment
         let zec_domain = sinsemilla::CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);

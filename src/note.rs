@@ -155,7 +155,7 @@ pub struct Note {
     recipient: Address,
     /// The value of this note.
     value: NoteValue,
-    /// The asset id of this note.
+    /// The asset of this note.
     asset: AssetBase,
     /// A unique creation ID for this note.
     ///
@@ -276,7 +276,7 @@ impl Note {
         self.value
     }
 
-    /// Returns the note type of this note.
+    /// Returns the asset of this note.
     pub fn asset(&self) -> AssetBase {
         self.asset
     }

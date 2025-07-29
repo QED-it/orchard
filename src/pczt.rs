@@ -177,7 +177,7 @@ pub struct Spend {
     /// information, or after signatures have been applied, this can be redacted.
     pub(crate) value: Option<NoteValue>,
 
-    /// The asset id of this Action.
+    /// The asset of this Action.
     ///
     /// - This is set by the Constructor.
     /// - This is required by the Prover.
