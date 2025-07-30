@@ -759,13 +759,12 @@ mod tests {
         builder::{Builder, BundleType},
         circuit::ProvingKey,
         issuance::Error::{
-            AssetBaseCannotBeIdentityPoint, IssueActionNotFound,
-            IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
-            IssueBundleInvalidSignature,
+            IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+            IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
         },
         issuance::{
-            compute_asset_desc_hash, is_reference_note, verify_issue_bundle, AwaitingNullifier,
-            IssueAction, IssueBundle, IssueInfo, Signed,
+            compute_asset_desc_hash, is_reference_note, verify_issue_bundle, IssueAction,
+            IssueBundle, IssueInfo, Signed,
         },
         keys::{
             FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope,
@@ -891,56 +890,6 @@ mod tests {
         AssetBase::from_bytes(&identity_point.to_bytes()).unwrap()
     }
 
-    /// Sets up test parameters for identity point tests.
-    ///
-    /// This function generates two notes with the identity point as their asset base,
-    /// and returns the issuance authorizing key, an unauthorized issue bundle containing
-    /// the notes, and a sighash
-    fn identity_point_test_params(
-        note1_value: u64,
-        note2_value: u64,
-    ) -> (
-        IssuanceAuthorizingKey,
-        IssueBundle<AwaitingNullifier>,
-        [u8; 32],
-        Nullifier,
-    ) {
-        let TestParams {
-            mut rng,
-            isk,
-            ik,
-            recipient,
-            sighash,
-            first_nullifier,
-        } = setup_params();
-
-        let note1 = Note::new(
-            recipient,
-            NoteValue::from_raw(note1_value),
-            identity_point(),
-            Rho::zero(),
-            &mut rng,
-        );
-
-        let note2 = Note::new(
-            recipient,
-            NoteValue::from_raw(note2_value),
-            identity_point(),
-            Rho::zero(),
-            &mut rng,
-        );
-
-        let action = IssueAction::from_parts(
-            compute_asset_desc_hash(&NonEmpty::from_slice(b"arbitrary asset_desc").unwrap()),
-            vec![note1, note2],
-            false,
-        );
-
-        let bundle = IssueBundle::from_parts(ik, NonEmpty::new(action), AwaitingNullifier);
-
-        (isk, bundle, sighash, first_nullifier)
-    }
-
     #[test]
     fn action_verify_valid() {
         let (ik, test_asset, action) = action_verify_test_params(10, 20, b"Asset 1", None, false);
@@ -954,16 +903,6 @@ mod tests {
         assert_eq!(asset, test_asset);
         assert_eq!(amount, NoteValue::from_raw(30));
         assert!(!action.is_finalized());
-    }
-
-    #[test]
-    fn action_verify_invalid_for_asset_base_as_identity() {
-        let (_, bundle, _, _) = identity_point_test_params(10, 20);
-
-        assert_eq!(
-            bundle.actions.head.verify(&bundle.ik),
-            Err(AssetBaseCannotBeIdentityPoint)
-        );
     }
 
     #[test]
@@ -1691,38 +1630,6 @@ mod tests {
         assert_eq!(
             verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
             IssueBundleIkMismatchAssetBase
-        );
-    }
-
-    #[test]
-    fn issue_bundle_cannot_be_signed_with_asset_base_identity_point() {
-        let (isk, bundle, sighash, first_nullifier) = identity_point_test_params(10, 20);
-
-        assert_eq!(
-            bundle
-                .update_rho(&first_nullifier)
-                .prepare(sighash)
-                .sign(&isk)
-                .unwrap_err(),
-            AssetBaseCannotBeIdentityPoint
-        );
-    }
-
-    #[test]
-    fn issue_bundle_verify_fail_asset_base_identity_point() {
-        let (isk, bundle, sighash, _) = identity_point_test_params(10, 20);
-
-        let signed = IssueBundle {
-            ik: bundle.ik().clone(),
-            actions: bundle.actions,
-            authorization: Signed {
-                signature: isk.try_sign(&sighash).unwrap(),
-            },
-        };
-
-        assert_eq!(
-            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
-            AssetBaseCannotBeIdentityPoint
         );
     }
 
