@@ -41,17 +41,17 @@ reddsa = { version = "0.5", default-features = false }
 nonempty = { version = "0.11", default-features = false }
 poseidon = { package = "halo2_poseidon", version = "0.1" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
-sinsemilla = "0.1"
+sinsemilla = { git = "https://github.com/zcash/sinsemilla", rev = "aabb707e862bc3d7b803c77d14e5a771bcee3e8c" }
 subtle = { version = "2.3", default-features = false }
-zcash_note_encryption = "0.4"
+zcash_note_encryption = { git = "https://github.com/zcash/zcash_note_encryption", rev = "668ea44cf59a226715a5f3cb1bf88710a8c188a3" }
 incrementalmerkletree = "0.8.1"
 zcash_spec = "0.2.1"
 zip32 = { version = "0.2.0", default-features = false }
 visibility = "0.1.1"
 
 # Circuit
-halo2_gadgets = { version = "0.3", optional = true, default-features = false }
-halo2_proofs = { version = "0.3", optional = true, default-features = false, features = ["batch", "floor-planner-v1-legacy-pdqsort"] }
+halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "zsa1", optional = true, default-features = false }
+halo2_proofs = { git = "https://github.com/QED-it/halo2", branch = "zsa1", optional = true, default-features = false, features = ["batch", "floor-planner-v1-legacy-pdqsort"] }
 
 # Boilerplate
 getset = "0.1"
@@ -72,9 +72,9 @@ half = { version = "=2.2.1", optional = true }
 
 [dev-dependencies]
 criterion = "0.4" # 0.5 depends on clap 4 which has MSRV 1.70
-halo2_gadgets = { version = "0.3", features = ["test-dependencies"] }
+halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "zsa1", features = ["test-dependencies"] }
 proptest = ">=1.0.0, <1.7.0"
-zcash_note_encryption = { version = "0.4", features = ["pre-zip-212"] }
+zcash_note_encryption = { git = "https://github.com/zcash/zcash_note_encryption", rev = "668ea44cf59a226715a5f3cb1bf88710a8c188a3", features = ["pre-zip-212"] }
 incrementalmerkletree = { version = "0.8.1", features = ["test-dependencies"] }
 shardtree = "0.6"
 
@@ -111,9 +111,3 @@ debug = true
 
 [profile.bench]
 debug = true
-
-[patch.crates-io]
-sinsemilla = { git = "https://github.com/zcash/sinsemilla", rev = "aabb707e862bc3d7b803c77d14e5a771bcee3e8c", features = ["test-dependencies"] }
-zcash_note_encryption = { git = "https://github.com/zcash/zcash_note_encryption", branch = "main" }
-halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "zsa1" }
-halo2_proofs = { git = "https://github.com/QED-it/halo2", branch = "zsa1", default-features = false, features = ["batch", "floor-planner-v1-legacy-pdqsort"] }
