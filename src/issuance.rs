@@ -12,9 +12,7 @@
 //! Errors related to issuance, such as invalid signatures or supply overflows,
 //! are handled through the `Error` enum.
 
-use alloc::collections::BTreeMap;
-use alloc::string::String;
-use alloc::vec::Vec;
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use core::fmt;
 use group::Group;
@@ -22,15 +20,15 @@ use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
 
-use crate::bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
-use crate::constants::reference_keys::ReferenceKeys;
-use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
-use crate::note::{AssetBase, Nullifier, Rho};
-
-use crate::value::NoteValue;
-use crate::{Address, Note};
-
-use crate::asset_record::AssetRecord;
+use crate::{
+    asset_record::AssetRecord,
+    bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
+    constants::reference_keys::ReferenceKeys,
+    keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    note::{AssetBase, Nullifier, Rho},
+    value::NoteValue,
+    Address, Note,
+};
 
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
@@ -163,6 +161,8 @@ impl IssueAction {
     /// * `ValueOverflow`: The total amount value of all notes in the `IssueAction` overflows.
     /// * `IssueBundleIkMismatchAssetBase`: The provided `ik` is not used to derive the
     ///   `AssetBase` for **all** internal notes.
+    /// * `AssetBaseCannotBeIdentityPoint`: The derived `AssetBase` is the identity point of the
+    ///    Pallas curve.
     /// * `IssueActionWithoutNoteNotFinalized`: The `IssueAction` contains no notes and is not finalized.
     fn verify(&self, ik: &IssuanceValidatingKey) -> Result<(AssetBase, NoteValue), Error> {
         if self.notes.is_empty() && !self.is_finalized() {
@@ -171,17 +171,17 @@ impl IssueAction {
 
         let issue_asset = AssetBase::derive(ik, &self.asset_desc_hash);
 
+        //The issue asset should not be the identity point of the Pallas curve.
+        if bool::from(issue_asset.cv_base().is_identity()) {
+            return Err(AssetBaseCannotBeIdentityPoint);
+        }
+
         // Calculate the value of the asset as a sum of values of all its notes
         // and ensure all note types are equal the asset derived from asset_desc_hash and ik.
         let value_sum = self
             .notes
             .iter()
             .try_fold(NoteValue::zero(), |value_sum, &note| {
-                //The asset base should not be the identity point of the Pallas curve.
-                if bool::from(note.asset().cv_base().is_identity()) {
-                    return Err(AssetBaseCannotBeIdentityPoint);
-                }
-
                 // All assets should be derived correctly
                 if note.asset() != issue_asset {
                     return Err(IssueBundleIkMismatchAssetBase);
@@ -581,7 +581,7 @@ impl From<IssueBundleCommitment> for [u8; 32] {
 pub struct IssueBundleAuthorizingCommitment(pub Blake2bHash);
 
 impl IssueBundle<Signed> {
-    /// Computes a commitment to the authorizing data within for this bundle.
+    /// Computes a commitment to the authorizing data contained in this bundle.
     ///
     /// This together with `IssueBundle::commitment` bind the entire bundle.
     pub fn authorizing_commitment(&self) -> IssueBundleAuthorizingCommitment {
@@ -754,8 +754,8 @@ impl fmt::Display for Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_asset_desc_hash, AssetRecord, IssueBundle, IssueInfo};
     use crate::{
+        asset_record::AssetRecord,
         builder::{Builder, BundleType},
         circuit::ProvingKey,
         issuance::Error::{
@@ -764,7 +764,8 @@ mod tests {
             IssueBundleInvalidSignature,
         },
         issuance::{
-            is_reference_note, verify_issue_bundle, AwaitingNullifier, IssueAction, Signed,
+            compute_asset_desc_hash, is_reference_note, verify_issue_bundle, AwaitingNullifier,
+            IssueAction, IssueBundle, IssueInfo, Signed,
         },
         keys::{
             FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope,
@@ -1939,10 +1940,12 @@ mod tests {
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
-    use crate::issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed};
-    use crate::keys::testing::arb_issuance_validating_key;
-    use crate::note::asset_base::testing::zsa_asset_base;
-    use crate::note::testing::arb_zsa_note;
+    use crate::{
+        issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed},
+        keys::testing::arb_issuance_validating_key,
+        note::asset_base::testing::zsa_asset_base,
+        note::testing::arb_zsa_note,
+    };
     use k256::schnorr;
     use nonempty::NonEmpty;
     use proptest::collection::vec;

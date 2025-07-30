@@ -17,7 +17,7 @@ use crate::{
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, NonIdentityEccPoint},
-        {NonIdentityPoint, Point, ScalarFixed},
+        NonIdentityPoint, Point, ScalarFixed,
     },
     sinsemilla::{
         chip::{SinsemillaChip, SinsemillaConfig},
@@ -2628,7 +2628,8 @@ mod tests {
             chip::{EccChip, EccConfig},
             NonIdentityPoint, ScalarFixed,
         },
-        sinsemilla::{chip::SinsemillaChip, primitives::CommitDomain},
+        sinsemilla::chip::SinsemillaChip,
+        sinsemilla::primitives::CommitDomain,
         utilities::{
             cond_swap::{CondSwapChip, CondSwapConfig},
             lookup_range_check::{

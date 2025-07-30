@@ -66,7 +66,7 @@ impl AssetBase {
         self.0.to_bytes()
     }
 
-    /// Note type derivation$.
+    /// Note type derivation.
     ///
     /// Defined in [ZIP-226: Transfer and Burn of Zcash Shielded Assets][assetbase].
     ///

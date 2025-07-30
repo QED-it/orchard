@@ -243,9 +243,9 @@ pub(in crate::circuit) mod gadgets {
     #[allow(clippy::type_complexity)]
     pub(in crate::circuit) fn commit_ivk<
         Lookup: PallasLookupRangeCheck,
-        Chip: OrchardSinsemillaChip<Lookup>,
+        SinsemillaChip: OrchardSinsemillaChip<Lookup>,
     >(
-        sinsemilla_chip: Chip,
+        sinsemilla_chip: SinsemillaChip,
         ecc_chip: EccChip<OrchardFixedBases, Lookup>,
         commit_ivk_chip: CommitIvkChip,
         mut layouter: impl Layouter<pallas::Base>,
@@ -666,7 +666,6 @@ mod tests {
     use core::iter;
 
     use super::{gadgets, CommitIvkChip, CommitIvkConfig};
-
     use crate::constants::{
         fixed_bases::COMMIT_IVK_PERSONALIZATION, OrchardCommitDomains, OrchardFixedBases,
         OrchardHashDomains, L_ORCHARD_BASE, T_Q,

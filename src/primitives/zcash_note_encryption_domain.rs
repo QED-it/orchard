@@ -10,7 +10,6 @@ use zcash_note_encryption::{
     OutgoingCipherKey, OUT_PLAINTEXT_SIZE,
 };
 
-use super::{orchard_domain::OrchardDomain, orchard_primitives::OrchardPrimitives};
 use crate::{
     address::Address,
     keys::{
@@ -18,6 +17,7 @@ use crate::{
         OutgoingViewingKey, PreparedEphemeralPublicKey, PreparedIncomingViewingKey, SharedSecret,
     },
     note::{ExtractedNoteCommitment, Note, RandomSeed, Rho},
+    primitives::{orchard_domain::OrchardDomain, orchard_primitives::OrchardPrimitives},
     value::{NoteValue, ValueCommitment},
 };
 

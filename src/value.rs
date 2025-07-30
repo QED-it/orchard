@@ -511,8 +511,6 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
-    use crate::note::asset_base::testing::{arb_asset_base, native_asset_base};
-
     use alloc::vec::Vec;
     use proptest::prelude::*;
 
@@ -520,7 +518,11 @@ mod tests {
         testing::{arb_note_value_bounded, arb_trapdoor, arb_value_sum_bounded},
         OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum, MAX_NOTE_VALUE,
     };
-    use crate::{note::AssetBase, primitives::redpallas};
+    use crate::{
+        note::asset_base::testing::{arb_asset_base, native_asset_base},
+        note::AssetBase,
+        primitives::redpallas,
+    };
 
     fn check_binding_signature(
         native_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],

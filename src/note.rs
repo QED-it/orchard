@@ -423,11 +423,10 @@ impl<P: OrchardPrimitives> fmt::Debug for TransmittedNoteCiphertext<P> {
 pub mod testing {
     use proptest::prelude::*;
 
-    use crate::note::asset_base::testing::arb_asset_base;
-    use crate::note::AssetBase;
-    use crate::value::testing::arb_note_value;
     use crate::{
-        address::testing::arb_address, note::nullifier::testing::arb_nullifier, value::NoteValue,
+        address::testing::arb_address,
+        note::{asset_base::testing::arb_asset_base, nullifier::testing::arb_nullifier, AssetBase},
+        value::{testing::arb_note_value, NoteValue},
     };
 
     use subtle::CtOption;

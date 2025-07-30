@@ -27,22 +27,19 @@ use halo2_proofs::{
     poly::Rotation,
 };
 
-use super::{
-    commit_ivk::CommitIvkChip,
-    derive_nullifier::ZsaNullifierParams,
-    gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
-    note_commit::NoteCommitChip,
-    unpack,
-    value_commit_orchard::ZsaValueCommitParams,
-    AdditionalZsaWitnesses, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
-    ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
-};
 use crate::{
-    circuit::commit_ivk::gadgets::commit_ivk,
-    circuit::derive_nullifier::gadgets::derive_nullifier,
-    circuit::note_commit::{gadgets::note_commit, ZsaNoteCommitParams},
-    circuit::value_commit_orchard::gadgets::value_commit_orchard,
-    circuit::{Config, Witnesses},
+    circuit::{
+        commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
+        derive_nullifier::{gadgets::derive_nullifier, ZsaNullifierParams},
+        gadget::{
+            add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag,
+        },
+        note_commit::{gadgets::note_commit, NoteCommitChip, ZsaNoteCommitParams},
+        unpack,
+        value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
+        AdditionalZsaWitnesses, Config, OrchardCircuit, Witnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y,
+        ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+    },
     constants::OrchardFixedBasesFull,
     constants::{OrchardFixedBases, OrchardHashDomains},
     note::AssetBase,

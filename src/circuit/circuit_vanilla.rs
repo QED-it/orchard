@@ -24,22 +24,18 @@ use halo2_proofs::{
 };
 
 use crate::{
-    circuit::commit_ivk::gadgets::commit_ivk,
-    circuit::derive_nullifier::gadgets::derive_nullifier,
-    circuit::note_commit::gadgets::note_commit,
-    circuit::value_commit_orchard::gadgets::value_commit_orchard,
-    circuit::{Config, Witnesses},
+    circuit::{
+        commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
+        derive_nullifier::gadgets::derive_nullifier,
+        gadget::{add_chip::AddChip, assign_free_advice},
+        note_commit::{gadgets::note_commit, NoteCommitChip},
+        value_commit_orchard::gadgets::value_commit_orchard,
+        AdditionalZsaWitnesses, Config, OrchardCircuit, Witnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y,
+        ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
+    },
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
     note::AssetBase,
     orchard_flavor::OrchardVanilla,
-};
-
-use super::{
-    commit_ivk::CommitIvkChip,
-    gadget::{add_chip::AddChip, assign_free_advice},
-    note_commit::NoteCommitChip,
-    AdditionalZsaWitnesses, OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT,
-    ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
 };
 
 impl OrchardCircuit for OrchardVanilla {
@@ -640,10 +636,9 @@ mod tests {
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, RngCore};
 
-    use crate::circuit::Witnesses;
     use crate::{
         bundle::Flags,
-        circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K},
+        circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, Witnesses, K},
         keys::SpendValidatingKey,
         note::{AssetBase, Note, Rho},
         orchard_flavor::OrchardVanilla,

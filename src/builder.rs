@@ -248,7 +248,7 @@ pub struct SpendInfo {
     pub(crate) scope: Scope,
     pub(crate) note: Note,
     pub(crate) merkle_path: MerklePath,
-    // a flag to indicate whether the value of the note will be counted in the `ValueSum` of the action.
+    // A flag to indicate whether the value of the note will be counted in the `ValueSum` of the action.
     pub(crate) split_flag: bool,
 }
 
@@ -256,8 +256,8 @@ impl SpendInfo {
     /// This constructor is public to enable creation of custom builders.
     /// If you are not creating a custom builder, use [`Builder::add_spend`] instead.
     ///
-    /// Creates a `SpendInfo` from note, full viewing key owning the note,
-    /// and merkle path witness of the note.
+    /// Creates a `SpendInfo` from note, full viewing key owning the note, merkle path witness of
+    /// the note, and split flag.
     ///
     /// Returns `None` if the `fvk` does not own the `note`.
     ///
@@ -615,8 +615,8 @@ impl BundleMetadata {
 #[cfg(feature = "circuit")]
 pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, BundleMetadata);
 
-/// A builder that constructs a [`Bundle`] from a set of notes to be spent, and outputs
-/// to receive funds.
+/// A builder that constructs a [`Bundle`] from a set of notes to be spent, outputs
+/// to receive funds, and assets to burn.
 #[derive(Debug)]
 pub struct Builder {
     spends: Vec<SpendInfo>,
@@ -817,10 +817,11 @@ type MetadataIdx = Option<usize>;
 
 /// Partition a list of spends and outputs by note types.
 ///
-/// This method adds dummy spends and outputs until reaching the minimum number of actions, when
+/// When
 /// - either spends and outputs are both empty, or
-/// - we only have native assets and not enough spends or outputs.
-/// (adding dummy spends and outputs must be performed before shuffling to ensure backward compatibility).
+/// - we only have native assets and not enough spends or outputs,
+/// this method adds dummy spends and outputs until reaching the minimum number of actions (adding
+/// dummy spends and outputs must be performed before shuffling to ensure backward compatibility).
 #[allow(clippy::type_complexity)]
 fn partition_by_asset(
     spends: &[SpendInfo],
@@ -900,7 +901,7 @@ fn pad_spend(
     }
 }
 
-/// Builds a bundle containing the given spent notes and outputs.
+/// Builds a bundle containing the given spent notes, outputs and burns.
 ///
 /// The returned bundle will have no proof or signatures; these can be applied with
 /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.

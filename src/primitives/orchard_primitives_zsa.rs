@@ -4,29 +4,26 @@
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::note_bytes::NoteBytesData;
 
-use crate::bundle::commitments::{
-    ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION, ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
-};
-use crate::bundle::Authorized;
 use crate::{
     bundle::{
         commitments::{
             hasher, ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION,
-            ZCASH_ORCHARD_HASH_PERSONALIZATION, ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION,
+            ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION,
+            ZCASH_ORCHARD_HASH_PERSONALIZATION, ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
+            ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION,
         },
-        Authorization,
+        Authorization, Authorized,
     },
     note::{AssetBase, Note},
     orchard_flavor::OrchardZSA,
-    Bundle,
-};
-
-use super::{
-    orchard_primitives::OrchardPrimitives,
-    zcash_note_encryption_domain::{
-        build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
-        NOTE_VERSION_BYTE_V3,
+    primitives::{
+        orchard_primitives::OrchardPrimitives,
+        zcash_note_encryption_domain::{
+            build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA,
+            COMPACT_NOTE_SIZE_ZSA, NOTE_VERSION_BYTE_V3,
+        },
     },
+    Bundle,
 };
 
 impl OrchardPrimitives for OrchardZSA {
@@ -125,16 +122,15 @@ mod tests {
             Rho, TransmittedNoteCiphertext,
         },
         orchard_flavor::OrchardZSA,
-        primitives::redpallas,
-        value::{NoteValue, ValueCommitment},
-    };
-
-    use super::super::{
-        compact_action::CompactAction,
-        orchard_domain::OrchardDomain,
-        zcash_note_encryption_domain::{
-            parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
+        primitives::{
+            compact_action::CompactAction,
+            orchard_domain::OrchardDomain,
+            redpallas,
+            zcash_note_encryption_domain::{
+                parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
+            },
         },
+        value::{NoteValue, ValueCommitment},
     };
 
     type OrchardDomainZSA = OrchardDomain<OrchardZSA>;
