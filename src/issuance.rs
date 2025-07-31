@@ -171,7 +171,7 @@ impl IssueAction {
 
         let issue_asset = AssetBase::derive(ik, &self.asset_desc_hash);
 
-        //The issue asset should not be the identity point of the Pallas curve.
+        // The new asset should not be the identity point of the Pallas curve.
         if bool::from(issue_asset.cv_base().is_identity()) {
             return Err(AssetBaseCannotBeIdentityPoint);
         }

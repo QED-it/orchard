@@ -267,7 +267,7 @@ impl Witnesses {
 }
 
 /// The verifying key for the Orchard Action circuit.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VerifyingKey {
     pub(crate) params: halo2_proofs::poly::commitment::Params<vesta::Affine>,
     pub(crate) vk: plonk::VerifyingKey<vesta::Affine>,
@@ -286,7 +286,7 @@ impl VerifyingKey {
 }
 
 /// The proving key for the Orchard Action circuit.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProvingKey {
     params: halo2_proofs::poly::commitment::Params<vesta::Affine>,
     pk: plonk::ProvingKey<vesta::Affine>,

@@ -615,8 +615,9 @@ impl BundleMetadata {
 #[cfg(feature = "circuit")]
 pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, BundleMetadata);
 
-/// A builder that constructs a [`Bundle`] from a set of notes to be spent, outputs
-/// to receive funds, and assets to burn.
+/// A builder for constructing an Orchard [`Bundle`] by specifying notes to spend, outputs to
+/// receive, and assets to burn.
+/// This builder provides a structured way to incrementally assemble the components of a bundle.
 #[derive(Debug)]
 pub struct Builder {
     spends: Vec<SpendInfo>,
@@ -817,11 +818,11 @@ type MetadataIdx = Option<usize>;
 
 /// Partition a list of spends and outputs by note types.
 ///
-/// When
-/// - either spends and outputs are both empty, or
-/// - we only have native assets and not enough spends or outputs,
-/// this method adds dummy spends and outputs until reaching the minimum number of actions (adding
-/// dummy spends and outputs must be performed before shuffling to ensure backward compatibility).
+/// Normally, spends and outputs are used as provided. However, in the special cases where:
+/// - both spends and outputs are empty, or
+/// - only native assets are present and there are not enough spends or outputs,
+/// this method adds dummy spends and outputs until the minimum number of actions is reached.
+/// Dummy spends and outputs are added before shuffling to ensure backward compatibility.
 #[allow(clippy::type_complexity)]
 fn partition_by_asset(
     spends: &[SpendInfo],
@@ -851,9 +852,10 @@ fn partition_by_asset(
     }
 
     // To ensure backward compatibility, if
-    // - either spends and outputs are both empty, or
-    // - we only have native assets and not enough spends or outputs,
-    // add dummy spends and outputs until reaching the minimum number of actions.
+    // - both spends and outputs are empty, or
+    // - only native assets are present and there are not enough spends or outputs,
+    // this method adds dummy spends and outputs until the minimum number of actions is reached.
+    // Dummy spends and outputs are added before shuffling.
     if hm.is_empty() {
         // dummy_spend should not be included in the indexing and marked as None.
         hm.insert(
@@ -864,18 +866,18 @@ fn partition_by_asset(
             ),
         );
     }
-    if hm.len() == 1 && hm.contains_key(&AssetBase::native()) {
-        let (spends, outputs) = hm.get_mut(&AssetBase::native()).unwrap();
-        if spends.len() < MIN_ACTIONS {
+    if hm.len() == 1 {
+        if let Some((spends, outputs)) = hm.get_mut(&AssetBase::native()) {
+            let pad_spends = MIN_ACTIONS.saturating_sub(spends.len());
+            let pad_outputs = MIN_ACTIONS.saturating_sub(outputs.len());
+
             spends.extend(
                 iter::repeat_with(|| (SpendInfo::dummy(AssetBase::native(), rng), None))
-                    .take(MIN_ACTIONS.saturating_sub(spends.len())),
+                    .take(pad_spends),
             );
-        }
-        if outputs.len() < MIN_ACTIONS {
             outputs.extend(
                 iter::repeat_with(|| (OutputInfo::dummy(rng, AssetBase::native()), None))
-                    .take(MIN_ACTIONS.saturating_sub(outputs.len())),
+                    .take(pad_outputs),
             );
         }
     }

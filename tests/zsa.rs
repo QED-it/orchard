@@ -53,15 +53,13 @@ impl Keychain {
     }
 }
 
-fn prepare_keys(seed: u8) -> Keychain {
-    let pk = ProvingKey::build::<OrchardZSA>();
-    let vk = VerifyingKey::build::<OrchardZSA>();
-
+fn prepare_keys(pk: ProvingKey, vk: VerifyingKey, seed: u8) -> Keychain {
     let sk = SpendingKey::from_bytes([seed; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
-    let isk = IssuanceAuthorizingKey::from_bytes([seed + 1; 32]).unwrap();
+    let isk =
+        IssuanceAuthorizingKey::from_bytes([seed.wrapping_add(1); 32]).expect("valid issuance key");
     let ik = IssuanceValidatingKey::from(&isk);
     Keychain {
         pk,
@@ -324,9 +322,12 @@ fn verify_reference_note(note: &Note, asset: AssetBase) {
 fn zsa_issue_and_transfer() {
     // --------------------------- Setup -----------------------------------------
 
-    let keys = prepare_keys(5);
-    let keys2 = prepare_keys(10);
-    let keys3 = prepare_keys(15);
+    let pk = ProvingKey::build::<OrchardZSA>();
+    let vk = VerifyingKey::build::<OrchardZSA>();
+
+    let keys = prepare_keys(pk.clone(), vk.clone(), 5);
+    let keys2 = prepare_keys(pk.clone(), vk.clone(), 10);
+    let keys3 = prepare_keys(pk, vk, 15);
 
     let native_note = create_native_note(&keys);
 
