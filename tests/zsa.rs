@@ -22,6 +22,7 @@ use orchard::{
 };
 use rand::rngs::OsRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
+use std::collections::HashSet;
 use zcash_note_encryption::try_note_decryption;
 
 #[derive(Debug)]
@@ -288,18 +289,11 @@ fn build_and_verify_bundle(
 }
 
 fn verify_unique_spent_nullifiers(bundle: &Bundle<Authorized, i64, OrchardZSA>) -> bool {
-    let mut unique_nulifiers = Vec::new();
-    let spent_nullifiers = bundle
+    let mut seen = HashSet::new();
+    bundle
         .actions()
         .iter()
-        .map(|action| *action.nullifier())
-        .collect::<Vec<_>>();
-    spent_nullifiers.iter().enumerate().all(|(i, item)| {
-        unique_nulifiers.push(*item);
-        // Check if the item is already in the unique_nullifiers vector by checking that the first
-        // position of the item is equal to the current index i.
-        unique_nulifiers.iter().position(|x| x == item) == Some(i)
-    })
+        .all(|action| seen.insert(action.nullifier().to_bytes()))
 }
 
 /// Validation for reference note
