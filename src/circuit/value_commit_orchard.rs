@@ -4,10 +4,10 @@ use pasta_curves::pallas;
 
 use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains};
 
-use halo2_gadgets::utilities::lookup_range_check::PallasLookupRangeCheck;
 use halo2_gadgets::{
     ecc::{chip::EccChip, NonIdentityPoint},
     sinsemilla::chip::SinsemillaChip,
+    utilities::lookup_range_check::PallasLookupRangeCheck,
 };
 
 pub struct ZsaValueCommitParams<Lookup: PallasLookupRangeCheck> {

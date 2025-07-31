@@ -32,37 +32,41 @@ pub(crate) fn hasher(personal: &[u8; 16]) -> State {
 /// Evaluate `orchard_digest` for the bundle as defined in
 /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
 /// for OrchardVanilla and as defined in
-/// [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226]
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 /// for OrchardZSA
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
-/// [zip226]: https://zips.z.cash/zip-0226
+/// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>, P: OrchardPrimitives>(
     bundle: &Bundle<A, V, P>,
 ) -> Blake2bHash {
     P::hash_bundle_txid_data(bundle)
 }
 
-/// Construct the commitment for the absent bundle as defined in
-/// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+/// Construct the `orchard_digest` commitment for the absent bundle as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
-/// [zip244]: https://zips.z.cash/zip-0244
+/// [zip246]: https://zips.z.cash/zip-0246
 pub fn hash_bundle_txid_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION).finalize()
 }
 
-/// Construct the commitment to the authorizing data of an
-/// authorized bundle as defined in [ZIP-244: Transaction
-/// Identifier Non-Malleability][zip244]
+/// Construct the `orchard_auth_digest` commitment to the authorizing data of an
+/// authorized bundle as defined in
+/// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+/// for OrchardVanilla and as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
+/// for OrchardZSA
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
+/// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_bundle_auth_data<V, P: OrchardPrimitives>(
     bundle: &Bundle<Authorized, V, P>,
 ) -> Blake2bHash {
     P::hash_bundle_auth_data(bundle)
 }
 
-/// Construct the commitment for an absent bundle as defined in
+/// Construct the `orchard_auth_digest` commitment for an absent bundle as defined in
 /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
@@ -70,23 +74,26 @@ pub fn hash_bundle_auth_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION).finalize()
 }
 
-/// Construct the commitment for an absent issue bundle as defined in
-/// [ZIP-227: Issuance of Zcash Shielded Assets][zip227]
+/// Construct the `issuance_auth_digest` commitment for an absent issue bundle as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
-/// [zip227]: https://zips.z.cash/zip-0227
+/// [zip246]: https://zips.z.cash/zip-0246
 pub fn hash_issue_bundle_auth_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION).finalize()
 }
 
-/// Construct the commitment for an absent issue bundle as defined in
-/// [ZIP-227: Issuance of Zcash Shielded Assets][zip227]
+/// Construct the `issuance_digest` commitment for an absent issue bundle as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
-/// [zip227]: https://zips.z.cash/zip-0227
+/// [zip246]: https://zips.z.cash/zip-0246
 pub fn hash_issue_bundle_txid_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION).finalize()
 }
 
-/// Construct the commitment for the issue bundle
+/// Construct the `issuance_digest` commitment for the issue bundle as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
+///
+/// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION);
     let mut ia = hasher(ZCASH_ORCHARD_ZSA_ISSUE_ACTION_PERSONALIZATION);
@@ -109,8 +116,11 @@ pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>)
     h.finalize()
 }
 
-/// Construct the commitment to the authorizing data of an
-/// authorized issue bundle
+/// Construct the `issuance_auth_digest` commitment to the authorizing data of an
+/// authorized issue bundle as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
+///
+/// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION);
     h.update(&<[u8; 64]>::from(bundle.authorization().signature()));

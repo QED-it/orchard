@@ -10,7 +10,6 @@ use zcash_note_encryption::{
     OutgoingCipherKey, OUT_PLAINTEXT_SIZE,
 };
 
-use super::{orchard_domain::OrchardDomain, orchard_primitives::OrchardPrimitives};
 use crate::{
     address::Address,
     keys::{
@@ -18,6 +17,7 @@ use crate::{
         OutgoingViewingKey, PreparedEphemeralPublicKey, PreparedIncomingViewingKey, SharedSecret,
     },
     note::{ExtractedNoteCommitment, Note, RandomSeed, Rho},
+    primitives::{orchard_domain::OrchardDomain, orchard_primitives::OrchardPrimitives},
     value::{NoteValue, ValueCommitment},
 };
 
@@ -37,7 +37,7 @@ const NOTE_RSEED_OFFSET: usize = NOTE_VALUE_OFFSET + NOTE_VALUE_SIZE;
 pub(super) const COMPACT_NOTE_SIZE_VANILLA: usize =
     NOTE_VERSION_SIZE + NOTE_DIVERSIFIER_SIZE + NOTE_VALUE_SIZE + NOTE_RSEED_SIZE;
 
-/// The size of the encoding of a ZSA asset id.
+/// The size of the encoding of a ZSA asset.
 const ZSA_ASSET_SIZE: usize = 32;
 
 /// The size of a ZSA compact note.

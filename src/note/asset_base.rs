@@ -46,12 +46,12 @@ pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
 ///    Defined in [ZIP-227: Issuance of Zcash Shielded Assets][assetdigest].
 ///
 ///    [assetdigest]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
-pub fn asset_digest(asset_id: [u8; 65]) -> Blake2bHash {
+pub fn asset_digest(encode_asset_id: [u8; 65]) -> Blake2bHash {
     Params::new()
         .hash_length(64)
         .personal(ZSA_ASSET_DIGEST_PERSONALIZATION)
         .to_state()
-        .update(&asset_id)
+        .update(&encode_asset_id)
         .finalize()
 }
 
@@ -66,7 +66,7 @@ impl AssetBase {
         self.0.to_bytes()
     }
 
-    /// Note type derivation$.
+    /// Note type derivation.
     ///
     /// Defined in [ZIP-226: Transfer and Burn of Zcash Shielded Assets][assetbase].
     ///

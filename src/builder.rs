@@ -248,7 +248,7 @@ pub struct SpendInfo {
     pub(crate) scope: Scope,
     pub(crate) note: Note,
     pub(crate) merkle_path: MerklePath,
-    // a flag to indicate whether the value of the note will be counted in the `ValueSum` of the action.
+    // A flag to indicate whether the value of the note will be counted in the `ValueSum` of the action.
     pub(crate) split_flag: bool,
 }
 
@@ -256,8 +256,8 @@ impl SpendInfo {
     /// This constructor is public to enable creation of custom builders.
     /// If you are not creating a custom builder, use [`Builder::add_spend`] instead.
     ///
-    /// Creates a `SpendInfo` from note, full viewing key owning the note,
-    /// and merkle path witness of the note.
+    /// Creates a `SpendInfo` from note, full viewing key owning the note, merkle path witness of
+    /// the note, and split flag.
     ///
     /// Returns `None` if the `fvk` does not own the `note`.
     ///
@@ -301,7 +301,7 @@ impl SpendInfo {
     /// Creates a split spend, which is identical to origin normal spend except that
     /// `rseed_split_note` contains a random seed. In addition, the split_flag is raised.
     ///
-    /// Defined in [Transfer and Burn of Zcash Shielded Assets ZIP-0226 § Split Notes (DRAFT PR)][TransferZSA].
+    /// Defined in [Transfer and Burn of Zcash Shielded Assets ZIP-0226 § Split Notes ][TransferZSA].
     ///
     /// [TransferZSA]: https://zips.z.cash/zip-0226#split-notes
     fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
@@ -615,8 +615,9 @@ impl BundleMetadata {
 #[cfg(feature = "circuit")]
 pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, BundleMetadata);
 
-/// A builder that constructs a [`Bundle`] from a set of notes to be spent, and outputs
-/// to receive funds.
+/// A builder for constructing an Orchard [`Bundle`] by specifying notes to spend, outputs to
+/// receive, and assets to burn.
+/// This builder provides a structured way to incrementally assemble the components of a bundle.
 #[derive(Debug)]
 pub struct Builder {
     spends: Vec<SpendInfo>,
@@ -816,7 +817,12 @@ impl Builder {
 type MetadataIdx = Option<usize>;
 
 /// Partition a list of spends and outputs by note types.
-/// Method creates single dummy ZEC note if spends and outputs are both empty.
+///
+/// Normally, spends and outputs are used as provided. However, in the special cases where:
+/// - both spends and outputs are empty, or
+/// - only native assets are present and there are not enough spends or outputs,
+/// this method adds dummy spends and outputs until the minimum number of actions is reached.
+/// Dummy spends and outputs are added before shuffling to ensure backward compatibility.
 #[allow(clippy::type_complexity)]
 fn partition_by_asset(
     spends: &[SpendInfo],
@@ -845,6 +851,11 @@ fn partition_by_asset(
             .push((o.clone(), Some(i)));
     }
 
+    // To ensure backward compatibility, if
+    // - both spends and outputs are empty, or
+    // - only native assets are present and there are not enough spends or outputs,
+    // this method adds dummy spends and outputs until the minimum number of actions is reached.
+    // Dummy spends and outputs are added before shuffling.
     if hm.is_empty() {
         // dummy_spend should not be included in the indexing and marked as None.
         hm.insert(
@@ -854,6 +865,24 @@ fn partition_by_asset(
                 vec![],
             ),
         );
+    }
+    if hm.len() == 1 {
+        // All spends and outputs have the same asset.
+        if let Some((spends, outputs)) = hm.get_mut(&AssetBase::native()) {
+            // This asset is the native asset.
+            // So, we have to add dummy spends and outputs until the minimum number of actions is reached.
+            let pad_spends = MIN_ACTIONS.saturating_sub(spends.len());
+            let pad_outputs = MIN_ACTIONS.saturating_sub(outputs.len());
+
+            spends.extend(
+                iter::repeat_with(|| (SpendInfo::dummy(AssetBase::native(), rng), None))
+                    .take(pad_spends),
+            );
+            outputs.extend(
+                iter::repeat_with(|| (OutputInfo::dummy(rng, AssetBase::native()), None))
+                    .take(pad_outputs),
+            );
+        }
     }
 
     hm
@@ -877,12 +906,11 @@ fn pad_spend(
     }
 }
 
-/// Builds a bundle containing the given spent notes and outputs.
+/// Builds a bundle containing the given spent notes, outputs and burns.
 ///
 /// The returned bundle will have no proof or signatures; these can be applied with
 /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
 #[cfg(feature = "circuit")]
-#[allow(clippy::type_complexity)]
 pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     rng: impl RngCore,
     anchor: Anchor,
@@ -949,12 +977,12 @@ fn build_bundle<B, R: RngCore>(
     outputs: Vec<OutputInfo>,
     burn: BTreeMap<AssetBase, NoteValue>,
     finisher: impl FnOnce(
-        Vec<ActionInfo>,
-        Flags,
-        ValueSum,
-        Vec<(AssetBase, NoteValue)>,
-        BundleMetadata,
-        R,
+        Vec<ActionInfo>,             // pre-actions
+        Flags,                       // flags
+        ValueSum,                    // native value balance
+        Vec<(AssetBase, NoteValue)>, // burn vector
+        BundleMetadata,              // bundle metadata
+        R,                           // random number generator
     ) -> Result<B, BuildError>,
 ) -> Result<B, BuildError> {
     let flags = bundle_type.flags();
@@ -983,7 +1011,6 @@ fn build_bundle<B, R: RngCore>(
             Vec::with_capacity(spends.len().max(outputs.len()).max(MIN_ACTIONS));
 
         let spends_outputs_by_asset = partition_by_asset(&spends, &outputs, &mut rng);
-        let number_of_assets = spends_outputs_by_asset.len();
 
         indexed_spends_outputs.extend(spends_outputs_by_asset.into_iter().flat_map(
             |(asset, (spends, outputs))| {
@@ -1003,20 +1030,6 @@ fn build_bundle<B, R: RngCore>(
                     .take(num_asset_pre_actions)
                     .collect::<Vec<_>>();
 
-                // To ensure backward compatibility, if we only have native assets and not enough
-                // spends, add dummy spends before shuffling them.
-                if asset.is_native().into()
-                    && number_of_assets == 1
-                    && indexed_spends.len() < MIN_ACTIONS
-                {
-                    indexed_spends.extend(
-                        iter::repeat_with(|| {
-                            (SpendInfo::dummy(AssetBase::native(), &mut rng), None)
-                        })
-                        .take(MIN_ACTIONS.saturating_sub(indexed_spends.len())),
-                    );
-                }
-
                 let mut indexed_outputs = outputs
                     .into_iter()
                     .chain(iter::repeat_with(|| {
@@ -1024,20 +1037,6 @@ fn build_bundle<B, R: RngCore>(
                     }))
                     .take(num_asset_pre_actions)
                     .collect::<Vec<_>>();
-
-                // To ensure backward compatibility, if we only have native assets and not enough
-                // outputs, add dummy outputs before shuffling them.
-                if asset.is_native().into()
-                    && number_of_assets == 1
-                    && indexed_outputs.len() < MIN_ACTIONS
-                {
-                    indexed_outputs.extend(
-                        iter::repeat_with(|| {
-                            (OutputInfo::dummy(&mut rng, AssetBase::native()), None)
-                        })
-                        .take(MIN_ACTIONS.saturating_sub(indexed_outputs.len())),
-                    );
-                }
 
                 // Shuffle the spends and outputs, so that learning the position of a
                 // specific spent note or output note doesn't reveal anything on its own about
@@ -1445,13 +1444,12 @@ pub mod testing {
     use proptest::collection::vec;
     use proptest::prelude::*;
 
-    use crate::note::AssetBase;
     use crate::{
         address::testing::arb_address,
         bundle::{Authorized, Bundle},
         circuit::ProvingKey,
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
-        note::testing::arb_note,
+        note::{testing::arb_note, AssetBase},
         orchard_flavor::OrchardFlavor,
         primitives::OrchardPrimitives,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
@@ -1592,6 +1590,7 @@ pub mod testing {
 mod tests {
     use rand::rngs::OsRng;
 
+    use super::Builder;
     use crate::{
         builder::BundleType,
         bundle::{Authorized, Bundle},
@@ -1603,8 +1602,6 @@ mod tests {
         tree::EMPTY_ROOTS,
         value::NoteValue,
     };
-
-    use super::Builder;
 
     fn shielding_bundle<FL: OrchardFlavor>() {
         let pk = ProvingKey::build::<FL>();

@@ -1552,11 +1552,9 @@ dependencies = [
  "core2",
  "criterion",
  "ff",
- "font-kit",
  "fpe",
  "getset",
  "group",
- "half 2.2.1",
  "halo2_gadgets",
  "halo2_poseidon 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "halo2_proofs",
@@ -2726,7 +2724,7 @@ dependencies = [
 [[package]]
 name = "zcash_note_encryption"
 version = "0.4.1"
-source = "git+https://github.com/zcash/zcash_note_encryption?branch=main#668ea44cf59a226715a5f3cb1bf88710a8c188a3"
+source = "git+https://github.com/zcash/zcash_note_encryption?rev=668ea44cf59a226715a5f3cb1bf88710a8c188a3#668ea44cf59a226715a5f3cb1bf88710a8c188a3"
 dependencies = [
  "chacha20",
  "chacha20poly1305",

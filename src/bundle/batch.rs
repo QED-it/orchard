@@ -6,7 +6,6 @@ use rand::{CryptoRng, RngCore};
 use tracing::debug;
 
 use super::{Authorized, Bundle};
-
 use crate::{
     circuit::VerifyingKey,
     primitives::redpallas::{self, Binding, SpendAuth},

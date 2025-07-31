@@ -13,14 +13,13 @@ use crate::{
     },
     note::{AssetBase, Note},
     orchard_flavor::OrchardVanilla,
-    Bundle,
-};
-
-use super::{
-    orchard_primitives::OrchardPrimitives,
-    zcash_note_encryption_domain::{
-        build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_V2,
+    primitives::{
+        orchard_primitives::OrchardPrimitives,
+        zcash_note_encryption_domain::{
+            build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_V2,
+        },
     },
+    Bundle,
 };
 
 impl OrchardPrimitives for OrchardVanilla {
@@ -100,16 +99,15 @@ mod tests {
             RandomSeed, Rho, TransmittedNoteCiphertext,
         },
         orchard_flavor::OrchardVanilla,
-        primitives::redpallas,
-        value::{NoteValue, ValueCommitment},
-    };
-
-    use super::super::{
-        compact_action::CompactAction,
-        orchard_domain::OrchardDomain,
-        zcash_note_encryption_domain::{
-            parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
+        primitives::{
+            compact_action::CompactAction,
+            orchard_domain::OrchardDomain,
+            redpallas,
+            zcash_note_encryption_domain::{
+                parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
+            },
         },
+        value::{NoteValue, ValueCommitment},
     };
 
     type OrchardDomainVanilla = OrchardDomain<OrchardVanilla>;

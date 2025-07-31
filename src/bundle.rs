@@ -122,7 +122,7 @@ impl Flags {
         zsa_enabled: true,
     };
 
-    /// The flag set with outputs disabled.
+    /// The flag set with outputs disabled and ZSA disabled.
     pub const OUTPUTS_DISABLED: Flags = Flags {
         spends_enabled: true,
         outputs_enabled: false,
@@ -304,8 +304,8 @@ impl<A: Authorization, V, P: OrchardPrimitives> Bundle<A, V, P> {
     }
 
     /// Construct a new bundle by applying a transformation that might fail
-    /// to the value balance and balances of assets to burn.
-    pub fn try_map_value_balance<V0, E, F: Fn(V) -> Result<V0, E>>(
+    /// to the value balance.
+    pub fn try_map_value_balance<V0, E, F: FnOnce(V) -> Result<V0, E>>(
         self,
         f: F,
     ) -> Result<Bundle<A, V0, P>, E> {

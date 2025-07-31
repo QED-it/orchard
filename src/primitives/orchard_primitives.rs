@@ -50,11 +50,11 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
     /// Evaluate `orchard_digest` for the bundle as defined in
     /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
     /// for OrchardVanilla and as defined in
-    /// [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226]
+    /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
     /// for OrchardZSA
     ///
     /// [zip244]: https://zips.z.cash/zip-0244
-    /// [zip226]: https://zips.z.cash/zip-0226
+    /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
         bundle: &Bundle<A, V, Self>,
     ) -> Blake2bHash;
@@ -72,9 +72,9 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
     ///   with ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION
     /// * \[(cv, rk, enc_ciphertext\[564..\], out_ciphertext)*\] personalized
     ///   with ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION
-    ///   as defined in [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+    ///   as defined in [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
     ///
-    /// [zip244]: https://zips.z.cash/zip-0244
+    /// [zip246]: https://zips.z.cash/zip-0246
     fn update_hash_with_actions<A: Authorization, V: Copy + Into<i64>>(
         main_hasher: &mut State,
         bundle: &Bundle<A, V, Self>,
@@ -111,10 +111,10 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
     /// Evaluate `orchard_auth_digest` for the bundle as defined in
     /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
     /// for OrchardVanilla and as defined in
-    /// [ZIP-226: Transfer and Burn of Zcash Shielded Assets][zip226]
+    /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
     /// for OrchardZSA
     ///
     /// [zip244]: https://zips.z.cash/zip-0244
-    /// [zip226]: https://zips.z.cash/zip-0226
+    /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_auth_data<V>(bundle: &Bundle<Authorized, V, Self>) -> Blake2bHash;
 }

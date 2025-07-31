@@ -177,7 +177,7 @@ pub struct Spend {
     /// information, or after signatures have been applied, this can be redacted.
     pub(crate) value: Option<NoteValue>,
 
-    /// The asset id of this Action.
+    /// The asset of this Action.
     ///
     /// - This is set by the Constructor.
     /// - This is required by the Prover.
@@ -399,7 +399,6 @@ impl<P: OrchardPrimitives> From<PcztTransmittedNoteCiphertext> for TransmittedNo
 
 #[cfg(test)]
 mod tests {
-    use crate::orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA};
     use blake2b_simd::Hash as Blake2bHash;
     use ff::{Field, PrimeField};
     use incrementalmerkletree::{Marking, Retention};
@@ -414,6 +413,7 @@ mod tests {
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
+        orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         pczt::Zip32Derivation,
         tree::{MerkleHashOrchard, EMPTY_ROOTS},
         value::NoteValue,

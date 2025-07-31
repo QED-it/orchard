@@ -22,7 +22,7 @@ impl<P: OrchardPrimitives> OrchardDomain<P> {
         }
     }
 
-    /// Constructs a domain that can be used to trial-decrypt this action's output note.
+    /// Constructs a domain that can be used to trial-decrypt this compact action's output note.
     pub fn for_compact_action(act: &CompactAction<P>) -> Self {
         Self {
             rho: act.rho(),
