@@ -867,7 +867,10 @@ fn partition_by_asset(
         );
     }
     if hm.len() == 1 {
+        // All spends and outputs have the same asset.
         if let Some((spends, outputs)) = hm.get_mut(&AssetBase::native()) {
+            // This asset is the native asset.
+            // So, we have to add dummy spends and outputs until the minimum number of actions is reached.
             let pad_spends = MIN_ACTIONS.saturating_sub(spends.len());
             let pad_outputs = MIN_ACTIONS.saturating_sub(outputs.len());
 
