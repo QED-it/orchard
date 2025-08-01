@@ -172,14 +172,6 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate the native note type
-        pub fn native_asset_base()(_i in 0..1) -> AssetBase {
-            // TODO: remove _i
-            AssetBase::native()
-        }
-    }
-
-    prop_compose! {
         /// Generate an asset ID
         pub fn arb_zsa_asset_base()(
             isk in arb_issuance_authorizing_key(),

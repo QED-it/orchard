@@ -519,9 +519,7 @@ mod tests {
         OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum, MAX_NOTE_VALUE,
     };
     use crate::{
-        note::asset_base::testing::{arb_asset_base, native_asset_base},
-        note::AssetBase,
-        primitives::redpallas,
+        note::asset_base::testing::arb_asset_base, note::AssetBase, primitives::redpallas,
     };
 
     fn check_binding_signature(
@@ -583,7 +581,7 @@ mod tests {
         fn bsk_consistent_with_bvk_native_with_zsa_transfer_and_burning(
             native_values in (1usize..10).prop_flat_map(|n_values|
                 arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), native_asset_base()), n_values)
+                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), Just(AssetBase::native())), n_values)
                 )
             ),
             (asset_values, neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|
