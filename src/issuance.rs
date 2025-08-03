@@ -24,7 +24,7 @@ use crate::{
     asset_record::AssetRecord,
     bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
     constants::reference_keys::ReferenceKeys,
-    keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    keys::{IssuanceAuthSigScheme, IssuanceAuthorizingKey, IssuanceValidatingKey},
     note::{AssetBase, Nullifier, Rho},
     value::NoteValue,
     Address, Note,
