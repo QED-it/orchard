@@ -46,6 +46,14 @@ fn is_reference_note(note: &Note) -> bool {
     note.value() == NoteValue::zero() && note.recipient() == ReferenceKeys::recipient()
 }
 
+/// An issuance authorization signature `issueAuthSig`,
+///
+/// as defined in [ZIP 227][issueauthsig].
+///
+/// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signature-scheme
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct IssuanceAuthorizationSignature(pub(crate) schnorr::Signature);
+
 /// A bundle of actions to be applied to the ledger.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IssueBundle<T: IssueAuth> {
@@ -98,6 +106,13 @@ pub fn compute_asset_desc_hash(asset_desc: &NonEmpty<u8>) -> [u8; 32] {
         .as_bytes()
         .try_into()
         .expect("Invalid asset description hash length")
+}
+
+impl IssuanceAuthorizationSignature {
+    /// Serialize the issuance authorization signature to its canonical byte representation.
+    pub fn to_bytes(&self) -> [u8; 64] {
+        self.0.to_bytes()
+    }
 }
 
 impl IssueAction {
@@ -240,19 +255,21 @@ pub struct Prepared {
 /// Marker for an authorized bundle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Signed {
-    signature: schnorr::Signature,
+    signature: IssuanceAuthorizationSignature,
 }
 
 impl Signed {
     /// Returns the signature for this authorization.
-    pub fn signature(&self) -> &schnorr::Signature {
+    pub fn signature(&self) -> &IssuanceAuthorizationSignature {
         &self.signature
     }
 
     /// Constructs a `Signed` from a byte array containing Schnorr signature bytes.
     pub fn from_data(data: [u8; 64]) -> Self {
         Signed {
-            signature: schnorr::Signature::try_from(data.as_ref()).unwrap(),
+            signature: IssuanceAuthorizationSignature(
+                schnorr::Signature::try_from(data.as_ref()).unwrap(),
+            ),
         }
     }
 }
@@ -1847,6 +1864,7 @@ mod tests {
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
+    use crate::issuance::IssuanceAuthorizationSignature;
     use crate::{
         issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed},
         keys::testing::arb_issuance_validating_key,
@@ -1863,8 +1881,8 @@ pub mod testing {
         /// Generate a uniformly distributed signature
         pub(crate) fn arb_signature()(
             sig_bytes in vec(prop::num::u8::ANY, 64)
-        ) -> schnorr::Signature {
-            schnorr::Signature::try_from(sig_bytes.as_slice()).unwrap()
+        ) -> IssuanceAuthorizationSignature {
+            IssuanceAuthorizationSignature(schnorr::Signature::try_from(sig_bytes.as_slice()).unwrap())
         }
     }
 

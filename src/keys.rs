@@ -16,7 +16,7 @@ use k256::{
     schnorr,
     schnorr::{
         signature::hazmat::{PrehashSigner, PrehashVerifier},
-        Signature, VerifyingKey,
+        VerifyingKey,
     },
     NonZeroScalar,
 };
@@ -28,6 +28,7 @@ use zcash_note_encryption::EphemeralKeyBytes;
 
 use crate::{
     address::Address,
+    issuance::{self, Error::IssueBundleInvalidSignature, IssuanceAuthorizationSignature},
     primitives::redpallas::{self, SpendAuth, VerificationKey},
     spec::{
         commit_ivk, diversify_hash, extract_p, ka_orchard, ka_orchard_prepared, prf_nf, to_base,
@@ -295,8 +296,14 @@ impl IssuanceAuthorizingKey {
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
     /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign 32 byte SIGHASH values.
-    pub fn try_sign(&self, msg: &[u8; 32]) -> Result<Signature, schnorr::Error> {
-        schnorr::SigningKey::from(self.0).sign_prehash(msg)
+    pub fn try_sign(
+        &self,
+        msg: &[u8; 32],
+    ) -> Result<IssuanceAuthorizationSignature, issuance::Error> {
+        schnorr::SigningKey::from(self.0)
+            .sign_prehash(msg)
+            .map(IssuanceAuthorizationSignature)
+            .map_err(|_| IssueBundleInvalidSignature)
     }
 }
 
@@ -348,8 +355,12 @@ impl IssuanceValidatingKey {
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
-    pub fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), schnorr::Error> {
-        self.0.verify_prehash(msg, signature)
+    pub fn verify(
+        &self,
+        msg: &[u8],
+        signature: &IssuanceAuthorizationSignature,
+    ) -> Result<(), schnorr::Error> {
+        self.0.verify_prehash(msg, &signature.0)
     }
 }
 
