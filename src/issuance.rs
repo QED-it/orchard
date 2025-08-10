@@ -52,7 +52,9 @@ fn is_reference_note(note: &Note) -> bool {
 ///
 /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signature-scheme
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct IssuanceAuthorizationSignature(pub(crate) schnorr::Signature);
+pub struct IssuanceAuthorizationSignature {
+    pub(crate) bytes: [u8; 64],
+}
 
 /// A bundle of actions to be applied to the ledger.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,7 +113,7 @@ pub fn compute_asset_desc_hash(asset_desc: &NonEmpty<u8>) -> [u8; 32] {
 impl IssuanceAuthorizationSignature {
     /// Serialize the issuance authorization signature to its canonical byte representation.
     pub fn to_bytes(&self) -> [u8; 64] {
-        self.0.to_bytes()
+        self.bytes
     }
 }
 
@@ -267,9 +269,11 @@ impl Signed {
     /// Constructs a `Signed` from a byte array containing Schnorr signature bytes.
     pub fn from_data(data: [u8; 64]) -> Self {
         Signed {
-            signature: IssuanceAuthorizationSignature(
-                schnorr::Signature::try_from(data.as_ref()).unwrap(),
-            ),
+            signature: IssuanceAuthorizationSignature {
+                bytes: schnorr::Signature::try_from(data.as_ref())
+                    .unwrap()
+                    .to_bytes(),
+            },
         }
     }
 }
@@ -1871,7 +1875,6 @@ pub mod testing {
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
     };
-    use k256::schnorr;
     use nonempty::NonEmpty;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -1882,7 +1885,9 @@ pub mod testing {
         pub(crate) fn arb_signature()(
             sig_bytes in vec(prop::num::u8::ANY, 64)
         ) -> IssuanceAuthorizationSignature {
-            IssuanceAuthorizationSignature(schnorr::Signature::try_from(sig_bytes.as_slice()).unwrap())
+            IssuanceAuthorizationSignature {
+                bytes: sig_bytes.try_into().unwrap()
+            }
         }
     }
 

@@ -302,7 +302,9 @@ impl IssuanceAuthorizingKey {
     ) -> Result<IssuanceAuthorizationSignature, issuance::Error> {
         schnorr::SigningKey::from(self.0)
             .sign_prehash(msg)
-            .map(IssuanceAuthorizationSignature)
+            .map(|sig| IssuanceAuthorizationSignature {
+                bytes: sig.to_bytes(),
+            })
             .map_err(|_| IssueBundleInvalidSignature)
     }
 }
@@ -360,7 +362,10 @@ impl IssuanceValidatingKey {
         msg: &[u8],
         signature: &IssuanceAuthorizationSignature,
     ) -> Result<(), schnorr::Error> {
-        self.0.verify_prehash(msg, &signature.0)
+        self.0.verify_prehash(
+            msg,
+            &schnorr::Signature::try_from(signature.bytes.as_slice()).unwrap(),
+        )
     }
 }
 
