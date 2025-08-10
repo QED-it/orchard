@@ -28,7 +28,7 @@ use zcash_note_encryption::EphemeralKeyBytes;
 
 use crate::{
     address::Address,
-    issuance::{self, Error::IssueBundleInvalidSignature, IssuanceAuthorizationSignature},
+    issuance::{self, IssuanceAuthorizationSignature},
     primitives::redpallas::{self, SpendAuth, VerificationKey},
     spec::{
         commit_ivk, diversify_hash, extract_p, ka_orchard, ka_orchard_prepared, prf_nf, to_base,
@@ -305,7 +305,7 @@ impl IssuanceAuthorizingKey {
             .map(|sig| IssuanceAuthorizationSignature {
                 bytes: sig.to_bytes(),
             })
-            .map_err(|_| IssueBundleInvalidSignature)
+            .map_err(|_| issuance::Error::IssueBundleInvalidSignature)
     }
 }
 
@@ -323,11 +323,18 @@ impl Debug for IssuanceAuthorizingKey {
 ///
 /// [IssuanceZSA]: https://zips.z.cash/zip-0227#issuance-key-derivation
 #[derive(Debug, Clone)]
-pub struct IssuanceValidatingKey(schnorr::VerifyingKey);
+pub struct IssuanceValidatingKey {
+    bytes: [u8; 32],
+}
 
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
-        IssuanceValidatingKey(*schnorr::SigningKey::from(isk.0).verifying_key())
+        IssuanceValidatingKey {
+            bytes: schnorr::SigningKey::from(isk.0)
+                .verifying_key()
+                .to_bytes()
+                .into(),
+        }
     }
 }
 
@@ -343,7 +350,7 @@ impl IssuanceValidatingKey {
     /// Converts this issuance validating key to its serialized form,
     /// in big-endian order as defined in BIP 340.
     pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.to_bytes().into()
+        self.bytes
     }
 
     /// Constructs an Orchard issuance validating key from the provided bytes.
@@ -353,7 +360,9 @@ impl IssuanceValidatingKey {
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         VerifyingKey::from_bytes(bytes)
             .ok()
-            .map(IssuanceValidatingKey)
+            .map(|vk| IssuanceValidatingKey {
+                bytes: vk.to_bytes().into(),
+            })
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
@@ -361,11 +370,14 @@ impl IssuanceValidatingKey {
         &self,
         msg: &[u8],
         signature: &IssuanceAuthorizationSignature,
-    ) -> Result<(), schnorr::Error> {
-        self.0.verify_prehash(
+    ) -> Result<(), issuance::Error> {
+        let vk = VerifyingKey::from_bytes(&self.bytes)
+            .map_err(|_| issuance::Error::InvalidIssuanceValidatingKey)?;
+        vk.verify_prehash(
             msg,
             &schnorr::Signature::try_from(signature.bytes.as_slice()).unwrap(),
         )
+        .map_err(|_| issuance::Error::IssueBundleInvalidSignature)
     }
 }
 

@@ -31,10 +31,10 @@ use crate::{
 };
 
 use Error::{
-    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
-    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
-    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, InvalidIssuanceValidatingKey,
+    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
+    IssueBundleInvalidSignature, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 /// Checks if a given note is a reference note.
@@ -709,6 +709,8 @@ pub enum Error {
     CannotBeFirstIssuance,
 
     /// Verification errors:
+    /// Invalid issuance validating key.
+    InvalidIssuanceValidatingKey,
     /// Invalid signature.
     IssueBundleInvalidSignature,
     /// The provided `AssetBase` has been previously finalized.
@@ -750,6 +752,9 @@ impl fmt::Display for Error {
                     f,
                     "it cannot be first issuance because we have already some notes for this asset."
                 )
+            }
+            InvalidIssuanceValidatingKey => {
+                write!(f, "invalid issuance validating key")
             }
             IssueBundleInvalidSignature => {
                 write!(f, "invalid signature")
