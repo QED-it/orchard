@@ -31,8 +31,8 @@ use crate::{
 };
 
 use Error::{
-    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, InvalidIssuanceValidatingKey,
-    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, InvalidIssuanceAuthorizingKey,
+    InvalidIssuanceValidatingKey, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
     IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
     IssueBundleInvalidSignature, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
@@ -708,6 +708,10 @@ pub enum Error {
     /// It cannot be first issuance because we have already some notes for this asset.
     CannotBeFirstIssuance,
 
+    /// Signing errors:
+    /// Invalid issuance authorizing key.
+    InvalidIssuanceAuthorizingKey,
+
     /// Verification errors:
     /// Invalid issuance validating key.
     InvalidIssuanceValidatingKey,
@@ -752,6 +756,9 @@ impl fmt::Display for Error {
                     f,
                     "it cannot be first issuance because we have already some notes for this asset."
                 )
+            }
+            InvalidIssuanceAuthorizingKey => {
+                write!(f, "invalid issuance authorizing key")
             }
             InvalidIssuanceValidatingKey => {
                 write!(f, "invalid issuance validating key")

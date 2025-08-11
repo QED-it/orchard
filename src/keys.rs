@@ -246,7 +246,9 @@ fn check_structural_validity(
 ///
 /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#issuance-key-derivation
 #[derive(Copy, Clone)]
-pub struct IssuanceAuthorizingKey(NonZeroScalar);
+pub struct IssuanceAuthorizingKey {
+    bytes: [u8; 32],
+}
 
 impl IssuanceAuthorizingKey {
     /// Generates a random issuance key.
@@ -256,7 +258,9 @@ impl IssuanceAuthorizingKey {
     ///
     /// [ZIP 32]: https://zips.z.cash/zip-0032
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
-        IssuanceAuthorizingKey(NonZeroScalar::random(rng))
+        IssuanceAuthorizingKey {
+            bytes: NonZeroScalar::random(rng).to_bytes().into(),
+        }
     }
 
     /// Constructs an Orchard issuance key from uniformly-random bytes.
@@ -265,12 +269,14 @@ impl IssuanceAuthorizingKey {
     pub fn from_bytes(isk_bytes: [u8; 32]) -> Option<Self> {
         NonZeroScalar::try_from(&isk_bytes as &[u8])
             .ok()
-            .map(IssuanceAuthorizingKey)
+            .map(|isk| IssuanceAuthorizingKey {
+                bytes: isk.to_bytes().into(),
+            })
     }
 
     /// Returns the raw bytes of the issuance key.
     pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.to_bytes().into()
+        self.bytes
     }
 
     /// Derives the Orchard-ZSA issuance key for the given seed, coin type, and account.
@@ -300,7 +306,8 @@ impl IssuanceAuthorizingKey {
         &self,
         msg: &[u8; 32],
     ) -> Result<IssuanceAuthorizationSignature, issuance::Error> {
-        schnorr::SigningKey::from(self.0)
+        schnorr::SigningKey::from_bytes(&self.bytes as &[u8])
+            .map_err(|_| issuance::Error::InvalidIssuanceAuthorizingKey)?
             .sign_prehash(msg)
             .map(|sig| IssuanceAuthorizationSignature {
                 bytes: sig.to_bytes(),
@@ -312,7 +319,7 @@ impl IssuanceAuthorizingKey {
 impl Debug for IssuanceAuthorizingKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("IssuanceAuthorizingKey")
-            .field(&self.0.to_bytes())
+            .field(&self.bytes)
             .finish()
     }
 }
@@ -330,7 +337,8 @@ pub struct IssuanceValidatingKey {
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
         IssuanceValidatingKey {
-            bytes: schnorr::SigningKey::from(isk.0)
+            bytes: schnorr::SigningKey::from_bytes(&isk.bytes)
+                .unwrap()
                 .verifying_key()
                 .to_bytes()
                 .into(),
