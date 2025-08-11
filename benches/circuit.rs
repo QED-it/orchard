@@ -43,7 +43,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                     recipient,
                     NoteValue::from_raw(10),
                     AssetBase::native(),
-                    None,
+                    [0; 512],
                 )
                 .unwrap();
         }
@@ -69,7 +69,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 b.iter(|| {
                     bundle
                         .authorization()
-                        .create_proof(&pk, &instances, rng)
+                        .create_proof::<FL>(&pk, &instances, rng)
                         .unwrap()
                 });
             });

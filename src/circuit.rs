@@ -3,15 +3,9 @@
 //! This module defines the common structures, traits and implementations for the
 //! Orchard Action circuit, supporting both the standard ("Vanilla") and ZSA variations.
 
-use core::fmt;
+use alloc::vec::Vec;
 
 use group::{Curve, GroupEncoding};
-use halo2_gadgets::{
-    ecc::chip::EccConfig,
-    poseidon::Pow5Config as PoseidonConfig,
-    sinsemilla::{chip::SinsemillaConfig, merkle::chip::MerkleConfig},
-    utilities::lookup_range_check::PallasLookupRangeCheck,
-};
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
     plonk::{
@@ -19,7 +13,6 @@ use halo2_proofs::{
     },
     transcript::{Blake2bRead, Blake2bWrite},
 };
-use memuse::DynamicUsage;
 use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
 use rand::RngCore;
 
@@ -45,6 +38,12 @@ use crate::{
     tree::{Anchor, MerkleHashOrchard},
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
 };
+use halo2_gadgets::{
+    ecc::chip::EccConfig,
+    poseidon::Pow5Config as PoseidonConfig,
+    sinsemilla::{chip::SinsemillaConfig, merkle::chip::MerkleConfig},
+    utilities::lookup_range_check::PallasLookupRangeCheck,
+};
 
 mod circuit_vanilla;
 mod circuit_zsa;
@@ -55,6 +54,8 @@ pub(in crate::circuit) mod gadget;
 pub(in crate::circuit) mod note_commit;
 pub(in crate::circuit) mod orchard_sinsemilla_chip;
 pub(in crate::circuit) mod value_commit_orchard;
+
+pub use crate::Proof;
 
 /// Size of the Orchard circuit.
 const K: u32 = 11;
@@ -109,6 +110,14 @@ pub trait OrchardCircuit: Sized + Default {
         config: Self::Config,
         layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error>;
+
+    /// Builds the ZSA-specific witnesses for the circuit.
+    /// For OrchardVanilla circuits, it should return `Value::unknown()`.
+    fn build_additional_zsa_witnesses(
+        psi_nf: pallas::Base,
+        asset: AssetBase,
+        split_flag: bool,
+    ) -> Value<AdditionalZsaWitnesses>;
 }
 
 impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
@@ -134,9 +143,27 @@ impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
 
 /// The Orchard Action circuit.
 #[derive(Clone, Debug, Default)]
-pub struct Circuit<D> {
+pub struct Circuit<C: OrchardCircuit> {
     pub(crate) witnesses: Witnesses,
-    pub(crate) phantom: std::marker::PhantomData<D>,
+    pub(crate) phantom: core::marker::PhantomData<C>,
+}
+
+/// The ZSA-specific witnesses.
+#[derive(Clone, Debug)]
+pub struct AdditionalZsaWitnesses {
+    pub(crate) psi_nf: pallas::Base,
+    pub(crate) asset: AssetBase,
+    pub(crate) split_flag: bool,
+}
+
+fn unpack(
+    zsa_values: Value<AdditionalZsaWitnesses>,
+) -> (Value<pallas::Base>, Value<AssetBase>, Value<bool>) {
+    (
+        zsa_values.clone().map(|values| values.psi_nf),
+        zsa_values.clone().map(|values| values.asset),
+        zsa_values.map(|values| values.split_flag),
+    )
 }
 
 /// The Orchard Action witnesses
@@ -151,7 +178,6 @@ pub struct Witnesses {
     pub(crate) psi_old: Value<pallas::Base>,
     pub(crate) rcm_old: Value<NoteCommitTrapdoor>,
     pub(crate) cm_old: Value<NoteCommitment>,
-    pub(crate) psi_nf: Value<pallas::Base>,
     pub(crate) alpha: Value<pallas::Scalar>,
     pub(crate) ak: Value<SpendValidatingKey>,
     pub(crate) nk: Value<NullifierDerivingKey>,
@@ -162,8 +188,10 @@ pub struct Witnesses {
     pub(crate) psi_new: Value<pallas::Base>,
     pub(crate) rcm_new: Value<NoteCommitTrapdoor>,
     pub(crate) rcv: Value<ValueCommitTrapdoor>,
-    pub(crate) asset: Value<AssetBase>,
-    pub(crate) split_flag: Value<bool>,
+
+    // The ZSA-specific witnesses.
+    // For OrchardVanilla circuits, this field should be initialized to `Value::unknown()`.
+    pub(crate) additional_zsa_witnesses: Value<AdditionalZsaWitnesses>,
 }
 
 impl Witnesses {
@@ -182,17 +210,17 @@ impl Witnesses {
     ///
     /// [`SpendInfo`]: crate::builder::SpendInfo
     /// [`Builder`]: crate::builder::Builder
-    pub fn from_action_context(
+    pub fn from_action_context<C: OrchardCircuit>(
         spend: SpendInfo,
         output_note: Note,
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
     ) -> Option<Self> {
         (Rho::from_nf_old(spend.note.nullifier(&spend.fvk)) == output_note.rho())
-            .then(|| Self::from_action_context_unchecked(spend, output_note, alpha, rcv))
+            .then(|| Self::from_action_context_unchecked::<C>(spend, output_note, alpha, rcv))
     }
 
-    pub(crate) fn from_action_context_unchecked(
+    pub(crate) fn from_action_context_unchecked<C: OrchardCircuit>(
         spend: SpendInfo,
         output_note: Note,
         alpha: pallas::Scalar,
@@ -203,12 +231,14 @@ impl Witnesses {
         let psi_old = spend.note.rseed().psi(&rho_old);
         let rcm_old = spend.note.rseed().rcm(&rho_old);
 
-        let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
-        let psi_nf = nf_rseed.psi(&rho_old);
-
         let rho_new = output_note.rho();
         let psi_new = output_note.rseed().psi(&rho_new);
         let rcm_new = output_note.rseed().rcm(&rho_new);
+
+        let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
+        let psi_nf = nf_rseed.psi(&rho_old);
+        let additional_zsa_witnesses =
+            C::build_additional_zsa_witnesses(psi_nf, spend.note.asset(), spend.split_flag);
 
         Witnesses {
             path: Value::known(spend.merkle_path.auth_path()),
@@ -220,7 +250,6 @@ impl Witnesses {
             psi_old: Value::known(psi_old),
             rcm_old: Value::known(rcm_old),
             cm_old: Value::known(spend.note.commitment()),
-            psi_nf: Value::known(psi_nf),
             alpha: Value::known(alpha),
             ak: Value::known(spend.fvk.clone().into()),
             nk: Value::known(*spend.fvk.nk()),
@@ -231,14 +260,14 @@ impl Witnesses {
             psi_new: Value::known(psi_new),
             rcm_new: Value::known(rcm_new),
             rcv: Value::known(rcv),
-            asset: Value::known(spend.note.asset()),
-            split_flag: Value::known(spend.split_flag),
+
+            additional_zsa_witnesses,
         }
     }
 }
 
 /// The verifying key for the Orchard Action circuit.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VerifyingKey {
     pub(crate) params: halo2_proofs::poly::commitment::Params<vesta::Affine>,
     pub(crate) vk: plonk::VerifyingKey<vesta::Affine>,
@@ -257,7 +286,7 @@ impl VerifyingKey {
 }
 
 /// The proving key for the Orchard Action circuit.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProvingKey {
     params: halo2_proofs::poly::commitment::Params<vesta::Affine>,
     pk: plonk::ProvingKey<vesta::Affine>,
@@ -342,41 +371,6 @@ impl Instance {
     }
 }
 
-/// A proof of the validity of an Orchard [`Bundle`].
-///
-/// [`Bundle`]: crate::bundle::Bundle
-#[derive(Clone)]
-pub struct Proof(Vec<u8>);
-
-impl fmt::Debug for Proof {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if f.alternate() {
-            f.debug_tuple("Proof").field(&self.0).finish()
-        } else {
-            // By default, only show the proof length, not its contents.
-            f.debug_tuple("Proof")
-                .field(&format_args!("{} bytes", self.0.len()))
-                .finish()
-        }
-    }
-}
-
-impl AsRef<[u8]> for Proof {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl DynamicUsage for Proof {
-    fn dynamic_usage(&self) -> usize {
-        self.0.dynamic_usage()
-    }
-
-    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
-        self.0.dynamic_usage_bounds()
-    }
-}
-
 impl Proof {
     /// Creates a proof for the given circuits and instances.
     pub fn create<C: OrchardCircuit>(
@@ -436,10 +430,5 @@ impl Proof {
             .collect();
 
         batch.add_proof(instances, self.0.clone());
-    }
-
-    /// Constructs a new Proof value.
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Proof(bytes)
     }
 }

@@ -1,11 +1,13 @@
-use std::collections::HashMap;
+extern crate alloc;
 
+use alloc::collections::BTreeMap;
+use nonempty::NonEmpty;
 use rand::{rngs::OsRng, RngCore};
 
 use orchard::{
     asset_record::AssetRecord,
     issuance::{
-        verify_issue_bundle,
+        compute_asset_desc_hash, verify_issue_bundle,
         Error::{
             IssueActionPreviouslyFinalizedAssetBase, MissingReferenceNoteOnFirstIssuance,
             ValueOverflow,
@@ -126,20 +128,21 @@ fn build_issue_bundle(params: &TestParams, data: &[IssueTestNote]) -> IssueBundl
         first_issuance,
     } = data.first().unwrap().clone();
 
+    let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(&asset_desc).unwrap());
+
     let (mut bundle, _) = IssueBundle::new(
         ik.clone(),
-        asset_desc.clone(),
+        asset_desc_hash,
         Some(IssueInfo {
             recipient,
             value: NoteValue::from_raw(amount),
         }),
         first_issuance,
         rng,
-    )
-    .unwrap();
+    );
 
     if is_finalized {
-        bundle.finalize_action(&asset_desc).unwrap();
+        bundle.finalize_action(&asset_desc_hash).unwrap();
     }
 
     for IssueTestNote {
@@ -149,9 +152,10 @@ fn build_issue_bundle(params: &TestParams, data: &[IssueTestNote]) -> IssueBundl
         first_issuance,
     } in data.iter().skip(1).cloned()
     {
+        let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(&asset_desc).unwrap());
         bundle
             .add_recipient(
-                &asset_desc,
+                asset_desc_hash,
                 recipient,
                 NoteValue::from_raw(amount),
                 first_issuance,
@@ -160,7 +164,7 @@ fn build_issue_bundle(params: &TestParams, data: &[IssueTestNote]) -> IssueBundl
             .unwrap();
 
         if is_finalized {
-            bundle.finalize_action(&asset_desc).unwrap();
+            bundle.finalize_action(&asset_desc_hash).unwrap();
         }
     }
 
@@ -184,12 +188,24 @@ fn issue_bundle_verify_with_global_state() {
     let asset3_desc = b"Verify with issued assets 3".to_vec();
     let asset4_desc = b"Verify with issued assets 4".to_vec();
 
-    let asset1_base = AssetBase::derive(&ik, &asset1_desc);
-    let asset2_base = AssetBase::derive(&ik, &asset2_desc);
-    let asset3_base = AssetBase::derive(&ik, &asset3_desc);
-    let asset4_base = AssetBase::derive(&ik, &asset4_desc);
+    let asset1_base = AssetBase::derive(
+        &ik,
+        &compute_asset_desc_hash(&NonEmpty::from_slice(&asset1_desc).unwrap()),
+    );
+    let asset2_base = AssetBase::derive(
+        &ik,
+        &compute_asset_desc_hash(&NonEmpty::from_slice(&asset2_desc).unwrap()),
+    );
+    let asset3_base = AssetBase::derive(
+        &ik,
+        &compute_asset_desc_hash(&NonEmpty::from_slice(&asset3_desc).unwrap()),
+    );
+    let asset4_base = AssetBase::derive(
+        &ik,
+        &compute_asset_desc_hash(&NonEmpty::from_slice(&asset4_desc).unwrap()),
+    );
 
-    let mut global_state = HashMap::new();
+    let mut global_state = BTreeMap::new();
 
     // We'll issue and verify a series of bundles. For valid bundles, the global
     // state is updated and must match the expected result. For invalid bundles,
@@ -207,7 +223,7 @@ fn issue_bundle_verify_with_global_state() {
         ],
     );
 
-    let expected_global_state1 = HashMap::from([
+    let expected_global_state1 = BTreeMap::from([
         build_state_entry(&asset1_base, 15, false, get_first_note(&bundle1, 0)),
         build_state_entry(&asset2_base, 10, true, get_first_note(&bundle1, 1)),
         build_state_entry(&asset3_base, 5, false, get_first_note(&bundle1, 2)),
@@ -228,7 +244,7 @@ fn issue_bundle_verify_with_global_state() {
         ],
     );
 
-    let expected_global_state2 = HashMap::from([
+    let expected_global_state2 = BTreeMap::from([
         build_state_entry(&asset1_base, 18, true, get_first_note(&bundle1, 0)),
         build_state_entry(&asset2_base, 10, true, get_first_note(&bundle1, 1)),
         build_state_entry(&asset3_base, 25, false, get_first_note(&bundle1, 2)),
@@ -306,7 +322,7 @@ fn issue_bundle_verify_with_global_state() {
         ],
     );
 
-    let expected_global_state6 = HashMap::from([
+    let expected_global_state6 = BTreeMap::from([
         build_state_entry(&asset1_base, 18, true, get_first_note(&bundle1, 0)),
         build_state_entry(&asset2_base, 10, true, get_first_note(&bundle1, 1)),
         build_state_entry(&asset3_base, 75, true, get_first_note(&bundle1, 2)),

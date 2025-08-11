@@ -1,4 +1,4 @@
-//! 'Add' chip implemetation.
+//! `Add` chip implemetation.
 
 use halo2_proofs::{
     circuit::{AssignedCell, Chip, Layouter},

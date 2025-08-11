@@ -27,21 +27,19 @@ use halo2_proofs::{
     poly::Rotation,
 };
 
-use super::{
-    commit_ivk::CommitIvkChip,
-    derive_nullifier::ZsaNullifierParams,
-    gadget::{add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag},
-    note_commit::NoteCommitChip,
-    value_commit_orchard::ZsaValueCommitParams,
-    OrchardCircuit, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA,
-    NF_OLD, RK_X, RK_Y,
-};
 use crate::{
-    circuit::commit_ivk::gadgets::commit_ivk,
-    circuit::derive_nullifier::gadgets::derive_nullifier,
-    circuit::note_commit::{gadgets::note_commit, ZsaNoteCommitParams},
-    circuit::value_commit_orchard::gadgets::value_commit_orchard,
-    circuit::{Config, Witnesses},
+    circuit::{
+        commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
+        derive_nullifier::{gadgets::derive_nullifier, ZsaNullifierParams},
+        gadget::{
+            add_chip::AddChip, assign_free_advice, assign_is_native_asset, assign_split_flag,
+        },
+        note_commit::{gadgets::note_commit, NoteCommitChip, ZsaNoteCommitParams},
+        unpack,
+        value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
+        AdditionalZsaWitnesses, Config, OrchardCircuit, Witnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y,
+        ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+    },
     constants::OrchardFixedBasesFull,
     constants::{OrchardFixedBases, OrchardHashDomains},
     note::AssetBase,
@@ -335,6 +333,10 @@ impl OrchardCircuit for OrchardZSA {
         // Load the Sinsemilla generator lookup table used by the whole circuit.
         SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
+        // Unpack the ZSA witnesses.
+        let (psi_nf_value, asset_value, split_flag_value) =
+            unpack(circuit.additional_zsa_witnesses.clone());
+
         // Construct the ECC chip.
         let ecc_chip = config.ecc_chip();
 
@@ -344,7 +346,7 @@ impl OrchardCircuit for OrchardZSA {
             let psi_nf = assign_free_advice(
                 layouter.namespace(|| "witness psi_nf"),
                 config.advices[0],
-                circuit.psi_nf,
+                psi_nf_value,
             )?;
 
             // Witness psi_old
@@ -408,7 +410,7 @@ impl OrchardCircuit for OrchardZSA {
             let asset = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness asset"),
-                circuit.asset.map(|asset| asset.cv_base().to_affine()),
+                asset_value.map(|asset| asset.cv_base().to_affine()),
             )?;
 
             (
@@ -420,7 +422,7 @@ impl OrchardCircuit for OrchardZSA {
         let split_flag = assign_split_flag(
             layouter.namespace(|| "witness split_flag"),
             config.advices[0],
-            circuit.split_flag,
+            split_flag_value,
         )?;
 
         // Witness is_native_asset which is equal to
@@ -429,7 +431,7 @@ impl OrchardCircuit for OrchardZSA {
         let is_native_asset = assign_is_native_asset(
             layouter.namespace(|| "witness is_native_asset"),
             config.advices[0],
-            circuit.asset,
+            asset_value,
         )?;
 
         // Merkle path validity check.
@@ -457,7 +459,7 @@ impl OrchardCircuit for OrchardZSA {
                 // v_net is equal to
                 //   (-v_new) if split_flag = true
                 //   v_old - v_new if split_flag = false
-                let v_net = circuit.split_flag.and_then(|split_flag| {
+                let v_net = split_flag_value.and_then(|split_flag| {
                     if split_flag {
                         Value::known(crate::value::NoteValue::zero()) - circuit.v_new
                     } else {
@@ -523,7 +525,7 @@ impl OrchardCircuit for OrchardZSA {
         // [zip226]: https://zips.z.cash/zip-0226
         let nf_old = {
             let nf_old = derive_nullifier(
-                &mut layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_nf, cm_old)"),
+                layouter.namespace(|| "nf_old = DeriveNullifier_nk(rho_old, psi_nf, cm_old)"),
                 config.poseidon_chip(),
                 config.add_chip(),
                 ecc_chip.clone(),
@@ -788,7 +790,7 @@ impl OrchardCircuit for OrchardZSA {
                     config.advices[2],
                     1,
                     || {
-                        circuit.asset.map(|asset| {
+                        asset_value.map(|asset| {
                             let asset_x = *asset.cv_base().to_affine().coordinates().unwrap().x();
                             let native_asset_x = *AssetBase::native()
                                 .cv_base()
@@ -812,7 +814,7 @@ impl OrchardCircuit for OrchardZSA {
                     config.advices[3],
                     1,
                     || {
-                        circuit.asset.map(|asset| {
+                        asset_value.map(|asset| {
                             let asset_y = *asset.cv_base().to_affine().coordinates().unwrap().y();
                             let native_asset_y = *AssetBase::native()
                                 .cv_base()
@@ -849,10 +851,23 @@ impl OrchardCircuit for OrchardZSA {
 
         Ok(())
     }
+
+    fn build_additional_zsa_witnesses(
+        psi_nf: pallas::Base,
+        asset: AssetBase,
+        split_flag: bool,
+    ) -> Value<AdditionalZsaWitnesses> {
+        Value::known(AdditionalZsaWitnesses {
+            psi_nf,
+            asset,
+            split_flag,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
     use core::iter;
 
     use ff::Field;
@@ -860,12 +875,15 @@ mod tests {
     use halo2_proofs::{circuit::Value, dev::MockProver};
     use pasta_curves::pallas;
     use rand::{rngs::OsRng, RngCore};
+    use rand_core::CryptoRngCore;
 
-    use crate::circuit::Witnesses;
     use crate::{
         builder::SpendInfo,
         bundle::Flags,
-        circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K},
+        circuit::{
+            AdditionalZsaWitnesses, Circuit, Instance, Proof, ProvingKey, VerifyingKey, Witnesses,
+            K,
+        },
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
@@ -874,9 +892,7 @@ mod tests {
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
-    type OrchardCircuitZSA = Circuit<OrchardZSA>;
-
-    fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (OrchardCircuitZSA, Instance) {
+    fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit<OrchardZSA>, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
 
         let sender_address = spent_note.recipient();
@@ -901,7 +917,7 @@ mod tests {
         let psi_old = spent_note.rseed().psi(&spent_note.rho());
 
         (
-            OrchardCircuitZSA {
+            Circuit {
                 witnesses: Witnesses {
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),
@@ -912,8 +928,6 @@ mod tests {
                     psi_old: Value::known(psi_old),
                     rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
                     cm_old: Value::known(spent_note.commitment()),
-                    // For non split note, psi_nf is equal to psi_old
-                    psi_nf: Value::known(psi_old),
                     alpha: Value::known(alpha),
                     ak: Value::known(ak),
                     nk: Value::known(nk),
@@ -924,10 +938,14 @@ mod tests {
                     psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
                     rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
                     rcv: Value::known(rcv),
-                    asset: Value::known(spent_note.asset()),
-                    split_flag: Value::known(false),
+
+                    additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
+                        psi_nf: psi_old,
+                        asset: spent_note.asset(),
+                        split_flag: false,
+                    }),
                 },
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             Instance {
                 anchor,
@@ -1105,9 +1123,9 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = OrchardCircuitZSA {
+        let circuit = Circuit::<OrchardZSA> {
             witnesses: Witnesses::default(),
-            phantom: std::marker::PhantomData,
+            phantom: core::marker::PhantomData,
         };
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)
@@ -1117,7 +1135,7 @@ mod tests {
     }
 
     fn check_proof_of_orchard_circuit(
-        circuit: &OrchardCircuitZSA,
+        circuit: &Circuit<OrchardZSA>,
         instance: &Instance,
         should_pass: bool,
     ) {
@@ -1139,16 +1157,16 @@ mod tests {
         }
     }
 
-    fn generate_circuit_instance<R: RngCore>(
+    fn generate_circuit_instance<R: CryptoRngCore>(
         is_native_asset: bool,
         split_flag: bool,
         mut rng: R,
-    ) -> (OrchardCircuitZSA, Instance) {
+    ) -> (Circuit<OrchardZSA>, Instance) {
         // Create asset
         let asset_base = if is_native_asset {
             AssetBase::native()
         } else {
-            AssetBase::random()
+            AssetBase::random(&mut rng)
         };
 
         // Create spent_note
@@ -1223,14 +1241,14 @@ mod tests {
         };
 
         (
-            OrchardCircuitZSA {
-                witnesses: Witnesses::from_action_context_unchecked(
+            Circuit {
+                witnesses: Witnesses::from_action_context_unchecked::<OrchardZSA>(
                     spend_info,
                     output_note,
                     alpha,
                     rcv,
                 ),
-                phantom: std::marker::PhantomData,
+                phantom: core::marker::PhantomData,
             },
             Instance {
                 anchor,
@@ -1245,12 +1263,12 @@ mod tests {
         )
     }
 
-    fn random_note_commitment(mut rng: impl RngCore) -> NoteCommitment {
+    fn random_note_commitment(mut rng: impl CryptoRngCore) -> NoteCommitment {
         NoteCommitment::derive(
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
             NoteValue::from_raw(rng.next_u64()),
-            AssetBase::random(),
+            AssetBase::random(&mut rng),
             pallas::Base::random(&mut rng),
             pallas::Base::random(&mut rng),
             NoteCommitTrapdoor(pallas::Scalar::random(&mut rng)),
@@ -1301,7 +1319,7 @@ mod tests {
 
                 // Set cm_old to be a random NoteCommitment
                 // The proof should fail
-                let circuit_wrong_cm_old = OrchardCircuitZSA {
+                let circuit_wrong_cm_old = Circuit {
                     witnesses: Witnesses {
                         path: circuit.witnesses.path,
                         pos: circuit.witnesses.pos,
@@ -1312,7 +1330,6 @@ mod tests {
                         psi_old: circuit.witnesses.psi_old,
                         rcm_old: circuit.witnesses.rcm_old.clone(),
                         cm_old: Value::known(random_note_commitment(&mut rng)),
-                        psi_nf: circuit.witnesses.psi_nf,
                         alpha: circuit.witnesses.alpha,
                         ak: circuit.witnesses.ak.clone(),
                         nk: circuit.witnesses.nk,
@@ -1323,10 +1340,13 @@ mod tests {
                         psi_new: circuit.witnesses.psi_new,
                         rcm_new: circuit.witnesses.rcm_new.clone(),
                         rcv: circuit.witnesses.rcv,
-                        asset: circuit.witnesses.asset,
-                        split_flag: circuit.witnesses.split_flag,
+
+                        additional_zsa_witnesses: circuit
+                            .witnesses
+                            .additional_zsa_witnesses
+                            .clone(),
                     },
-                    phantom: std::marker::PhantomData,
+                    phantom: core::marker::PhantomData,
                 };
                 check_proof_of_orchard_circuit(&circuit_wrong_cm_old, &instance, false);
 
@@ -1361,7 +1381,7 @@ mod tests {
                 // If split_flag = 0 , set psi_nf to be a random Pallas base element
                 // The proof should fail
                 if !split_flag {
-                    let circuit_wrong_psi_nf = OrchardCircuitZSA {
+                    let circuit_wrong_psi_nf = Circuit {
                         witnesses: Witnesses {
                             path: circuit.witnesses.path,
                             pos: circuit.witnesses.pos,
@@ -1372,7 +1392,6 @@ mod tests {
                             psi_old: circuit.witnesses.psi_old,
                             rcm_old: circuit.witnesses.rcm_old.clone(),
                             cm_old: circuit.witnesses.cm_old.clone(),
-                            psi_nf: Value::known(pallas::Base::random(&mut rng)),
                             alpha: circuit.witnesses.alpha,
                             ak: circuit.witnesses.ak.clone(),
                             nk: circuit.witnesses.nk,
@@ -1383,10 +1402,17 @@ mod tests {
                             psi_new: circuit.witnesses.psi_new,
                             rcm_new: circuit.witnesses.rcm_new.clone(),
                             rcv: circuit.witnesses.rcv,
-                            asset: circuit.witnesses.asset,
-                            split_flag: circuit.witnesses.split_flag,
+
+                            additional_zsa_witnesses: circuit
+                                .witnesses
+                                .additional_zsa_witnesses
+                                .clone()
+                                .map(|zsa_values| AdditionalZsaWitnesses {
+                                    psi_nf: pallas::Base::random(&mut rng),
+                                    ..zsa_values
+                                }),
                         },
-                        phantom: std::marker::PhantomData,
+                        phantom: core::marker::PhantomData,
                     };
                     check_proof_of_orchard_circuit(&circuit_wrong_psi_nf, &instance, false);
                 }

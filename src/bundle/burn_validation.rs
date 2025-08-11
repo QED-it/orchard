@@ -2,7 +2,8 @@
 //!
 //! The module provides a function `validate_bundle_burn` that can be used to validate the burn values for the bundle.
 //!
-use std::{collections::HashSet, fmt};
+use alloc::collections::BTreeSet;
+use core::fmt;
 
 use crate::{note::AssetBase, value::NoteValue};
 
@@ -33,7 +34,7 @@ pub enum BurnError {
 /// * Any asset in the `burn` vector has a zero value (`BurnError::ZeroAmount`).
 /// * Any asset in the `burn` vector is not unique (`BurnError::DuplicateAsset`).
 pub fn validate_bundle_burn(burn: &[(AssetBase, NoteValue)]) -> Result<(), BurnError> {
-    let mut burn_set = HashSet::new();
+    let mut burn_set = BTreeSet::new();
 
     for (asset, value) in burn {
         if asset.is_native().into() {
@@ -64,31 +65,33 @@ impl fmt::Display for BurnError {
 
 #[cfg(test)]
 mod tests {
+    use crate::issuance::compute_asset_desc_hash;
     use crate::value::NoteValue;
+    use nonempty::NonEmpty;
 
     use super::*;
 
-    /// Creates an item of bundle burn list for a given asset description and value.
+    /// Creates an item of bundle burn list for a given asset description hash and value.
     ///
     /// This function is deterministic and guarantees that each call with the same parameters
     /// will return the same result. It achieves determinism by using a static `IssuanceAuthorizingKey`.
     ///
     /// # Arguments
     ///
-    /// * `asset_desc` - The asset description string.
+    /// * `asset_desc_hash` - The asset description hash.
     /// * `value` - The value for the burn.
     ///
     /// # Returns
     ///
     /// A tuple `(AssetBase, Amount)` representing the burn list item.
     ///
-    pub fn get_burn_tuple(asset_desc: &[u8], value: u64) -> (AssetBase, NoteValue) {
+    fn get_burn_tuple(asset_desc_hash: &[u8; 32], value: u64) -> (AssetBase, NoteValue) {
         use crate::keys::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 
         let isk = IssuanceAuthorizingKey::from_bytes([1u8; 32]).unwrap();
 
         (
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc),
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc_hash),
             NoteValue::from_raw(value),
         )
     }
@@ -96,9 +99,18 @@ mod tests {
     #[test]
     fn validate_bundle_burn_success() {
         let bundle_burn = vec![
-            get_burn_tuple(b"Asset 1", 10),
-            get_burn_tuple(b"Asset 2", 20),
-            get_burn_tuple(b"Asset 3", 10),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
+                10,
+            ),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 2").unwrap()),
+                20,
+            ),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 3").unwrap()),
+                10,
+            ),
         ];
 
         let result = validate_bundle_burn(&bundle_burn);
@@ -109,9 +121,18 @@ mod tests {
     #[test]
     fn validate_bundle_burn_duplicate_asset() {
         let bundle_burn = vec![
-            get_burn_tuple(b"Asset 1", 10),
-            get_burn_tuple(b"Asset 1", 20),
-            get_burn_tuple(b"Asset 3", 10),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
+                10,
+            ),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
+                20,
+            ),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 3").unwrap()),
+                10,
+            ),
         ];
 
         let result = validate_bundle_burn(&bundle_burn);
@@ -122,9 +143,15 @@ mod tests {
     #[test]
     fn validate_bundle_burn_native_asset() {
         let bundle_burn = vec![
-            get_burn_tuple(b"Asset 1", 10),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
+                10,
+            ),
             (AssetBase::native(), NoteValue::from_raw(20)),
-            get_burn_tuple(b"Asset 3", 10),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 3").unwrap()),
+                10,
+            ),
         ];
 
         let result = validate_bundle_burn(&bundle_burn);
@@ -135,9 +162,18 @@ mod tests {
     #[test]
     fn validate_bundle_burn_zero_value() {
         let bundle_burn = vec![
-            get_burn_tuple(b"Asset 1", 10),
-            get_burn_tuple(b"Asset 2", 0),
-            get_burn_tuple(b"Asset 3", 10),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
+                10,
+            ),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 2").unwrap()),
+                0,
+            ),
+            get_burn_tuple(
+                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 3").unwrap()),
+                10,
+            ),
         ];
 
         let result = validate_bundle_burn(&bundle_burn);

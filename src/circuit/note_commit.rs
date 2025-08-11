@@ -1,14 +1,23 @@
 //! Note commitment logic for the Orchard circuit.
 
+use core::iter;
+
+use group::ff::PrimeField;
+use halo2_proofs::{
+    circuit::{AssignedCell, Chip, Layouter, Value},
+    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
+    poly::Rotation,
+};
+use pasta_curves::pallas;
+
 use crate::{
     constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P},
     value::NoteValue,
 };
-use group::ff::PrimeField;
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, NonIdentityEccPoint},
-        {NonIdentityPoint, Point, ScalarFixed},
+        NonIdentityPoint, Point, ScalarFixed,
     },
     sinsemilla::{
         chip::{SinsemillaChip, SinsemillaConfig},
@@ -19,13 +28,6 @@ use halo2_gadgets::{
         FieldValue, RangeConstrained,
     },
 };
-use halo2_proofs::{
-    circuit::{AssignedCell, Chip, Layouter, Value},
-    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
-    poly::Rotation,
-};
-use pasta_curves::pallas;
-use std::iter;
 
 type NoteCommitPiece<Lookup> = MessagePiece<
     pallas::Affine,
@@ -69,7 +71,7 @@ struct DecomposeB<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeB<Lookup> {
@@ -117,7 +119,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeB<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -216,7 +218,7 @@ struct DecomposeD<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeD<Lookup> {
@@ -264,7 +266,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeD<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -354,7 +356,7 @@ struct DecomposeE<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeE<Lookup> {
@@ -388,7 +390,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeE<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -474,7 +476,7 @@ struct DecomposeG<Lookup: PallasLookupRangeCheck> {
     q_notecommit_g: Selector,
     col_l: Column<Advice>,
     col_m: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeG<Lookup> {
@@ -515,7 +517,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeG<Lookup> {
             q_notecommit_g,
             col_l,
             col_m,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -600,7 +602,7 @@ struct DecomposeHVanilla<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeHVanilla<Lookup> {
@@ -640,7 +642,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeHVanilla<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -724,7 +726,7 @@ struct DecomposeHZsa<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeHZsa<Lookup> {
@@ -775,7 +777,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeHZsa<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -883,7 +885,7 @@ struct DecomposeJ<Lookup: PallasLookupRangeCheck> {
     col_l: Column<Advice>,
     col_m: Column<Advice>,
     col_r: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> DecomposeJ<Lookup> {
@@ -924,7 +926,7 @@ impl<Lookup: PallasLookupRangeCheck> DecomposeJ<Lookup> {
             col_l,
             col_m,
             col_r,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -996,7 +998,7 @@ struct GdCanonicity<Lookup: PallasLookupRangeCheck> {
     col_m: Column<Advice>,
     col_r: Column<Advice>,
     col_z: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> GdCanonicity<Lookup> {
@@ -1063,7 +1065,7 @@ impl<Lookup: PallasLookupRangeCheck> GdCanonicity<Lookup> {
             col_m,
             col_r,
             col_z,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -1122,7 +1124,7 @@ struct PkdAssetCanonicity<Lookup: PallasLookupRangeCheck> {
     col_m: Column<Advice>,
     col_r: Column<Advice>,
     col_z: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> PkdAssetCanonicity<Lookup> {
@@ -1191,7 +1193,7 @@ impl<Lookup: PallasLookupRangeCheck> PkdAssetCanonicity<Lookup> {
             col_m,
             col_r,
             col_z,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -1324,7 +1326,7 @@ struct RhoCanonicity<Lookup: PallasLookupRangeCheck> {
     col_m: Column<Advice>,
     col_r: Column<Advice>,
     col_z: Column<Advice>,
-    _lookup_marker: std::marker::PhantomData<Lookup>,
+    _lookup_marker: core::marker::PhantomData<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> RhoCanonicity<Lookup> {
@@ -1389,7 +1391,7 @@ impl<Lookup: PallasLookupRangeCheck> RhoCanonicity<Lookup> {
             col_m,
             col_r,
             col_z,
-            _lookup_marker: std::marker::PhantomData,
+            _lookup_marker: core::marker::PhantomData,
         }
     }
 
@@ -1755,7 +1757,7 @@ pub struct NoteCommitConfigForZsaCircuit<Lookup: PallasLookupRangeCheck> {
 
 #[derive(Clone, Debug)]
 pub struct NoteCommitChip<Lookup: PallasLookupRangeCheck> {
-    pub config: NoteCommitConfig<Lookup>,
+    config: NoteCommitConfig<Lookup>,
 }
 
 impl<Lookup: PallasLookupRangeCheck> NoteCommitChip<Lookup> {
@@ -2047,7 +2049,6 @@ pub(in crate::circuit) mod gadgets {
             g_d.y(),
             b_2,
         )?;
-
         // Check decomposition of `y(pk_d)`.
         let d_1 = y_canonicity(
             &lookup_config,
@@ -2253,7 +2254,7 @@ pub(in crate::circuit) mod gadgets {
         )?;
 
         // Finally, assign values to all of the NoteCommit regions.
-        let cfg = note_commit_chip.config.clone();
+        let cfg = &note_commit_chip.config;
 
         let b_1 = cfg
             .b
@@ -2611,9 +2612,10 @@ mod tests {
     use core::iter;
 
     use crate::{
-        circuit::gadget::{assign_free_advice, assign_is_native_asset},
-        circuit::note_commit::gadgets,
-        circuit::note_commit::{NoteCommitChip, NoteCommitConfig},
+        circuit::{
+            gadget::{assign_free_advice, assign_is_native_asset},
+            note_commit::{gadgets, NoteCommitChip, NoteCommitConfig, ZsaNoteCommitParams},
+        },
         constants::{
             fixed_bases::NOTE_COMMITMENT_PERSONALIZATION, OrchardCommitDomains, OrchardFixedBases,
             OrchardHashDomains, L_ORCHARD_BASE, L_VALUE, T_Q,
@@ -2626,7 +2628,8 @@ mod tests {
             chip::{EccChip, EccConfig},
             NonIdentityPoint, ScalarFixed,
         },
-        sinsemilla::{chip::SinsemillaChip, primitives::CommitDomain},
+        sinsemilla::chip::SinsemillaChip,
+        sinsemilla::primitives::CommitDomain,
         utilities::{
             cond_swap::{CondSwapChip, CondSwapConfig},
             lookup_range_check::{
@@ -2645,7 +2648,6 @@ mod tests {
     };
     use pasta_curves::{arithmetic::CurveAffine, pallas, EpAffine};
 
-    use crate::circuit::note_commit::ZsaNoteCommitParams;
     use rand::{rngs::OsRng, RngCore};
 
     #[test]
@@ -2746,10 +2748,10 @@ mod tests {
 
                 // Load the Sinsemilla generator lookup table used by the whole circuit.
                 SinsemillaChip::<
-                    OrchardHashDomains,
-                    OrchardCommitDomains,
-                    OrchardFixedBases,
-                >::load(note_commit_config.sinsemilla_config.clone(), &mut layouter)?;
+                OrchardHashDomains,
+                OrchardCommitDomains,
+                OrchardFixedBases,
+            >::load(note_commit_config.sinsemilla_config.clone(), &mut layouter)?;
 
                 // Construct a Sinsemilla chip
                 let sinsemilla_chip =
@@ -3210,7 +3212,7 @@ mod tests {
 
         let two_pow_254 = pallas::Base::from_u128(1 << 127).square();
         let mut rng = OsRng;
-        let random_asset = AssetBase::random();
+        let random_asset = AssetBase::random(&mut rng);
 
         // Test different values of `ak`, `nk`
         let mut circuits = vec![];

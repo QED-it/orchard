@@ -1,34 +1,43 @@
 //! Structs related to bundles of Orchard actions.
 
-mod batch;
 pub mod burn_validation;
+use alloc::vec::Vec;
+
 pub mod commitments;
 
+#[cfg(feature = "circuit")]
+mod batch;
+#[cfg(feature = "circuit")]
 pub use batch::BatchValidator;
 
 use core::fmt;
 
 use blake2b_simd::Hash as Blake2bHash;
-use memuse::DynamicUsage;
 use nonempty::NonEmpty;
-use zcash_note_encryption_zsa::{try_note_decryption, try_output_recovery_with_ovk};
+use zcash_note_encryption::{try_note_decryption, try_output_recovery_with_ovk};
+
+#[cfg(feature = "std")]
+use memuse::DynamicUsage;
 
 use crate::{
     action::Action,
     address::Address,
-    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data, hash_action_group},
-    circuit::{Instance, Proof, VerifyingKey},
-    domain::{OrchardDomain, OrchardDomainCommon},
+    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    orchard_flavor::OrchardFlavor,
     primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::{OrchardDomain, OrchardPrimitives},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
+    Proof,
 };
 use crate::orchard_flavor::OrchardZSA;
 
-impl<A, D: OrchardDomainCommon> Action<A, D> {
+#[cfg(feature = "circuit")]
+use crate::circuit::{Instance, VerifyingKey};
+
+#[cfg(feature = "circuit")]
+impl<A, P: OrchardPrimitives> Action<A, P> {
     /// Prepares the public instance for this action, for creating and verifying the
     /// bundle proof.
     pub fn to_instance(&self, flags: Flags, anchor: Anchor) -> Instance {
@@ -134,7 +143,7 @@ impl Flags {
         swaps_enabled: false,
     };
 
-    /// The flag set with outputs disabled.
+    /// The flag set with outputs disabled and ZSA disabled.
     pub const OUTPUTS_DISABLED: Flags = Flags {
         spends_enabled: true,
         outputs_enabled: false,
@@ -221,9 +230,9 @@ pub trait Authorization: fmt::Debug {
 
 /// A bundle of actions to be applied to the ledger.
 #[derive(Clone)]
-pub struct Bundle<A: Authorization, V, D: OrchardDomainCommon> {
+pub struct Bundle<A: Authorization, V, P: OrchardPrimitives> {
     /// The list of actions that make up this bundle.
-    actions: NonEmpty<Action<A::SpendAuth, D>>,
+    actions: NonEmpty<Action<A::SpendAuth, P>>,
     /// Orchard-specific transaction-level flags for this bundle.
     flags: Flags,
     /// The net value moved out of the Orchard shielded pool.
@@ -243,11 +252,11 @@ pub struct Bundle<A: Authorization, V, D: OrchardDomainCommon> {
     authorization: A,
 }
 
-impl<A: Authorization, V: fmt::Debug, D: OrchardDomainCommon> fmt::Debug for Bundle<A, V, D> {
+impl<A: Authorization, V: fmt::Debug, P: OrchardPrimitives> fmt::Debug for Bundle<A, V, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         /// Helper struct for debug-printing actions without exposing `NonEmpty`.
-        struct Actions<'a, A, D: OrchardDomainCommon>(&'a NonEmpty<Action<A, D>>);
-        impl<'a, A: fmt::Debug, D: OrchardDomainCommon> fmt::Debug for Actions<'a, A, D> {
+        struct Actions<'a, A, P: OrchardPrimitives>(&'a NonEmpty<Action<A, P>>);
+        impl<A: fmt::Debug, P: OrchardPrimitives> fmt::Debug for Actions<'_, A, P> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 f.debug_list().entries(self.0.iter()).finish()
             }
@@ -263,10 +272,10 @@ impl<A: Authorization, V: fmt::Debug, D: OrchardDomainCommon> fmt::Debug for Bun
     }
 }
 
-impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
+impl<A: Authorization, V, P: OrchardPrimitives> Bundle<A, V, P> {
     /// Constructs a `Bundle` from its constituent parts.
     pub fn from_parts(
-        actions: NonEmpty<Action<A::SpendAuth, D>>,
+        actions: NonEmpty<Action<A::SpendAuth, P>>,
         flags: Flags,
         value_balance: V,
         burn: Vec<(AssetBase, NoteValue)>,
@@ -286,7 +295,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
     }
 
     /// Returns the list of actions that make up this bundle.
-    pub fn actions(&self) -> &NonEmpty<Action<A::SpendAuth, D>> {
+    pub fn actions(&self) -> &NonEmpty<Action<A::SpendAuth, P>> {
         &self.actions
     }
 
@@ -325,11 +334,11 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
     }
 
     /// Construct a new bundle by applying a transformation that might fail
-    /// to the value balance and balances of assets to burn.
-    pub fn try_map_value_balance<V0, E, F: Fn(V) -> Result<V0, E>>(
+    /// to the value balance.
+    pub fn try_map_value_balance<V0, E, F: FnOnce(V) -> Result<V0, E>>(
         self,
         f: F,
-    ) -> Result<Bundle<A, V0, D>, E> {
+    ) -> Result<Bundle<A, V0, P>, E> {
         Ok(Bundle {
             actions: self.actions,
             flags: self.flags,
@@ -347,7 +356,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
         context: &mut R,
         mut spend_auth: impl FnMut(&mut R, &A, A::SpendAuth) -> U::SpendAuth,
         step: impl FnOnce(&mut R, A) -> U,
-    ) -> Bundle<U, V, D> {
+    ) -> Bundle<U, V, P> {
         let authorization = self.authorization;
         Bundle {
             actions: self
@@ -368,7 +377,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
         context: &mut R,
         mut spend_auth: impl FnMut(&mut R, &A, A::SpendAuth) -> Result<U::SpendAuth, E>,
         step: impl FnOnce(&mut R, A) -> Result<U, E>,
-    ) -> Result<Bundle<U, V, D>, E> {
+    ) -> Result<Bundle<U, V, P>, E> {
         let authorization = self.authorization;
         let new_actions = self
             .actions
@@ -387,6 +396,7 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
         })
     }
 
+    #[cfg(feature = "circuit")]
     pub(crate) fn to_instances(&self) -> Vec<Instance> {
         self.actions
             .iter()
@@ -482,29 +492,36 @@ impl<A: Authorization, V, D: OrchardDomainCommon> Bundle<A, V, D> {
     }
 }
 
-pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, FL: 'a + OrchardFlavor>(
-    actions: impl IntoIterator<Item = &'a Action<A, FL>>,
+pub(crate) fn derive_bvk<A, V: Clone + Into<i64>, P: OrchardPrimitives>(
+    actions: &NonEmpty<Action<A, P>>,
     value_balance: V,
-    burn: impl Iterator<Item = (AssetBase, NoteValue)>,
+    burn: &[(AssetBase, NoteValue)],
 ) -> redpallas::VerificationKey<Binding> {
-    (actions
-        .into_iter()
-        .map(|a| a.cv_net())
-        .sum::<ValueCommitment>()
+    let cv_nets: Vec<_> = actions.into_iter().map(|a| a.cv_net().clone()).collect();
+    derive_bvk_raw(&cv_nets, ValueSum::from_raw(value_balance.into()), burn)
+}
+
+pub(crate) fn derive_bvk_raw(
+    cv_nets: &[ValueCommitment],
+    value_balance: ValueSum,
+    burn: &[(AssetBase, NoteValue)],
+) -> redpallas::VerificationKey<Binding> {
+    (cv_nets.iter().sum::<ValueCommitment>()
         - ValueCommitment::derive(
-            ValueSum::from_raw(value_balance.into()),
+            value_balance,
             ValueCommitTrapdoor::zero(),
             AssetBase::native(),
         )
         - burn
+            .iter()
             .map(|(asset, value)| {
-                ValueCommitment::derive(ValueSum::from(value), ValueCommitTrapdoor::zero(), asset)
+                ValueCommitment::derive(ValueSum::from(*value), ValueCommitTrapdoor::zero(), *asset)
             })
             .sum::<ValueCommitment>())
     .into_bvk()
 }
 
-impl<A: Authorization, V: Copy + Into<i64>, FL: OrchardFlavor> Bundle<A, V, FL> {
+impl<A: Authorization, V: Copy + Into<i64>, P: OrchardPrimitives> Bundle<A, V, P> {
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
     pub fn commitment(&self) -> BundleCommitment {
@@ -516,8 +533,16 @@ impl<A: Authorization, V: Copy + Into<i64>, FL: OrchardFlavor> Bundle<A, V, FL> 
     /// This can be used to validate the [`Authorized::binding_signature`] returned from
     /// [`Bundle::authorization`].
     pub fn binding_validating_key(&self) -> redpallas::VerificationKey<Binding> {
-        derive_bvk(&self.actions, self.value_balance, self.burn.iter().cloned())
+        derive_bvk(&self.actions, self.value_balance, &self.burn)
     }
+}
+
+/// Marker type for a bundle that contains no authorizing data.
+#[derive(Clone, Debug)]
+pub struct EffectsOnly;
+
+impl Authorization for EffectsOnly {
+    type SpendAuth = ();
 }
 
 impl<A: Authorization, V: Copy + Into<i64>> Bundle<A, V, OrchardZSA> {
@@ -559,7 +584,7 @@ impl Authorized {
     }
 }
 
-impl<V, D: OrchardDomainCommon> Bundle<Authorized, V, D> {
+impl<V, P: OrchardPrimitives> Bundle<Authorized, V, P> {
     /// Computes a commitment to the authorizing data within for this bundle.
     ///
     /// This together with `Bundle::commitment` bind the entire bundle.
@@ -568,6 +593,7 @@ impl<V, D: OrchardDomainCommon> Bundle<Authorized, V, D> {
     }
 
     /// Verifies the proof for this bundle.
+    #[cfg(feature = "circuit")]
     pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
         self.authorization()
             .proof()
@@ -576,16 +602,17 @@ impl<V, D: OrchardDomainCommon> Bundle<Authorized, V, D> {
     }
 }
 
-impl<V: DynamicUsage, D: OrchardDomainCommon> DynamicUsage for Bundle<Authorized, V, D> {
+#[cfg(feature = "std")]
+impl<V: DynamicUsage, P: OrchardPrimitives> DynamicUsage for Bundle<Authorized, V, P> {
     fn dynamic_usage(&self) -> usize {
-        self.actions.dynamic_usage()
+        self.actions.tail.dynamic_usage()
             + self.value_balance.dynamic_usage()
             + self.authorization.proof.dynamic_usage()
     }
 
     fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
         let bounds = (
-            self.actions.dynamic_usage_bounds(),
+            self.actions.tail.dynamic_usage_bounds(),
             self.value_balance.dynamic_usage_bounds(),
             self.authorization.proof.dynamic_usage_bounds(),
         );
@@ -623,6 +650,8 @@ pub struct BundleAuthorizingCommitment(pub Blake2bHash);
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
+    use alloc::vec::Vec;
+
     use group::ff::FromUniformBytes;
     use nonempty::NonEmpty;
     use pasta_curves::pallas;
@@ -633,46 +662,35 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::{
-        circuit::Proof,
         primitives::redpallas::{self, testing::arb_binding_signing_key},
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
-        Anchor,
+        Anchor, Proof,
     };
 
-    use super::{Action, Authorization, Authorized, Bundle, Flags};
+    use super::{Action, Authorized, Bundle, Flags};
 
     pub use crate::action::testing::ActionArb;
-    use crate::domain::OrchardDomainCommon;
     use crate::note::asset_base::testing::arb_zsa_asset_base;
     use crate::note::AssetBase;
+    use crate::primitives::OrchardPrimitives;
     use crate::value::testing::arb_note_value;
 
-    /// Marker for an unauthorized bundle with no proofs or signatures.
-    #[derive(Debug)]
-    pub struct Unauthorized;
-
-    impl Authorization for Unauthorized {
-        type SpendAuth = ();
-
-        /// Return the proof component of the authorizing data.
-        fn proof(&self) -> Option<&Proof> {
-            None
-        }
-    }
+    /// Marker type for a bundle that contains no authorizing data.
+    pub type Unauthorized = super::EffectsOnly;
 
     /// `BundleArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol variations
     /// in property-based testing, addressing proptest crate limitations.
     #[derive(Debug)]
-    pub struct BundleArb<D: OrchardDomainCommon> {
-        phantom: std::marker::PhantomData<D>,
+    pub struct BundleArb<P: OrchardPrimitives> {
+        phantom: std::marker::PhantomData<P>,
     }
 
-    impl<D: OrchardDomainCommon + Default> BundleArb<D> {
+    impl<P: OrchardPrimitives + Default> BundleArb<P> {
         /// Generate an unauthorized action having spend and output values less than MAX_NOTE_VALUE / n_actions.
         pub fn arb_unauthorized_action_n(
             n_actions: usize,
             flags: Flags,
-        ) -> impl Strategy<Value = (ValueSum, Action<(), D>)> {
+        ) -> impl Strategy<Value = (ValueSum, Action<(), P>)> {
             let spend_value_gen = if flags.spends_enabled {
                 Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
             } else {
@@ -697,7 +715,7 @@ pub mod testing {
         pub fn arb_action_n(
             n_actions: usize,
             flags: Flags,
-        ) -> impl Strategy<Value = (ValueSum, Action<redpallas::Signature<SpendAuth>, D>)> {
+        ) -> impl Strategy<Value = (ValueSum, Action<redpallas::Signature<SpendAuth>, P>)> {
             let spend_value_gen = if flags.spends_enabled {
                 Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
             } else {
@@ -758,7 +776,7 @@ pub mod testing {
                 anchor in Self::arb_base().prop_map(Anchor::from),
                 flags in Just(flags),
                 burn in vec(Self::arb_asset_to_burn(), 1usize..10)
-            ) -> Bundle<Unauthorized, ValueSum, D> {
+            ) -> Bundle<Unauthorized, ValueSum, P> {
                 let (balances, actions): (Vec<ValueSum>, Vec<Action<_, _>>) = acts.into_iter().unzip();
 
                 Bundle::from_parts(
@@ -767,8 +785,7 @@ pub mod testing {
                     balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
                     burn,
                     anchor,
-                    0,
-                    Unauthorized,
+                    super::EffectsOnly,
                 )
             }
         }
@@ -790,7 +807,7 @@ pub mod testing {
                 fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
                 flags in Just(flags),
                 burn in vec(Self::arb_asset_to_burn(), 1usize..10)
-            ) -> Bundle<Authorized, ValueSum, D> {
+            ) -> Bundle<Authorized, ValueSum, P> {
                 let (balances, actions): (Vec<ValueSum>, Vec<Action<_, _>, >) = acts.into_iter().unzip();
                 let rng = StdRng::from_seed(rng_seed);
 

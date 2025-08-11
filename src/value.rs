@@ -6,8 +6,8 @@
 //! - [`ValueSum`], the sum of note values within an Orchard [`Action`] or [`Bundle`].
 //!   It is a signed 64-bit integer (with range [`VALUE_SUM_RANGE`]).
 //! - `valueBalanceOrchard`, which is a signed 63-bit integer. This is represented
-//!    by a user-defined type parameter on [`Bundle`], returned by
-//!    [`Bundle::value_balance`] and [`Builder::value_balance`].
+//!   by a user-defined type parameter on [`Bundle`], returned by
+//!   [`Bundle::value_balance`] and [`Builder::value_balance`].
 //!
 //! If your specific instantiation of the Orchard protocol requires a smaller bound on
 //! valid note values (for example, Zcash's `MAX_MONEY` fits into a 51-bit integer), you
@@ -40,11 +40,14 @@
 use core::fmt::{self, Debug};
 use core::iter::Sum;
 use core::ops::{Add, RangeInclusive, Sub};
+
+#[cfg(feature = "std")]
 use std::ops::Neg;
 
 use bitvec::{array::BitArray, order::Lsb0};
 use ff::{Field, PrimeField};
 use group::{Curve, Group, GroupEncoding};
+#[cfg(feature = "circuit")]
 use halo2_proofs::plonk::Assigned;
 use pasta_curves::{
     arithmetic::{CurveAffine, CurveExt},
@@ -54,12 +57,11 @@ use rand::RngCore;
 use subtle::CtOption;
 
 use crate::{
+    builder::BuildError,
     constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_R_BYTES},
+    note::AssetBase,
     primitives::redpallas::{self, Binding},
 };
-
-use crate::builder::BuildError;
-use crate::note::AssetBase;
 
 /// Maximum note value.
 pub const MAX_NOTE_VALUE: u64 = u64::MAX;
@@ -82,6 +84,7 @@ impl fmt::Display for OverflowError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for OverflowError {}
 
 /// The non-negative value of an individual Orchard note.
@@ -120,13 +123,9 @@ impl NoteValue {
     pub(crate) fn to_le_bits(self) -> BitArray<[u8; 8], Lsb0> {
         BitArray::<_, Lsb0>::new(self.0.to_le_bytes())
     }
-
-    /// The minimum, greater than zero, note value that can not be split further.
-    pub fn unsplittable() -> Self {
-        NoteValue(1u64)
-    }
 }
 
+#[cfg(feature = "circuit")]
 impl From<&NoteValue> for Assigned<pallas::Base> {
     fn from(v: &NoteValue) -> Self {
         pallas::Base::from(v.inner()).into()
@@ -161,8 +160,12 @@ impl Add for NoteValue {
     }
 }
 
-pub(crate) enum Sign {
+/// The sign of a [`ValueSum`].
+#[derive(Debug)]
+pub enum Sign {
+    /// A non-negative [`ValueSum`].
     Positive,
+    /// A negative [`ValueSum`].
     Negative,
 }
 
@@ -186,8 +189,23 @@ impl ValueSum {
         ValueSum(value as i128)
     }
 
+    /// Constructs a value sum from its magnitude and sign.
+    pub(crate) fn from_magnitude_sign(magnitude: u64, sign: Sign) -> Self {
+        Self(match sign {
+            Sign::Positive => magnitude as i128,
+            Sign::Negative => -(magnitude as i128),
+        })
+    }
+
     /// Splits this value sum into its magnitude and sign.
-    pub(crate) fn magnitude_sign(&self) -> (u64, Sign) {
+    ///
+    /// This is a low-level API, requiring a detailed understanding of the
+    /// [use of value balancing][orchardbalance] in the Zcash protocol to use correctly
+    /// and securely. It is intended to be used in combination with the [`crate::pczt`]
+    /// module.
+    ///
+    /// [orchardbalance]: https://zips.z.cash/protocol/protocol.pdf#orchardbalance
+    pub fn magnitude_sign(&self) -> (u64, Sign) {
         let (magnitude, sign) = if self.0.is_negative() {
             (-self.0, Sign::Negative)
         } else {
@@ -219,6 +237,7 @@ impl<T: Into<i128>> Add<T> for ValueSum {
     }
 }
 
+#[cfg(feature = "std")]
 impl Neg for ValueSum {
     type Output = Option<ValueSum>;
 
@@ -286,6 +305,18 @@ impl ValueCommitTrapdoor {
     /// [orchardbalance]: https://zips.z.cash/protocol/protocol.pdf#orchardbalance
     pub fn from_bytes(bytes: [u8; 32]) -> CtOption<Self> {
         pallas::Scalar::from_repr(bytes).map(ValueCommitTrapdoor)
+    }
+
+    /// Returns the byte encoding of a `ValueCommitTrapdoor`.
+    ///
+    /// This is a low-level API, requiring a detailed understanding of the
+    /// [use of value commitment trapdoors][orchardbalance] in the Zcash protocol
+    /// to use correctly and securely. It is intended to be used in combination
+    /// with the [`crate::pczt`] module.
+    ///
+    /// [orchardbalance]: https://zips.z.cash/protocol/protocol.pdf#orchardbalance
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0.to_repr()
     }
 }
 
@@ -490,16 +521,16 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
-    use crate::note::asset_base::testing::{arb_asset_base, native_asset_base};
-
-    use crate::note::AssetBase;
+    use alloc::vec::Vec;
     use proptest::prelude::*;
 
     use super::{
         testing::{arb_note_value_bounded, arb_trapdoor, arb_value_sum_bounded},
         OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum, MAX_NOTE_VALUE,
     };
-    use crate::primitives::redpallas;
+    use crate::{
+        note::asset_base::testing::arb_asset_base, note::AssetBase, primitives::redpallas,
+    };
 
     fn check_binding_signature(
         native_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
@@ -560,7 +591,7 @@ mod tests {
         fn bsk_consistent_with_bvk_native_with_zsa_transfer_and_burning(
             native_values in (1usize..10).prop_flat_map(|n_values|
                 arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), native_asset_base()), n_values)
+                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), Just(AssetBase::native())), n_values)
                 )
             ),
             (asset_values, neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|

@@ -2,15 +2,15 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use orchard::{
     builder::{Builder, BundleType},
     circuit::ProvingKey,
-    domain::{CompactAction, OrchardDomain},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
     orchard_flavor::{OrchardVanilla, OrchardZSA},
+    primitives::{CompactAction, OrchardDomain},
     value::NoteValue,
     Anchor, Bundle,
 };
 use rand::rngs::OsRng;
-use zcash_note_encryption_zsa::{batch, try_compact_note_decryption, try_note_decryption};
+use zcash_note_encryption::{batch, try_compact_note_decryption, try_note_decryption};
 
 #[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
@@ -62,7 +62,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 recipient,
                 NoteValue::from_raw(10),
                 AssetBase::native(),
-                None,
+                [0; 512],
             )
             .unwrap();
         builder
@@ -71,7 +71,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 recipient,
                 NoteValue::from_raw(10),
                 AssetBase::native(),
-                None,
+                [0; 512],
             )
             .unwrap();
         let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().0;

@@ -4,10 +4,10 @@ use pasta_curves::pallas;
 
 use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains};
 
-use halo2_gadgets::utilities::lookup_range_check::PallasLookupRangeCheck;
 use halo2_gadgets::{
     ecc::{chip::EccChip, NonIdentityPoint},
     sinsemilla::chip::SinsemillaChip,
+    utilities::lookup_range_check::PallasLookupRangeCheck,
 };
 
 pub struct ZsaValueCommitParams<Lookup: PallasLookupRangeCheck> {
@@ -354,7 +354,7 @@ mod tests {
         let mut circuits = vec![];
         let mut instances = vec![];
         let native_asset = AssetBase::native();
-        let random_asset = AssetBase::random();
+        let random_asset = AssetBase::random(&mut rng);
         for split_flag in [false, true] {
             for asset in [native_asset, random_asset] {
                 let v_old = NoteValue::from_raw(rng.next_u64());

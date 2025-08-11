@@ -7,9 +7,60 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+## [0.11.0] - 2025-02-20
+
+### Added
+- `orchard::pczt::Zip32Derivation::extract_account_index`
+
+### Changed
+- MSRV is now 1.70
+- Migrated to `nonempty 0.11`, `incrementalmerkletree 0.8`, `shardtree 0.6`, 
+  `zcash_spec 0.2`, `zip32 0.2`
+- `orchard::builder::Builder::add_output` now takes a `[u8; 512]` for its
+  `memo` argument instead of an optional value.
+
+## [0.10.1] - 2024-12-16
+
+### Added
+- Support for Partially-Created Zcash Transactions:
+  - `orchard::builder::Builder::build_for_pczt`
+  - `orchard::note_encryption`:
+    - `OrchardDomain::for_pczt_action`
+    - `impl ShieldedOutput<OrchardDomain, ENC_CIPHERTEXT_SIZE> for orchard::pczt::Action`
+  - `orchard::pczt` module.
+- `orchard::bundle::EffectsOnly`
+- `orchard::tree::MerklePath::{position, auth_path}`
+- `orchard::value`:
+  - `Sign`
+  - `ValueSum::magnitude_sign`
+  - `ValueCommitTrapdoor::to_bytes`
+- `impl Clone for orchard::tree::MerklePath`
+
+## [0.10.0] - 2024-10-02
+
+### Changed
+- Migrated to `incrementalmerkletree 0.7`.
+
+## [0.9.1] - 2024-08-13
+
+### Changed
+- Migrated to `visibility 0.1.1`.
+
+## [0.9.0] - 2024-08-12
+
+### Added
+- `orchard::keys::SpendValidatingKey::{from_bytes, to_bytes}` behind the
+  `unstable-frost` feature flag. These are temporary APIs exposed for development
+  purposes, and will be replaced by type-safe FROST APIs once ZIP 312 key
+  generation is specified (https://github.com/zcash/zips/pull/883).
+
+### Changed
+- Migrated to `incrementalmerkletree 0.6`.
+
 ## [0.8.0] - 2024-03-25
 
 ### Added
+- `orchard::keys::IncomingViewingKey::prepare`
 - `orchard::note::Rho`
 - `orchard::action::Action::rho`
 - `orchard::note_encryption::CompactAction::rho`

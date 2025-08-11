@@ -1,4 +1,5 @@
 //! Data structures used for note construction.
+use alloc::vec::Vec;
 use blake2b_simd::Params;
 use core::fmt;
 use memuse::DynamicUsage;
@@ -10,8 +11,8 @@ use rand::RngCore;
 use subtle::{Choice, ConditionallySelectable, CtOption};
 
 use crate::{
-    domain::OrchardDomainCommon,
     keys::{EphemeralSecretKey, FullViewingKey, Scope, SpendingKey},
+    primitives::OrchardPrimitives,
     spec::{to_base, to_scalar, NonZeroPallasScalar, PrfExpand},
     value::NoteValue,
     Address,
@@ -40,7 +41,7 @@ impl Rho {
     /// value otherwise.
     ///
     /// [`Action::rho`]: crate::action::Action::rho
-    /// [`CompactAction::rho`]: crate::domain::CompactAction::rho
+    /// [`CompactAction::rho`]: crate::primitives::CompactAction::rho
     pub fn from_bytes(bytes: &[u8; 32]) -> CtOption<Self> {
         pallas::Base::from_repr(*bytes).map(Rho)
     }
@@ -154,7 +155,7 @@ pub struct Note {
     recipient: Address,
     /// The value of this note.
     value: NoteValue,
-    /// The asset id of this note.
+    /// The asset of this note.
     asset: AssetBase,
     /// A unique creation ID for this note.
     ///
@@ -275,7 +276,7 @@ impl Note {
         self.value
     }
 
-    /// Returns the note type of this note.
+    /// Returns the asset of this note.
     pub fn asset(&self) -> AssetBase {
         self.asset
     }
@@ -396,17 +397,17 @@ pub(crate) fn rho_for_issuance_note(
 
 /// An encrypted note.
 #[derive(Clone)]
-pub struct TransmittedNoteCiphertext<D: OrchardDomainCommon> {
+pub struct TransmittedNoteCiphertext<P: OrchardPrimitives> {
     /// The serialization of the ephemeral public key
     pub epk_bytes: [u8; 32],
     /// The encrypted note ciphertext
-    pub enc_ciphertext: D::NoteCiphertextBytes,
+    pub enc_ciphertext: P::NoteCiphertextBytes,
     /// An encrypted value that allows the holder of the outgoing cipher
     /// key for the note to recover the note plaintext.
     pub out_ciphertext: [u8; 80],
 }
 
-impl<D: OrchardDomainCommon> fmt::Debug for TransmittedNoteCiphertext<D> {
+impl<P: OrchardPrimitives> fmt::Debug for TransmittedNoteCiphertext<P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TransmittedNoteCiphertext")
             .field("epk_bytes", &self.epk_bytes)
@@ -422,11 +423,10 @@ impl<D: OrchardDomainCommon> fmt::Debug for TransmittedNoteCiphertext<D> {
 pub mod testing {
     use proptest::prelude::*;
 
-    use crate::note::asset_base::testing::arb_asset_base;
-    use crate::note::AssetBase;
-    use crate::value::testing::arb_note_value;
     use crate::{
-        address::testing::arb_address, note::nullifier::testing::arb_nullifier, value::NoteValue,
+        address::testing::arb_address,
+        note::{asset_base::testing::arb_asset_base, nullifier::testing::arb_nullifier, AssetBase},
+        value::{testing::arb_note_value, NoteValue},
     };
 
     use subtle::CtOption;
