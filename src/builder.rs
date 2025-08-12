@@ -11,21 +11,10 @@ use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
 use zcash_note_encryption::NoteEncryption;
 
-use crate::{
-    address::Address,
-    builder::BuildError::{BurnNative, BurnZero},
-    bundle::{Authorization, Authorized, Bundle, Flags},
-    keys::{
-        FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
-        SpendingKey,
-    },
-    note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
-    primitives::redpallas::{self, Binding, SpendAuth},
-    primitives::{OrchardDomain, OrchardPrimitives},
-    tree::{Anchor, MerklePath},
-    value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
-    Proof,
-};
+use crate::{address::Address, builder::BuildError::{BurnNative, BurnZero}, bundle::{Authorization, Authorized, Bundle, Flags}, keys::{
+    FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
+    SpendingKey,
+}, note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext}, primitives::redpallas::{self, Binding, SpendAuth}, primitives::{OrchardDomain, OrchardPrimitives}, tree::{Anchor, MerklePath}, value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum}, Proof, ReferenceKeys};
 
 #[cfg(feature = "circuit")]
 use {
@@ -37,6 +26,9 @@ use {
     },
     nonempty::NonEmpty,
 };
+use crate::orchard_flavor::OrchardZSA;
+use crate::primitives::redpallas::SigningKey;
+use crate::swap_bundle::ActionGroupAuthorized;
 
 const MIN_ACTIONS: usize = 2;
 
@@ -636,7 +628,7 @@ pub struct Builder {
     burn: BTreeMap<AssetBase, NoteValue>,
     bundle_type: BundleType,
     anchor: Anchor,
-    reference_notes: HashMap<AssetBase, SpendInfo>,
+    reference_notes: BTreeMap<AssetBase, SpendInfo>,
 }
 
 impl Builder {
@@ -648,7 +640,7 @@ impl Builder {
             burn: BTreeMap::new(),
             bundle_type,
             anchor,
-            reference_notes: HashMap::new(),
+            reference_notes: BTreeMap::new(),
         }
     }
 
@@ -809,8 +801,8 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
-            0,
             self.burn,
+            0,
             false,
             None,
         )
@@ -831,8 +823,8 @@ impl Builder {
             self.bundle_type,
             self.spends,
             self.outputs,
-            expiry_height,
             self.burn,
+            expiry_height,
             true,
             Some(self.reference_notes),
         )
@@ -851,6 +843,8 @@ impl Builder {
             self.spends,
             self.outputs,
             self.burn,
+            false,
+            Some(self.reference_notes),
             |pre_actions, flags, value_sum, burn_vec, bundle_meta, mut rng| {
                 // Create the actions.
                 let actions = pre_actions
@@ -983,8 +977,9 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
     burn: BTreeMap<AssetBase, NoteValue>,
+    expiry_height: u32,
     is_action_group: bool,
-    reference_notes: Option<HashMap<AssetBase, SpendInfo>>,
+    reference_notes: Option<BTreeMap<AssetBase, SpendInfo>>,
 ) -> Result<UnauthorizedBundleWithMetadata<V, FL>, BuildError> {
     build_bundle(
         rng,
@@ -993,6 +988,8 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
         spends,
         outputs,
         burn,
+        is_action_group,
+        reference_notes,
         |pre_actions, flags, value_balance, burn_vec, bundle_meta, mut rng| {
             let native_value_balance: i64 =
                 i64::try_from(value_balance).map_err(BuildError::ValueSum)?;
@@ -1015,8 +1012,10 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
             let actions = NonEmpty::from_vec(actions).unwrap();
 
             // Verify that bsk and bvk are consistent.
-            let bvk = derive_bvk(&actions, native_value_balance, &burn_vec);
-            assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+            if !is_action_group {
+                let bvk = derive_bvk(&actions, native_value_balance, &burn_vec);
+                assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+            }
 
             Ok((
                 Bundle::from_parts(
@@ -1025,6 +1024,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
                     result_value_balance,
                     burn_vec,
                     anchor,
+                    expiry_height,
                     InProgress {
                         proof: Unproven { witnesses },
                         sigs: Unauthorized { bsk },
@@ -1043,6 +1043,8 @@ fn build_bundle<B, R: RngCore>(
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
     burn: BTreeMap<AssetBase, NoteValue>,
+    is_action_group: bool,
+    reference_notes: Option<BTreeMap<AssetBase, SpendInfo>>,
     finisher: impl FnOnce(
         Vec<ActionInfo>,             // pre-actions
         Flags,                       // flags
@@ -1167,9 +1169,9 @@ fn build_bundle<B, R: RngCore>(
         .into_iter()
         .map(|(asset, value)| {
             Ok((
-                *asset,
+                asset,
                 NoteValue::from_raw(
-                    u64::try_from(i128::from(*value))
+                    u64::try_from(i128::from(value))
                         .map_err(|_| BuildError::ValueSum(OverflowError))?,
                 ),
             ))
@@ -1384,7 +1386,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
     }
 }
 
-impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, D> {
+impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, P> {
     /// Loads the action_group_digest into this action group, preparing it for signing.
     ///
     /// This API ensures that all signatures are created over the same action_group_digest.
@@ -1392,7 +1394,7 @@ impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, D> {
         self,
         mut rng: R,
         action_group_digest: [u8; 32],
-    ) -> Bundle<InProgress<P, ActionGroupPartiallyAuthorized>, V, D> {
+    ) -> Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, P> {
         let reference_ask = SpendAuthorizingKey::from(&ReferenceKeys::sk());
         let reference_ak: SpendValidatingKey = (&reference_ask).into();
         self.map_authorization(
@@ -1452,7 +1454,7 @@ impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, P> {
         mut rng: R,
         action_group_digest: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
-    ) -> Result<(Bundle<ActionGroupAuthorized, V, D>, SigningKey<Binding>), BuildError> {
+    ) -> Result<(Bundle<ActionGroupAuthorized, V, P>, SigningKey<Binding>), BuildError> {
         signing_keys
             .iter()
             .fold(
@@ -1463,9 +1465,7 @@ impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, P> {
     }
 }
 
-impl<P: fmt::Debug, V, D: OrchardDomainCommon>
-    Bundle<InProgress<P, ActionGroupPartiallyAuthorized>, V, D>
-{
+impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, P> {
     /// Signs this action group with the given [`SpendAuthorizingKey`].
     ///
     /// This will apply signatures for all notes controlled by this spending key.
@@ -1570,14 +1570,14 @@ impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, PartiallyAuthorized>, V, 
     }
 }
 
-impl<V, D: OrchardDomainCommon> Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, D> {
+impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, P> {
     /// Finalizes this action group.
     ///
     /// Returns an error if any signatures are missing.
     #[allow(clippy::type_complexity)]
     pub fn finalize(
         self,
-    ) -> Result<(Bundle<ActionGroupAuthorized, V, D>, SigningKey<Binding>), BuildError> {
+    ) -> Result<(Bundle<ActionGroupAuthorized, V, P>, SigningKey<Binding>), BuildError> {
         let bsk = self.authorization().sigs.bsk;
         self.try_map_authorization(
             &mut (),

@@ -7,10 +7,9 @@ use zcash_note_encryption::note_bytes::NoteBytesData;
 use crate::{
     bundle::{
         commitments::{
-            hasher, ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION,
+            hash_action_group, hasher,
             ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION,
             ZCASH_ORCHARD_HASH_PERSONALIZATION, ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
-            ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION,
         },
         Authorization, Authorized,
     },
@@ -62,15 +61,6 @@ impl OrchardPrimitives for OrchardZSA {
         let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
         let action_group_hash = hash_action_group(bundle);
         h.update(action_group_hash.as_bytes());
-
-        let mut burn_hasher = hasher(ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION);
-        for burn_item in bundle.burn() {
-            burn_hasher.update(&burn_item.0.to_bytes());
-            burn_hasher.update(&burn_item.1.to_bytes());
-        }
-        agh.update(burn_hasher.finalize().as_bytes());
-        h.update(agh.finalize().as_bytes());
-
         h.update(&(*bundle.value_balance()).into().to_le_bytes());
         h.finalize()
     }
