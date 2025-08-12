@@ -11,6 +11,10 @@ use crate::{
     primitives::OrchardPrimitives,
     orchard_flavor::OrchardZSA,
 };
+use crate::orchard_flavor::OrchardZSA;
+
+// TODO remove
+const MEMO_SIZE: usize = 512;
 
 pub(crate) const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
 pub(crate) const ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActGHash";
@@ -85,6 +89,14 @@ pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
     agh.update(&[action_group.flags().to_byte()]);
     agh.update(&action_group.anchor().to_bytes());
     agh.update(&action_group.expiry_height().to_le_bytes());
+
+    let mut burn_hasher = hasher(ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION);
+    for burn_item in action_group.burn() {
+        burn_hasher.update(&burn_item.0.to_bytes());
+        burn_hasher.update(&burn_item.1.to_bytes());
+    }
+
+    agh.update(burn_hasher.finalize().as_bytes());
     agh.finalize()
 }
 

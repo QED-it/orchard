@@ -35,6 +35,7 @@ use crate::{
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
 };
+use crate::bundle::commitments::hash_action_group;
 use crate::orchard_flavor::OrchardZSA;
 
 #[cfg(feature = "circuit")]
@@ -562,6 +563,9 @@ pub struct EffectsOnly;
 
 impl Authorization for EffectsOnly {
     type SpendAuth = ();
+
+    /// Return the proof component of the authorizing data.
+    fn proof(&self) -> Option<&Proof> { None }
 }
 
 impl<A: Authorization, V: Copy + Into<i64>> Bundle<A, V, OrchardZSA> {

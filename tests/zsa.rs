@@ -16,7 +16,6 @@ use orchard::{
     orchard_flavor::OrchardZSA,
     primitives::redpallas::{Binding, SigningKey},
     swap_bundle::{ActionGroupAuthorized, SwapBundle},
-    tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Address, Anchor, Bundle, Note, ReferenceKeys,
 };
@@ -24,6 +23,7 @@ use rand::rngs::OsRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use std::collections::HashSet;
 use zcash_note_encryption::try_note_decryption;
+use orchard::bundle::Authorization;
 
 #[derive(Debug)]
 struct Keychain {
@@ -437,7 +437,7 @@ fn build_and_verify_action_group(
         outputs
             .iter()
             .try_for_each(|output| {
-                builder.add_output(None, output.recipient, output.value, output.asset, None)
+                builder.add_output(None, output.recipient, output.value, output.asset, [0; 512])
             })
             .map_err(|err| err.to_string())?;
         reference_notes
@@ -460,7 +460,7 @@ fn build_and_verify_action_group(
     Ok((shielded_action_group, bsk))
 }
 
-fn verify_unique_spent_nullifiers(bundle: &Bundle<Authorized, i64, OrchardZSA>) -> bool {
+fn verify_unique_spent_nullifiers<A: Authorization>(bundle: &Bundle<A, i64, OrchardZSA>) -> bool {
     let mut seen = HashSet::new();
     bundle
         .actions()
@@ -791,8 +791,12 @@ fn zsa_issue_and_transfer() {
 #[test]
 fn action_group_and_swap_bundle() {
     // ----- Setup -----
+
+    let pk = ProvingKey::build::<OrchardZSA>();
+    let vk = VerifyingKey::build::<OrchardZSA>();
+
     // Create notes for user1
-    let keys1 = prepare_keys(5);
+    let keys1 = prepare_keys(pk.clone(), vk.clone(),5);
 
     let asset_descr1 = b"zsa_asset1".to_vec();
     let (asset1_reference_note, asset1_note1, asset1_note2) =
@@ -802,7 +806,7 @@ fn action_group_and_swap_bundle() {
     let user1_native_note2 = create_native_note(&keys1);
 
     // Create notes for user2
-    let keys2 = prepare_keys(10);
+    let keys2 = prepare_keys(pk.clone(), vk.clone(),10);
 
     let asset_descr2 = b"zsa_asset2".to_vec();
     let (asset2_reference_note, asset2_note1, asset2_note2) =
@@ -812,7 +816,7 @@ fn action_group_and_swap_bundle() {
     let user2_native_note2 = create_native_note(&keys2);
 
     // Create matcher keys
-    let matcher_keys = prepare_keys(15);
+    let matcher_keys = prepare_keys(pk, vk,15);
 
     // Create Merkle tree with all notes
     let (merkle_paths, anchor) = build_merkle_paths(vec![

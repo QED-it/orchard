@@ -9,11 +9,14 @@ use crate::{
     note_encryption::OrchardDomainCommon,
     orchard_flavor::OrchardZSA,
     primitives::redpallas::{self, Binding, SpendAuth},
-    value::{NoteValue, ValueCommitTrapdoor},
+    value::ValueCommitTrapdoor,
     Proof,
 };
+use alloc::vec::Vec;
 
 use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
+use nonempty::NonEmpty;
+use crate::primitives::OrchardPrimitives;
 
 /// An action group.
 #[derive(Debug)]
@@ -201,7 +204,7 @@ impl ActionGroupAuthorized {
     }
 }
 
-impl<V, D: OrchardDomainCommon> Bundle<ActionGroupAuthorized, V, D> {
+impl<V, D: OrchardPrimitives> Bundle<ActionGroupAuthorized, V, D> {
     /// Verifies the proof for this bundle.
     pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
         self.authorization()
@@ -245,12 +248,13 @@ impl<V: Copy + Into<i64>> SwapBundle<V> {
         let actions = self
             .action_groups
             .iter()
-            .flat_map(|ag| ag.actions())
+            .flat_map(|ag| ag.actions().iter().cloned())
             .collect::<Vec<_>>();
+
         derive_bvk(
-            actions,
+            &NonEmpty::from_vec(actions).expect("SwapBundle must have at least one action"),
             self.value_balance,
-            std::iter::empty::<(AssetBase, NoteValue)>(),
+            &[],
         )
     }
 }

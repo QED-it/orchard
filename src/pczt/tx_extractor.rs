@@ -99,6 +99,7 @@ impl super::Bundle {
                 value_balance,
                 self.burn.clone(),
                 self.anchor,
+                self.expiry_height,
                 authorization,
             ))
         } else {
@@ -129,6 +130,10 @@ pub struct Unbound {
 
 impl Authorization for Unbound {
     type SpendAuth = VerSpendAuthSig;
+
+    fn proof(&self) -> Option<&Proof> {
+        Some(&self.proof)
+    }
 }
 
 impl<P: OrchardPrimitives, V> crate::Bundle<Unbound, V, P> {
