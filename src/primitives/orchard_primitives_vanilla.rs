@@ -4,6 +4,12 @@
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::note_bytes::NoteBytesData;
 
+use super::{
+    zcash_note_encryption_domain::{
+        build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_V2,
+    },
+};
+
 use crate::{
     bundle::{
         commitments::{
@@ -15,9 +21,6 @@ use crate::{
     orchard_flavor::OrchardVanilla,
     primitives::{
         orchard_primitives::OrchardPrimitives,
-        zcash_note_encryption_domain::{
-            build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, NOTE_VERSION_BYTE_V2,
-        },
     },
     Bundle,
 };
@@ -65,7 +68,7 @@ impl OrchardPrimitives for OrchardVanilla {
     /// [zip244]: https://zips.z.cash/zip-0244
     fn hash_bundle_auth_data<V>(bundle: &Bundle<Authorized, V, OrchardVanilla>) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
-        h.update(bundle.authorization().proof().as_ref());
+        h.update(bundle.authorization().proof().unwrap().as_ref());
         for action in bundle.actions().iter() {
             h.update(&<[u8; 64]>::from(action.authorization()));
         }

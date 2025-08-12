@@ -814,13 +814,14 @@ mod tests {
             let enable_spend = read_bool(&mut r);
             let enable_output = read_bool(&mut r);
             let enable_zsa = false;
+            let enable_swaps = false;
             let instance = Instance::from_parts(
                 anchor,
                 cv_net,
                 nf_old,
                 rk,
                 cmx,
-                Flags::from_parts(enable_spend, enable_output, enable_zsa),
+                Flags::from_parts(enable_spend, enable_output, enable_zsa, enable_swaps),
             );
 
             let mut proof_bytes = vec![];

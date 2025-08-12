@@ -1,5 +1,6 @@
 //! Utility functions for computing bundle commitments
 
+use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::{
@@ -7,6 +8,10 @@ use crate::{
     issuance::{IssueAuth, IssueBundle, Signed},
     primitives::OrchardPrimitives,
 };
+use crate::orchard_flavor::OrchardZSA;
+
+// TODO remove
+const MEMO_SIZE: usize = 512;
 
 pub(crate) const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
 pub(crate) const ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActGHash";
@@ -19,7 +24,6 @@ pub(crate) const ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxI
 pub(crate) const ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrchaHash";
 pub(crate) const ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION: &[u8; 16] =
     b"ZTxAuthOrcAGHash";
-
 const ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION: &[u8; 16] = b"ZTxIdSAIssueHash";
 const ZCASH_ORCHARD_ZSA_ISSUE_ACTION_PERSONALIZATION: &[u8; 16] = b"ZTxIdIssuActHash";
 const ZCASH_ORCHARD_ZSA_ISSUE_NOTE_PERSONALIZATION: &[u8; 16] = b"ZTxIdIAcNoteHash";
@@ -49,6 +53,49 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>, P: Or
 /// [zip246]: https://zips.z.cash/zip-0246
 pub fn hash_bundle_txid_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION).finalize()
+}
+
+/// Construct the commitment for an action group as defined in
+/// [ZIP-228: Asset Swaps for Zcash Shielded Assets][zip228]
+///
+/// [zip228]: https://zips.z.cash/zip-0228
+pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
+    action_group: &Bundle<A, V, OrchardZSA>,
+) -> Blake2bHash {
+    let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION);
+
+    OrchardZSA::update_hash_with_actions(&mut agh, action_group);
+
+    agh.update(&[action_group.flags().to_byte()]);
+    agh.update(&action_group.anchor().to_bytes());
+    agh.update(&action_group.expiry_height().to_le_bytes());
+
+    let mut burn_hasher = hasher(ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION);
+    for burn_item in action_group.burn() {
+        burn_hasher.update(&burn_item.0.to_bytes());
+        burn_hasher.update(&burn_item.1.to_bytes());
+    }
+
+    agh.update(burn_hasher.finalize().as_bytes());
+    agh.finalize()
+}
+
+/// Construct the commitment for a swap bundle as defined in
+/// [ZIP-228: Asset Swaps for Zcash Shielded Assets][zip228]
+///
+/// [zip228]: https://zips.z.cash/zip-0228
+pub(crate) fn hash_swap_bundle<A: Authorization, V: Copy + Into<i64>>(
+    action_groups: Vec<&Bundle<A, V, OrchardZSA>>,
+    value_balance: V,
+) -> Blake2bHash {
+    let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
+
+    for action_group in action_groups {
+        h.update(hash_action_group(action_group).as_bytes());
+    }
+
+    h.update(&value_balance.into().to_le_bytes());
+    h.finalize()
 }
 
 /// Construct the `orchard_auth_digest` commitment to the authorizing data of an

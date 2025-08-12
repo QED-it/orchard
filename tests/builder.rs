@@ -6,6 +6,7 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+    swap_bundle::{ActionGroupAuthorized, SwapBundle},
     primitives::{OrchardDomain, OrchardPrimitives},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
@@ -33,6 +34,44 @@ pub fn verify_bundle<P: OrchardPrimitives>(
         bvk.verify(&sighash, bundle.authorization().binding_signature()),
         Ok(())
     );
+}
+
+// Verify a swap bundle
+// - verify each action group (its proof and for each action, the spend authorization signature)
+// - verify that bsk is None  for each action group
+// - verify the swap binding signature
+pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>) {
+    assert_eq!(vks.len(), swap_bundle.action_groups().len());
+    for (action_group, vk) in swap_bundle.action_groups().iter().zip(vks.iter()) {
+        verify_action_group(action_group, vk);
+    }
+
+    let sighash: [u8; 32] = swap_bundle.commitment().into();
+    let bvk = swap_bundle.binding_validating_key();
+    assert_eq!(
+        bvk.verify(&sighash, swap_bundle.binding_signature()),
+        Ok(())
+    );
+}
+
+// Verify an action group
+// - verify the proof
+// - verify the signature on each action
+pub fn verify_action_group(
+    action_group_bundle: &Bundle<ActionGroupAuthorized, i64, OrchardZSA>,
+    vk: &VerifyingKey,
+) {
+    assert!(matches!(action_group_bundle.verify_proof(vk), Ok(())));
+
+    let action_group_digest: [u8; 32] = action_group_bundle.action_group_commitment().into();
+    for action in action_group_bundle.actions() {
+        assert_eq!(
+            action
+                .rk()
+                .verify(&action_group_digest, action.authorization()),
+            Ok(())
+        );
+    }
 }
 
 pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {

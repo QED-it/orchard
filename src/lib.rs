@@ -40,6 +40,7 @@ pub mod orchard_flavor;
 pub mod pczt;
 pub mod primitives;
 mod spec;
+pub mod swap_bundle;
 pub mod tree;
 pub mod value;
 pub mod zip32;
