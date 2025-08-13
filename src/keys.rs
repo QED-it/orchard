@@ -1045,6 +1045,21 @@ impl SharedSecret {
     }
 }
 
+/// The sighash version and associated information
+#[derive(Debug, Clone)]
+pub struct SighashInfo {
+    /// The sighash version
+    pub version: u8,
+    /// The associated information for the sighash
+    pub associated_information: Vec<u8>,
+}
+
+/// The sighash version and associated information for Orchard binding and authorizing signatures.
+pub const ORCHARD_SIG_V0: SighashInfo = SighashInfo {
+    version: 0x00,
+    associated_information: vec![],
+};
+
 /// Generators for property testing.
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]

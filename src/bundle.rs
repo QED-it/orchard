@@ -23,7 +23,7 @@ use crate::{
     action::Action,
     address::Address,
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
-    keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
+    keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey, SighashInfo},
     note::{AssetBase, Note},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
@@ -519,7 +519,16 @@ impl Authorization for EffectsOnly {
 #[derive(Debug, Clone)]
 pub struct Authorized {
     proof: Proof,
-    binding_signature: redpallas::Signature<Binding>,
+    binding_signature: BindingSignature,
+}
+
+/// Binding signature containing the sighash information and the signature itself.
+#[derive(Debug, Clone)]
+pub struct BindingSignature {
+    /// The sighash information for the binding signature.
+    pub info: SighashInfo,
+    /// The binding signature.
+    pub signature: redpallas::Signature<Binding>,
 }
 
 impl Authorization for Authorized {
@@ -528,7 +537,7 @@ impl Authorization for Authorized {
 
 impl Authorized {
     /// Constructs the authorizing data for a bundle of actions from its constituent parts.
-    pub fn from_parts(proof: Proof, binding_signature: redpallas::Signature<Binding>) -> Self {
+    pub fn from_parts(proof: Proof, binding_signature: BindingSignature) -> Self {
         Authorized {
             proof,
             binding_signature,
@@ -542,7 +551,7 @@ impl Authorized {
 
     /// Return the binding signature.
     pub fn binding_signature(&self) -> &redpallas::Signature<Binding> {
-        &self.binding_signature
+        &self.binding_signature.signature
     }
 }
 
@@ -623,6 +632,8 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::{
+        bundle::BindingSignature,
+        keys::ORCHARD_SIG_V0,
         primitives::redpallas::{self, testing::arb_binding_signing_key},
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, Proof,
@@ -780,7 +791,10 @@ pub mod testing {
                     anchor,
                     Authorized {
                         proof: Proof::new(fake_proof),
-                        binding_signature: sk.sign(rng, &fake_sighash),
+                        binding_signature: BindingSignature{
+                            info: ORCHARD_SIG_V0,
+                            signature : sk.sign(rng, &fake_sighash),
+                        },
                     },
                 )
             }

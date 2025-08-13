@@ -14,10 +14,10 @@ use zcash_note_encryption::NoteEncryption;
 use crate::{
     address::Address,
     builder::BuildError::{BurnNative, BurnZero},
-    bundle::{Authorization, Authorized, Bundle, Flags},
+    bundle::{Authorization, Authorized, BindingSignature, Bundle, Flags},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
-        SpendingKey,
+        SpendingKey, ORCHARD_SIG_V0,
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
@@ -1238,7 +1238,7 @@ pub struct SigningMetadata {
 /// Marker for a partially-authorized bundle, in the process of being signed.
 #[derive(Debug)]
 pub struct PartiallyAuthorized {
-    binding_signature: redpallas::Signature<Binding>,
+    binding_signature: BindingSignature,
     sighash: [u8; 32],
 }
 
@@ -1287,7 +1287,10 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
             |rng, auth| InProgress {
                 proof: auth.proof,
                 sigs: PartiallyAuthorized {
-                    binding_signature: auth.sigs.bsk.sign(rng, &sighash),
+                    binding_signature: BindingSignature {
+                        info: ORCHARD_SIG_V0,
+                        signature: auth.sigs.bsk.sign(rng, &sighash),
+                    },
                     sighash,
                 },
             },
