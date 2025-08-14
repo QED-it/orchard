@@ -24,7 +24,7 @@ use crate::{
     asset_record::AssetRecord,
     bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
     constants::reference_keys::ReferenceKeys,
-    keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey},
     note::{AssetBase, Nullifier, Rho},
     value::NoteValue,
     Address, Note,
@@ -799,10 +799,8 @@ mod tests {
             compute_asset_desc_hash, is_reference_note, verify_issue_bundle, IssueAction,
             IssueBundle, IssueInfo, Signed,
         },
-        keys::{
-            FullViewingKey, IssuanceAuthorizingKey, IssuanceValidatingKey, Scope,
-            SpendAuthorizingKey, SpendingKey,
-        },
+        issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+        keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
         tree::{MerkleHashOrchard, MerklePath},
@@ -1883,7 +1881,7 @@ pub mod testing {
     use crate::issuance::IssuanceAuthorizationSignature;
     use crate::{
         issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed},
-        keys::testing::arb_issuance_validating_key,
+        issuance_auth::testing::arb_issuance_validating_key,
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
     };

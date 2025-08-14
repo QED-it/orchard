@@ -13,7 +13,7 @@ use crate::{
         NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
     },
     issuance::compute_asset_desc_hash,
-    keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey},
 };
 
 /// Note type identifier.
@@ -154,7 +154,7 @@ pub mod testing {
 
     use proptest::prelude::*;
 
-    use crate::keys::{testing::arb_issuance_authorizing_key, IssuanceValidatingKey};
+    use crate::issuance_auth::{testing::arb_issuance_authorizing_key, IssuanceValidatingKey};
 
     prop_compose! {
         /// Generate a uniformly distributed note type
