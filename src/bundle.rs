@@ -23,10 +23,13 @@ use crate::{
     action::Action,
     address::Address,
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
-    keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey, SighashInfo},
+    keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::redpallas::{self, Binding},
     primitives::{OrchardDomain, OrchardPrimitives},
+    signature_with_sighash_info::{
+        BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo,
+    },
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -522,62 +525,6 @@ pub struct Authorized {
     binding_signature: BindingSignatureWithSighashInfo,
 }
 
-/// Binding signature containing the sighash information and the signature itself.
-#[derive(Debug, Clone)]
-pub struct BindingSignatureWithSighashInfo {
-    /// The sighash information for the binding signature.
-    info: SighashInfo,
-    /// The binding signature.
-    signature: redpallas::Signature<Binding>,
-}
-
-impl BindingSignatureWithSighashInfo {
-    pub(crate) fn new(info: SighashInfo, signature: redpallas::Signature<Binding>) -> Self {
-        BindingSignatureWithSighashInfo { info, signature }
-    }
-
-    pub(crate) fn to_bytes(&self) -> Vec<u8> {
-        [self.info.version]
-            .into_iter()
-            .chain(self.info.associated_information.clone().into_iter())
-            .chain(<[u8; 64]>::from(&self.signature).into_iter())
-            .collect::<Vec<u8>>()
-    }
-
-    /// Returns the binding signature.
-    pub fn signature(&self) -> &redpallas::Signature<Binding> {
-        &self.signature
-    }
-}
-
-/// Authorizing signature containing the sighash information and the signature itself.
-#[derive(Debug, Clone)]
-pub struct SpendAuthSignatureWithSighashInfo {
-    /// The sighash information for the authorizing signature.
-    info: SighashInfo,
-    /// The authorizing signature.
-    signature: redpallas::Signature<SpendAuth>,
-}
-
-impl SpendAuthSignatureWithSighashInfo {
-    pub(crate) fn new(info: SighashInfo, signature: redpallas::Signature<SpendAuth>) -> Self {
-        SpendAuthSignatureWithSighashInfo { info, signature }
-    }
-
-    pub(crate) fn to_bytes(&self) -> Vec<u8> {
-        [self.info.version]
-            .into_iter()
-            .chain(self.info.associated_information.clone().into_iter())
-            .chain(<[u8; 64]>::from(&self.signature).into_iter())
-            .collect::<Vec<u8>>()
-    }
-
-    /// Returns the authorizing signature.
-    pub fn signature(&self) -> &redpallas::Signature<SpendAuth> {
-        &self.signature
-    }
-}
-
 impl Authorization for Authorized {
     type SpendAuth = SpendAuthSignatureWithSighashInfo;
 }
@@ -678,9 +625,10 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::{
-        bundle::{BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo},
-        keys::ORCHARD_SIG_V0,
         primitives::redpallas::testing::arb_binding_signing_key,
+        signature_with_sighash_info::{
+            BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0,
+        },
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, Proof,
     };
@@ -838,10 +786,7 @@ pub mod testing {
                     anchor,
                     Authorized {
                         proof: Proof::new(fake_proof),
-                        binding_signature: BindingSignatureWithSighashInfo{
-                            info: ORCHARD_SIG_V0,
-                            signature : sk.sign(rng, &fake_sighash),
-                        },
+                        binding_signature: BindingSignatureWithSighashInfo::new(ORCHARD_SIG_V0, sk.sign(rng, &fake_sighash)),
                     },
                 )
             }

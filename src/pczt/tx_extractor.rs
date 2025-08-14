@@ -3,13 +3,12 @@ use rand::{CryptoRng, RngCore};
 
 use super::Action;
 use crate::{
-    bundle::{
-        Authorization, Authorized, BindingSignatureWithSighashInfo, EffectsOnly,
-        SpendAuthSignatureWithSighashInfo,
-    },
-    keys::ORCHARD_SIG_V0,
+    bundle::{Authorization, Authorized, EffectsOnly},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::OrchardPrimitives,
+    signature_with_sighash_info::{
+        BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0,
+    },
     Proof,
 };
 

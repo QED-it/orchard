@@ -14,17 +14,17 @@ use zcash_note_encryption::NoteEncryption;
 use crate::{
     address::Address,
     builder::BuildError::{BurnNative, BurnZero},
-    bundle::{
-        Authorization, Authorized, BindingSignatureWithSighashInfo, Bundle, Flags,
-        SpendAuthSignatureWithSighashInfo,
-    },
+    bundle::{Authorization, Authorized, Bundle, Flags},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
-        SpendingKey, ORCHARD_SIG_V0,
+        SpendingKey,
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
+    signature_with_sighash_info::{
+        BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0,
+    },
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,

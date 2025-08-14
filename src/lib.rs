@@ -39,9 +39,11 @@ pub mod note;
 pub mod orchard_flavor;
 pub mod pczt;
 pub mod primitives;
+mod signature_with_sighash_info;
 mod spec;
 pub mod tree;
 pub mod value;
+
 pub mod zip32;
 
 #[cfg(test)]
