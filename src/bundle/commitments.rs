@@ -234,7 +234,7 @@ mod tests {
         let orchard_auth_digest = hash_bundle_auth_data(&bundle);
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            "6d17185768dc16d651ca51e3d22601e83ff82b8c6368fedc5913d77335be8dc3"
+            "342f261f4acc82c57aaf9d0153e33574ee803e833f17eec44ea897391299a07b"
         );
     }
 }
