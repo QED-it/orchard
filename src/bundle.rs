@@ -519,21 +519,21 @@ impl Authorization for EffectsOnly {
 #[derive(Debug, Clone)]
 pub struct Authorized {
     proof: Proof,
-    binding_signature: BindingSignature,
+    binding_signature: BindingSignatureWithSighashInfo,
 }
 
 /// Binding signature containing the sighash information and the signature itself.
 #[derive(Debug, Clone)]
-pub struct BindingSignature {
+pub struct BindingSignatureWithSighashInfo {
     /// The sighash information for the binding signature.
     info: SighashInfo,
     /// The binding signature.
     signature: redpallas::Signature<Binding>,
 }
 
-impl BindingSignature {
+impl BindingSignatureWithSighashInfo {
     pub(crate) fn new(info: SighashInfo, signature: redpallas::Signature<Binding>) -> Self {
-        BindingSignature { info, signature }
+        BindingSignatureWithSighashInfo { info, signature }
     }
 
     pub(crate) fn to_bytes(&self) -> Vec<u8> {
@@ -552,16 +552,16 @@ impl BindingSignature {
 
 /// Authorizing signature containing the sighash information and the signature itself.
 #[derive(Debug, Clone)]
-pub struct SpendAuthSignature {
+pub struct SpendAuthSignatureWithSighashInfo {
     /// The sighash information for the authorizing signature.
     info: SighashInfo,
     /// The authorizing signature.
     signature: redpallas::Signature<SpendAuth>,
 }
 
-impl SpendAuthSignature {
+impl SpendAuthSignatureWithSighashInfo {
     pub(crate) fn new(info: SighashInfo, signature: redpallas::Signature<SpendAuth>) -> Self {
-        SpendAuthSignature { info, signature }
+        SpendAuthSignatureWithSighashInfo { info, signature }
     }
 
     pub(crate) fn to_bytes(&self) -> Vec<u8> {
@@ -579,12 +579,12 @@ impl SpendAuthSignature {
 }
 
 impl Authorization for Authorized {
-    type SpendAuth = SpendAuthSignature;
+    type SpendAuth = SpendAuthSignatureWithSighashInfo;
 }
 
 impl Authorized {
     /// Constructs the authorizing data for a bundle of actions from its constituent parts.
-    pub fn from_parts(proof: Proof, binding_signature: BindingSignature) -> Self {
+    pub fn from_parts(proof: Proof, binding_signature: BindingSignatureWithSighashInfo) -> Self {
         Authorized {
             proof,
             binding_signature,
@@ -597,7 +597,7 @@ impl Authorized {
     }
 
     /// Return the binding signature.
-    pub fn binding_signature(&self) -> &BindingSignature {
+    pub fn binding_signature(&self) -> &BindingSignatureWithSighashInfo {
         &self.binding_signature
     }
 }
@@ -678,7 +678,7 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::{
-        bundle::{BindingSignature, SpendAuthSignature},
+        bundle::{BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo},
         keys::ORCHARD_SIG_V0,
         primitives::redpallas::testing::arb_binding_signing_key,
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
@@ -733,7 +733,8 @@ pub mod testing {
         pub fn arb_action_n(
             n_actions: usize,
             flags: Flags,
-        ) -> impl Strategy<Value = (ValueSum, Action<SpendAuthSignature, P>)> {
+        ) -> impl Strategy<Value = (ValueSum, Action<SpendAuthSignatureWithSighashInfo, P>)>
+        {
             let spend_value_gen = if flags.spends_enabled {
                 Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
             } else {
@@ -837,7 +838,7 @@ pub mod testing {
                     anchor,
                     Authorized {
                         proof: Proof::new(fake_proof),
-                        binding_signature: BindingSignature{
+                        binding_signature: BindingSignatureWithSighashInfo{
                             info: ORCHARD_SIG_V0,
                             signature : sk.sign(rng, &fake_sighash),
                         },

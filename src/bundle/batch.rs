@@ -47,7 +47,7 @@ impl BatchValidator {
             self.signatures.push(BundleSignature {
                 signature: action
                     .rk()
-                    .create_batch_item(action.authorization().signature.clone(), &sighash),
+                    .create_batch_item(action.authorization().signature().clone(), &sighash),
             });
         }
 

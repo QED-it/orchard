@@ -3,7 +3,10 @@ use rand::{CryptoRng, RngCore};
 
 use super::Action;
 use crate::{
-    bundle::{Authorization, Authorized, BindingSignature, EffectsOnly, SpendAuthSignature},
+    bundle::{
+        Authorization, Authorized, BindingSignatureWithSighashInfo, EffectsOnly,
+        SpendAuthSignatureWithSighashInfo,
+    },
     keys::ORCHARD_SIG_V0,
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::OrchardPrimitives,
@@ -145,11 +148,14 @@ impl<P: OrchardPrimitives, V> crate::Bundle<Unbound, V, P> {
         {
             Some(self.map_authorization(
                 &mut (),
-                |_, _, a| SpendAuthSignature::new(ORCHARD_SIG_V0, a),
+                |_, _, a| SpendAuthSignatureWithSighashInfo::new(ORCHARD_SIG_V0, a),
                 |_, Unbound { proof, bsk }| {
                     Authorized::from_parts(
                         proof,
-                        BindingSignature::new(ORCHARD_SIG_V0, bsk.sign(rng, &sighash)),
+                        BindingSignatureWithSighashInfo::new(
+                            ORCHARD_SIG_V0,
+                            bsk.sign(rng, &sighash),
+                        ),
                     )
                 },
             ))
