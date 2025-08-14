@@ -16,7 +16,6 @@ use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use core::fmt;
 use group::Group;
-use k256::schnorr;
 use nonempty::NonEmpty;
 use rand::RngCore;
 
@@ -254,11 +253,7 @@ impl Signed {
     /// Constructs a `Signed` from a byte array containing Schnorr signature bytes.
     pub fn from_data(data: [u8; 64]) -> Self {
         Signed {
-            signature: IssuanceAuthorizationSignature {
-                bytes: schnorr::Signature::try_from(data.as_ref())
-                    .unwrap()
-                    .to_bytes(),
-            },
+            signature: IssuanceAuthorizationSignature::from_bytes(data),
         }
     }
 }
@@ -1880,9 +1875,7 @@ pub mod testing {
         pub(crate) fn arb_signature()(
             sig_bytes in vec(prop::num::u8::ANY, 64)
         ) -> IssuanceAuthorizationSignature {
-            IssuanceAuthorizationSignature {
-                bytes: sig_bytes.try_into().unwrap()
-            }
+                IssuanceAuthorizationSignature::from_bytes(sig_bytes.try_into().unwrap())
         }
     }
 

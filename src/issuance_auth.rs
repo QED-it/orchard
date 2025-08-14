@@ -27,23 +27,36 @@ pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only}
 const ZIP32_PURPOSE: u32 = 32;
 const ZIP32_PURPOSE_FOR_ISSUANCE: u32 = 227;
 
-/// An issuance key, from which all key material is derived.
+/// Enumeration of the supported issuance authorization signature schemes.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum IssuanceAuthSigSchemeID {
+    /// The OrchardZSA issuance authorization signature scheme, based on the BIP 340 Schnorr    
+    /// signature scheme, defined in [ZIP 227][issueauthsigscheme].    
+    ///    
+    /// [issueauthsigscheme]: https://zips.z.cash/zip-0227#orchard-zsa-issuance-authorization-signature-scheme    
+    ZSASchnorrSigSchemeID = 0x00,
+}
+
+/// An issuance authorization key, from is used to sign the issuance authorization signatures.
 ///
-/// $\mathsf{isk}$ as defined in [ZIP 227][issuancekeycomponents].
+/// This is denoted by `isk` as defined in [ZIP 227][issuancekeycomponents].
 ///
 /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#issuance-key-derivation
 #[derive(Copy, Clone)]
 pub struct IssuanceAuthorizingKey {
+    scheme: IssuanceAuthSigSchemeID,
     bytes: [u8; 32],
 }
 
-/// A key used to validate issuance authorization signatures.
+/// A key used to validate issuance authorization signatures, denoted by `ik`.
 ///
 /// Defined in [ZIP 227: Issuance of Zcash Shielded Assets § Issuance Key Generation][IssuanceZSA].
 ///
 /// [IssuanceZSA]: https://zips.z.cash/zip-0227#issuance-key-derivation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IssuanceValidatingKey {
+    scheme: IssuanceAuthSigSchemeID,
     bytes: [u8; 32],
 }
 
@@ -54,7 +67,8 @@ pub struct IssuanceValidatingKey {
 /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signature-scheme
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct IssuanceAuthorizationSignature {
-    pub(crate) bytes: [u8; 64],
+    scheme: IssuanceAuthSigSchemeID,
+    bytes: [u8; 64],
 }
 
 impl IssuanceAuthorizingKey {
@@ -66,6 +80,7 @@ impl IssuanceAuthorizingKey {
     /// [ZIP 32]: https://zips.z.cash/zip-0032
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
         IssuanceAuthorizingKey {
+            scheme: IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID,
             bytes: NonZeroScalar::random(rng).to_bytes().into(),
         }
     }
@@ -77,6 +92,7 @@ impl IssuanceAuthorizingKey {
         NonZeroScalar::try_from(&isk_bytes as &[u8])
             .ok()
             .map(|isk| IssuanceAuthorizingKey {
+                scheme: IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID,
                 bytes: isk.to_bytes().into(),
             })
     }
@@ -117,6 +133,7 @@ impl IssuanceAuthorizingKey {
             .map_err(|_| issuance::Error::InvalidIssuanceAuthorizingKey)?
             .sign_prehash(msg)
             .map(|sig| IssuanceAuthorizationSignature {
+                scheme: self.scheme,
                 bytes: sig.to_bytes(),
             })
             .map_err(|_| issuance::Error::IssueBundleInvalidSignature)
@@ -126,6 +143,7 @@ impl IssuanceAuthorizingKey {
 impl Debug for IssuanceAuthorizingKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("IssuanceAuthorizingKey")
+            .field(&self.scheme)
             .field(&self.bytes)
             .finish()
     }
@@ -134,6 +152,7 @@ impl Debug for IssuanceAuthorizingKey {
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
         IssuanceValidatingKey {
+            scheme: isk.scheme,
             bytes: schnorr::SigningKey::from_bytes(&isk.bytes)
                 .unwrap()
                 .verifying_key()
@@ -142,14 +161,6 @@ impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
         }
     }
 }
-
-impl PartialEq for IssuanceValidatingKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.to_bytes().eq(&other.to_bytes())
-    }
-}
-
-impl Eq for IssuanceValidatingKey {}
 
 impl IssuanceValidatingKey {
     /// Converts this issuance validating key to its serialized form,
@@ -166,6 +177,7 @@ impl IssuanceValidatingKey {
         VerifyingKey::from_bytes(bytes)
             .ok()
             .map(|vk| IssuanceValidatingKey {
+                scheme: IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID,
                 bytes: vk.to_bytes().into(),
             })
     }
@@ -176,6 +188,9 @@ impl IssuanceValidatingKey {
         msg: &[u8],
         signature: &IssuanceAuthorizationSignature,
     ) -> Result<(), issuance::Error> {
+        if signature.scheme != self.scheme {
+            return Err(issuance::Error::IssueBundleInvalidSignature);
+        }
         let vk = VerifyingKey::from_bytes(&self.bytes)
             .map_err(|_| issuance::Error::InvalidIssuanceValidatingKey)?;
         vk.verify_prehash(
@@ -190,6 +205,16 @@ impl IssuanceAuthorizationSignature {
     /// Serialize the issuance authorization signature to its canonical byte representation.
     pub fn to_bytes(&self) -> [u8; 64] {
         self.bytes
+    }
+
+    /// Deserialize the issuance authorization signature from its canonical byte representation.
+    pub fn from_bytes(bytes: [u8; 64]) -> Self {
+        IssuanceAuthorizationSignature {
+            scheme: IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID,
+            bytes: schnorr::Signature::try_from(bytes.as_ref())
+                .unwrap()
+                .to_bytes(),
+        }
     }
 }
 
