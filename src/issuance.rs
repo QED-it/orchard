@@ -24,7 +24,9 @@ use crate::{
     asset_record::AssetRecord,
     bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
     constants::reference_keys::ReferenceKeys,
-    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    issuance_auth::{
+        IssuanceAuthorizationSignature, IssuanceAuthorizingKey, IssuanceValidatingKey,
+    },
     note::{AssetBase, Nullifier, Rho},
     value::NoteValue,
     Address, Note,
@@ -44,16 +46,6 @@ use Error::{
 /// - The note's recipient matches the reference recipient.
 fn is_reference_note(note: &Note) -> bool {
     note.value() == NoteValue::zero() && note.recipient() == ReferenceKeys::recipient()
-}
-
-/// An issuance authorization signature `issueAuthSig`,
-///
-/// as defined in [ZIP 227][issueauthsig].
-///
-/// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signature-scheme
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct IssuanceAuthorizationSignature {
-    pub(crate) bytes: [u8; 64],
 }
 
 /// A bundle of actions to be applied to the ledger.
@@ -108,13 +100,6 @@ pub fn compute_asset_desc_hash(asset_desc: &NonEmpty<u8>) -> [u8; 32] {
         .as_bytes()
         .try_into()
         .expect("Invalid asset description hash length")
-}
-
-impl IssuanceAuthorizationSignature {
-    /// Serialize the issuance authorization signature to its canonical byte representation.
-    pub fn to_bytes(&self) -> [u8; 64] {
-        self.bytes
-    }
 }
 
 impl IssueAction {

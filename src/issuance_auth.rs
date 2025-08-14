@@ -16,7 +16,7 @@ use k256::{
 use rand_core::CryptoRngCore;
 
 use crate::{
-    issuance::{self, IssuanceAuthorizationSignature},
+    issuance::{self},
     zip32::{self, ExtendedSpendingKey},
 };
 
@@ -35,6 +35,26 @@ const ZIP32_PURPOSE_FOR_ISSUANCE: u32 = 227;
 #[derive(Copy, Clone)]
 pub struct IssuanceAuthorizingKey {
     bytes: [u8; 32],
+}
+
+/// A key used to validate issuance authorization signatures.
+///
+/// Defined in [ZIP 227: Issuance of Zcash Shielded Assets § Issuance Key Generation][IssuanceZSA].
+///
+/// [IssuanceZSA]: https://zips.z.cash/zip-0227#issuance-key-derivation
+#[derive(Debug, Clone)]
+pub struct IssuanceValidatingKey {
+    bytes: [u8; 32],
+}
+
+/// An issuance authorization signature `issueAuthSig`,
+///
+/// as defined in [ZIP 227][issueauthsig].
+///
+/// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signature-scheme
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct IssuanceAuthorizationSignature {
+    pub(crate) bytes: [u8; 64],
 }
 
 impl IssuanceAuthorizingKey {
@@ -111,16 +131,6 @@ impl Debug for IssuanceAuthorizingKey {
     }
 }
 
-/// A key used to validate issuance authorization signatures.
-///
-/// Defined in [ZIP 227: Issuance of Zcash Shielded Assets § Issuance Key Generation][IssuanceZSA].
-///
-/// [IssuanceZSA]: https://zips.z.cash/zip-0227#issuance-key-derivation
-#[derive(Debug, Clone)]
-pub struct IssuanceValidatingKey {
-    bytes: [u8; 32],
-}
-
 impl From<&IssuanceAuthorizingKey> for IssuanceValidatingKey {
     fn from(isk: &IssuanceAuthorizingKey) -> Self {
         IssuanceValidatingKey {
@@ -173,6 +183,13 @@ impl IssuanceValidatingKey {
             &schnorr::Signature::try_from(signature.bytes.as_slice()).unwrap(),
         )
         .map_err(|_| issuance::Error::IssueBundleInvalidSignature)
+    }
+}
+
+impl IssuanceAuthorizationSignature {
+    /// Serialize the issuance authorization signature to its canonical byte representation.
+    pub fn to_bytes(&self) -> [u8; 64] {
+        self.bytes
     }
 }
 
