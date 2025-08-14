@@ -1,7 +1,7 @@
 use memuse::DynamicUsage;
 
 use crate::{
-    bundle::SpendAuthSignature,
+    bundle::SpendAuthSignatureWithSighashInfo,
     note::{ExtractedNoteCommitment, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, SpendAuth},
     primitives::OrchardPrimitives,
@@ -108,7 +108,7 @@ impl<A, P: OrchardPrimitives> Action<A, P> {
     }
 }
 
-impl<P: OrchardPrimitives> DynamicUsage for Action<SpendAuthSignature, P> {
+impl<P: OrchardPrimitives> DynamicUsage for Action<SpendAuthSignatureWithSighashInfo, P> {
     #[inline(always)]
     fn dynamic_usage(&self) -> usize {
         0
@@ -132,7 +132,7 @@ pub(crate) mod testing {
     use zcash_note_encryption::NoteEncryption;
 
     use crate::{
-        bundle::SpendAuthSignature,
+        bundle::SpendAuthSignatureWithSighashInfo,
         keys::ORCHARD_SIG_V0,
         note::{
             asset_base::testing::arb_asset_base, commitment::ExtractedNoteCommitment,
@@ -214,7 +214,7 @@ pub(crate) mod testing {
                 fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
                 asset in arb_asset_base(),
                 memo in prop::collection::vec(prop::num::u8::ANY, 512),
-            ) -> Action<SpendAuthSignature, P> {
+            ) -> Action<SpendAuthSignatureWithSighashInfo, P> {
                 let cmx = ExtractedNoteCommitment::from(note.commitment());
                 let cv_net = ValueCommitment::derive(
                     spend_value - output_value,
@@ -232,7 +232,7 @@ pub(crate) mod testing {
                     cmx,
                     encrypted_note,
                     cv_net,
-                    authorization: SpendAuthSignature::new(ORCHARD_SIG_V0, sk.sign(rng, &fake_sighash)),
+                    authorization: SpendAuthSignatureWithSighashInfo::new(ORCHARD_SIG_V0, sk.sign(rng, &fake_sighash)),
                 }
             }
         }

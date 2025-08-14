@@ -14,7 +14,10 @@ use zcash_note_encryption::NoteEncryption;
 use crate::{
     address::Address,
     builder::BuildError::{BurnNative, BurnZero},
-    bundle::{Authorization, Authorized, BindingSignature, Bundle, Flags, SpendAuthSignature},
+    bundle::{
+        Authorization, Authorized, BindingSignatureWithSighashInfo, Bundle, Flags,
+        SpendAuthSignatureWithSighashInfo,
+    },
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey, ORCHARD_SIG_V0,
@@ -1238,7 +1241,7 @@ pub struct SigningMetadata {
 /// Marker for a partially-authorized bundle, in the process of being signed.
 #[derive(Debug)]
 pub struct PartiallyAuthorized {
-    binding_signature: BindingSignature,
+    binding_signature: BindingSignatureWithSighashInfo,
     sighash: [u8; 32],
 }
 
@@ -1254,11 +1257,11 @@ pub enum MaybeSigned {
     /// The information needed to sign this [`Action`].
     SigningMetadata(SigningParts),
     /// The signature for this [`Action`].
-    Signature(SpendAuthSignature),
+    Signature(SpendAuthSignatureWithSighashInfo),
 }
 
 impl MaybeSigned {
-    fn finalize(self) -> Result<SpendAuthSignature, BuildError> {
+    fn finalize(self) -> Result<SpendAuthSignatureWithSighashInfo, BuildError> {
         match self {
             Self::Signature(sig) => Ok(sig),
             _ => Err(BuildError::MissingSignatures),
@@ -1281,7 +1284,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
                 // We can create signatures for dummy spends immediately.
                 dummy_ask
                     .map(|ask| {
-                        SpendAuthSignature::new(
+                        SpendAuthSignatureWithSighashInfo::new(
                             ORCHARD_SIG_V0,
                             ask.randomize(&parts.alpha).sign(rng, &sighash),
                         )
@@ -1292,7 +1295,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
             |rng, auth| InProgress {
                 proof: auth.proof,
                 sigs: PartiallyAuthorized {
-                    binding_signature: BindingSignature::new(
+                    binding_signature: BindingSignatureWithSighashInfo::new(
                         ORCHARD_SIG_V0,
                         auth.sigs.bsk.sign(rng, &sighash),
                     ),
@@ -1336,7 +1339,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
             &mut rng,
             |rng, partial, maybe| match maybe {
                 MaybeSigned::SigningMetadata(parts) if parts.ak == expected_ak => {
-                    MaybeSigned::Signature(SpendAuthSignature::new(
+                    MaybeSigned::Signature(SpendAuthSignatureWithSighashInfo::new(
                         ORCHARD_SIG_V0,
                         ask.randomize(&parts.alpha).sign(rng, &partial.sigs.sighash),
                     ))
@@ -1353,11 +1356,17 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
     /// for more than one input.
     ///
     /// [`Signature`]: SpendAuthSignature
-    pub fn append_signatures(self, signatures: &[SpendAuthSignature]) -> Result<Self, BuildError> {
+    pub fn append_signatures(
+        self,
+        signatures: &[SpendAuthSignatureWithSighashInfo],
+    ) -> Result<Self, BuildError> {
         signatures.iter().try_fold(self, Self::append_signature)
     }
 
-    fn append_signature(self, signature: &SpendAuthSignature) -> Result<Self, BuildError> {
+    fn append_signature(
+        self,
+        signature: &SpendAuthSignatureWithSighashInfo,
+    ) -> Result<Self, BuildError> {
         let mut signature_valid_for = 0usize;
         let bundle = self.map_authorization(
             &mut signature_valid_for,
