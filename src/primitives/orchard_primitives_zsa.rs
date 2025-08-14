@@ -89,12 +89,16 @@ impl OrchardPrimitives for OrchardZSA {
         let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION);
         agh.update(bundle.authorization().proof().as_ref());
         for action in bundle.actions().iter() {
-            agh.update(&<[u8; 64]>::from(action.authorization()));
+            agh.update(action.authorization().to_bytes().as_slice());
         }
         h.update(agh.finalize().as_bytes());
-        h.update(&<[u8; 64]>::from(
-            bundle.authorization().binding_signature(),
-        ));
+        h.update(
+            bundle
+                .authorization()
+                .binding_signature()
+                .to_bytes()
+                .as_slice(),
+        );
         h.finalize()
     }
 }

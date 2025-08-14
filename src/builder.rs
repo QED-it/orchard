@@ -14,7 +14,7 @@ use zcash_note_encryption::NoteEncryption;
 use crate::{
     address::Address,
     builder::BuildError::{BurnNative, BurnZero},
-    bundle::{Authorization, Authorized, BindingSignature, Bundle, Flags},
+    bundle::{Authorization, Authorized, BindingSignature, Bundle, Flags, SpendAuthSignature},
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey, ORCHARD_SIG_V0,
@@ -1254,11 +1254,11 @@ pub enum MaybeSigned {
     /// The information needed to sign this [`Action`].
     SigningMetadata(SigningParts),
     /// The signature for this [`Action`].
-    Signature(redpallas::Signature<SpendAuth>),
+    Signature(SpendAuthSignature),
 }
 
 impl MaybeSigned {
-    fn finalize(self) -> Result<redpallas::Signature<SpendAuth>, BuildError> {
+    fn finalize(self) -> Result<SpendAuthSignature, BuildError> {
         match self {
             Self::Signature(sig) => Ok(sig),
             _ => Err(BuildError::MissingSignatures),
@@ -1280,17 +1280,23 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
             |rng, _, SigningMetadata { dummy_ask, parts }| {
                 // We can create signatures for dummy spends immediately.
                 dummy_ask
-                    .map(|ask| ask.randomize(&parts.alpha).sign(rng, &sighash))
+                    .map(|ask| {
+                        SpendAuthSignature::new(
+                            ORCHARD_SIG_V0,
+                            ask.randomize(&parts.alpha).sign(rng, &sighash),
+                        )
+                    })
                     .map(MaybeSigned::Signature)
                     .unwrap_or(MaybeSigned::SigningMetadata(parts))
             },
             |rng, auth| InProgress {
                 proof: auth.proof,
                 sigs: PartiallyAuthorized {
-                    binding_signature: BindingSignature {
-                        info: ORCHARD_SIG_V0,
-                        signature: auth.sigs.bsk.sign(rng, &sighash),
-                    },
+                    binding_signature: BindingSignature::new(
+                        ORCHARD_SIG_V0,
+                        auth.sigs.bsk.sign(rng, &sighash),
+                    ),
+
                     sighash,
                 },
             },
@@ -1330,9 +1336,10 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
             &mut rng,
             |rng, partial, maybe| match maybe {
                 MaybeSigned::SigningMetadata(parts) if parts.ak == expected_ak => {
-                    MaybeSigned::Signature(
+                    MaybeSigned::Signature(SpendAuthSignature::new(
+                        ORCHARD_SIG_V0,
                         ask.randomize(&parts.alpha).sign(rng, &partial.sigs.sighash),
-                    )
+                    ))
                 }
                 s => s,
             },
@@ -1345,25 +1352,22 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
     /// will be returned if the signature is not valid for any inputs, or if it is valid
     /// for more than one input.
     ///
-    /// [`Signature`]: redpallas::Signature
-    pub fn append_signatures(
-        self,
-        signatures: &[redpallas::Signature<SpendAuth>],
-    ) -> Result<Self, BuildError> {
+    /// [`Signature`]: SpendAuthSignature
+    pub fn append_signatures(self, signatures: &[SpendAuthSignature]) -> Result<Self, BuildError> {
         signatures.iter().try_fold(self, Self::append_signature)
     }
 
-    fn append_signature(
-        self,
-        signature: &redpallas::Signature<SpendAuth>,
-    ) -> Result<Self, BuildError> {
+    fn append_signature(self, signature: &SpendAuthSignature) -> Result<Self, BuildError> {
         let mut signature_valid_for = 0usize;
         let bundle = self.map_authorization(
             &mut signature_valid_for,
             |valid_for, partial, maybe| match maybe {
                 MaybeSigned::SigningMetadata(parts) => {
                     let rk = parts.ak.randomize(&parts.alpha);
-                    if rk.verify(&partial.sigs.sighash[..], signature).is_ok() {
+                    if rk
+                        .verify(&partial.sigs.sighash[..], signature.signature())
+                        .is_ok()
+                    {
                         *valid_for += 1;
                         MaybeSigned::Signature(signature.clone())
                     } else {
