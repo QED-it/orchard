@@ -526,13 +526,60 @@ pub struct Authorized {
 #[derive(Debug, Clone)]
 pub struct BindingSignature {
     /// The sighash information for the binding signature.
-    pub info: SighashInfo,
+    info: SighashInfo,
     /// The binding signature.
-    pub signature: redpallas::Signature<Binding>,
+    signature: redpallas::Signature<Binding>,
+}
+
+impl BindingSignature {
+    pub(crate) fn new(info: SighashInfo, signature: redpallas::Signature<Binding>) -> Self {
+        BindingSignature { info, signature }
+    }
+
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
+        [self.info.version]
+            .into_iter()
+            .chain(self.info.associated_information.clone().into_iter())
+            .chain(<[u8; 64]>::from(&self.signature).into_iter())
+            .collect::<Vec<u8>>()
+    }
+
+    /// Returns the binding signature.
+    pub fn signature(&self) -> &redpallas::Signature<Binding> {
+        &self.signature
+    }
+}
+
+/// Authorizing signature containing the sighash information and the signature itself.
+#[derive(Debug, Clone)]
+pub struct SpendAuthSignature {
+    /// The sighash information for the authorizing signature.
+    info: SighashInfo,
+    /// The authorizing signature.
+    signature: redpallas::Signature<SpendAuth>,
+}
+
+impl SpendAuthSignature {
+    pub(crate) fn new(info: SighashInfo, signature: redpallas::Signature<SpendAuth>) -> Self {
+        SpendAuthSignature { info, signature }
+    }
+
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
+        [self.info.version]
+            .into_iter()
+            .chain(self.info.associated_information.clone().into_iter())
+            .chain(<[u8; 64]>::from(&self.signature).into_iter())
+            .collect::<Vec<u8>>()
+    }
+
+    /// Returns the authorizing signature.
+    pub fn signature(&self) -> &redpallas::Signature<SpendAuth> {
+        &self.signature
+    }
 }
 
 impl Authorization for Authorized {
-    type SpendAuth = redpallas::Signature<SpendAuth>;
+    type SpendAuth = SpendAuthSignature;
 }
 
 impl Authorized {
@@ -550,8 +597,8 @@ impl Authorized {
     }
 
     /// Return the binding signature.
-    pub fn binding_signature(&self) -> &redpallas::Signature<Binding> {
-        &self.binding_signature.signature
+    pub fn binding_signature(&self) -> &BindingSignature {
+        &self.binding_signature
     }
 }
 
@@ -626,15 +673,14 @@ pub mod testing {
     use nonempty::NonEmpty;
     use pasta_curves::pallas;
     use rand::{rngs::StdRng, SeedableRng};
-    use reddsa::orchard::SpendAuth;
 
     use proptest::collection::vec;
     use proptest::prelude::*;
 
     use crate::{
-        bundle::BindingSignature,
+        bundle::{BindingSignature, SpendAuthSignature},
         keys::ORCHARD_SIG_V0,
-        primitives::redpallas::{self, testing::arb_binding_signing_key},
+        primitives::redpallas::testing::arb_binding_signing_key,
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, Proof,
     };
@@ -687,7 +733,7 @@ pub mod testing {
         pub fn arb_action_n(
             n_actions: usize,
             flags: Flags,
-        ) -> impl Strategy<Value = (ValueSum, Action<redpallas::Signature<SpendAuth>, P>)> {
+        ) -> impl Strategy<Value = (ValueSum, Action<SpendAuthSignature, P>)> {
             let spend_value_gen = if flags.spends_enabled {
                 Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
             } else {
