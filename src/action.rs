@@ -1,10 +1,10 @@
 use memuse::DynamicUsage;
 
 use crate::{
-    bundle::SpendAuthSignatureWithSighashInfo,
     note::{ExtractedNoteCommitment, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, SpendAuth},
     primitives::OrchardPrimitives,
+    signature_with_sighash_info::SpendAuthSignatureWithSighashInfo,
     value::ValueCommitment,
 };
 
@@ -132,8 +132,6 @@ pub(crate) mod testing {
     use zcash_note_encryption::NoteEncryption;
 
     use crate::{
-        bundle::SpendAuthSignatureWithSighashInfo,
-        keys::ORCHARD_SIG_V0,
         note::{
             asset_base::testing::arb_asset_base, commitment::ExtractedNoteCommitment,
             nullifier::testing::arb_nullifier, testing::arb_note, Note, TransmittedNoteCiphertext,
@@ -143,6 +141,7 @@ pub(crate) mod testing {
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
         },
         primitives::{OrchardDomain, OrchardPrimitives},
+        signature_with_sighash_info::{SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0},
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
