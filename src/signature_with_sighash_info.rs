@@ -47,3 +47,18 @@ pub type BindingSignatureWithSighashInfo = SignatureWithSighashInfo<Binding>;
 
 /// Authorizing signature containing the sighash information and the signature itself.
 pub type SpendAuthSignatureWithSighashInfo = SignatureWithSighashInfo<SpendAuth>;
+
+#[cfg(test)]
+mod tests {
+    use super::{BindingSignatureWithSighashInfo, ORCHARD_SIG_V0};
+    use crate::primitives::redpallas::{self, Binding};
+
+    #[test]
+    fn signature_with_sighash_info() {
+        let binding_signature_with_info = BindingSignatureWithSighashInfo::new(
+            ORCHARD_SIG_V0,
+            redpallas::Signature::<Binding>::from([0u8; 64]),
+        );
+        assert_eq!(binding_signature_with_info.to_bytes(), [0u8; 65]);
+    }
+}
