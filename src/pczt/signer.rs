@@ -1,6 +1,10 @@
 use rand::{CryptoRng, RngCore};
 
-use crate::{keys::SpendAuthorizingKey, primitives::redpallas};
+use crate::{
+    keys::SpendAuthorizingKey,
+    primitives::redpallas,
+    signature_with_sighash_info::{SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0},
+};
 
 impl super::Action {
     /// Signs the Orchard spend with the given spend authorizing key.
@@ -23,7 +27,10 @@ impl super::Action {
         let rk = redpallas::VerificationKey::from(&rsk);
 
         if self.spend.rk == rk {
-            self.spend.spend_auth_sig = Some(rsk.sign(rng, &sighash));
+            self.spend.spend_auth_sig = Some(SpendAuthSignatureWithSighashInfo::new(
+                ORCHARD_SIG_V0,
+                rsk.sign(rng, &sighash),
+            ));
             Ok(())
         } else {
             Err(SignerError::WrongSpendAuthorizingKey)
