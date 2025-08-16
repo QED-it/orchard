@@ -3,6 +3,7 @@ mod builder;
 use crate::builder::verify_bundle;
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use nonempty::NonEmpty;
+use orchard::issuance_auth::IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID;
 use orchard::{
     builder::{Builder, BundleType},
     bundle::Authorized,
@@ -60,7 +61,8 @@ fn prepare_keys(pk: ProvingKey, vk: VerifyingKey, seed: u8) -> Keychain {
     let recipient = fvk.address_at(0u32, Scope::External);
 
     let isk =
-        IssuanceAuthorizingKey::from_bytes([seed.wrapping_add(1); 32]).expect("valid issuance key");
+        IssuanceAuthorizingKey::from_bytes(ZSASchnorrSigSchemeID, &[seed.wrapping_add(1); 32])
+            .expect("valid issuance key");
     let ik = IssuanceValidatingKey::from(&isk);
     Keychain {
         pk,
@@ -150,7 +152,7 @@ fn issue_zsa_notes(
     first_nullifier: &Nullifier,
 ) -> (Note, Note, Note) {
     let mut rng = OsRng;
-    // Create a issuance bundle
+    // Create an issuance bundle
     let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(asset_descr).unwrap());
     let (mut awaiting_nullifier_bundle, _) = IssueBundle::new(
         keys.ik().clone(),

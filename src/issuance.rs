@@ -31,6 +31,7 @@ use crate::{
     Address, Note,
 };
 
+use crate::issuance_auth::IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID;
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, InvalidIssuanceAuthorizingKey,
     InvalidIssuanceValidatingKey, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
@@ -253,7 +254,9 @@ impl Signed {
     /// Constructs a `Signed` from a byte array containing Schnorr signature bytes.
     pub fn from_data(data: [u8; 64]) -> Self {
         Signed {
-            signature: IssuanceAuthorizationSignature::from_bytes(data),
+            //TODO: VA: This is used in librustzcash - need to consider ways to make this work with the new signature format
+            signature: IssuanceAuthorizationSignature::from_bytes(ZSASchnorrSigSchemeID, &data)
+                .unwrap(),
         }
     }
 }
@@ -767,6 +770,7 @@ impl fmt::Display for Error {
 
 #[cfg(test)]
 mod tests {
+    use crate::issuance_auth::IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID;
     use crate::{
         asset_record::AssetRecord,
         builder::{Builder, BundleType},
@@ -823,7 +827,7 @@ mod tests {
     fn setup_params() -> TestParams {
         let mut rng = OsRng;
 
-        let isk = IssuanceAuthorizingKey::random(&mut rng);
+        let isk = IssuanceAuthorizingKey::random(ZSASchnorrSigSchemeID, &mut rng);
         let ik: IssuanceValidatingKey = (&isk).into();
 
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
@@ -1157,7 +1161,8 @@ mod tests {
             rng,
         );
 
-        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random(&mut rng);
+        let wrong_isk: IssuanceAuthorizingKey =
+            IssuanceAuthorizingKey::random(ZSASchnorrSigSchemeID, &mut rng);
 
         let err = bundle
             .update_rho(&first_nullifier)
@@ -1493,7 +1498,8 @@ mod tests {
             rng,
         );
 
-        let wrong_isk: IssuanceAuthorizingKey = IssuanceAuthorizingKey::random(&mut rng);
+        let wrong_isk: IssuanceAuthorizingKey =
+            IssuanceAuthorizingKey::random(ZSASchnorrSigSchemeID, &mut rng);
 
         let mut signed = bundle
             .update_rho(&first_nullifier)
@@ -1624,7 +1630,7 @@ mod tests {
             .sign(&isk)
             .unwrap();
 
-        let incorrect_isk = IssuanceAuthorizingKey::random(&mut rng);
+        let incorrect_isk = IssuanceAuthorizingKey::random(ZSASchnorrSigSchemeID, &mut rng);
         let incorrect_ik: IssuanceValidatingKey = (&incorrect_isk).into();
 
         // Add "bad" note
@@ -1717,7 +1723,7 @@ mod tests {
         let sk = SpendingKey::from_bytes([1; 32]).unwrap();
         let fvk = FullViewingKey::from(&sk);
         let recipient = fvk.address_at(0u32, Scope::External);
-        let isk = IssuanceAuthorizingKey::from_bytes([2; 32]).unwrap();
+        let isk = IssuanceAuthorizingKey::from_bytes(ZSASchnorrSigSchemeID, &[2; 32]).unwrap();
         let ik = IssuanceValidatingKey::from(&isk);
 
         // Setup note and merkle tree
@@ -1859,6 +1865,7 @@ mod tests {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use crate::issuance::IssuanceAuthorizationSignature;
+    use crate::issuance_auth::IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID;
     use crate::{
         issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed},
         issuance_auth::testing::arb_issuance_validating_key,
@@ -1871,11 +1878,11 @@ pub mod testing {
     use proptest::prop_compose;
 
     prop_compose! {
-        /// Generate a uniformly distributed signature
+        /// Generate a uniformly distributed ZSA Schnorr signature
         pub(crate) fn arb_signature()(
             sig_bytes in vec(prop::num::u8::ANY, 64)
         ) -> IssuanceAuthorizationSignature {
-                IssuanceAuthorizationSignature::from_bytes(sig_bytes.try_into().unwrap())
+                IssuanceAuthorizationSignature::from_bytes(ZSASchnorrSigSchemeID, &sig_bytes).unwrap()
         }
     }
 

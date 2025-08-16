@@ -4,6 +4,7 @@ use alloc::collections::BTreeMap;
 use nonempty::NonEmpty;
 use rand::{rngs::OsRng, RngCore};
 
+use orchard::issuance_auth::IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID;
 use orchard::{
     asset_record::AssetRecord,
     issuance::{
@@ -44,7 +45,8 @@ fn setup_params() -> TestParams {
 
     let rng = OsRng;
 
-    let isk = IssuanceAuthorizingKey::from_bytes(random_bytes(rng)).unwrap();
+    let isk = IssuanceAuthorizingKey::from_bytes(ZSASchnorrSigSchemeID, &random_bytes::<32>(rng))
+        .unwrap();
     let ik: IssuanceValidatingKey = (&isk).into();
 
     let fvk = FullViewingKey::from(&SpendingKey::from_bytes(random_bytes(rng)).unwrap());

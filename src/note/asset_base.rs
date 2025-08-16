@@ -13,7 +13,10 @@ use crate::{
         NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
     },
     issuance::compute_asset_desc_hash,
-    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    issuance_auth::{
+        IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID, IssuanceAuthorizingKey,
+        IssuanceValidatingKey,
+    },
 };
 
 /// Note type identifier.
@@ -83,7 +86,7 @@ impl AssetBase {
         let encode_asset_id: [u8; 65] = {
             let mut array = [0u8; 65];
             array[..1].copy_from_slice(&version_byte);
-            array[1..33].copy_from_slice(&ik.to_bytes());
+            array[1..33].copy_from_slice(ik.to_bytes());
             array[33..].copy_from_slice(asset_desc_hash);
             array
         };
@@ -124,7 +127,7 @@ impl AssetBase {
     ///
     /// This is only used in tests.
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
-        let isk = IssuanceAuthorizingKey::random(rng);
+        let isk = IssuanceAuthorizingKey::random(ZSASchnorrSigSchemeID, rng);
         let ik = IssuanceValidatingKey::from(&isk);
         AssetBase::derive(
             &ik,
@@ -189,6 +192,14 @@ pub mod testing {
             AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc_hash)
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        issuance_auth::{IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID, IssuanceValidatingKey},
+        note::AssetBase,
+    };
 
     #[test]
     fn test_vectors() {
@@ -199,7 +210,7 @@ pub mod testing {
                 &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
             );
             let calculated_asset_base = AssetBase::derive(
-                &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
+                &IssuanceValidatingKey::from_bytes(ZSASchnorrSigSchemeID, &tv.key).unwrap(),
                 &asset_desc_hash,
             );
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();
