@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use core::cmp::Ordering;
 use core::hash::{Hash, Hasher};
@@ -49,13 +50,27 @@ pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
 ///    Defined in [ZIP-227: Issuance of Zcash Shielded Assets][assetdigest].
 ///
 ///    [assetdigest]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
-pub fn asset_digest(encode_asset_id: [u8; 65]) -> Blake2bHash {
+pub fn asset_digest(encode_asset_id: &[u8]) -> Blake2bHash {
     Params::new()
         .hash_length(64)
         .personal(ZSA_ASSET_DIGEST_PERSONALIZATION)
         .to_state()
-        .update(&encode_asset_id)
+        .update(encode_asset_id)
         .finalize()
+}
+
+/// Encoding the Asset Identifier, as defined in [ZIP 227][assetidentifier].
+///
+/// [assetidentifier]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
+pub fn encode_asset_id(
+    version: u8,
+    ik: &IssuanceValidatingKey,
+    asset_desc_hash: &[u8; 32],
+) -> Vec<u8> {
+    let mut asset_id = vec![version];
+    asset_id.extend_from_slice(&ik.encode()); // TODO: VA: Do we need to panic here if decoding is not 33 bytes?
+    asset_id.extend_from_slice(&asset_desc_hash[..]);
+    asset_id
 }
 
 impl AssetBase {
@@ -80,18 +95,11 @@ impl AssetBase {
     /// Panics if the derived AssetBase is the identity point.
     #[allow(non_snake_case)]
     pub fn derive(ik: &IssuanceValidatingKey, asset_desc_hash: &[u8; 32]) -> Self {
-        let version_byte = [0x00];
+        let version_byte: u8 = 0x00;
 
         // EncodeAssetId(ik, asset_desc_hash) = version_byte || ik || asset_desc_hash
-        let encode_asset_id: [u8; 65] = {
-            let mut array = [0u8; 65];
-            array[..1].copy_from_slice(&version_byte);
-            array[1..33].copy_from_slice(ik.to_bytes());
-            array[33..].copy_from_slice(asset_desc_hash);
-            array
-        };
-
-        let asset_digest = asset_digest(encode_asset_id);
+        let asset_id = encode_asset_id(version_byte, ik, asset_desc_hash);
+        let asset_digest = asset_digest(&asset_id);
 
         let asset_base =
             pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(asset_digest.as_bytes());
@@ -196,10 +204,7 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        issuance_auth::{IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID, IssuanceValidatingKey},
-        note::AssetBase,
-    };
+    use crate::{issuance_auth::IssuanceValidatingKey, note::AssetBase};
 
     #[test]
     fn test_vectors() {
@@ -210,7 +215,7 @@ mod tests {
                 &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
             );
             let calculated_asset_base = AssetBase::derive(
-                &IssuanceValidatingKey::from_bytes(ZSASchnorrSigSchemeID, &tv.key).unwrap(),
+                &IssuanceValidatingKey::decode(&tv.key).unwrap(),
                 &asset_desc_hash,
             );
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();

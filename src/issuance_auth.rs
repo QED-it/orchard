@@ -49,6 +49,17 @@ impl IssuanceAuthSigSchemeID {
     }
 }
 
+impl TryFrom<u8> for IssuanceAuthSigSchemeID {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID),
+            _ => Err(()),
+        }
+    }
+}
+
 /// An issuance authorization key, from is used to sign the issuance authorization signatures.
 ///
 /// This is denoted by `isk` as defined in [ZIP 227][issuancekeycomponents].
@@ -291,6 +302,30 @@ impl IssuanceValidatingKey {
             scheme,
             bytes: bytes.to_vec(),
         })
+    }
+
+    /// Encodes the issuance validating key into a byte vector, in the manner defined in [ZIP 227][issuancekeycomponents].
+    ///
+    /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#derivation-of-issuance-validating-key
+    pub fn encode(&self) -> Vec<u8> {
+        let mut encoded = vec![self.scheme as u8];
+        encoded.extend_from_slice(&self.bytes);
+        encoded
+    }
+
+    /// Decodes an issuance validating key from the byte representation defined in [ZIP 227][issuancekeycomponents].
+    ///
+    /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#derivation-of-issuance-validating-key
+    pub fn decode(bytes: &[u8]) -> Result<Self, issuance::Error> {
+        let scheme = bytes
+            .first()
+            .ok_or(Error::InvalidIssuanceValidatingKey)
+            .and_then(|&algorithm_byte| {
+                algorithm_byte
+                    .try_into()
+                    .map_err(|_| Error::InvalidIssuanceValidatingKey)
+            })?;
+        Self::from_bytes(scheme, &bytes[1..]).ok_or(Error::InvalidIssuanceValidatingKey)
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
