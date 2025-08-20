@@ -25,16 +25,16 @@ use crate::{
     bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
     constants::reference_keys::ReferenceKeys,
     keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
-    note::{AssetBase, Nullifier, Rho},
+    note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
     value::NoteValue,
     Address, Note,
 };
 
 use Error::{
-    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IssueActionNotFound,
-    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
-    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IncorrectRhoDerivation,
+    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
+    IssueBundleInvalidSignature, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 /// Checks if a given note is a reference note.
@@ -599,6 +599,9 @@ impl IssueBundle<Signed> {
 ///   - Ensures the total supply value does not overflow when adding the new amount to the existing supply.
 ///   - Verifies that the `AssetBase` has not already been finalized.
 ///   - Requires a reference note for the *first issuance* of an asset; subsequent issuance may omit it.
+/// - **Rho computation**:
+///   - Ensures that the `rho` value of each issuance note is correctly computed from the given
+///     `first_nullifier`.
 ///
 /// # Arguments
 ///
@@ -607,6 +610,8 @@ impl IssueBundle<Signed> {
 /// * `get_global_asset_state`: A closure that takes a reference to an [`AssetBase`] and returns an
 ///   [`Option<AssetRecord>`], representing the current state of the asset from a global store
 ///   of previously issued assets.
+/// * `first_nullifier`: A reference to a [`Nullifier`] that is used to compute the `rho` value of
+///   each issuance note.
 ///
 /// # Returns
 ///
@@ -622,22 +627,42 @@ impl IssueBundle<Signed> {
 ///   already been finalized.
 /// * `MissingReferenceNoteOnFirstIssuance`: No reference note is provided for the first
 ///   issuance of a new asset.
+/// * `IncorrectRhoDerivation`: If the `rho` value of any issuance note is not correctly derived
+///   from the `first_nullifier`.
 /// * **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
 ///   propagated
 pub fn verify_issue_bundle(
     bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
     get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
+    first_nullifier: &Nullifier,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
     bundle
         .ik()
         .verify(&sighash, bundle.authorization().signature())
         .map_err(|_| IssueBundleInvalidSignature)?;
 
-    bundle
-        .actions()
-        .iter()
-        .try_fold(BTreeMap::new(), |mut new_records, action| {
+    bundle.actions().iter().enumerate().try_fold(
+        BTreeMap::new(),
+        |mut new_records, (index_action, action)| {
+            // Check rho derivation for each note.
+            action
+                .notes
+                .iter()
+                .enumerate()
+                .try_for_each(|(index_note, note)| {
+                    if note.rho()
+                        != rho_for_issuance_note(
+                            first_nullifier,
+                            index_action.try_into().unwrap(),
+                            index_note.try_into().unwrap(),
+                        )
+                    {
+                        return Err(IncorrectRhoDerivation);
+                    }
+                    Ok(())
+                })?;
+
             let (asset, amount) = action.verify(bundle.ik())?;
 
             let is_finalized = action.is_finalized();
@@ -670,7 +695,8 @@ pub fn verify_issue_bundle(
             new_records.insert(asset, new_asset_record);
 
             Ok(new_records)
-        })
+        },
+    )
 }
 
 /// Errors produced during the issuance process
@@ -692,6 +718,8 @@ pub enum Error {
     IssueBundleInvalidSignature,
     /// The provided `AssetBase` has been previously finalized.
     IssueActionPreviouslyFinalizedAssetBase,
+    /// The rho value of an issuance note is not correctly derived from the first nullifier.
+    IncorrectRhoDerivation,
 
     /// Overflow error occurred while calculating the value of the asset
     ValueOverflow,
@@ -735,6 +763,9 @@ impl fmt::Display for Error {
             }
             IssueActionPreviouslyFinalizedAssetBase => {
                 write!(f, "the provided `AssetBase` has been previously finalized")
+            }
+            IncorrectRhoDerivation => {
+                write!(f, "incorrect rho value")
             }
             ValueOverflow => {
                 write!(
@@ -1232,7 +1263,8 @@ mod tests {
             .sign(&isk)
             .unwrap();
 
-        let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
+        let issued_assets =
+            verify_issue_bundle(&signed, sighash, |_| None, &first_nullifier).unwrap();
 
         let first_note = *signed.actions().first().notes().first().unwrap();
         assert_eq!(
@@ -1277,7 +1309,8 @@ mod tests {
             .sign(&isk)
             .unwrap();
 
-        let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
+        let issued_assets =
+            verify_issue_bundle(&signed, sighash, |_| None, &first_nullifier).unwrap();
 
         let first_note = *signed.actions().first().notes().first().unwrap();
         assert_eq!(
@@ -1362,7 +1395,8 @@ mod tests {
             .sign(&isk)
             .unwrap();
 
-        let issued_assets = verify_issue_bundle(&signed, sighash, |_| None).unwrap();
+        let issued_assets =
+            verify_issue_bundle(&signed, sighash, |_| None, &first_nullifier).unwrap();
 
         assert_eq!(issued_assets.keys().len(), 3);
 
@@ -1447,8 +1481,13 @@ mod tests {
         .collect::<BTreeMap<_, _>>();
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, |asset| issued_assets.get(asset).copied())
-                .unwrap_err(),
+            verify_issue_bundle(
+                &signed,
+                sighash,
+                |asset| issued_assets.get(asset).copied(),
+                &first_nullifier
+            )
+            .unwrap_err(),
             IssueActionPreviouslyFinalizedAssetBase
         );
     }
@@ -1495,7 +1534,7 @@ mod tests {
         });
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None, &first_nullifier).unwrap_err(),
             IssueBundleInvalidSignature
         );
     }
@@ -1530,7 +1569,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            verify_issue_bundle(&signed, random_sighash, |_| None).unwrap_err(),
+            verify_issue_bundle(&signed, random_sighash, |_| None, &first_nullifier).unwrap_err(),
             IssueBundleInvalidSignature
         );
     }
@@ -1578,7 +1617,7 @@ mod tests {
         signed.actions.first_mut().notes.push(note);
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None, &first_nullifier).unwrap_err(),
             IssueBundleIkMismatchAssetBase
         );
     }
@@ -1628,7 +1667,7 @@ mod tests {
         signed.actions.first_mut().notes = vec![note];
 
         assert_eq!(
-            verify_issue_bundle(&signed, sighash, |_| None).unwrap_err(),
+            verify_issue_bundle(&signed, sighash, |_| None, &first_nullifier).unwrap_err(),
             IssueBundleIkMismatchAssetBase
         );
     }
