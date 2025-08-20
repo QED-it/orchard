@@ -790,7 +790,7 @@ mod tests {
         builder::{Builder, BundleType},
         circuit::ProvingKey,
         issuance::Error::{
-            IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+            IncorrectRhoDerivation, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
             IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
         },
         issuance::{
@@ -1236,7 +1236,7 @@ mod tests {
     #[test]
     fn issue_bundle_verify() {
         let TestParams {
-            rng,
+            mut rng,
             isk,
             ik,
             recipient,
@@ -1265,6 +1265,12 @@ mod tests {
 
         let issued_assets =
             verify_issue_bundle(&signed, sighash, |_| None, &first_nullifier).unwrap();
+
+        // Verify that `verify_issue_bundle` returns an error if `first_nullifier` is incorrect.
+        assert_eq!(
+            verify_issue_bundle(&signed, sighash, |_| None, &Nullifier::dummy(&mut rng)),
+            Err(IncorrectRhoDerivation)
+        );
 
         let first_note = *signed.actions().first().notes().first().unwrap();
         assert_eq!(
