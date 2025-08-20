@@ -1610,7 +1610,7 @@ mod tests {
                 signed.ik(),
                 &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
             ),
-            Rho::zero(),
+            rho_for_issuance_note(&first_nullifier, 0, 2),
             &mut rng,
         );
 
@@ -1660,7 +1660,7 @@ mod tests {
             recipient,
             NoteValue::from_raw(55),
             AssetBase::derive(&incorrect_ik, &asset_desc_hash),
-            Rho::zero(),
+            rho_for_issuance_note(&first_nullifier, 0, 0),
             &mut rng,
         );
 
