@@ -361,6 +361,8 @@ pub enum ParseError {
     InvalidWitness,
     /// An invalid `zip32_derivation` was provided.
     InvalidZip32Derivation,
+    /// An invalid `SighashInfo` was provided.
+    InvalidSighashInfo,
     /// `rho` must be provided whenever `rseed` is provided.
     MissingRho,
     /// The provided `flags` field had unexpected bits set.
