@@ -78,6 +78,17 @@ impl<T: SigType> SignatureWithSighashInfo<T> {
     pub fn signature(&self) -> &redpallas::Signature<T> {
         &self.signature
     }
+
+    /// Parses a SpendAuthSignatureWithSighashInfo from its raw bytes components.
+    ///
+    /// Returns an error `sighash_info` is empty.
+    pub fn parse(sighash_info: Vec<u8>, signature: [u8; 64]) -> Result<Self, ParseError> {
+        let info = SighashInfo::from_bytes(&sighash_info).ok_or(ParseError::InvalidSighashInfo)?;
+        Ok(Self {
+            info,
+            signature: signature.into(),
+        })
+    }
 }
 
 /// Binding signature containing the sighash information and the signature itself.
@@ -85,19 +96,6 @@ pub type BindingSignatureWithSighashInfo = SignatureWithSighashInfo<Binding>;
 
 /// Authorizing signature containing the sighash information and the signature itself.
 pub type SpendAuthSignatureWithSighashInfo = SignatureWithSighashInfo<SpendAuth>;
-
-impl SpendAuthSignatureWithSighashInfo {
-    /// Parses a SpendAuthSignatureWithSighashInfo from its raw bytes components.
-    ///
-    /// Returns an error `sighash_info` is empty.
-    pub fn parse(sighash_info: Vec<u8>, signature: [u8; 64]) -> Result<Self, ParseError> {
-        let info = SighashInfo::from_bytes(&sighash_info).ok_or(ParseError::InvalidSighashInfo)?;
-        Ok(SpendAuthSignatureWithSighashInfo::new(
-            info,
-            signature.into(),
-        ))
-    }
-}
 
 #[cfg(test)]
 mod tests {
