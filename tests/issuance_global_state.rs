@@ -4,7 +4,6 @@ use alloc::collections::BTreeMap;
 use nonempty::NonEmpty;
 use rand::{rngs::OsRng, RngCore};
 
-use orchard::issuance_auth::IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID;
 use orchard::{
     asset_record::AssetRecord,
     issuance::{
@@ -15,7 +14,7 @@ use orchard::{
         },
         IssueBundle, IssueInfo, Signed,
     },
-    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorrSigScheme},
     keys::{FullViewingKey, Scope, SpendingKey},
     note::{AssetBase, Nullifier},
     value::NoteValue,
@@ -31,8 +30,8 @@ fn random_bytes<const N: usize>(mut rng: OsRng) -> [u8; N] {
 #[derive(Clone)]
 struct TestParams {
     rng: OsRng,
-    isk: IssuanceAuthorizingKey,
-    ik: IssuanceValidatingKey,
+    isk: IssuanceAuthorizingKey<ZSASchnorrSigScheme>,
+    ik: IssuanceValidatingKey<ZSASchnorrSigScheme>,
     recipient: Address,
     sighash: [u8; 32],
     first_nullifier: Nullifier,
@@ -43,11 +42,10 @@ fn setup_params() -> TestParams {
     use group::{ff::PrimeField, Curve, Group};
     use pasta_curves::{arithmetic::CurveAffine, pallas};
 
-    let rng = OsRng;
+    let mut rng = OsRng;
 
-    let isk = IssuanceAuthorizingKey::from_bytes(ZSASchnorrSigSchemeID, &random_bytes::<32>(rng))
-        .unwrap();
-    let ik: IssuanceValidatingKey = (&isk).into();
+    let isk = IssuanceAuthorizingKey::random(&mut rng);
+    let ik = (&isk).into();
 
     let fvk = FullViewingKey::from(&SpendingKey::from_bytes(random_bytes(rng)).unwrap());
     let recipient = fvk.address_at(0u32, Scope::External);
@@ -110,11 +108,17 @@ impl IssueTestNote {
     }
 }
 
-fn get_first_note(bundle: &IssueBundle<Signed>, action_index: usize) -> &Note {
+fn get_first_note(
+    bundle: &IssueBundle<ZSASchnorrSigScheme, Signed<ZSASchnorrSigScheme>>,
+    action_index: usize,
+) -> &Note {
     bundle.actions()[action_index].notes().first().unwrap()
 }
 
-fn build_issue_bundle(params: &TestParams, data: &[IssueTestNote]) -> IssueBundle<Signed> {
+fn build_issue_bundle(
+    params: &TestParams,
+    data: &[IssueTestNote],
+) -> IssueBundle<ZSASchnorrSigScheme, Signed<ZSASchnorrSigScheme>> {
     let TestParams {
         rng,
         ref isk,

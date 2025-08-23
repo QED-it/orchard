@@ -3,7 +3,6 @@ mod builder;
 use crate::builder::verify_bundle;
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use nonempty::NonEmpty;
-use orchard::issuance_auth::IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID;
 use orchard::{
     builder::{Builder, BundleType},
     bundle::Authorized,
@@ -12,7 +11,7 @@ use orchard::{
         compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo,
         Signed,
     },
-    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorrSigScheme},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, Nullifier},
     orchard_flavor::OrchardZSA,
@@ -32,8 +31,8 @@ struct Keychain {
     vk: VerifyingKey,
     sk: SpendingKey,
     fvk: FullViewingKey,
-    isk: IssuanceAuthorizingKey,
-    ik: IssuanceValidatingKey,
+    isk: IssuanceAuthorizingKey<ZSASchnorrSigScheme>,
+    ik: IssuanceValidatingKey<ZSASchnorrSigScheme>,
     recipient: Address,
 }
 
@@ -47,10 +46,10 @@ impl Keychain {
     fn fvk(&self) -> &FullViewingKey {
         &self.fvk
     }
-    fn isk(&self) -> &IssuanceAuthorizingKey {
+    fn isk(&self) -> &IssuanceAuthorizingKey<ZSASchnorrSigScheme> {
         &self.isk
     }
-    fn ik(&self) -> &IssuanceValidatingKey {
+    fn ik(&self) -> &IssuanceValidatingKey<ZSASchnorrSigScheme> {
         &self.ik
     }
 }
@@ -60,9 +59,8 @@ fn prepare_keys(pk: ProvingKey, vk: VerifyingKey, seed: u8) -> Keychain {
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
-    let isk =
-        IssuanceAuthorizingKey::from_bytes(ZSASchnorrSigSchemeID, &[seed.wrapping_add(1); 32])
-            .expect("valid issuance key");
+    let isk = IssuanceAuthorizingKey::from_bytes(&[seed.wrapping_add(1); 32])
+        .expect("valid issuance key");
     let ik = IssuanceValidatingKey::from(&isk);
     Keychain {
         pk,
@@ -76,10 +74,10 @@ fn prepare_keys(pk: ProvingKey, vk: VerifyingKey, seed: u8) -> Keychain {
 }
 
 fn sign_issue_bundle(
-    awaiting_nullifier_bundle: IssueBundle<AwaitingNullifier>,
-    isk: &IssuanceAuthorizingKey,
+    awaiting_nullifier_bundle: IssueBundle<ZSASchnorrSigScheme, AwaitingNullifier>,
+    isk: &IssuanceAuthorizingKey<ZSASchnorrSigScheme>,
     first_nullifier: &Nullifier,
-) -> IssueBundle<Signed> {
+) -> IssueBundle<ZSASchnorrSigScheme, Signed<ZSASchnorrSigScheme>> {
     let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier);
     let sighash = awaiting_sighash_bundle.commitment().into();
     let prepared_bundle = awaiting_sighash_bundle.prepare(sighash);

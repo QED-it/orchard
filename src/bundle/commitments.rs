@@ -2,6 +2,7 @@
 
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
+use crate::issuance_auth::IssuanceAuthSigScheme;
 use crate::{
     bundle::{Authorization, Authorized, Bundle},
     issuance::{IssueAuth, IssueBundle, Signed},
@@ -94,7 +95,9 @@ pub fn hash_issue_bundle_txid_empty() -> Blake2bHash {
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
-pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>) -> Blake2bHash {
+pub(crate) fn hash_issue_bundle_txid_data<S: IssuanceAuthSigScheme, A: IssueAuth>(
+    bundle: &IssueBundle<S, A>,
+) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION);
     let mut ia = hasher(ZCASH_ORCHARD_ZSA_ISSUE_ACTION_PERSONALIZATION);
 
@@ -112,7 +115,7 @@ pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>)
         ia.update(&[u8::from(action.is_finalized())]);
     }
     h.update(ia.finalize().as_bytes());
-    h.update(bundle.ik().to_bytes());
+    h.update(&bundle.ik().to_bytes());
     h.finalize()
 }
 
@@ -121,9 +124,11 @@ pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>)
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
-pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake2bHash {
+pub(crate) fn hash_issue_bundle_auth_data<S: IssuanceAuthSigScheme>(
+    bundle: &IssueBundle<S, Signed<S>>,
+) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION);
-    h.update(bundle.authorization().signature().to_bytes());
+    h.update(&bundle.authorization().signature().to_bytes());
     h.finalize()
 }
 

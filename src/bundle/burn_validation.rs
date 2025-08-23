@@ -67,7 +67,7 @@ impl fmt::Display for BurnError {
 mod tests {
     use super::*;
     use crate::issuance::compute_asset_desc_hash;
-    use crate::issuance_auth::IssuanceAuthSigSchemeID::ZSASchnorrSigSchemeID;
+    use crate::issuance_auth::ZSASchnorrSigScheme;
     use crate::value::NoteValue;
     use nonempty::NonEmpty;
 
@@ -88,7 +88,7 @@ mod tests {
     fn get_burn_tuple(asset_desc_hash: &[u8; 32], value: u64) -> (AssetBase, NoteValue) {
         use crate::issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey};
 
-        let isk = IssuanceAuthorizingKey::from_bytes(ZSASchnorrSigSchemeID, &[1u8; 32]).unwrap();
+        let isk = IssuanceAuthorizingKey::<ZSASchnorrSigScheme>::from_bytes(&[1u8; 32]).unwrap();
 
         (
             AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc_hash),
