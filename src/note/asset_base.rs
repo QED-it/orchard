@@ -135,8 +135,8 @@ impl AssetBase {
     /// Generates a ZSA random asset.
     ///
     /// This is only used in tests. //TODO: VA: This will only work for ZSA Schnorr signatures. Generalization would need random isk generation for other schemes.
-    pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
-        let isk = IssuanceAuthorizingKey::random(rng);
+    pub(crate) fn random<S: IssuanceAuthSigScheme>(rng: &mut impl CryptoRngCore) -> Self {
+        let isk = IssuanceAuthorizingKey::<S>::random(rng);
         let ik = IssuanceValidatingKey::from(&isk);
         AssetBase::derive(
             &ik,

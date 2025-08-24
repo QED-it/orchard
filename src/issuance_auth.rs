@@ -34,12 +34,6 @@ pub trait IssuanceAuthSigScheme {
     /// The byte corresponding to this signature scheme, used to encode the issuance validating key
     /// and issuance authorization signature.
     const ALGORITHM_BYTE: u8;
-    /// The length in bytes of an issuance authorizing key.
-    const ISK_LENGTH: usize;
-    /// The length in bytes of an issuance validating key.
-    const IK_LENGTH: usize;
-    /// The length in bytes of an issuance authorization signature.
-    const SIG_LENGTH: usize;
 
     /// The type of the issuance authorizing key.
     type IskType;
@@ -60,6 +54,9 @@ pub trait IssuanceAuthSigScheme {
     fn sig_to_bytes(sig: &Self::IssueAuthSigType) -> Vec<u8>;
     /// Deserialization for the issuance authorization signature.
     fn sig_from_bytes(bytes: &[u8]) -> Option<Self::IssueAuthSigType>;
+
+    /// Generates a random issuance authorizing key, for testing purposes.
+    fn random_isk(rng: &mut impl CryptoRngCore) -> Self::IskType;
 
     /// Derives the issuance validating key from the issuance authorizing key.
     fn ik_from_isk(isk: &Self::IskType) -> Self::IkType;
@@ -108,9 +105,6 @@ pub struct ZSASchnorrSigScheme;
 
 impl IssuanceAuthSigScheme for ZSASchnorrSigScheme {
     const ALGORITHM_BYTE: u8 = 0x00;
-    const ISK_LENGTH: usize = 32;
-    const IK_LENGTH: usize = 32;
-    const SIG_LENGTH: usize = 64;
 
     type IskType = NonZeroScalar;
     type IkType = VerifyingKey;
@@ -140,6 +134,10 @@ impl IssuanceAuthSigScheme for ZSASchnorrSigScheme {
         schnorr::Signature::try_from(bytes).ok()
     }
 
+    fn random_isk(rng: &mut impl CryptoRngCore) -> Self::IskType {
+        NonZeroScalar::random(rng)
+    }
+
     fn ik_from_isk(&isk: &Self::IskType) -> Self::IkType {
         *schnorr::SigningKey::from(isk).verifying_key()
     }
@@ -161,14 +159,22 @@ impl<S: IssuanceAuthSigScheme> IssuanceAuthorizingKey<S> {
     ///
     /// Returns `None` if the bytes do not correspond to a valid issuance authorizing key.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        (bytes.len() == S::ISK_LENGTH)
-            .then_some(S::isk_from_bytes(bytes)?)
-            .map(Self)
+        S::isk_from_bytes(bytes).map(Self)
     }
 
     /// Returns the raw bytes of the issuance key.
     pub fn to_bytes(&self) -> Vec<u8> {
         S::isk_to_bytes(&self.0)
+    }
+
+    /// Generates a random issuance authorizing key.
+    ///
+    /// This is only used when generating a random AssetBase.
+    /// Real issuance keys should be derived according to [ZIP 32].
+    ///
+    /// [ZIP 32]: https://zips.z.cash/zip-0032
+    pub fn random(rng: &mut impl CryptoRngCore) -> Self {
+        Self(S::random_isk(rng))
     }
 
     /// Derives the Orchard-ZSA issuance key for the given seed, coin type, and account.
@@ -202,18 +208,6 @@ impl<S: IssuanceAuthSigScheme> IssuanceAuthorizingKey<S> {
     }
 }
 
-impl IssuanceAuthorizingKey<ZSASchnorrSigScheme> {
-    /// Generates a random issuance key.
-    ///
-    /// This is only used when generating a random AssetBase.
-    /// Real issuance keys should be derived according to [ZIP 32].
-    ///
-    /// [ZIP 32]: https://zips.z.cash/zip-0032
-    pub fn random(rng: &mut impl CryptoRngCore) -> Self {
-        Self(NonZeroScalar::random(rng))
-    }
-}
-
 impl<S: IssuanceAuthSigScheme> Debug for IssuanceAuthorizingKey<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("IssuanceAuthorizingKey")
@@ -240,17 +234,17 @@ impl<S: IssuanceAuthSigScheme> IssuanceValidatingKey<S> {
     ///
     /// Returns `None` if the bytes do not correspond to a valid key.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        (bytes.len() == S::IK_LENGTH)
-            .then_some(S::ik_from_bytes(bytes)?)
-            .map(Self)
+        S::ik_from_bytes(bytes).map(Self)
     }
 
     /// Encodes the issuance validating key into a byte vector, in the manner defined in [ZIP 227][issuancekeycomponents].
     ///
     /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#derivation-of-issuance-validating-key
     pub fn encode(&self) -> Vec<u8> {
-        let mut encoded = vec![S::ALGORITHM_BYTE];
-        encoded.extend(S::ik_to_bytes(&self.0));
+        let ik_bytes = S::ik_to_bytes(&self.0);
+        let mut encoded = Vec::with_capacity(1 + ik_bytes.len());
+        encoded.push(S::ALGORITHM_BYTE);
+        encoded.extend(ik_bytes);
         encoded
     }
 
@@ -303,9 +297,7 @@ impl<S: IssuanceAuthSigScheme> IssuanceAuthorizationSignature<S> {
 
     /// Deserialize the issuance authorization signature from its canonical byte representation.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        (bytes.len() == S::SIG_LENGTH)
-            .then_some(S::sig_from_bytes(bytes)?)
-            .map(Self)
+        S::sig_from_bytes(bytes).map(Self)
     }
 
     /// Encodes the issuance authorization signature into a byte vector, in the manner
@@ -313,8 +305,10 @@ impl<S: IssuanceAuthSigScheme> IssuanceAuthorizationSignature<S> {
     ///
     /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signing-and-validation
     pub fn encode(&self) -> Vec<u8> {
-        let mut encoded = vec![S::ALGORITHM_BYTE];
-        encoded.extend(S::sig_to_bytes(&self.0));
+        let sig_bytes = S::sig_to_bytes(&self.0);
+        let mut encoded = Vec::with_capacity(1 + sig_bytes.len());
+        encoded.push(S::ALGORITHM_BYTE);
+        encoded.extend(sig_bytes);
         encoded
     }
 
@@ -395,7 +389,8 @@ mod tests {
     #[test]
     fn issuance_authorizing_key_from_bytes_to_bytes_roundtrip() {
         // TODO: VA: This test should work for any scheme, but random is only defined for ZSA Schnorr...
-        let isk = IssuanceAuthorizingKey::random(&mut OsRng);
+        let isk: IssuanceAuthorizingKey<ZSASchnorrSigScheme> =
+            IssuanceAuthorizingKey::random(&mut OsRng);
         let isk_bytes = isk.to_bytes();
         let isk_roundtrip =
             IssuanceAuthorizingKey::<ZSASchnorrSigScheme>::from_bytes(&isk_bytes).unwrap();

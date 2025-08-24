@@ -1652,7 +1652,8 @@ mod tests {
             .sign(&isk)
             .unwrap();
 
-        let incorrect_isk = IssuanceAuthorizingKey::random(&mut rng);
+        let incorrect_isk: IssuanceAuthorizingKey<ZSASchnorrSigScheme> =
+            IssuanceAuthorizingKey::random(&mut rng);
         let incorrect_ik = (&incorrect_isk).into();
 
         // Add "bad" note
