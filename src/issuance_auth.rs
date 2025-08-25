@@ -61,6 +61,9 @@ pub trait IssuanceAuthSigScheme {
     fn ik_from_isk(isk: &Self::IskType) -> Self::IkType;
 
     /// Signs a 32-byte message using the issuance authorizing key.
+    ///
+    /// Only supports signing of messages of length 32 bytes, since we will only be using it
+    /// to sign 32 byte SIGHASH values.
     fn try_sign(
         isk: &Self::IskType,
         msg: &[u8; 32],
@@ -387,7 +390,6 @@ mod tests {
 
     #[test]
     fn issuance_authorizing_key_from_bytes_to_bytes_roundtrip() {
-        // TODO: VA: This test should work for any scheme, but random is only defined for ZSA Schnorr...
         let isk: IssuanceAuthorizingKey<ZSASchnorr> = IssuanceAuthorizingKey::random(&mut OsRng);
         let isk_bytes = isk.to_bytes();
         let isk_roundtrip = IssuanceAuthorizingKey::<ZSASchnorr>::from_bytes(&isk_bytes).unwrap();

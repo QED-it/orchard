@@ -985,6 +985,7 @@ mod tests {
         *,
     };
     use crate::{
+        issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorr},
         note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
         value::NoteValue,
         Note,
@@ -1043,13 +1044,13 @@ mod tests {
             let ask: SpendAuthorizingKey = (&sk).into();
             assert_eq!(<[u8; 32]>::from(&ask.0), tv.ask);
 
-            // let isk = IssuanceAuthorizingKey::from_bytes(tv.isk).unwrap();
+            let isk = IssuanceAuthorizingKey::<ZSASchnorr>::from_bytes(&tv.isk).unwrap();
 
             let ak: SpendValidatingKey = (&ask).into();
             assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
 
-            // let ik: IssuanceValidatingKey = (&isk).into();
-            // assert_eq!(ik.to_bytes(), tv.ik);
+            let ik: IssuanceValidatingKey<ZSASchnorr> = (&isk).into();
+            assert_eq!(ik.to_bytes(), tv.ik);
 
             let nk: NullifierDerivingKey = (&sk).into();
             assert_eq!(nk.0.to_repr(), tv.nk);
