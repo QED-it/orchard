@@ -74,7 +74,7 @@ pub trait IssuanceAuthSigScheme {
     ) -> Result<(), issuance::Error>;
 }
 
-/// An issuance authorization key, from is used to sign the issuance authorization signatures.
+/// An issuance authorizing key.
 ///
 /// This is denoted by `isk` as defined in [ZIP 227][issuancekeycomponents].
 ///
@@ -82,9 +82,9 @@ pub trait IssuanceAuthSigScheme {
 #[derive(Clone)]
 pub struct IssuanceAuthorizingKey<S: IssuanceAuthSigScheme>(S::IskType);
 
-/// A key used to validate issuance authorization signatures, denoted by `ik`.
+/// An issuance validating key which is used to validate issuance authorization signatures.
 ///
-/// Defined in [ZIP 227: Issuance of Zcash Shielded Assets § Issuance Key Generation][IssuanceZSA].
+/// This is denoted by `ik` and defined in [ZIP 227: Issuance of Zcash Shielded Assets § Issuance Key Generation][IssuanceZSA].
 ///
 /// [IssuanceZSA]: https://zips.z.cash/zip-0227#issuance-key-derivation
 #[derive(Clone)]
@@ -144,7 +144,7 @@ impl IssuanceAuthSigScheme for ZSASchnorrSigScheme {
     fn try_sign(isk: &Self::IskType, msg: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error> {
         schnorr::SigningKey::from(*isk)
             .sign_prehash(msg)
-            .map_err(|_| issuance::Error::IssueBundleInvalidSignature)
+            .map_err(|_| issuance::Error::InvalidIssuanceAuthorizingKey)
     }
 
     fn verify(ik: &Self::IkType, msg: &[u8], sig: &Self::IssueAuthSigType) -> Result<(), Error> {
@@ -365,7 +365,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate a uniformly distributed RedDSA issuance validating key.
+        /// Generate a uniformly distributed issuance validating key.
         pub fn arb_issuance_validating_key()(isk in arb_issuance_authorizing_key()) -> IssuanceValidatingKey<ZSASchnorrSigScheme> {
             IssuanceValidatingKey::from(&isk)
         }
@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn issuance_authorizing_key_from_bytes_fail_on_zero() {
-        // isk must not be the zero scalar for the ZSA Schnorr scheme. TODO: VA: I think this needs to be ZSA Schnorr specific - can't claim this for all schemes.
+        // isk must not be the zero scalar for the ZSA Schnorr scheme.
         let zero_bytes = [0u8; 32];
         let isk = IssuanceAuthorizingKey::<ZSASchnorrSigScheme>::from_bytes(&zero_bytes);
         assert!(isk.is_none());

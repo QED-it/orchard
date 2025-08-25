@@ -171,7 +171,6 @@ impl IssueAction {
         &self,
         ik: &IssuanceValidatingKey<S>,
     ) -> Result<(AssetBase, NoteValue), Error> {
-        // TODO: VA: I don't think we can avoid the generic here without making things convoluted
         if self.notes.is_empty() && !self.is_finalized() {
             return Err(IssueActionWithoutNoteNotFinalized);
         }
@@ -272,7 +271,8 @@ impl<S: IssuanceAuthSigScheme> Signed<S> {
         &self.signature
     }
 
-    /// Constructs a `Signed` from a byte array containing Schnorr signature bytes.
+    /// Constructs a `Signed` from a byte array containing an `IssuanceAuthorizationSignature`
+    /// in raw bytes.
     pub fn from_data(data: &[u8]) -> Self {
         Signed {
             //TODO: VA: This is used in librustzcash - need to confirm this will work with the serialization

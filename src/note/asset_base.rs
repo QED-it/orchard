@@ -65,7 +65,7 @@ pub fn encode_asset_id<S: IssuanceAuthSigScheme>(
     asset_desc_hash: &[u8; 32],
 ) -> Vec<u8> {
     let mut asset_id = vec![version];
-    asset_id.extend_from_slice(&ik.encode()); // TODO: VA: Do we need to panic here if decoding is not 33 bytes?
+    asset_id.extend_from_slice(&ik.encode());
     asset_id.extend_from_slice(&asset_desc_hash[..]);
     asset_id
 }
@@ -133,7 +133,7 @@ impl AssetBase {
 
     /// Generates a ZSA random asset.
     ///
-    /// This is only used in tests. //TODO: VA: This will only work for ZSA Schnorr signatures. Generalization would need random isk generation for other schemes.
+    /// This is only used in tests.
     pub(crate) fn random<S: IssuanceAuthSigScheme>(rng: &mut impl CryptoRngCore) -> Self {
         let isk = IssuanceAuthorizingKey::<S>::random(rng);
         let ik = IssuanceValidatingKey::from(&isk);
