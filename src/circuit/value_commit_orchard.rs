@@ -136,7 +136,7 @@ mod tests {
             K,
         },
         constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
-        issuance_auth::ZSASchnorrSigScheme,
+        issuance_auth::ZSASchnorr,
         note::AssetBase,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
@@ -356,7 +356,7 @@ mod tests {
         let mut circuits = vec![];
         let mut instances = vec![];
         let native_asset = AssetBase::native();
-        let random_asset = AssetBase::random::<ZSASchnorrSigScheme>(&mut rng);
+        let random_asset = AssetBase::random::<ZSASchnorr>(&mut rng);
         for split_flag in [false, true] {
             for asset in [native_asset, random_asset] {
                 let v_old = NoteValue::from_raw(rng.next_u64());

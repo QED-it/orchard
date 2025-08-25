@@ -883,7 +883,7 @@ mod tests {
             AdditionalZsaWitnesses, Circuit, Instance, Proof, ProvingKey, VerifyingKey, Witnesses,
             K,
         },
-        issuance_auth::ZSASchnorrSigScheme,
+        issuance_auth::ZSASchnorr,
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
@@ -1165,7 +1165,7 @@ mod tests {
         let asset_base = if is_native_asset {
             AssetBase::native()
         } else {
-            AssetBase::random::<ZSASchnorrSigScheme>(&mut rng)
+            AssetBase::random::<ZSASchnorr>(&mut rng)
         };
 
         // Create spent_note
@@ -1267,7 +1267,7 @@ mod tests {
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
             NoteValue::from_raw(rng.next_u64()),
-            AssetBase::random::<ZSASchnorrSigScheme>(&mut rng),
+            AssetBase::random::<ZSASchnorr>(&mut rng),
             pallas::Base::random(&mut rng),
             pallas::Base::random(&mut rng),
             NoteCommitTrapdoor(pallas::Scalar::random(&mut rng)),

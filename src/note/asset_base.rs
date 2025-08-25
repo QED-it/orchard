@@ -207,7 +207,7 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use crate::{
-        issuance_auth::{IssuanceValidatingKey, ZSASchnorrSigScheme},
+        issuance_auth::{IssuanceValidatingKey, ZSASchnorr},
         note::AssetBase,
     };
 
@@ -220,7 +220,7 @@ mod tests {
                 &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
             );
             let calculated_asset_base = AssetBase::derive(
-                &IssuanceValidatingKey::<ZSASchnorrSigScheme>::decode(&tv.key).unwrap(),
+                &IssuanceValidatingKey::<ZSASchnorr>::decode(&tv.key).unwrap(),
                 &asset_desc_hash,
             );
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();

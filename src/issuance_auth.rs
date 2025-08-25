@@ -100,9 +100,9 @@ pub struct IssuanceAuthorizationSignature<S: IssuanceAuthSigScheme>(S::IssueAuth
 
 /// The Orchard-ZSA issuance authorization signature scheme, based on BIP 340 Schnorr.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ZSASchnorrSigScheme;
+pub struct ZSASchnorr;
 
-impl IssuanceAuthSigScheme for ZSASchnorrSigScheme {
+impl IssuanceAuthSigScheme for ZSASchnorr {
     const ALGORITHM_BYTE: u8 = 0x00;
 
     type IskType = NonZeroScalar;
@@ -346,7 +346,7 @@ impl<S: IssuanceAuthSigScheme> Eq for IssuanceAuthorizationSignature<S> {}
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
-    use super::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorrSigScheme};
+    use super::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorr};
 
     use proptest::prelude::*;
 
@@ -359,14 +359,14 @@ pub mod testing {
                     "Values must be valid Orchard-ZSA issuance authorizing keys.",
                     |opt| opt.is_some()
                 )
-        ) -> IssuanceAuthorizingKey<ZSASchnorrSigScheme> {
+        ) -> IssuanceAuthorizingKey<ZSASchnorr> {
             key.unwrap()
         }
     }
 
     prop_compose! {
         /// Generate a uniformly distributed issuance validating key.
-        pub fn arb_issuance_validating_key()(isk in arb_issuance_authorizing_key()) -> IssuanceValidatingKey<ZSASchnorrSigScheme> {
+        pub fn arb_issuance_validating_key()(isk in arb_issuance_authorizing_key()) -> IssuanceValidatingKey<ZSASchnorr> {
             IssuanceValidatingKey::from(&isk)
         }
     }
@@ -381,25 +381,23 @@ mod tests {
     fn issuance_authorizing_key_from_bytes_fail_on_zero() {
         // isk must not be the zero scalar for the ZSA Schnorr scheme.
         let zero_bytes = [0u8; 32];
-        let isk = IssuanceAuthorizingKey::<ZSASchnorrSigScheme>::from_bytes(&zero_bytes);
+        let isk = IssuanceAuthorizingKey::<ZSASchnorr>::from_bytes(&zero_bytes);
         assert!(isk.is_none());
     }
 
     #[test]
     fn issuance_authorizing_key_from_bytes_to_bytes_roundtrip() {
         // TODO: VA: This test should work for any scheme, but random is only defined for ZSA Schnorr...
-        let isk: IssuanceAuthorizingKey<ZSASchnorrSigScheme> =
-            IssuanceAuthorizingKey::random(&mut OsRng);
+        let isk: IssuanceAuthorizingKey<ZSASchnorr> = IssuanceAuthorizingKey::random(&mut OsRng);
         let isk_bytes = isk.to_bytes();
-        let isk_roundtrip =
-            IssuanceAuthorizingKey::<ZSASchnorrSigScheme>::from_bytes(&isk_bytes).unwrap();
+        let isk_roundtrip = IssuanceAuthorizingKey::<ZSASchnorr>::from_bytes(&isk_bytes).unwrap();
         assert_eq!(isk_bytes, isk_roundtrip.to_bytes());
     }
 
     #[test]
     fn issuance_auth_sig_test_vectors() {
         for tv in crate::test_vectors::issuance_auth_sig::TEST_VECTORS {
-            let isk = IssuanceAuthorizingKey::<ZSASchnorrSigScheme>::from_bytes(&tv.isk).unwrap();
+            let isk = IssuanceAuthorizingKey::<ZSASchnorr>::from_bytes(&tv.isk).unwrap();
 
             let ik = IssuanceValidatingKey::from(&isk);
             assert_eq!(ik.to_bytes(), &tv.ik);

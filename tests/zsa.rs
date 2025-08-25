@@ -11,7 +11,7 @@ use orchard::{
         compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo,
         Signed,
     },
-    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorrSigScheme},
+    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorr},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, Nullifier},
     orchard_flavor::OrchardZSA,
@@ -31,8 +31,8 @@ struct Keychain {
     vk: VerifyingKey,
     sk: SpendingKey,
     fvk: FullViewingKey,
-    isk: IssuanceAuthorizingKey<ZSASchnorrSigScheme>,
-    ik: IssuanceValidatingKey<ZSASchnorrSigScheme>,
+    isk: IssuanceAuthorizingKey<ZSASchnorr>,
+    ik: IssuanceValidatingKey<ZSASchnorr>,
     recipient: Address,
 }
 
@@ -46,10 +46,10 @@ impl Keychain {
     fn fvk(&self) -> &FullViewingKey {
         &self.fvk
     }
-    fn isk(&self) -> &IssuanceAuthorizingKey<ZSASchnorrSigScheme> {
+    fn isk(&self) -> &IssuanceAuthorizingKey<ZSASchnorr> {
         &self.isk
     }
-    fn ik(&self) -> &IssuanceValidatingKey<ZSASchnorrSigScheme> {
+    fn ik(&self) -> &IssuanceValidatingKey<ZSASchnorr> {
         &self.ik
     }
 }
@@ -75,7 +75,7 @@ fn prepare_keys(pk: ProvingKey, vk: VerifyingKey, seed: u8) -> Keychain {
 
 fn sign_issue_bundle(
     awaiting_nullifier_bundle: IssueBundle<AwaitingNullifier>,
-    isk: &IssuanceAuthorizingKey<ZSASchnorrSigScheme>,
+    isk: &IssuanceAuthorizingKey<ZSASchnorr>,
     first_nullifier: &Nullifier,
 ) -> IssueBundle<Signed> {
     let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier);

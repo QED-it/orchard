@@ -14,7 +14,7 @@ use orchard::{
         },
         IssueBundle, IssueInfo, Signed,
     },
-    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorrSigScheme},
+    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorr},
     keys::{FullViewingKey, Scope, SpendingKey},
     note::{AssetBase, Nullifier},
     value::NoteValue,
@@ -30,8 +30,8 @@ fn random_bytes<const N: usize>(mut rng: OsRng) -> [u8; N] {
 #[derive(Clone)]
 struct TestParams {
     rng: OsRng,
-    isk: IssuanceAuthorizingKey<ZSASchnorrSigScheme>,
-    ik: IssuanceValidatingKey<ZSASchnorrSigScheme>,
+    isk: IssuanceAuthorizingKey<ZSASchnorr>,
+    ik: IssuanceValidatingKey<ZSASchnorr>,
     recipient: Address,
     sighash: [u8; 32],
     first_nullifier: Nullifier,
