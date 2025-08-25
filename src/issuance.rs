@@ -15,7 +15,7 @@
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use core::fmt;
-use core::fmt::{Debug, Formatter};
+use core::fmt::Debug;
 use group::Group;
 use nonempty::NonEmpty;
 use rand::RngCore;
@@ -25,14 +25,14 @@ use crate::{
     bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
     constants::reference_keys::ReferenceKeys,
     issuance_auth::{
-        IssuanceAuthSigScheme, IssuanceAuthorizationSignature, IssuanceAuthorizingKey,
-        IssuanceValidatingKey,
+        IssuanceAuthorizationSignature, IssuanceAuthorizingKey, IssuanceValidatingKey,
     },
     note::{AssetBase, Nullifier, Rho},
     value::NoteValue,
     Address, Note,
 };
 
+use crate::issuance_auth::ZSASchnorrSigScheme;
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, InvalidIssuanceAuthorizingKey,
     InvalidIssuanceValidatingKey, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
@@ -51,9 +51,9 @@ fn is_reference_note(note: &Note) -> bool {
 
 /// A bundle of actions to be applied to the ledger.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IssueBundle<S: IssuanceAuthSigScheme, T: IssueAuth> {
+pub struct IssueBundle<T: IssueAuth> {
     /// The issuer key for the note being created.
-    ik: IssuanceValidatingKey<S>,
+    ik: IssuanceValidatingKey<ZSASchnorrSigScheme>,
     /// The list of issue actions that make up this bundle.
     actions: NonEmpty<IssueAction>,
     /// The authorization for this action.
@@ -167,9 +167,9 @@ impl IssueAction {
     /// * `AssetBaseCannotBeIdentityPoint`: The derived `AssetBase` is the identity point of the
     ///    Pallas curve.
     /// * `IssueActionWithoutNoteNotFinalized`: The `IssueAction` contains no notes and is not finalized.
-    fn verify<S: IssuanceAuthSigScheme>(
+    fn verify(
         &self,
-        ik: &IssuanceValidatingKey<S>,
+        ik: &IssuanceValidatingKey<ZSASchnorrSigScheme>,
     ) -> Result<(AssetBase, NoteValue), Error> {
         if self.notes.is_empty() && !self.is_finalized() {
             return Err(IssueActionWithoutNoteNotFinalized);
@@ -244,30 +244,14 @@ pub struct Prepared {
 }
 
 /// Marker for an authorized bundle.
-#[derive(PartialEq, Eq)]
-pub struct Signed<S: IssuanceAuthSigScheme> {
-    signature: IssuanceAuthorizationSignature<S>,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Signed {
+    signature: IssuanceAuthorizationSignature<ZSASchnorrSigScheme>,
 }
 
-impl<S: IssuanceAuthSigScheme> Debug for Signed<S> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("Signed")
-            .field(&self.signature.to_bytes())
-            .finish()
-    }
-}
-
-impl<S: IssuanceAuthSigScheme> Clone for Signed<S> {
-    fn clone(&self) -> Self {
-        Self {
-            signature: self.signature.clone(),
-        }
-    }
-}
-
-impl<S: IssuanceAuthSigScheme> Signed<S> {
+impl Signed {
     /// Returns the signature for this authorization.
-    pub fn signature(&self) -> &IssuanceAuthorizationSignature<S> {
+    pub fn signature(&self) -> &IssuanceAuthorizationSignature<ZSASchnorrSigScheme> {
         &self.signature
     }
 
@@ -275,7 +259,6 @@ impl<S: IssuanceAuthSigScheme> Signed<S> {
     /// in raw bytes.
     pub fn from_data(data: &[u8]) -> Self {
         Signed {
-            //TODO: VA: This is used in librustzcash - need to confirm this will work with the serialization
             signature: IssuanceAuthorizationSignature::decode(data).unwrap(),
         }
     }
@@ -284,11 +267,11 @@ impl<S: IssuanceAuthSigScheme> Signed<S> {
 impl IssueAuth for AwaitingNullifier {}
 impl IssueAuth for AwaitingSighash {}
 impl IssueAuth for Prepared {}
-impl<S: IssuanceAuthSigScheme> IssueAuth for Signed<S> {}
+impl IssueAuth for Signed {}
 
-impl<S: IssuanceAuthSigScheme, T: IssueAuth> IssueBundle<S, T> {
+impl<T: IssueAuth> IssueBundle<T> {
     /// Returns the issuer verification key for the bundle.
-    pub fn ik(&self) -> &IssuanceValidatingKey<S> {
+    pub fn ik(&self) -> &IssuanceValidatingKey<ZSASchnorrSigScheme> {
         &self.ik
     }
     /// Return the actions for a given `IssueBundle`.
@@ -359,7 +342,7 @@ impl<S: IssuanceAuthSigScheme, T: IssueAuth> IssueBundle<S, T> {
 
     /// Constructs an `IssueBundle` from its constituent parts.
     pub fn from_parts(
-        ik: IssuanceValidatingKey<S>,
+        ik: IssuanceValidatingKey<ZSASchnorrSigScheme>,
         actions: NonEmpty<IssueAction>,
         authorization: T,
     ) -> Self {
@@ -374,7 +357,7 @@ impl<S: IssuanceAuthSigScheme, T: IssueAuth> IssueBundle<S, T> {
     pub fn map_authorization<T2: IssueAuth>(
         self,
         map_auth: impl FnOnce(T) -> T2,
-    ) -> IssueBundle<S, T2> {
+    ) -> IssueBundle<T2> {
         let authorization = self.authorization;
         IssueBundle {
             ik: self.ik,
@@ -384,7 +367,7 @@ impl<S: IssuanceAuthSigScheme, T: IssueAuth> IssueBundle<S, T> {
     }
 }
 
-impl<S: IssuanceAuthSigScheme> IssueBundle<S, AwaitingNullifier> {
+impl IssueBundle<AwaitingNullifier> {
     /// Constructs a new `IssueBundle`.
     ///
     /// If issue_info is None, the new `IssueBundle` will contain one `IssueAction` without notes
@@ -396,12 +379,12 @@ impl<S: IssuanceAuthSigScheme> IssueBundle<S, AwaitingNullifier> {
     /// If `first_issuance` is true, the `IssueBundle` will contain a reference note for the asset
     /// defined by (`asset_desc_hash`, `ik`).
     pub fn new(
-        ik: IssuanceValidatingKey<S>,
+        ik: IssuanceValidatingKey<ZSASchnorrSigScheme>,
         asset_desc_hash: [u8; 32],
         issue_info: Option<IssueInfo>,
         first_issuance: bool,
         mut rng: impl RngCore,
-    ) -> (IssueBundle<S, AwaitingNullifier>, AssetBase) {
+    ) -> (IssueBundle<AwaitingNullifier>, AssetBase) {
         let asset = AssetBase::derive(&ik, &asset_desc_hash);
 
         let mut notes = vec![];
@@ -516,7 +499,7 @@ impl<S: IssuanceAuthSigScheme> IssueBundle<S, AwaitingNullifier> {
     /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227].
     ///
     /// [zip227]: https://zips.z.cash/zip-0227
-    pub fn update_rho(self, first_nullifier: &Nullifier) -> IssueBundle<S, AwaitingSighash> {
+    pub fn update_rho(self, first_nullifier: &Nullifier) -> IssueBundle<AwaitingSighash> {
         let mut bundle = self;
         bundle
             .actions
@@ -539,9 +522,9 @@ impl<S: IssuanceAuthSigScheme> IssueBundle<S, AwaitingNullifier> {
     }
 }
 
-impl<S: IssuanceAuthSigScheme> IssueBundle<S, AwaitingSighash> {
+impl IssueBundle<AwaitingSighash> {
     /// Loads the sighash into the bundle, as preparation for signing.
-    pub fn prepare(self, sighash: [u8; 32]) -> IssueBundle<S, Prepared> {
+    pub fn prepare(self, sighash: [u8; 32]) -> IssueBundle<Prepared> {
         IssueBundle {
             ik: self.ik,
             actions: self.actions,
@@ -560,11 +543,14 @@ fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
     )
 }
 
-impl<S: IssuanceAuthSigScheme> IssueBundle<S, Prepared> {
+impl IssueBundle<Prepared> {
     /// Sign the `IssueBundle`.
     /// The call makes sure that the provided `isk` matches the `ik` and the derived `asset` for each note in the bundle.
-    pub fn sign(self, isk: &IssuanceAuthorizingKey<S>) -> Result<IssueBundle<S, Signed<S>>, Error> {
-        let expected_ik: IssuanceValidatingKey<S> = isk.into();
+    pub fn sign(
+        self,
+        isk: &IssuanceAuthorizingKey<ZSASchnorrSigScheme>,
+    ) -> Result<IssueBundle<Signed>, Error> {
+        let expected_ik = isk.into();
 
         // Make sure the `expected_ik` matches the `asset` for all notes.
         self.actions.iter().try_for_each(|action| {
@@ -604,7 +590,7 @@ impl From<IssueBundleCommitment> for [u8; 32] {
 #[derive(Debug)]
 pub struct IssueBundleAuthorizingCommitment(pub Blake2bHash);
 
-impl<S: IssuanceAuthSigScheme> IssueBundle<S, Signed<S>> {
+impl IssueBundle<Signed> {
     /// Computes a commitment to the authorizing data contained in this bundle.
     ///
     /// This together with `IssueBundle::commitment` bind the entire bundle.
@@ -648,8 +634,8 @@ impl<S: IssuanceAuthSigScheme> IssueBundle<S, Signed<S>> {
 ///   issuance of a new asset.
 /// * **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
 ///   propagated
-pub fn verify_issue_bundle<S: IssuanceAuthSigScheme>(
-    bundle: &IssueBundle<S, Signed<S>>,
+pub fn verify_issue_bundle(
+    bundle: &IssueBundle<Signed>,
     sighash: [u8; 32],
     get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
@@ -835,7 +821,6 @@ mod tests {
 
     #[derive(Clone)]
     struct TestParams {
-        // TODO: VA: Considered making it generic, but might not be required for the tests for now.
         rng: OsRng,
         isk: IssuanceAuthorizingKey<ZSASchnorrSigScheme>,
         ik: IssuanceValidatingKey<ZSASchnorrSigScheme>,
@@ -847,7 +832,7 @@ mod tests {
     fn setup_params() -> TestParams {
         let mut rng = OsRng;
 
-        let isk = IssuanceAuthorizingKey::<ZSASchnorrSigScheme>::random(&mut rng);
+        let isk = IssuanceAuthorizingKey::random(&mut rng);
         let ik = (&isk).into();
 
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
@@ -1495,8 +1480,8 @@ mod tests {
     #[test]
     fn issue_bundle_verify_fail_bad_signature() {
         // we want to inject "bad" signatures for test purposes.
-        impl IssueBundle<ZSASchnorrSigScheme, Signed<ZSASchnorrSigScheme>> {
-            pub fn set_authorization(&mut self, authorization: Signed<ZSASchnorrSigScheme>) {
+        impl IssueBundle<Signed> {
+            pub fn set_authorization(&mut self, authorization: Signed) {
                 self.authorization = authorization;
             }
         }
@@ -1932,7 +1917,7 @@ pub mod testing {
         (
             actions in vec(arb_issue_action([1u8; 32]), n_actions),
             ik in arb_issuance_validating_key()
-        ) -> IssueBundle<ZSASchnorrSigScheme, AwaitingNullifier> {
+        ) -> IssueBundle<AwaitingNullifier> {
             let actions = NonEmpty::from_vec(actions).unwrap();
             IssueBundle {
                 ik,
@@ -1950,7 +1935,7 @@ pub mod testing {
             actions in vec(arb_issue_action([1u8; 32]), n_actions),
             ik in arb_issuance_validating_key(),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY)
-        ) -> IssueBundle<ZSASchnorrSigScheme, Prepared> {
+        ) -> IssueBundle<Prepared> {
             let actions = NonEmpty::from_vec(actions).unwrap();
             IssueBundle {
                 ik,
@@ -1968,7 +1953,7 @@ pub mod testing {
             actions in vec(arb_issue_action([1u8; 32]), n_actions),
             ik in arb_issuance_validating_key(),
             fake_sig in arb_signature(),
-        ) -> IssueBundle<ZSASchnorrSigScheme, Signed<ZSASchnorrSigScheme>> {
+        ) -> IssueBundle<Signed> {
             let actions = NonEmpty::from_vec(actions).unwrap();
             IssueBundle {
                 ik,

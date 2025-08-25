@@ -74,10 +74,10 @@ fn prepare_keys(pk: ProvingKey, vk: VerifyingKey, seed: u8) -> Keychain {
 }
 
 fn sign_issue_bundle(
-    awaiting_nullifier_bundle: IssueBundle<ZSASchnorrSigScheme, AwaitingNullifier>,
+    awaiting_nullifier_bundle: IssueBundle<AwaitingNullifier>,
     isk: &IssuanceAuthorizingKey<ZSASchnorrSigScheme>,
     first_nullifier: &Nullifier,
-) -> IssueBundle<ZSASchnorrSigScheme, Signed<ZSASchnorrSigScheme>> {
+) -> IssueBundle<Signed> {
     let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier);
     let sighash = awaiting_sighash_bundle.commitment().into();
     let prepared_bundle = awaiting_sighash_bundle.prepare(sighash);

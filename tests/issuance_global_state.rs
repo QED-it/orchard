@@ -108,17 +108,11 @@ impl IssueTestNote {
     }
 }
 
-fn get_first_note(
-    bundle: &IssueBundle<ZSASchnorrSigScheme, Signed<ZSASchnorrSigScheme>>,
-    action_index: usize,
-) -> &Note {
+fn get_first_note(bundle: &IssueBundle<Signed>, action_index: usize) -> &Note {
     bundle.actions()[action_index].notes().first().unwrap()
 }
 
-fn build_issue_bundle(
-    params: &TestParams,
-    data: &[IssueTestNote],
-) -> IssueBundle<ZSASchnorrSigScheme, Signed<ZSASchnorrSigScheme>> {
+fn build_issue_bundle(params: &TestParams, data: &[IssueTestNote]) -> IssueBundle<Signed> {
     let TestParams {
         rng,
         ref isk,
