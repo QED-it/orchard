@@ -64,8 +64,10 @@ pub fn encode_asset_id<S: IssuanceAuthSigScheme>(
     ik: &IssuanceValidatingKey<S>,
     asset_desc_hash: &[u8; 32],
 ) -> Vec<u8> {
-    let mut asset_id = vec![version];
-    asset_id.extend_from_slice(&ik.encode());
+    let ik_encoding = ik.encode();
+    let mut asset_id = Vec::with_capacity(1 + ik_encoding.len() + asset_desc_hash.len());
+    asset_id.push(version);
+    asset_id.extend(ik_encoding);
     asset_id.extend_from_slice(&asset_desc_hash[..]);
     asset_id
 }

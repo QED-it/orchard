@@ -835,7 +835,7 @@ mod tests {
 
     #[derive(Clone)]
     struct TestParams {
-        // TODO: VA: I wanted to make it generic, but isk.random() is only implemented for ZSASchnorrSigScheme
+        // TODO: VA: Considered making it generic, but might not be required for the tests for now.
         rng: OsRng,
         isk: IssuanceAuthorizingKey<ZSASchnorrSigScheme>,
         ik: IssuanceValidatingKey<ZSASchnorrSigScheme>,
@@ -847,8 +847,8 @@ mod tests {
     fn setup_params() -> TestParams {
         let mut rng = OsRng;
 
-        let isk = IssuanceAuthorizingKey::random(&mut rng);
-        let ik: IssuanceValidatingKey<ZSASchnorrSigScheme> = (&isk).into();
+        let isk = IssuanceAuthorizingKey::<ZSASchnorrSigScheme>::random(&mut rng);
+        let ik = (&isk).into();
 
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
         let recipient = fvk.address_at(0u32, Scope::External);
@@ -1652,8 +1652,7 @@ mod tests {
             .sign(&isk)
             .unwrap();
 
-        let incorrect_isk: IssuanceAuthorizingKey<ZSASchnorrSigScheme> =
-            IssuanceAuthorizingKey::random(&mut rng);
+        let incorrect_isk = IssuanceAuthorizingKey::<ZSASchnorrSigScheme>::random(&mut rng);
         let incorrect_ik = (&incorrect_isk).into();
 
         // Add "bad" note
