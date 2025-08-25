@@ -9,13 +9,12 @@ use pasta_curves::{arithmetic::CurveExt, pallas};
 use rand_core::CryptoRngCore;
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
-use crate::issuance_auth::IssuanceAuthSigScheme;
 use crate::{
     constants::fixed_bases::{
         NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
     },
     issuance::compute_asset_desc_hash,
-    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    issuance_auth::{IssuanceAuthSigScheme, IssuanceAuthorizingKey, IssuanceValidatingKey},
 };
 
 /// Note type identifier.
@@ -205,8 +204,10 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
-    use crate::issuance_auth::ZSASchnorrSigScheme;
-    use crate::{issuance_auth::IssuanceValidatingKey, note::AssetBase};
+    use crate::{
+        issuance_auth::{IssuanceValidatingKey, ZSASchnorrSigScheme},
+        note::AssetBase,
+    };
 
     #[test]
     fn test_vectors() {

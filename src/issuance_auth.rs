@@ -17,14 +17,13 @@ use k256::{
 use rand_core::CryptoRngCore;
 
 use crate::{
-    issuance::{self},
+    issuance::{self, Error},
     zip32::{self, ExtendedSpendingKey},
 };
 
 // Preserve '::' which specifies the EXTERNAL 'zip32' crate
 #[rustfmt::skip]
 pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only};
-use crate::issuance::Error;
 
 const ZIP32_PURPOSE: u32 = 32;
 const ZIP32_PURPOSE_FOR_ISSUANCE: u32 = 227;

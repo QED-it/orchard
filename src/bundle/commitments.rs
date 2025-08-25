@@ -2,10 +2,10 @@
 
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
-use crate::issuance_auth::IssuanceAuthSigScheme;
 use crate::{
     bundle::{Authorization, Authorized, Bundle},
     issuance::{IssueAuth, IssueBundle, Signed},
+    issuance_auth::IssuanceAuthSigScheme,
     primitives::OrchardPrimitives,
 };
 

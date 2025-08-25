@@ -1887,11 +1887,12 @@ mod tests {
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
-    use crate::issuance::IssuanceAuthorizationSignature;
-    use crate::issuance_auth::ZSASchnorrSigScheme;
     use crate::{
-        issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed},
-        issuance_auth::testing::arb_issuance_validating_key,
+        issuance::{
+            AwaitingNullifier, IssuanceAuthorizationSignature, IssueAction, IssueBundle, Prepared,
+            Signed,
+        },
+        issuance_auth::{testing::arb_issuance_validating_key, ZSASchnorrSigScheme},
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
     };

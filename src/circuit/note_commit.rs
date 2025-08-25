@@ -2620,6 +2620,7 @@ mod tests {
             fixed_bases::NOTE_COMMITMENT_PERSONALIZATION, OrchardCommitDomains, OrchardFixedBases,
             OrchardHashDomains, L_ORCHARD_BASE, L_VALUE, T_Q,
         },
+        issuance_auth::ZSASchnorrSigScheme,
         note::{commitment::NoteCommitTrapdoor, AssetBase, NoteCommitment},
         value::NoteValue,
     };
@@ -2648,7 +2649,6 @@ mod tests {
     };
     use pasta_curves::{arithmetic::CurveAffine, pallas, EpAffine};
 
-    use crate::issuance_auth::ZSASchnorrSigScheme;
     use rand::{rngs::OsRng, RngCore};
 
     #[test]
