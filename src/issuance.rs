@@ -832,7 +832,7 @@ mod tests {
     fn setup_params() -> TestParams {
         let mut rng = OsRng;
 
-        let isk = IssuanceAuthorizingKey::random(&mut rng);
+        let isk = IssuanceAuthorizingKey::<ZSASchnorr>::random(&mut rng);
         let ik = (&isk).into();
 
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
@@ -1166,7 +1166,7 @@ mod tests {
             rng,
         );
 
-        let wrong_isk = IssuanceAuthorizingKey::random(&mut rng);
+        let wrong_isk = IssuanceAuthorizingKey::<ZSASchnorr>::random(&mut rng);
 
         let err = bundle
             .update_rho(&first_nullifier)
@@ -1502,7 +1502,7 @@ mod tests {
             rng,
         );
 
-        let wrong_isk = IssuanceAuthorizingKey::random(&mut rng);
+        let wrong_isk = IssuanceAuthorizingKey::<ZSASchnorr>::random(&mut rng);
 
         let mut signed = bundle
             .update_rho(&first_nullifier)

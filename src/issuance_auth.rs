@@ -28,7 +28,7 @@ pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only}
 const ZIP32_PURPOSE: u32 = 32;
 const ZIP32_PURPOSE_FOR_ISSUANCE: u32 = 227;
 
-/// Internal trait that defines the common interface for issuance authorization signature schemes.
+/// Trait that defines the common interface for issuance authorization signature schemes.
 pub trait IssuanceAuthSigScheme {
     /// The byte corresponding to this signature scheme, used to encode the issuance validating key
     /// and issuance authorization signature.

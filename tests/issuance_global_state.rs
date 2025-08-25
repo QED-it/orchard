@@ -44,7 +44,7 @@ fn setup_params() -> TestParams {
 
     let mut rng = OsRng;
 
-    let isk = IssuanceAuthorizingKey::random(&mut rng);
+    let isk = IssuanceAuthorizingKey::<ZSASchnorr>::random(&mut rng);
     let ik = (&isk).into();
 
     let fvk = FullViewingKey::from(&SpendingKey::from_bytes(random_bytes(rng)).unwrap());
