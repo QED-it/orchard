@@ -8,11 +8,11 @@ use pasta_curves::pallas;
 use zcash_note_encryption::OutgoingCipherKey;
 use zip32::ChildIndex;
 
-use super::{Action, Bundle, Output, Spend, Zip32Derivation};
+use super::{Action, Bundle, Output, PcztTransmittedNoteCiphertext, Spend, Zip32Derivation};
 use crate::{
     bundle::Flags,
     keys::{FullViewingKey, SpendingKey},
-    note::{ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext},
+    note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
     primitives::redpallas::{self, SpendAuth},
     tree::{MerkleHashOrchard, MerklePath},
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -22,11 +22,14 @@ use crate::{
 impl Bundle {
     /// Parses a PCZT bundle from its component parts.
     /// `value_sum` is represented as `(magnitude, is_negative)`.
+    #[allow(clippy::too_many_arguments)]
     pub fn parse(
         actions: Vec<Action>,
         flags: u8,
         value_sum: (u64, bool),
         anchor: [u8; 32],
+        burn: Vec<([u8; 32], u64)>,
+        expiry_height: u32,
         zkproof: Option<Vec<u8>>,
         bsk: Option<[u8; 32]>,
     ) -> Result<Self, ParseError> {
@@ -48,6 +51,17 @@ impl Bundle {
             .into_option()
             .ok_or(ParseError::InvalidAnchor)?;
 
+        let burn = burn
+            .into_iter()
+            .map(|(burn_asset, burn_value)| {
+                let burn_asset = AssetBase::from_bytes(&burn_asset)
+                    .into_option()
+                    .ok_or(ParseError::InvalidBurn)?;
+                let burn_value = NoteValue::from_raw(burn_value);
+                Ok((burn_asset, burn_value))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
         let zkproof = zkproof.map(Proof::new);
 
         let bsk = bsk
@@ -60,6 +74,8 @@ impl Bundle {
             flags,
             value_sum,
             anchor,
+            burn,
+            expiry_height,
             zkproof,
             bsk,
         })
@@ -104,11 +120,14 @@ impl Spend {
         spend_auth_sig: Option<[u8; 64]>,
         recipient: Option<[u8; 43]>,
         value: Option<u64>,
+        asset: Option<[u8; 32]>,
         rho: Option<[u8; 32]>,
         rseed: Option<[u8; 32]>,
+        rseed_split_note: Option<[u8; 32]>,
         fvk: Option<[u8; 96]>,
         witness: Option<(u32, [[u8; 32]; NOTE_COMMITMENT_TREE_DEPTH])>,
         alpha: Option<[u8; 32]>,
+        split_flag: Option<bool>,
         zip32_derivation: Option<Zip32Derivation>,
         dummy_sk: Option<[u8; 32]>,
         proprietary: BTreeMap<String, Vec<u8>>,
@@ -133,6 +152,9 @@ impl Spend {
 
         let value = value.map(NoteValue::from_raw);
 
+        let asset: Option<AssetBase> =
+            asset.and_then(|bytes| AssetBase::from_bytes(&bytes).into_option());
+
         let rho = rho
             .map(|rho| {
                 Rho::from_bytes(&rho)
@@ -145,6 +167,15 @@ impl Spend {
             .map(|rseed| {
                 let rho = rho.as_ref().ok_or(ParseError::MissingRho)?;
                 RandomSeed::from_bytes(rseed, rho)
+                    .into_option()
+                    .ok_or(ParseError::InvalidRandomSeed)
+            })
+            .transpose()?;
+
+        let rseed_split_note = rseed_split_note
+            .map(|rseed_split_note| {
+                let rho = rho.as_ref().ok_or(ParseError::MissingRho)?;
+                RandomSeed::from_bytes(rseed_split_note, rho)
                     .into_option()
                     .ok_or(ParseError::InvalidRandomSeed)
             })
@@ -191,11 +222,14 @@ impl Spend {
             spend_auth_sig,
             recipient,
             value,
+            asset,
             rho,
             rseed,
+            rseed_split_note,
             fvk,
             witness,
             alpha,
+            split_flag,
             zip32_derivation,
             dummy_sk,
             proprietary,
@@ -225,12 +259,9 @@ impl Output {
             .into_option()
             .ok_or(ParseError::InvalidExtractedNoteCommitment)?;
 
-        let encrypted_note = TransmittedNoteCiphertext {
+        let encrypted_note = PcztTransmittedNoteCiphertext {
             epk_bytes: ephemeral_key,
-            enc_ciphertext: enc_ciphertext
-                .as_slice()
-                .try_into()
-                .map_err(|_| ParseError::InvalidEncCiphertext)?,
+            enc_ciphertext: enc_ciphertext.to_vec(),
             out_ciphertext: out_ciphertext
                 .as_slice()
                 .try_into()
@@ -297,6 +328,8 @@ impl Zip32Derivation {
 pub enum ParseError {
     /// An invalid anchor was provided.
     InvalidAnchor,
+    /// An invalid `burn` was provided.
+    InvalidBurn,
     /// An invalid `bsk` was provided.
     InvalidBindingSignatureSigningKey,
     /// An invalid `dummy_sk` was provided.

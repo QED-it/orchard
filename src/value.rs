@@ -6,8 +6,8 @@
 //! - [`ValueSum`], the sum of note values within an Orchard [`Action`] or [`Bundle`].
 //!   It is a signed 64-bit integer (with range [`VALUE_SUM_RANGE`]).
 //! - `valueBalanceOrchard`, which is a signed 63-bit integer. This is represented
-//!    by a user-defined type parameter on [`Bundle`], returned by
-//!    [`Bundle::value_balance`] and [`Builder::value_balance`].
+//!   by a user-defined type parameter on [`Bundle`], returned by
+//!   [`Bundle::value_balance`] and [`Builder::value_balance`].
 //!
 //! If your specific instantiation of the Orchard protocol requires a smaller bound on
 //! valid note values (for example, Zcash's `MAX_MONEY` fits into a 51-bit integer), you
@@ -41,6 +41,9 @@ use core::fmt::{self, Debug};
 use core::iter::Sum;
 use core::ops::{Add, RangeInclusive, Sub};
 
+#[cfg(feature = "std")]
+use std::ops::Neg;
+
 use bitvec::{array::BitArray, order::Lsb0};
 use ff::{Field, PrimeField};
 use group::{Curve, Group, GroupEncoding};
@@ -54,9 +57,9 @@ use rand::RngCore;
 use subtle::CtOption;
 
 use crate::{
-    constants::fixed_bases::{
-        VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_R_BYTES, VALUE_COMMITMENT_V_BYTES,
-    },
+    builder::BuildError,
+    constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_R_BYTES},
+    note::AssetBase,
     primitives::redpallas::{self, Binding},
 };
 
@@ -107,11 +110,13 @@ impl NoteValue {
         NoteValue(value)
     }
 
-    pub(crate) fn from_bytes(bytes: [u8; 8]) -> Self {
+    /// Creates a note value from a byte array.
+    pub fn from_bytes(bytes: [u8; 8]) -> Self {
         NoteValue(u64::from_le_bytes(bytes))
     }
 
-    pub(crate) fn to_bytes(self) -> [u8; 8] {
+    /// Converts the note value to a byte array.
+    pub fn to_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
 
@@ -127,6 +132,12 @@ impl From<&NoteValue> for Assigned<pallas::Base> {
     }
 }
 
+impl From<NoteValue> for i128 {
+    fn from(value: NoteValue) -> Self {
+        value.0 as i128
+    }
+}
+
 impl Sub for NoteValue {
     type Output = ValueSum;
 
@@ -138,6 +149,14 @@ impl Sub for NoteValue {
             .filter(|v| VALUE_SUM_RANGE.contains(v))
             .map(ValueSum)
             .expect("u64 - u64 result is always in VALUE_SUM_RANGE")
+    }
+}
+
+impl Add for NoteValue {
+    type Output = Option<NoteValue>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        self.0.checked_add(rhs.0).map(NoteValue)
     }
 }
 
@@ -198,15 +217,34 @@ impl ValueSum {
             sign,
         )
     }
+
+    pub(crate) fn into<V: TryFrom<i64>>(self) -> Result<V, BuildError> {
+        i64::try_from(self)
+            .map_err(BuildError::ValueSum)
+            .and_then(|i| V::try_from(i).map_err(|_| BuildError::ValueSum(OverflowError)))
+    }
 }
 
-impl Add for ValueSum {
+impl<T: Into<i128>> Add<T> for ValueSum {
     type Output = Option<ValueSum>;
 
     #[allow(clippy::suspicious_arithmetic_impl)]
-    fn add(self, rhs: Self) -> Self::Output {
+    fn add(self, rhs: T) -> Self::Output {
         self.0
-            .checked_add(rhs.0)
+            .checked_add(rhs.into())
+            .filter(|v| VALUE_SUM_RANGE.contains(v))
+            .map(ValueSum)
+    }
+}
+
+#[cfg(feature = "std")]
+impl Neg for ValueSum {
+    type Output = Option<ValueSum>;
+
+    #[allow(clippy::suspicious_arithmetic_impl)]
+    fn neg(self) -> Self::Output {
+        self.0
+            .checked_neg()
             .filter(|v| VALUE_SUM_RANGE.contains(v))
             .map(ValueSum)
     }
@@ -234,8 +272,20 @@ impl TryFrom<ValueSum> for i64 {
     }
 }
 
+impl From<ValueSum> for i128 {
+    fn from(value: ValueSum) -> Self {
+        value.0
+    }
+}
+
+impl From<NoteValue> for ValueSum {
+    fn from(value: NoteValue) -> Self {
+        Self(value.into())
+    }
+}
+
 /// The blinding factor for a [`ValueCommitment`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct ValueCommitTrapdoor(pallas::Scalar);
 
 impl ValueCommitTrapdoor {
@@ -344,9 +394,8 @@ impl ValueCommitment {
     ///
     /// [concretehomomorphiccommit]: https://zips.z.cash/protocol/nu5.pdf#concretehomomorphiccommit
     #[allow(non_snake_case)]
-    pub fn derive(value: ValueSum, rcv: ValueCommitTrapdoor) -> Self {
+    pub fn derive(value: ValueSum, rcv: ValueCommitTrapdoor, asset: AssetBase) -> Self {
         let hasher = pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION);
-        let V = hasher(&VALUE_COMMITMENT_V_BYTES);
         let R = hasher(&VALUE_COMMITMENT_R_BYTES);
         let abs_value = u64::try_from(value.0.abs()).expect("value must be in valid range");
 
@@ -356,7 +405,9 @@ impl ValueCommitment {
             pallas::Scalar::from(abs_value)
         };
 
-        ValueCommitment(V * value + R * rcv.0)
+        let V_zsa = asset.cv_base();
+
+        ValueCommitment(V_zsa * value + R * rcv.0)
     }
 
     pub(crate) fn into_bvk(self) -> redpallas::VerificationKey<Binding> {
@@ -460,43 +511,93 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
     use proptest::prelude::*;
 
     use super::{
         testing::{arb_note_value_bounded, arb_trapdoor, arb_value_sum_bounded},
         OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum, MAX_NOTE_VALUE,
     };
-    use crate::primitives::redpallas;
+    use crate::{
+        note::asset_base::testing::arb_asset_base, note::AssetBase, primitives::redpallas,
+    };
+
+    fn check_binding_signature(
+        native_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
+        arb_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
+        neg_trapdoors: &[ValueCommitTrapdoor],
+        arb_values_to_burn: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
+    ) {
+        // for each arb value, create a negative value with a different trapdoor
+        let neg_arb_values: Vec<_> = arb_values
+            .iter()
+            .cloned()
+            .zip(neg_trapdoors.iter().cloned())
+            .map(|((value, _, asset), rcv)| ((-value).unwrap(), rcv, asset))
+            .collect();
+
+        let native_value_balance = native_values
+            .iter()
+            .map(|(value, _, _)| value)
+            .sum::<Result<ValueSum, OverflowError>>()
+            .expect("we generate values that won't overflow");
+
+        let values = [
+            native_values,
+            arb_values,
+            &neg_arb_values,
+            arb_values_to_burn,
+        ]
+        .concat();
+
+        let bsk = values
+            .iter()
+            .map(|(_, rcv, _)| rcv)
+            .sum::<ValueCommitTrapdoor>()
+            .into_bsk();
+
+        let bvk = (values
+            .into_iter()
+            .map(|(value, rcv, asset)| ValueCommitment::derive(value, rcv, asset))
+            .sum::<ValueCommitment>()
+            - ValueCommitment::derive(
+                native_value_balance,
+                ValueCommitTrapdoor::zero(),
+                AssetBase::native(),
+            )
+            - arb_values_to_burn
+                .iter()
+                .map(|(value, _, asset)| {
+                    ValueCommitment::derive(*value, ValueCommitTrapdoor::zero(), *asset)
+                })
+                .sum::<ValueCommitment>())
+        .into_bvk();
+
+        assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+    }
 
     proptest! {
         #[test]
-        fn bsk_consistent_with_bvk(
-            values in (1usize..10).prop_flat_map(|n_values|
+        fn bsk_consistent_with_bvk_native_with_zsa_transfer_and_burning(
+            native_values in (1usize..10).prop_flat_map(|n_values|
                 arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor()), n_values)
+                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), Just(AssetBase::native())), n_values)
                 )
+            ),
+            (asset_values, neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|
+                (arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
+                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_base()), n_values)
+                ), prop::collection::vec(arb_trapdoor(), n_values))
+            ),
+            burn_values in (1usize..10).prop_flat_map(|n_values|
+                arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64)
+                .prop_flat_map(move |bound| prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_base()), n_values))
             )
         ) {
-            let value_balance = values
-                .iter()
-                .map(|(value, _)| value)
-                .sum::<Result<ValueSum, OverflowError>>()
-                .expect("we generate values that won't overflow");
-
-            let bsk = values
-                .iter()
-                .map(|(_, rcv)| rcv)
-                .sum::<ValueCommitTrapdoor>()
-                .into_bsk();
-
-            let bvk = (values
-                .into_iter()
-                .map(|(value, rcv)| ValueCommitment::derive(value, rcv))
-                .sum::<ValueCommitment>()
-                - ValueCommitment::derive(value_balance, ValueCommitTrapdoor::zero()))
-            .into_bvk();
-
-            assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+            check_binding_signature(&native_values, &[], &[], &[]);
+            check_binding_signature(&native_values, &[], &[], &burn_values);
+            check_binding_signature(&native_values, &asset_values, &neg_trapdoors, &[]);
+            check_binding_signature(&native_values, &asset_values, &neg_trapdoors, &burn_values);
         }
     }
 }

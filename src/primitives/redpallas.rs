@@ -23,8 +23,8 @@ pub type Binding = reddsa::orchard::Binding;
 impl SigType for Binding {}
 
 /// A RedPallas signing key.
-#[derive(Clone, Debug)]
-pub struct SigningKey<T: SigType>(reddsa::SigningKey<T>);
+#[derive(Clone, Copy, Debug)]
+pub struct SigningKey<T: SigType>(pub(crate) reddsa::SigningKey<T>);
 
 impl<T: SigType> From<SigningKey<T>> for [u8; 32] {
     fn from(sk: SigningKey<T>) -> [u8; 32] {
@@ -64,7 +64,7 @@ impl<T: SigType> SigningKey<T> {
 
 /// A RedPallas verification key.
 #[derive(Clone, Debug)]
-pub struct VerificationKey<T: SigType>(reddsa::VerificationKey<T>);
+pub struct VerificationKey<T: SigType>(pub(crate) reddsa::VerificationKey<T>);
 
 impl<T: SigType> From<VerificationKey<T>> for [u8; 32] {
     fn from(vk: VerificationKey<T>) -> [u8; 32] {
@@ -157,7 +157,7 @@ impl<T: SigType> VerificationKey<T> {
 }
 
 /// A RedPallas signature.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Signature<T: SigType>(reddsa::Signature<T>);
 
 impl<T: SigType> From<[u8; 64]> for Signature<T> {

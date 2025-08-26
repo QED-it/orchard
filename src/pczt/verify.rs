@@ -15,12 +15,13 @@ impl super::Action {
     pub fn verify_cv_net(&self) -> Result<(), VerifyError> {
         let spend_value = self.spend().value.ok_or(VerifyError::MissingValue)?;
         let output_value = self.output().value.ok_or(VerifyError::MissingValue)?;
-        let rcv = self
-            .rcv
-            .clone()
-            .ok_or(VerifyError::MissingValueCommitTrapdoor)?;
+        let rcv = self.rcv.ok_or(VerifyError::MissingValueCommitTrapdoor)?;
 
-        let cv_net = ValueCommitment::derive(spend_value - output_value, rcv);
+        let cv_net = ValueCommitment::derive(
+            spend_value - output_value,
+            rcv,
+            self.spend.asset.ok_or(VerifyError::MissingAsset)?,
+        );
         if cv_net.to_bytes() == self.cv_net.to_bytes() {
             Ok(())
         } else {
@@ -69,6 +70,7 @@ impl super::Spend {
         let note = Note::from_parts(
             self.recipient.ok_or(VerifyError::MissingRecipient)?,
             self.value.ok_or(VerifyError::MissingValue)?,
+            self.asset.ok_or(VerifyError::MissingAsset)?,
             self.rho.ok_or(VerifyError::MissingRho)?,
             self.rseed.ok_or(VerifyError::MissingRandomSeed)?,
         )
@@ -127,6 +129,7 @@ impl super::Output {
         let note = Note::from_parts(
             self.recipient.ok_or(VerifyError::MissingRecipient)?,
             self.value.ok_or(VerifyError::MissingValue)?,
+            spend.asset.ok_or(VerifyError::MissingAsset)?,
             Rho::from_nf_old(spend.nullifier),
             self.rseed.ok_or(VerifyError::MissingRandomSeed)?,
         )
@@ -170,6 +173,8 @@ pub enum VerifyError {
     MissingSpendAuthRandomizer,
     /// Verification requires all `value` fields to be set.
     MissingValue,
+    /// Verification requires `asset` to be set.
+    MissingAsset,
     /// `cv_net` verification requires `rcv` to be set.
     MissingValueCommitTrapdoor,
     /// The provided `fvk` does not own the spent note.

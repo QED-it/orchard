@@ -1,0 +1,210 @@
+use blake2b_simd::{Hash as Blake2bHash, Params};
+use core::cmp::Ordering;
+use core::hash::{Hash, Hasher};
+use group::{Curve, Group, GroupEncoding};
+use nonempty::NonEmpty;
+use pasta_curves::arithmetic::CurveAffine;
+use pasta_curves::{arithmetic::CurveExt, pallas};
+use rand_core::CryptoRngCore;
+use subtle::{Choice, ConstantTimeEq, CtOption};
+
+use crate::{
+    constants::fixed_bases::{
+        NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
+    },
+    issuance::compute_asset_desc_hash,
+    keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+};
+
+/// Note type identifier.
+#[derive(Clone, Copy, Debug, Eq)]
+pub struct AssetBase(pallas::Point);
+
+// AssetBase must implement PartialOrd and Ord to be used as a key in BTreeMap.
+impl PartialOrd for AssetBase {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for AssetBase {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let self_coord = self.0.to_affine().coordinates().unwrap();
+        let other_coord = other.0.to_affine().coordinates().unwrap();
+        self_coord
+            .x()
+            .cmp(other_coord.x())
+            .then_with(|| self_coord.y().cmp(other_coord.y()))
+    }
+}
+
+/// Personalization for the ZSA asset digest generator
+pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
+
+///    AssetDigest for the ZSA asset
+///
+///    Defined in [ZIP-227: Issuance of Zcash Shielded Assets][assetdigest].
+///
+///    [assetdigest]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
+pub fn asset_digest(encode_asset_id: [u8; 65]) -> Blake2bHash {
+    Params::new()
+        .hash_length(64)
+        .personal(ZSA_ASSET_DIGEST_PERSONALIZATION)
+        .to_state()
+        .update(&encode_asset_id)
+        .finalize()
+}
+
+impl AssetBase {
+    /// Deserialize the AssetBase from a byte array.
+    pub fn from_bytes(bytes: &[u8; 32]) -> CtOption<Self> {
+        pallas::Point::from_bytes(bytes).map(AssetBase)
+    }
+
+    /// Serialize the AssetBase to its canonical byte representation.
+    pub fn to_bytes(self) -> [u8; 32] {
+        self.0.to_bytes()
+    }
+
+    /// Note type derivation.
+    ///
+    /// Defined in [ZIP-226: Transfer and Burn of Zcash Shielded Assets][assetbase].
+    ///
+    /// [assetbase]: https://zips.z.cash/zip-0226.html#asset-identifiers
+    ///
+    /// # Panics
+    ///
+    /// Panics if the derived AssetBase is the identity point.
+    #[allow(non_snake_case)]
+    pub fn derive(ik: &IssuanceValidatingKey, asset_desc_hash: &[u8; 32]) -> Self {
+        let version_byte = [0x00];
+
+        // EncodeAssetId(ik, asset_desc_hash) = version_byte || ik || asset_desc_hash
+        let encode_asset_id: [u8; 65] = {
+            let mut array = [0u8; 65];
+            array[..1].copy_from_slice(&version_byte);
+            array[1..33].copy_from_slice(&ik.to_bytes());
+            array[33..].copy_from_slice(asset_desc_hash);
+            array
+        };
+
+        let asset_digest = asset_digest(encode_asset_id);
+
+        let asset_base =
+            pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(asset_digest.as_bytes());
+
+        // this will happen with negligible probability.
+        assert!(
+            bool::from(!asset_base.is_identity()),
+            "The Asset Base is the identity point, which is invalid."
+        );
+
+        // AssetBase = ZSAValueBase(AssetDigest)
+        AssetBase(asset_base)
+    }
+
+    /// Note type for the "native" currency (zec), maintains backward compatibility with Orchard untyped notes.
+    pub fn native() -> Self {
+        AssetBase(pallas::Point::hash_to_curve(
+            VALUE_COMMITMENT_PERSONALIZATION,
+        )(&NATIVE_ASSET_BASE_V_BYTES[..]))
+    }
+
+    /// The base point used in value commitments.
+    pub fn cv_base(&self) -> pallas::Point {
+        self.0
+    }
+
+    /// Whether this note represents a native or ZSA asset.
+    pub fn is_native(&self) -> Choice {
+        self.0.ct_eq(&Self::native().0)
+    }
+
+    /// Generates a ZSA random asset.
+    ///
+    /// This is only used in tests.
+    pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+        let isk = IssuanceAuthorizingKey::random(rng);
+        let ik = IssuanceValidatingKey::from(&isk);
+        AssetBase::derive(
+            &ik,
+            &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
+        )
+    }
+}
+
+impl Hash for AssetBase {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write(&self.to_bytes());
+        h.finish();
+    }
+}
+
+impl PartialEq for AssetBase {
+    fn eq(&self, other: &Self) -> bool {
+        bool::from(self.0.ct_eq(&other.0))
+    }
+}
+
+/// Generators for property testing.
+#[cfg(any(test, feature = "test-dependencies"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
+pub mod testing {
+    use super::AssetBase;
+
+    use proptest::prelude::*;
+
+    use crate::keys::{testing::arb_issuance_authorizing_key, IssuanceValidatingKey};
+
+    prop_compose! {
+        /// Generate a uniformly distributed note type
+        pub fn arb_asset_base()(
+            is_native in prop::bool::ANY,
+            isk in arb_issuance_authorizing_key(),
+            asset_desc_hash in any::<[u8; 32]>(),
+        ) -> AssetBase {
+            if is_native {
+                AssetBase::native()
+            } else {
+                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc_hash)
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an asset ID
+        pub fn arb_zsa_asset_base()(
+            isk in arb_issuance_authorizing_key(),
+            asset_desc_hash in any::<[u8; 32]>(),
+        ) -> AssetBase {
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc_hash)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an asset ID using a specific description
+        pub fn zsa_asset_base(asset_desc_hash: [u8; 32])(
+            isk in arb_issuance_authorizing_key(),
+        ) -> AssetBase {
+            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc_hash)
+        }
+    }
+
+    #[test]
+    fn test_vectors() {
+        let test_vectors = crate::test_vectors::asset_base::TEST_VECTORS;
+
+        for tv in test_vectors {
+            let asset_desc_hash = crate::issuance::compute_asset_desc_hash(
+                &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
+            );
+            let calculated_asset_base = AssetBase::derive(
+                &IssuanceValidatingKey::from_bytes(&tv.key).unwrap(),
+                &asset_desc_hash,
+            );
+            let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();
+
+            assert_eq!(calculated_asset_base, test_vector_asset_base);
+        }
+    }
+}
