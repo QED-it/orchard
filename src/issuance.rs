@@ -646,22 +646,13 @@ pub fn verify_issue_bundle(
         BTreeMap::new(),
         |mut new_records, (index_action, action)| {
             // Check rho derivation for each note.
-            action
-                .notes
-                .iter()
-                .enumerate()
-                .try_for_each(|(index_note, note)| {
-                    if note.rho()
-                        != rho_for_issuance_note(
-                            first_nullifier,
-                            index_action.try_into().unwrap(),
-                            index_note.try_into().unwrap(),
-                        )
-                    {
-                        return Err(IncorrectRhoDerivation);
-                    }
-                    Ok(())
-                })?;
+            for (index_note, note) in action.notes.iter().enumerate() {
+                let expected_rho =
+                    rho_for_issuance_note(first_nullifier, index_action as u32, index_note as u32);
+                if note.rho() != expected_rho {
+                    return Err(IncorrectRhoDerivation);
+                }
+            }
 
             let (asset, amount) = action.verify(bundle.ik())?;
 
@@ -1236,7 +1227,7 @@ mod tests {
     #[test]
     fn issue_bundle_verify() {
         let TestParams {
-            mut rng,
+            rng,
             isk,
             ik,
             recipient,
@@ -1265,12 +1256,6 @@ mod tests {
 
         let issued_assets =
             verify_issue_bundle(&signed, sighash, |_| None, &first_nullifier).unwrap();
-
-        // Verify that `verify_issue_bundle` returns an error if `first_nullifier` is incorrect.
-        assert_eq!(
-            verify_issue_bundle(&signed, sighash, |_| None, &Nullifier::dummy(&mut rng)),
-            Err(IncorrectRhoDerivation)
-        );
 
         let first_note = *signed.actions().first().notes().first().unwrap();
         assert_eq!(
@@ -1433,6 +1418,44 @@ mod tests {
                 false,
                 reference_note3
             ))
+        );
+    }
+
+    #[test]
+    fn issue_bundle_verify_fail_incorrect_rho_derivation() {
+        let TestParams {
+            mut rng,
+            isk,
+            ik,
+            recipient,
+            sighash,
+            first_nullifier,
+        } = setup_params();
+
+        let asset_desc_hash =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"asset desc").unwrap());
+
+        let (bundle, _) = IssueBundle::new(
+            ik.clone(),
+            asset_desc_hash,
+            Some(IssueInfo {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
+            true,
+            rng,
+        );
+
+        let signed = bundle
+            .update_rho(&first_nullifier)
+            .prepare(sighash)
+            .sign(&isk)
+            .unwrap();
+
+        // Verify that `verify_issue_bundle` returns an error if `first_nullifier` is incorrect.
+        assert_eq!(
+            verify_issue_bundle(&signed, sighash, |_| None, &Nullifier::dummy(&mut rng)),
+            Err(IncorrectRhoDerivation)
         );
     }
 
