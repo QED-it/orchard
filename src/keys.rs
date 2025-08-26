@@ -1050,7 +1050,7 @@ mod tests {
             assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
 
             let ik: IssuanceValidatingKey<ZSASchnorr> = (&isk).into();
-            assert_eq!(ik.to_bytes(), tv.ik);
+            assert_eq!(&ik.encode(), &tv.ik_encoding);
 
             let nk: NullifierDerivingKey = (&sk).into();
             assert_eq!(nk.0.to_repr(), tv.nk);
