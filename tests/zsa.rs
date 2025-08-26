@@ -186,7 +186,13 @@ fn issue_zsa_notes(
         AssetBase::derive(&keys.ik().clone(), &asset_desc_hash),
     );
 
-    assert!(verify_issue_bundle(&issue_bundle, issue_bundle.commitment().into(), |_| None).is_ok());
+    assert!(verify_issue_bundle(
+        &issue_bundle,
+        issue_bundle.commitment().into(),
+        |_| None,
+        first_nullifier
+    )
+    .is_ok());
 
     (*reference_note, *note1, *note2)
 }

@@ -231,7 +231,13 @@ fn issue_bundle_verify_with_global_state() {
     ]);
 
     global_state.extend(
-        verify_issue_bundle(&bundle1, sighash, |asset| global_state.get(asset).cloned()).unwrap(),
+        verify_issue_bundle(
+            &bundle1,
+            sighash,
+            |asset| global_state.get(asset).cloned(),
+            &params.first_nullifier,
+        )
+        .unwrap(),
     );
     assert_eq!(global_state, expected_global_state1);
 
@@ -252,7 +258,13 @@ fn issue_bundle_verify_with_global_state() {
     ]);
 
     global_state.extend(
-        verify_issue_bundle(&bundle2, sighash, |asset| global_state.get(asset).cloned()).unwrap(),
+        verify_issue_bundle(
+            &bundle2,
+            sighash,
+            |asset| global_state.get(asset).cloned(),
+            &params.first_nullifier,
+        )
+        .unwrap(),
     );
     assert_eq!(global_state, expected_global_state2);
 
@@ -269,8 +281,13 @@ fn issue_bundle_verify_with_global_state() {
     let expected_global_state3 = expected_global_state2;
 
     assert_eq!(
-        verify_issue_bundle(&bundle3, sighash, |asset| global_state.get(asset).cloned())
-            .unwrap_err(),
+        verify_issue_bundle(
+            &bundle3,
+            sighash,
+            |asset| global_state.get(asset).cloned(),
+            &params.first_nullifier
+        )
+        .unwrap_err(),
         IssueActionPreviouslyFinalizedAssetBase,
     );
     assert_eq!(global_state, expected_global_state3);
@@ -288,8 +305,13 @@ fn issue_bundle_verify_with_global_state() {
     let expected_global_state4 = expected_global_state3;
 
     assert_eq!(
-        verify_issue_bundle(&bundle4, sighash, |asset| global_state.get(asset).cloned())
-            .unwrap_err(),
+        verify_issue_bundle(
+            &bundle4,
+            sighash,
+            |asset| global_state.get(asset).cloned(),
+            &params.first_nullifier
+        )
+        .unwrap_err(),
         MissingReferenceNoteOnFirstIssuance,
     );
     assert_eq!(global_state, expected_global_state4);
@@ -307,8 +329,13 @@ fn issue_bundle_verify_with_global_state() {
     let expected_global_state5 = expected_global_state4;
 
     assert_eq!(
-        verify_issue_bundle(&bundle5, sighash, |asset| global_state.get(asset).cloned())
-            .unwrap_err(),
+        verify_issue_bundle(
+            &bundle5,
+            sighash,
+            |asset| global_state.get(asset).cloned(),
+            &params.first_nullifier
+        )
+        .unwrap_err(),
         ValueOverflow,
     );
     assert_eq!(global_state, expected_global_state5);
@@ -331,7 +358,13 @@ fn issue_bundle_verify_with_global_state() {
     ]);
 
     global_state.extend(
-        verify_issue_bundle(&bundle6, sighash, |asset| global_state.get(asset).cloned()).unwrap(),
+        verify_issue_bundle(
+            &bundle6,
+            sighash,
+            |asset| global_state.get(asset).cloned(),
+            &params.first_nullifier,
+        )
+        .unwrap(),
     );
     assert_eq!(global_state, expected_global_state6);
 }
