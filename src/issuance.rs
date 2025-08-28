@@ -24,9 +24,7 @@ use crate::{
     asset_record::AssetRecord,
     bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
     constants::reference_keys::ReferenceKeys,
-    issuance_auth::{
-        IssuanceAuthorizationSignature, IssuanceAuthorizingKey, IssuanceValidatingKey,
-    },
+    issuance_auth::{IssueAuthKey, IssueAuthSig, IssueValidatingKey},
     note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
     value::NoteValue,
     Address, Note,
@@ -54,7 +52,7 @@ fn is_reference_note(note: &Note) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IssueBundle<T: IssueAuth> {
     /// The issuer key for the note being created.
-    ik: IssuanceValidatingKey<ZSASchnorr>,
+    ik: IssueValidatingKey<ZSASchnorr>,
     /// The list of issue actions that make up this bundle.
     actions: NonEmpty<IssueAction>,
     /// The authorization for this action.
@@ -168,10 +166,7 @@ impl IssueAction {
     /// * `AssetBaseCannotBeIdentityPoint`: The derived `AssetBase` is the identity point of the
     ///    Pallas curve.
     /// * `IssueActionWithoutNoteNotFinalized`: The `IssueAction` contains no notes and is not finalized.
-    fn verify(
-        &self,
-        ik: &IssuanceValidatingKey<ZSASchnorr>,
-    ) -> Result<(AssetBase, NoteValue), Error> {
+    fn verify(&self, ik: &IssueValidatingKey<ZSASchnorr>) -> Result<(AssetBase, NoteValue), Error> {
         if self.notes.is_empty() && !self.is_finalized() {
             return Err(IssueActionWithoutNoteNotFinalized);
         }
@@ -247,12 +242,12 @@ pub struct Prepared {
 /// Marker for an authorized bundle.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Signed {
-    signature: IssuanceAuthorizationSignature<ZSASchnorr>,
+    signature: IssueAuthSig<ZSASchnorr>,
 }
 
 impl Signed {
     /// Returns the signature for this authorization.
-    pub fn signature(&self) -> &IssuanceAuthorizationSignature<ZSASchnorr> {
+    pub fn signature(&self) -> &IssueAuthSig<ZSASchnorr> {
         &self.signature
     }
 
@@ -260,7 +255,7 @@ impl Signed {
     /// in raw bytes.
     pub fn from_data(data: &[u8]) -> Self {
         Signed {
-            signature: IssuanceAuthorizationSignature::decode(data).unwrap(),
+            signature: IssueAuthSig::decode(data).unwrap(),
         }
     }
 }
@@ -272,7 +267,7 @@ impl IssueAuth for Signed {}
 
 impl<T: IssueAuth> IssueBundle<T> {
     /// Returns the issuer verification key for the bundle.
-    pub fn ik(&self) -> &IssuanceValidatingKey<ZSASchnorr> {
+    pub fn ik(&self) -> &IssueValidatingKey<ZSASchnorr> {
         &self.ik
     }
     /// Return the actions for a given `IssueBundle`.
@@ -343,7 +338,7 @@ impl<T: IssueAuth> IssueBundle<T> {
 
     /// Constructs an `IssueBundle` from its constituent parts.
     pub fn from_parts(
-        ik: IssuanceValidatingKey<ZSASchnorr>,
+        ik: IssueValidatingKey<ZSASchnorr>,
         actions: NonEmpty<IssueAction>,
         authorization: T,
     ) -> Self {
@@ -380,7 +375,7 @@ impl IssueBundle<AwaitingNullifier> {
     /// If `first_issuance` is true, the `IssueBundle` will contain a reference note for the asset
     /// defined by (`asset_desc_hash`, `ik`).
     pub fn new(
-        ik: IssuanceValidatingKey<ZSASchnorr>,
+        ik: IssueValidatingKey<ZSASchnorr>,
         asset_desc_hash: [u8; 32],
         issue_info: Option<IssueInfo>,
         first_issuance: bool,
@@ -547,10 +542,7 @@ fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
 impl IssueBundle<Prepared> {
     /// Sign the `IssueBundle`.
     /// The call makes sure that the provided `isk` matches the `ik` and the derived `asset` for each note in the bundle.
-    pub fn sign(
-        self,
-        isk: &IssuanceAuthorizingKey<ZSASchnorr>,
-    ) -> Result<IssueBundle<Signed>, Error> {
+    pub fn sign(self, isk: &IssueAuthKey<ZSASchnorr>) -> Result<IssueBundle<Signed>, Error> {
         let expected_ik = isk.into();
 
         // Make sure the `expected_ik` matches the `asset` for all notes.
@@ -811,7 +803,7 @@ mod tests {
             compute_asset_desc_hash, is_reference_note, verify_issue_bundle, IssueAction,
             IssueBundle, IssueInfo, Signed,
         },
-        issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorr},
+        issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
@@ -845,8 +837,8 @@ mod tests {
     #[derive(Clone)]
     struct TestParams {
         rng: OsRng,
-        isk: IssuanceAuthorizingKey<ZSASchnorr>,
-        ik: IssuanceValidatingKey<ZSASchnorr>,
+        isk: IssueAuthKey<ZSASchnorr>,
+        ik: IssueValidatingKey<ZSASchnorr>,
         recipient: Address,
         sighash: [u8; 32],
         first_nullifier: Nullifier,
@@ -855,7 +847,7 @@ mod tests {
     fn setup_params() -> TestParams {
         let mut rng = OsRng;
 
-        let isk = IssuanceAuthorizingKey::<ZSASchnorr>::random(&mut rng);
+        let isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
         let ik = (&isk).into();
 
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
@@ -886,7 +878,7 @@ mod tests {
         note1_asset_desc: &[u8],
         note2_asset_desc: Option<&[u8]>, // if None, both notes use the same asset
         finalize: bool,
-    ) -> (IssuanceValidatingKey<ZSASchnorr>, AssetBase, IssueAction) {
+    ) -> (IssueValidatingKey<ZSASchnorr>, AssetBase, IssueAction) {
         let TestParams {
             mut rng,
             ik,
@@ -1189,7 +1181,7 @@ mod tests {
             rng,
         );
 
-        let wrong_isk = IssuanceAuthorizingKey::<ZSASchnorr>::random(&mut rng);
+        let wrong_isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
 
         let err = bundle
             .update_rho(&first_nullifier)
@@ -1571,7 +1563,7 @@ mod tests {
             rng,
         );
 
-        let wrong_isk = IssuanceAuthorizingKey::<ZSASchnorr>::random(&mut rng);
+        let wrong_isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
 
         let mut signed = bundle
             .update_rho(&first_nullifier)
@@ -1702,7 +1694,7 @@ mod tests {
             .sign(&isk)
             .unwrap();
 
-        let incorrect_isk = IssuanceAuthorizingKey::<ZSASchnorr>::random(&mut rng);
+        let incorrect_isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
         let incorrect_ik = (&incorrect_isk).into();
 
         // Add "bad" note
@@ -1795,8 +1787,8 @@ mod tests {
         let sk = SpendingKey::from_bytes([1; 32]).unwrap();
         let fvk = FullViewingKey::from(&sk);
         let recipient = fvk.address_at(0u32, Scope::External);
-        let isk = IssuanceAuthorizingKey::<ZSASchnorr>::from_bytes(&[2; 32]).unwrap();
-        let ik = IssuanceValidatingKey::from(&isk);
+        let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&[2; 32]).unwrap();
+        let ik = IssueValidatingKey::from(&isk);
 
         // Setup note and merkle tree
         let mut rng = OsRng;
@@ -1938,9 +1930,7 @@ mod tests {
 pub mod testing {
     use crate::{
         issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed},
-        issuance_auth::{
-            testing::arb_issuance_validating_key, IssuanceAuthorizationSignature, ZSASchnorr,
-        },
+        issuance_auth::{testing::arb_issuance_validating_key, IssueAuthSig, ZSASchnorr},
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
     };
@@ -1953,8 +1943,8 @@ pub mod testing {
         /// Generate a uniformly distributed ZSA Schnorr signature
         pub(crate) fn arb_signature()(
             sig_bytes in vec(prop::num::u8::ANY, 64)
-        ) -> IssuanceAuthorizationSignature<ZSASchnorr> {
-                IssuanceAuthorizationSignature::from_bytes(&sig_bytes).unwrap()
+        ) -> IssueAuthSig<ZSASchnorr> {
+                IssueAuthSig::from_bytes(&sig_bytes).unwrap()
         }
     }
 

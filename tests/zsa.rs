@@ -11,7 +11,7 @@ use orchard::{
         compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo,
         Signed,
     },
-    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorr},
+    issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, Nullifier},
     orchard_flavor::OrchardZSA,
@@ -31,8 +31,8 @@ struct Keychain {
     vk: VerifyingKey,
     sk: SpendingKey,
     fvk: FullViewingKey,
-    isk: IssuanceAuthorizingKey<ZSASchnorr>,
-    ik: IssuanceValidatingKey<ZSASchnorr>,
+    isk: IssueAuthKey<ZSASchnorr>,
+    ik: IssueValidatingKey<ZSASchnorr>,
     recipient: Address,
 }
 
@@ -46,10 +46,10 @@ impl Keychain {
     fn fvk(&self) -> &FullViewingKey {
         &self.fvk
     }
-    fn isk(&self) -> &IssuanceAuthorizingKey<ZSASchnorr> {
+    fn isk(&self) -> &IssueAuthKey<ZSASchnorr> {
         &self.isk
     }
-    fn ik(&self) -> &IssuanceValidatingKey<ZSASchnorr> {
+    fn ik(&self) -> &IssueValidatingKey<ZSASchnorr> {
         &self.ik
     }
 }
@@ -59,9 +59,8 @@ fn prepare_keys(pk: ProvingKey, vk: VerifyingKey, seed: u8) -> Keychain {
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
-    let isk = IssuanceAuthorizingKey::from_bytes(&[seed.wrapping_add(1); 32])
-        .expect("valid issuance key");
-    let ik = IssuanceValidatingKey::from(&isk);
+    let isk = IssueAuthKey::from_bytes(&[seed.wrapping_add(1); 32]).expect("valid issuance key");
+    let ik = IssueValidatingKey::from(&isk);
     Keychain {
         pk,
         vk,
@@ -75,7 +74,7 @@ fn prepare_keys(pk: ProvingKey, vk: VerifyingKey, seed: u8) -> Keychain {
 
 fn sign_issue_bundle(
     awaiting_nullifier_bundle: IssueBundle<AwaitingNullifier>,
-    isk: &IssuanceAuthorizingKey<ZSASchnorr>,
+    isk: &IssueAuthKey<ZSASchnorr>,
     first_nullifier: &Nullifier,
 ) -> IssueBundle<Signed> {
     let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier);

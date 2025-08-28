@@ -84,12 +84,12 @@ mod tests {
     /// A tuple `(AssetBase, Amount)` representing the burn list item.
     ///
     fn get_burn_tuple(asset_desc_hash: &[u8; 32], value: u64) -> (AssetBase, NoteValue) {
-        use crate::issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey};
+        use crate::issuance_auth::{IssueAuthKey, IssueValidatingKey};
 
-        let isk = IssuanceAuthorizingKey::<ZSASchnorr>::from_bytes(&[1u8; 32]).unwrap();
+        let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&[1u8; 32]).unwrap();
 
         (
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), asset_desc_hash),
+            AssetBase::derive(&IssueValidatingKey::from(&isk), asset_desc_hash),
             NoteValue::from_raw(value),
         )
     }

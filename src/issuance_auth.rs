@@ -82,7 +82,7 @@ pub trait IssuanceAuthSigScheme {
 ///
 /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#issuance-key-derivation
 #[derive(Clone)]
-pub struct IssuanceAuthorizingKey<S: IssuanceAuthSigScheme>(S::IskType);
+pub struct IssueAuthKey<S: IssuanceAuthSigScheme>(S::IskType);
 
 /// An issuance validating key which is used to validate issuance authorization signatures.
 ///
@@ -90,7 +90,7 @@ pub struct IssuanceAuthorizingKey<S: IssuanceAuthSigScheme>(S::IskType);
 ///
 /// [IssuanceZSA]: https://zips.z.cash/zip-0227#issuance-key-derivation
 #[derive(Clone)]
-pub struct IssuanceValidatingKey<S: IssuanceAuthSigScheme>(S::IkType);
+pub struct IssueValidatingKey<S: IssuanceAuthSigScheme>(S::IkType);
 
 /// An issuance authorization signature `issueAuthSig`,
 ///
@@ -98,7 +98,7 @@ pub struct IssuanceValidatingKey<S: IssuanceAuthSigScheme>(S::IkType);
 ///
 /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signature-scheme
 #[derive(Debug)]
-pub struct IssuanceAuthorizationSignature<S: IssuanceAuthSigScheme>(S::IssueAuthSigType);
+pub struct IssueAuthSig<S: IssuanceAuthSigScheme>(S::IssueAuthSigType);
 
 /// The Orchard-ZSA issuance authorization signature scheme, based on BIP 340 Schnorr.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,7 +155,7 @@ impl IssuanceAuthSigScheme for ZSASchnorr {
     }
 }
 
-impl<S: IssuanceAuthSigScheme> IssuanceAuthorizingKey<S> {
+impl<S: IssuanceAuthSigScheme> IssueAuthKey<S> {
     /// Constructs an issuance authorizing key from the provided bytes.
     ///
     /// Returns `None` if the bytes do not correspond to a valid issuance authorizing key.
@@ -201,29 +201,26 @@ impl<S: IssuanceAuthSigScheme> IssuanceAuthorizingKey<S> {
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
     /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign 32 byte SIGHASH values.
-    pub fn try_sign(
-        &self,
-        msg: &[u8; 32],
-    ) -> Result<IssuanceAuthorizationSignature<S>, issuance::Error> {
-        S::try_sign(&self.0, msg).map(IssuanceAuthorizationSignature)
+    pub fn try_sign(&self, msg: &[u8; 32]) -> Result<IssueAuthSig<S>, issuance::Error> {
+        S::try_sign(&self.0, msg).map(IssueAuthSig)
     }
 }
 
-impl<S: IssuanceAuthSigScheme> Debug for IssuanceAuthorizingKey<S> {
+impl<S: IssuanceAuthSigScheme> Debug for IssueAuthKey<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("IssuanceAuthorizingKey")
+        f.debug_tuple("IssueAuthKey")
             .field(&self.to_bytes())
             .finish()
     }
 }
 
-impl<S: IssuanceAuthSigScheme> From<&IssuanceAuthorizingKey<S>> for IssuanceValidatingKey<S> {
-    fn from(isk: &IssuanceAuthorizingKey<S>) -> Self {
+impl<S: IssuanceAuthSigScheme> From<&IssueAuthKey<S>> for IssueValidatingKey<S> {
+    fn from(isk: &IssueAuthKey<S>) -> Self {
         Self(S::ik_from_isk(&isk.0))
     }
 }
 
-impl<S: IssuanceAuthSigScheme> IssuanceValidatingKey<S> {
+impl<S: IssuanceAuthSigScheme> IssueValidatingKey<S> {
     /// Converts this issuance validating key to its serialized form,
     /// in big-endian order as defined in BIP 340.
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -265,32 +262,28 @@ impl<S: IssuanceAuthSigScheme> IssuanceValidatingKey<S> {
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
-    pub fn verify(
-        &self,
-        msg: &[u8],
-        sig: &IssuanceAuthorizationSignature<S>,
-    ) -> Result<(), issuance::Error> {
+    pub fn verify(&self, msg: &[u8], sig: &IssueAuthSig<S>) -> Result<(), issuance::Error> {
         S::verify(&self.0, msg, &sig.0)
     }
 }
 
-impl<S: IssuanceAuthSigScheme> Debug for IssuanceValidatingKey<S> {
+impl<S: IssuanceAuthSigScheme> Debug for IssueValidatingKey<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("IssuanceValidatingKey")
+        f.debug_tuple("IssueValidatingKey")
             .field(&self.to_bytes())
             .finish()
     }
 }
 
-impl<S: IssuanceAuthSigScheme> PartialEq for IssuanceValidatingKey<S> {
+impl<S: IssuanceAuthSigScheme> PartialEq for IssueValidatingKey<S> {
     fn eq(&self, other: &Self) -> bool {
         self.to_bytes() == other.to_bytes()
     }
 }
 
-impl<S: IssuanceAuthSigScheme> Eq for IssuanceValidatingKey<S> {}
+impl<S: IssuanceAuthSigScheme> Eq for IssueValidatingKey<S> {}
 
-impl<S: IssuanceAuthSigScheme> IssuanceAuthorizationSignature<S> {
+impl<S: IssuanceAuthSigScheme> IssueAuthSig<S> {
     /// Serialize the issuance authorization signature to its canonical byte representation.
     pub fn to_bytes(&self) -> Vec<u8> {
         S::sig_to_bytes(&self.0)
@@ -330,25 +323,25 @@ impl<S: IssuanceAuthSigScheme> IssuanceAuthorizationSignature<S> {
     }
 }
 
-impl<S: IssuanceAuthSigScheme> Clone for IssuanceAuthorizationSignature<S> {
+impl<S: IssuanceAuthSigScheme> Clone for IssueAuthSig<S> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl<S: IssuanceAuthSigScheme> PartialEq for IssuanceAuthorizationSignature<S> {
+impl<S: IssuanceAuthSigScheme> PartialEq for IssueAuthSig<S> {
     fn eq(&self, other: &Self) -> bool {
         self.to_bytes() == other.to_bytes()
     }
 }
 
-impl<S: IssuanceAuthSigScheme> Eq for IssuanceAuthorizationSignature<S> {}
+impl<S: IssuanceAuthSigScheme> Eq for IssueAuthSig<S> {}
 
 /// Generators for property testing.
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
-    use super::{IssuanceAuthorizingKey, IssuanceValidatingKey, ZSASchnorr};
+    use super::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
 
     use proptest::prelude::*;
 
@@ -356,20 +349,20 @@ pub mod testing {
         /// Generate a uniformly distributed Orchard issuance authorizing key. TODO: VA: Can we generalize prop_compose with generics?
         pub fn arb_issuance_authorizing_key()(
             key in prop::array::uniform32(prop::num::u8::ANY)
-                .prop_map(|key| IssuanceAuthorizingKey::from_bytes(&key))
+                .prop_map(|key| IssueAuthKey::from_bytes(&key))
                 .prop_filter(
                     "Values must be valid Orchard-ZSA issuance authorizing keys.",
                     |opt| opt.is_some()
                 )
-        ) -> IssuanceAuthorizingKey<ZSASchnorr> {
+        ) -> IssueAuthKey<ZSASchnorr> {
             key.unwrap()
         }
     }
 
     prop_compose! {
         /// Generate a uniformly distributed issuance validating key.
-        pub fn arb_issuance_validating_key()(isk in arb_issuance_authorizing_key()) -> IssuanceValidatingKey<ZSASchnorr> {
-            IssuanceValidatingKey::from(&isk)
+        pub fn arb_issuance_validating_key()(isk in arb_issuance_authorizing_key()) -> IssueValidatingKey<ZSASchnorr> {
+            IssueValidatingKey::from(&isk)
         }
     }
 }
@@ -383,24 +376,24 @@ mod tests {
     fn issuance_authorizing_key_from_bytes_fail_on_zero() {
         // isk must not be the zero scalar for the ZSA Schnorr scheme.
         let zero_bytes = [0u8; 32];
-        let isk = IssuanceAuthorizingKey::<ZSASchnorr>::from_bytes(&zero_bytes);
+        let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&zero_bytes);
         assert!(isk.is_none());
     }
 
     #[test]
     fn issuance_authorizing_key_from_bytes_to_bytes_roundtrip() {
-        let isk: IssuanceAuthorizingKey<ZSASchnorr> = IssuanceAuthorizingKey::random(&mut OsRng);
+        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
         let isk_bytes = isk.to_bytes();
-        let isk_roundtrip = IssuanceAuthorizingKey::<ZSASchnorr>::from_bytes(&isk_bytes).unwrap();
+        let isk_roundtrip = IssueAuthKey::<ZSASchnorr>::from_bytes(&isk_bytes).unwrap();
         assert_eq!(isk_bytes, isk_roundtrip.to_bytes());
     }
 
     #[test]
     fn issuance_auth_sig_test_vectors() {
         for tv in crate::test_vectors::issuance_auth_sig::TEST_VECTORS {
-            let isk = IssuanceAuthorizingKey::<ZSASchnorr>::from_bytes(&tv.isk).unwrap();
+            let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&tv.isk).unwrap();
 
-            let ik = IssuanceValidatingKey::from(&isk);
+            let ik = IssueValidatingKey::from(&isk);
             assert_eq!(ik.to_bytes(), &tv.ik);
 
             let message = tv.msg;

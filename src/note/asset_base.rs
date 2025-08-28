@@ -15,7 +15,7 @@ use crate::{
         NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
     },
     issuance::compute_asset_desc_hash,
-    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey},
+    issuance_auth::{IssueAuthKey, IssueValidatingKey},
 };
 
 /// Note type identifier.
@@ -62,7 +62,7 @@ pub fn asset_digest(encode_asset_id: &[u8]) -> Blake2bHash {
 /// [assetidentifier]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
 pub fn encode_asset_id(
     version: u8,
-    ik: &IssuanceValidatingKey<ZSASchnorr>,
+    ik: &IssueValidatingKey<ZSASchnorr>,
     asset_desc_hash: &[u8; 32],
 ) -> Vec<u8> {
     let ik_encoding = ik.encode();
@@ -94,7 +94,7 @@ impl AssetBase {
     ///
     /// Panics if the derived AssetBase is the identity point.
     #[allow(non_snake_case)]
-    pub fn derive(ik: &IssuanceValidatingKey<ZSASchnorr>, asset_desc_hash: &[u8; 32]) -> Self {
+    pub fn derive(ik: &IssueValidatingKey<ZSASchnorr>, asset_desc_hash: &[u8; 32]) -> Self {
         let version_byte: u8 = 0x00;
 
         // EncodeAssetId(ik, asset_desc_hash) = version_byte || ik || asset_desc_hash
@@ -135,8 +135,8 @@ impl AssetBase {
     ///
     /// This is only used in tests.
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
-        let isk = IssuanceAuthorizingKey::<ZSASchnorr>::random(rng);
-        let ik = IssuanceValidatingKey::from(&isk);
+        let isk = IssueAuthKey::<ZSASchnorr>::random(rng);
+        let ik = IssueValidatingKey::from(&isk);
         AssetBase::derive(
             &ik,
             &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
@@ -165,7 +165,7 @@ pub mod testing {
 
     use proptest::prelude::*;
 
-    use crate::issuance_auth::{testing::arb_issuance_authorizing_key, IssuanceValidatingKey};
+    use crate::issuance_auth::{testing::arb_issuance_authorizing_key, IssueValidatingKey};
 
     prop_compose! {
         /// Generate a uniformly distributed note type
@@ -177,7 +177,7 @@ pub mod testing {
             if is_native {
                 AssetBase::native()
             } else {
-                AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc_hash)
+                AssetBase::derive(&IssueValidatingKey::from(&isk), &asset_desc_hash)
             }
         }
     }
@@ -188,7 +188,7 @@ pub mod testing {
             isk in arb_issuance_authorizing_key(),
             asset_desc_hash in any::<[u8; 32]>(),
         ) -> AssetBase {
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc_hash)
+            AssetBase::derive(&IssueValidatingKey::from(&isk), &asset_desc_hash)
         }
     }
 
@@ -197,7 +197,7 @@ pub mod testing {
         pub fn zsa_asset_base(asset_desc_hash: [u8; 32])(
             isk in arb_issuance_authorizing_key(),
         ) -> AssetBase {
-            AssetBase::derive(&IssuanceValidatingKey::from(&isk), &asset_desc_hash)
+            AssetBase::derive(&IssueValidatingKey::from(&isk), &asset_desc_hash)
         }
     }
 }
@@ -205,7 +205,7 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use crate::{
-        issuance_auth::{IssuanceValidatingKey, ZSASchnorr},
+        issuance_auth::{IssueValidatingKey, ZSASchnorr},
         note::AssetBase,
     };
 
@@ -218,7 +218,7 @@ mod tests {
                 &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
             );
             let calculated_asset_base = AssetBase::derive(
-                &IssuanceValidatingKey::<ZSASchnorr>::decode(&tv.key).unwrap(),
+                &IssueValidatingKey::<ZSASchnorr>::decode(&tv.key).unwrap(),
                 &asset_desc_hash,
             );
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();
