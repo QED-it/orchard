@@ -45,7 +45,7 @@ fn setup_params() -> TestParams {
     let mut rng = OsRng;
 
     let isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
-    let ik = (&isk).into();
+    let ik = IssueValidatingKey::from(&isk);
 
     let fvk = FullViewingKey::from(&SpendingKey::from_bytes(random_bytes(rng)).unwrap());
     let recipient = fvk.address_at(0u32, Scope::External);

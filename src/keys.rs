@@ -1049,7 +1049,7 @@ mod tests {
             let ak: SpendValidatingKey = (&ask).into();
             assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
 
-            let ik: IssueValidatingKey<ZSASchnorr> = (&isk).into();
+            let ik = IssueValidatingKey::from(&isk);
             assert_eq!(&ik.encode(), &tv.ik_encoding);
 
             let nk: NullifierDerivingKey = (&sk).into();

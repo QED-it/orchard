@@ -541,7 +541,7 @@ impl IssueBundle<Prepared> {
     /// Sign the `IssueBundle`.
     /// The call makes sure that the provided `isk` matches the `ik` and the derived `asset` for each note in the bundle.
     pub fn sign(self, isk: &IssueAuthKey<ZSASchnorr>) -> Result<IssueBundle<Signed>, Error> {
-        let expected_ik = isk.into();
+        let expected_ik = IssueValidatingKey::from(isk);
 
         // Make sure the `expected_ik` matches the `asset` for all notes.
         self.actions.iter().try_for_each(|action| {
@@ -1693,7 +1693,7 @@ mod tests {
             .unwrap();
 
         let incorrect_isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
-        let incorrect_ik = (&incorrect_isk).into();
+        let incorrect_ik = IssueValidatingKey::from(&incorrect_isk);
 
         // Add "bad" note
         let note = Note::new(
