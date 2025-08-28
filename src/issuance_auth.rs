@@ -211,15 +211,12 @@ impl IssueValidatingKey<ZSASchnorr> {
     ///
     /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#derivation-of-issuance-validating-key
     pub fn decode(bytes: &[u8]) -> Result<Self, Error> {
-        let (&algorithm_byte, key_bytes) = bytes
-            .split_first()
-            .ok_or(Error::InvalidIssueValidatingKey)?;
-
-        if algorithm_byte != ZSASchnorr::ALGORITHM_BYTE {
-            return Err(Error::InvalidIssueValidatingKey);
+        if let Some((&algorithm_byte, key_bytes)) = bytes.split_first() {
+            if algorithm_byte == ZSASchnorr::ALGORITHM_BYTE {
+                return Self::from_bytes(key_bytes).ok_or(Error::InvalidIssueValidatingKey);
+            }
         }
-
-        Self::from_bytes(key_bytes).ok_or(Error::InvalidIssueValidatingKey)
+        Err(Error::InvalidIssueValidatingKey)
     }
 }
 
@@ -265,14 +262,12 @@ impl IssueAuthSig<ZSASchnorr> {
     ///
     /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signing-and-validation
     pub(crate) fn decode(bytes: &[u8]) -> Result<Self, Error> {
-        let (&algorithm_byte, key_bytes) =
-            bytes.split_first().ok_or(Error::InvalidIssueBundleSig)?;
-
-        if algorithm_byte != ZSASchnorr::ALGORITHM_BYTE {
-            return Err(Error::InvalidIssueBundleSig);
+        if let Some((&algorithm_byte, key_bytes)) = bytes.split_first() {
+            if algorithm_byte == ZSASchnorr::ALGORITHM_BYTE {
+                return Self::from_bytes(key_bytes).ok_or(Error::InvalidIssueBundleSig);
+            }
         }
-
-        Self::from_bytes(key_bytes).ok_or(Error::InvalidIssueBundleSig)
+        Err(Error::InvalidIssueBundleSig)
     }
 }
 
