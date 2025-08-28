@@ -143,7 +143,7 @@ impl IssuanceAuthSigScheme for ZSASchnorr {
     fn try_sign(isk: &Self::IskType, msg: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error> {
         schnorr::SigningKey::from(*isk)
             .sign_prehash(msg)
-            .map_err(|_| Error::InvalidIssueAuthKey)
+            .map_err(|_| Error::InvalidIssueBundleSig)
     }
 
     fn verify(ik: &Self::IkType, msg: &[u8], sig: &Self::IssueAuthSigType) -> Result<(), Error> {
