@@ -380,6 +380,50 @@ mod tests {
     }
 
     #[test]
+    fn issuance_validating_key_from_bytes_to_bytes_roundtrip() {
+        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let ik = IssueValidatingKey::from(&isk);
+        let ik_bytes = ik.to_bytes();
+        let ik_roundtrip = IssueValidatingKey::from_bytes(&ik_bytes).unwrap();
+        assert_eq!(ik_bytes, ik_roundtrip.to_bytes());
+    }
+
+    #[test]
+    fn issuance_authorization_signature_from_bytes_to_bytes_roundtrip() {
+        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let sig = isk.try_sign(&[1u8; 32]).unwrap();
+        let sig_bytes = sig.to_bytes();
+        let sig_roundtrip = IssueAuthSig::<ZSASchnorr>::from_bytes(&sig_bytes).unwrap();
+        assert_eq!(sig_bytes, sig_roundtrip.to_bytes());
+    }
+
+    #[test]
+    fn verify_fails_on_wrong_message() {
+        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let ik = IssueValidatingKey::from(&isk);
+        let msg = [1u8; 32];
+        let incorrect_msg = [2u8; 32];
+        let sig = isk.try_sign(&msg).unwrap();
+        assert_eq!(
+            ik.verify(&incorrect_msg, &sig),
+            Err(Error::InvalidIssueBundleSig)
+        );
+    }
+
+    #[test]
+    fn verify_fails_on_wrong_key() {
+        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let msg = [1u8; 32];
+        let sig = isk.try_sign(&msg).unwrap();
+        let incorrect_isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let incorrect_ik = IssueValidatingKey::from(&incorrect_isk);
+        assert_eq!(
+            incorrect_ik.verify(&msg, &sig),
+            Err(Error::InvalidIssueBundleSig)
+        );
+    }
+
+    #[test]
     fn issuance_auth_sig_test_vectors() {
         for tv in crate::test_vectors::issuance_auth_sig::TEST_VECTORS {
             let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&tv.isk).unwrap();
