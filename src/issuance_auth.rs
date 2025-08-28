@@ -343,7 +343,7 @@ pub mod testing {
     use proptest::prelude::*;
 
     prop_compose! {
-        /// Generate a uniformly distributed Orchard issuance authorizing key. TODO: VA: Can we generalize prop_compose with generics?
+        /// Generate a uniformly distributed Orchard issuance authorizing key.
         pub fn arb_issuance_authorizing_key()(
             key in prop::array::uniform32(prop::num::u8::ANY)
                 .prop_map(|key| IssueAuthKey::from_bytes(&key))
