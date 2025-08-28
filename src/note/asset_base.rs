@@ -9,12 +9,13 @@ use pasta_curves::{arithmetic::CurveExt, pallas};
 use rand_core::CryptoRngCore;
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
+use crate::issuance_auth::ZSASchnorr;
 use crate::{
     constants::fixed_bases::{
         NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
     },
     issuance::compute_asset_desc_hash,
-    issuance_auth::{IssuanceAuthSigScheme, IssuanceAuthorizingKey, IssuanceValidatingKey},
+    issuance_auth::{IssuanceAuthorizingKey, IssuanceValidatingKey},
 };
 
 /// Note type identifier.
@@ -59,9 +60,9 @@ pub fn asset_digest(encode_asset_id: &[u8]) -> Blake2bHash {
 /// Encoding the Asset Identifier, as defined in [ZIP 227][assetidentifier].
 ///
 /// [assetidentifier]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
-pub fn encode_asset_id<S: IssuanceAuthSigScheme>(
+pub fn encode_asset_id(
     version: u8,
-    ik: &IssuanceValidatingKey<S>,
+    ik: &IssuanceValidatingKey<ZSASchnorr>,
     asset_desc_hash: &[u8; 32],
 ) -> Vec<u8> {
     let ik_encoding = ik.encode();
@@ -93,10 +94,7 @@ impl AssetBase {
     ///
     /// Panics if the derived AssetBase is the identity point.
     #[allow(non_snake_case)]
-    pub fn derive<S: IssuanceAuthSigScheme>(
-        ik: &IssuanceValidatingKey<S>,
-        asset_desc_hash: &[u8; 32],
-    ) -> Self {
+    pub fn derive(ik: &IssuanceValidatingKey<ZSASchnorr>, asset_desc_hash: &[u8; 32]) -> Self {
         let version_byte: u8 = 0x00;
 
         // EncodeAssetId(ik, asset_desc_hash) = version_byte || ik || asset_desc_hash
@@ -136,8 +134,8 @@ impl AssetBase {
     /// Generates a ZSA random asset.
     ///
     /// This is only used in tests.
-    pub(crate) fn random<S: IssuanceAuthSigScheme>(rng: &mut impl CryptoRngCore) -> Self {
-        let isk = IssuanceAuthorizingKey::<S>::random(rng);
+    pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+        let isk = IssuanceAuthorizingKey::<ZSASchnorr>::random(rng);
         let ik = IssuanceValidatingKey::from(&isk);
         AssetBase::derive(
             &ik,

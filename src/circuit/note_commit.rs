@@ -2620,7 +2620,6 @@ mod tests {
             fixed_bases::NOTE_COMMITMENT_PERSONALIZATION, OrchardCommitDomains, OrchardFixedBases,
             OrchardHashDomains, L_ORCHARD_BASE, L_VALUE, T_Q,
         },
-        issuance_auth::ZSASchnorr,
         note::{commitment::NoteCommitTrapdoor, AssetBase, NoteCommitment},
         value::NoteValue,
     };
@@ -3213,7 +3212,7 @@ mod tests {
 
         let two_pow_254 = pallas::Base::from_u128(1 << 127).square();
         let mut rng = OsRng;
-        let random_asset = AssetBase::random::<ZSASchnorr>(&mut rng);
+        let random_asset = AssetBase::random(&mut rng);
 
         // Test different values of `ak`, `nk`
         let mut circuits = vec![];
