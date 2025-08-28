@@ -25,7 +25,6 @@ use crate::{
 #[rustfmt::skip]
 pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only};
 
-const ZIP32_PURPOSE: u32 = 32;
 const ZIP32_PURPOSE_FOR_ISSUANCE: u32 = 227;
 
 /// Trait that defines the common interface for issuance authorization signature schemes.
