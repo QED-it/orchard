@@ -33,10 +33,9 @@ use crate::{
 use crate::issuance_auth::ZSASchnorr;
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IncorrectRhoDerivation,
-    InvalidIssuanceAuthorizingKey, InvalidIssuanceValidatingKey, IssueActionNotFound,
+    InvalidIssueAuthKey, InvalidIssueBundleSig, InvalidIssueValidatingKey, IssueActionNotFound,
     IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
-    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 /// Checks if a given note is a reference note.
@@ -150,7 +149,7 @@ impl IssueAction {
     ///
     /// # Arguments
     ///
-    /// * `ik` - A reference to the `IssuanceValidatingKey` used for deriving the asset.
+    /// * `ik` - A reference to the `IssueValidatingKey` used for deriving the asset.
     ///
     /// # Returns
     ///
@@ -251,8 +250,7 @@ impl Signed {
         &self.signature
     }
 
-    /// Constructs a `Signed` from a byte array containing an `IssuanceAuthorizationSignature`
-    /// in raw bytes.
+    /// Constructs a `Signed` from a byte array containing an `IssueAuthSig` in raw bytes.
     pub fn from_data(data: &[u8]) -> Self {
         Signed {
             signature: IssueAuthSig::decode(data).unwrap(),
@@ -554,7 +552,7 @@ impl IssueBundle<Prepared> {
         // Make sure the signature can be generated.
         let signature = isk
             .try_sign(&self.authorization.sighash)
-            .map_err(|_| IssueBundleInvalidSignature)?;
+            .map_err(|_| InvalidIssueBundleSig)?;
 
         Ok(IssueBundle {
             ik: self.ik,
@@ -643,7 +641,7 @@ pub fn verify_issue_bundle(
     bundle
         .ik()
         .verify(&sighash, bundle.authorization().signature())
-        .map_err(|_| IssueBundleInvalidSignature)?;
+        .map_err(|_| InvalidIssueBundleSig)?;
 
     bundle.actions().iter().enumerate().try_fold(
         BTreeMap::new(),
@@ -709,13 +707,13 @@ pub enum Error {
 
     /// Signing errors:
     /// Invalid issuance authorizing key.
-    InvalidIssuanceAuthorizingKey,
+    InvalidIssueAuthKey,
 
     /// Verification errors:
     /// Invalid issuance validating key.
-    InvalidIssuanceValidatingKey,
-    /// Invalid signature.
-    IssueBundleInvalidSignature,
+    InvalidIssueValidatingKey,
+    /// Invalid IssueBundle signature.
+    InvalidIssueBundleSig,
     /// The provided `AssetBase` has been previously finalized.
     IssueActionPreviouslyFinalizedAssetBase,
     /// The rho value of an issuance note is not correctly derived from the first nullifier.
@@ -758,14 +756,14 @@ impl fmt::Display for Error {
                     "it cannot be first issuance because we have already some notes for this asset."
                 )
             }
-            InvalidIssuanceAuthorizingKey => {
+            InvalidIssueAuthKey => {
                 write!(f, "invalid issuance authorizing key")
             }
-            InvalidIssuanceValidatingKey => {
+            InvalidIssueValidatingKey => {
                 write!(f, "invalid issuance validating key")
             }
-            IssueBundleInvalidSignature => {
-                write!(f, "invalid signature")
+            InvalidIssueBundleSig => {
+                write!(f, "invalid IssueBundle signature")
             }
             IssueActionPreviouslyFinalizedAssetBase => {
                 write!(f, "the provided `AssetBase` has been previously finalized")
@@ -796,8 +794,8 @@ mod tests {
         builder::{Builder, BundleType},
         circuit::ProvingKey,
         issuance::Error::{
-            IncorrectRhoDerivation, IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-            IssueBundleIkMismatchAssetBase, IssueBundleInvalidSignature,
+            IncorrectRhoDerivation, InvalidIssueBundleSig, IssueActionNotFound,
+            IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         },
         issuance::{
             compute_asset_desc_hash, is_reference_note, verify_issue_bundle, IssueAction,
@@ -1577,7 +1575,7 @@ mod tests {
 
         assert_eq!(
             verify_issue_bundle(&signed, sighash, |_| None, &first_nullifier).unwrap_err(),
-            IssueBundleInvalidSignature
+            InvalidIssueBundleSig
         );
     }
 
@@ -1612,7 +1610,7 @@ mod tests {
 
         assert_eq!(
             verify_issue_bundle(&signed, random_sighash, |_| None, &first_nullifier).unwrap_err(),
-            IssueBundleInvalidSignature
+            InvalidIssueBundleSig
         );
     }
 

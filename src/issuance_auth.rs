@@ -143,12 +143,12 @@ impl IssuanceAuthSigScheme for ZSASchnorr {
     fn try_sign(isk: &Self::IskType, msg: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error> {
         schnorr::SigningKey::from(*isk)
             .sign_prehash(msg)
-            .map_err(|_| Error::InvalidIssuanceAuthorizingKey)
+            .map_err(|_| Error::InvalidIssueAuthKey)
     }
 
     fn verify(ik: &Self::IkType, msg: &[u8], sig: &Self::IssueAuthSigType) -> Result<(), Error> {
         ik.verify_prehash(msg, sig)
-            .map_err(|_| Error::IssueBundleInvalidSignature)
+            .map_err(|_| Error::InvalidIssueBundleSig)
     }
 }
 
@@ -196,7 +196,7 @@ impl<S: IssuanceAuthSigScheme> IssueAuthKey<S> {
         Self::from_bytes(&isk_bytes).ok_or(zip32::Error::InvalidSpendingKey)
     }
 
-    /// Sign the provided message using the `IssuanceAuthorizingKey`.
+    /// Sign the provided message using the `IssueAuthKey`.
     /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign 32 byte SIGHASH values.
     pub fn try_sign(&self, msg: &[u8; 32]) -> Result<IssueAuthSig<S>, Error> {
         S::try_sign(&self.0, msg).map(IssueAuthSig)
@@ -249,13 +249,13 @@ impl<S: IssuanceAuthSigScheme> IssueValidatingKey<S> {
     pub fn decode(bytes: &[u8]) -> Result<Self, Error> {
         let (&algorithm_byte, key_bytes) = bytes
             .split_first()
-            .ok_or(Error::InvalidIssuanceValidatingKey)?;
+            .ok_or(Error::InvalidIssueValidatingKey)?;
 
         if algorithm_byte != S::ALGORITHM_BYTE {
-            return Err(Error::InvalidIssuanceValidatingKey);
+            return Err(Error::InvalidIssueValidatingKey);
         }
 
-        Self::from_bytes(key_bytes).ok_or(Error::InvalidIssuanceValidatingKey)
+        Self::from_bytes(key_bytes).ok_or(Error::InvalidIssueValidatingKey)
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
@@ -308,15 +308,14 @@ impl<S: IssuanceAuthSigScheme> IssueAuthSig<S> {
     ///
     /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signing-and-validation
     pub fn decode(bytes: &[u8]) -> Result<Self, Error> {
-        let (&algorithm_byte, key_bytes) = bytes
-            .split_first()
-            .ok_or(Error::IssueBundleInvalidSignature)?;
+        let (&algorithm_byte, key_bytes) =
+            bytes.split_first().ok_or(Error::InvalidIssueBundleSig)?;
 
         if algorithm_byte != S::ALGORITHM_BYTE {
-            return Err(Error::IssueBundleInvalidSignature);
+            return Err(Error::InvalidIssueBundleSig);
         }
 
-        Self::from_bytes(key_bytes).ok_or(Error::IssueBundleInvalidSignature)
+        Self::from_bytes(key_bytes).ok_or(Error::InvalidIssueBundleSig)
     }
 }
 

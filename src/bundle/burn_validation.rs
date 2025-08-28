@@ -72,7 +72,7 @@ mod tests {
     /// Creates an item of bundle burn list for a given asset description hash and value.
     ///
     /// This function is deterministic and guarantees that each call with the same parameters
-    /// will return the same result. It achieves determinism by using a static `IssuanceAuthorizingKey`.
+    /// will return the same result. It achieves determinism by using a static `IssueAuthKey`.
     ///
     /// # Arguments
     ///
