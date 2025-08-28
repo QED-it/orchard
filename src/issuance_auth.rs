@@ -1,7 +1,22 @@
-//! Issuance logic for Zcash Shielded Assets (ZSAs).
+//! Issuance authorization logic for Zcash Shielded Assets (ZSAs).
 //!
-//! This module provides the structures and methods necessary for handling issuance authorization
-//! signatures and the issuance keys.
+//! This module provides types and methods for working with issuance authorizing keys, validating
+//! keys, and authorization signatures, as defined in [ZIP 227].
+//!
+//! # Example
+//! ```
+//! use rand::rngs::OsRng;
+//! use orchard::issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
+//!
+//! let mut rng = OsRng;
+//! let isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
+//! let ik = IssueValidatingKey::from(&isk);
+//! let msg = [1u8; 32];
+//! let sig = isk.try_sign(&msg).unwrap();
+//! ik.verify(&msg, &sig).unwrap();
+//! ```
+//!
+//! [ZIP 227]: https://zips.z.cash/zip-0227
 
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
