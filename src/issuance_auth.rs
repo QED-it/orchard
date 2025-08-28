@@ -179,9 +179,9 @@ impl IssueAuthKey<ZSASchnorr> {
 
 impl Debug for IssueAuthKey<ZSASchnorr> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("IssueAuthKey")
-            .field(&self.to_bytes())
-            .finish()
+        // Do not print bytes from the issuance authorizing key.
+        let ik = IssueValidatingKey::from(self);
+        write!(f, "IssueAuthKey({:?})", ik)
     }
 }
 
@@ -229,9 +229,17 @@ impl IssueValidatingKey<ZSASchnorr> {
 
 impl Debug for IssueValidatingKey<ZSASchnorr> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("IssueValidatingKey")
-            .field(&self.to_bytes())
-            .finish()
+        let ik_bytes = self.to_bytes();
+        let last4 = &ik_bytes[(ik_bytes.len() - 4)..];
+
+        write!(
+            f,
+            "IssueValidatingKey {{ last4: 0x{:02x}{:02x}{:02x}{:02x} }}",
+            last4.first().copied().unwrap_or(0),
+            last4.get(1).copied().unwrap_or(0),
+            last4.get(2).copied().unwrap_or(0),
+            last4.get(3).copied().unwrap_or(0),
+        )
     }
 }
 
