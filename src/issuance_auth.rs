@@ -23,10 +23,7 @@ use core::fmt::{Debug, Formatter};
 
 use k256::{
     schnorr,
-    schnorr::{
-        signature::hazmat::{PrehashSigner, PrehashVerifier},
-        VerifyingKey,
-    },
+    schnorr::{signature::hazmat::PrehashVerifier, VerifyingKey},
     NonZeroScalar,
 };
 use rand_core::CryptoRngCore;
@@ -120,8 +117,7 @@ impl IssueAuthSigScheme for ZSASchnorr {
     type IssueAuthSigType = schnorr::Signature;
 
     fn try_sign(isk: &Self::IskType, msg: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error> {
-        schnorr::SigningKey::from(*isk)
-            .sign_prehash(msg)
+        schnorr::SigningKey::sign_raw(&schnorr::SigningKey::from(*isk), msg, &[0u8; 32])
             .map_err(|_| Error::InvalidIssueBundleSig)
     }
 
