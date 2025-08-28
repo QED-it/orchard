@@ -173,14 +173,6 @@ impl IssueAuthKey<ZSASchnorr> {
     }
 }
 
-impl Debug for IssueAuthKey<ZSASchnorr> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        // Do not print bytes from the issuance authorizing key.
-        let ik = IssueValidatingKey::from(self);
-        write!(f, "IssueAuthKey({:?})", ik)
-    }
-}
-
 impl From<&IssueAuthKey<ZSASchnorr>> for IssueValidatingKey<ZSASchnorr> {
     fn from(isk: &IssueAuthKey<ZSASchnorr>) -> Self {
         Self(*schnorr::SigningKey::from(isk.0).verifying_key())
@@ -220,19 +212,6 @@ impl IssueValidatingKey<ZSASchnorr> {
     }
 }
 
-impl Debug for IssueValidatingKey<ZSASchnorr> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        let ik_bytes = self.to_bytes();
-        let last4 = &ik_bytes[(ik_bytes.len() - 4)..];
-
-        write!(
-            f,
-            "IssueValidatingKey {{ last4: 0x{:02x}{:02x}{:02x}{:02x} }}",
-            last4[0], last4[1], last4[2], last4[3]
-        )
-    }
-}
-
 impl IssueAuthSig<ZSASchnorr> {
     fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes().to_vec()
@@ -265,6 +244,27 @@ impl IssueAuthSig<ZSASchnorr> {
             }
         }
         Err(Error::InvalidIssueBundleSig)
+    }
+}
+
+impl Debug for IssueValidatingKey<ZSASchnorr> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        let ik_bytes = self.to_bytes();
+        let last4 = &ik_bytes[(ik_bytes.len() - 4)..];
+
+        write!(
+            f,
+            "IssueValidatingKey {{ last4: 0x{:02x}{:02x}{:02x}{:02x} }}",
+            last4[0], last4[1], last4[2], last4[3]
+        )
+    }
+}
+
+impl Debug for IssueAuthKey<ZSASchnorr> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        // Do not print bytes from the issuance authorizing key.
+        let ik = IssueValidatingKey::from(self);
+        write!(f, "IssueAuthKey({:?})", ik)
     }
 }
 
