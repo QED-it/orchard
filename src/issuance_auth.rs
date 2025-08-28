@@ -228,10 +228,7 @@ impl Debug for IssueValidatingKey<ZSASchnorr> {
         write!(
             f,
             "IssueValidatingKey {{ last4: 0x{:02x}{:02x}{:02x}{:02x} }}",
-            last4.first().copied().unwrap_or(0),
-            last4.get(1).copied().unwrap_or(0),
-            last4.get(2).copied().unwrap_or(0),
-            last4.get(3).copied().unwrap_or(0),
+            last4[0], last4[1], last4[2], last4[3]
         )
     }
 }
