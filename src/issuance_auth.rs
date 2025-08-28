@@ -17,7 +17,7 @@ use k256::{
 use rand_core::CryptoRngCore;
 
 use crate::{
-    issuance::{self, Error},
+    issuance::Error,
     zip32::{self, ExtendedSpendingKey},
 };
 
@@ -63,17 +63,14 @@ pub trait IssuanceAuthSigScheme {
     ///
     /// Only supports signing of messages of length 32 bytes, since we will only be using it
     /// to sign 32 byte SIGHASH values.
-    fn try_sign(
-        isk: &Self::IskType,
-        msg: &[u8; 32],
-    ) -> Result<Self::IssueAuthSigType, issuance::Error>;
+    fn try_sign(isk: &Self::IskType, msg: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error>;
 
     /// Verifies a signature over a message using the issuance validating key.
     fn verify(
         ik: &Self::IkType,
         msg: &[u8],
         signature: &Self::IssueAuthSigType,
-    ) -> Result<(), issuance::Error>;
+    ) -> Result<(), Error>;
 }
 
 /// An issuance authorizing key.
@@ -146,12 +143,12 @@ impl IssuanceAuthSigScheme for ZSASchnorr {
     fn try_sign(isk: &Self::IskType, msg: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error> {
         schnorr::SigningKey::from(*isk)
             .sign_prehash(msg)
-            .map_err(|_| issuance::Error::InvalidIssuanceAuthorizingKey)
+            .map_err(|_| Error::InvalidIssuanceAuthorizingKey)
     }
 
     fn verify(ik: &Self::IkType, msg: &[u8], sig: &Self::IssueAuthSigType) -> Result<(), Error> {
         ik.verify_prehash(msg, sig)
-            .map_err(|_| issuance::Error::IssueBundleInvalidSignature)
+            .map_err(|_| Error::IssueBundleInvalidSignature)
     }
 }
 
@@ -201,7 +198,7 @@ impl<S: IssuanceAuthSigScheme> IssueAuthKey<S> {
 
     /// Sign the provided message using the `IssuanceAuthorizingKey`.
     /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign 32 byte SIGHASH values.
-    pub fn try_sign(&self, msg: &[u8; 32]) -> Result<IssueAuthSig<S>, issuance::Error> {
+    pub fn try_sign(&self, msg: &[u8; 32]) -> Result<IssueAuthSig<S>, Error> {
         S::try_sign(&self.0, msg).map(IssueAuthSig)
     }
 }
@@ -249,7 +246,7 @@ impl<S: IssuanceAuthSigScheme> IssueValidatingKey<S> {
     /// Decodes an issuance validating key from the byte representation defined in [ZIP 227][issuancekeycomponents].
     ///
     /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#derivation-of-issuance-validating-key
-    pub fn decode(bytes: &[u8]) -> Result<Self, issuance::Error> {
+    pub fn decode(bytes: &[u8]) -> Result<Self, Error> {
         let (&algorithm_byte, key_bytes) = bytes
             .split_first()
             .ok_or(Error::InvalidIssuanceValidatingKey)?;
@@ -262,7 +259,7 @@ impl<S: IssuanceAuthSigScheme> IssueValidatingKey<S> {
     }
 
     /// Verifies a purported `signature` over `msg` made by this verification key.
-    pub fn verify(&self, msg: &[u8], sig: &IssueAuthSig<S>) -> Result<(), issuance::Error> {
+    pub fn verify(&self, msg: &[u8], sig: &IssueAuthSig<S>) -> Result<(), Error> {
         S::verify(&self.0, msg, &sig.0)
     }
 }
@@ -310,7 +307,7 @@ impl<S: IssuanceAuthSigScheme> IssueAuthSig<S> {
     /// in [ZIP 227][issueauthsig].
     ///
     /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signing-and-validation
-    pub fn decode(bytes: &[u8]) -> Result<Self, issuance::Error> {
+    pub fn decode(bytes: &[u8]) -> Result<Self, Error> {
         let (&algorithm_byte, key_bytes) = bytes
             .split_first()
             .ok_or(Error::IssueBundleInvalidSignature)?;
