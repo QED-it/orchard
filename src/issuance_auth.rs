@@ -28,7 +28,7 @@ pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only}
 const ZIP32_PURPOSE_FOR_ISSUANCE: u32 = 227;
 
 /// Trait that defines the common interface for issuance authorization signature schemes.
-pub trait IssuanceAuthSigScheme {
+pub trait IssueAuthSigScheme {
     /// The byte corresponding to this signature scheme, used to encode the issuance validating key
     /// and issuance authorization signature.
     const ALGORITHM_BYTE: u8;
@@ -79,7 +79,7 @@ pub trait IssuanceAuthSigScheme {
 ///
 /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#issuance-key-derivation
 #[derive(Clone)]
-pub struct IssueAuthKey<S: IssuanceAuthSigScheme>(S::IskType);
+pub struct IssueAuthKey<S: IssueAuthSigScheme>(S::IskType);
 
 /// An issuance validating key which is used to validate issuance authorization signatures.
 ///
@@ -87,7 +87,7 @@ pub struct IssueAuthKey<S: IssuanceAuthSigScheme>(S::IskType);
 ///
 /// [IssuanceZSA]: https://zips.z.cash/zip-0227#issuance-key-derivation
 #[derive(Clone)]
-pub struct IssueValidatingKey<S: IssuanceAuthSigScheme>(S::IkType);
+pub struct IssueValidatingKey<S: IssueAuthSigScheme>(S::IkType);
 
 /// An issuance authorization signature `issueAuthSig`,
 ///
@@ -95,13 +95,13 @@ pub struct IssueValidatingKey<S: IssuanceAuthSigScheme>(S::IkType);
 ///
 /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signature-scheme
 #[derive(Debug)]
-pub struct IssueAuthSig<S: IssuanceAuthSigScheme>(S::IssueAuthSigType);
+pub struct IssueAuthSig<S: IssueAuthSigScheme>(S::IssueAuthSigType);
 
 /// The Orchard-ZSA issuance authorization signature scheme, based on BIP 340 Schnorr.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZSASchnorr;
 
-impl IssuanceAuthSigScheme for ZSASchnorr {
+impl IssueAuthSigScheme for ZSASchnorr {
     const ALGORITHM_BYTE: u8 = 0x00;
 
     type IskType = NonZeroScalar;
@@ -152,7 +152,7 @@ impl IssuanceAuthSigScheme for ZSASchnorr {
     }
 }
 
-impl<S: IssuanceAuthSigScheme> IssueAuthKey<S> {
+impl<S: IssueAuthSigScheme> IssueAuthKey<S> {
     /// Constructs an issuance authorizing key from the provided bytes.
     ///
     /// Returns `None` if the bytes do not correspond to a valid issuance authorizing key.
@@ -207,7 +207,7 @@ impl<S: IssuanceAuthSigScheme> IssueAuthKey<S> {
     }
 }
 
-impl<S: IssuanceAuthSigScheme> Debug for IssueAuthKey<S> {
+impl<S: IssueAuthSigScheme> Debug for IssueAuthKey<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("IssueAuthKey")
             .field(&self.to_bytes())
@@ -215,13 +215,13 @@ impl<S: IssuanceAuthSigScheme> Debug for IssueAuthKey<S> {
     }
 }
 
-impl<S: IssuanceAuthSigScheme> From<&IssueAuthKey<S>> for IssueValidatingKey<S> {
+impl<S: IssueAuthSigScheme> From<&IssueAuthKey<S>> for IssueValidatingKey<S> {
     fn from(isk: &IssueAuthKey<S>) -> Self {
         Self(S::ik_from_isk(&isk.0))
     }
 }
 
-impl<S: IssuanceAuthSigScheme> IssueValidatingKey<S> {
+impl<S: IssueAuthSigScheme> IssueValidatingKey<S> {
     /// Converts this issuance validating key to its serialized form,
     /// in big-endian order as defined in BIP 340.
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -268,7 +268,7 @@ impl<S: IssuanceAuthSigScheme> IssueValidatingKey<S> {
     }
 }
 
-impl<S: IssuanceAuthSigScheme> Debug for IssueValidatingKey<S> {
+impl<S: IssueAuthSigScheme> Debug for IssueValidatingKey<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("IssueValidatingKey")
             .field(&self.to_bytes())
@@ -276,15 +276,15 @@ impl<S: IssuanceAuthSigScheme> Debug for IssueValidatingKey<S> {
     }
 }
 
-impl<S: IssuanceAuthSigScheme> PartialEq for IssueValidatingKey<S> {
+impl<S: IssueAuthSigScheme> PartialEq for IssueValidatingKey<S> {
     fn eq(&self, other: &Self) -> bool {
         self.to_bytes() == other.to_bytes()
     }
 }
 
-impl<S: IssuanceAuthSigScheme> Eq for IssueValidatingKey<S> {}
+impl<S: IssueAuthSigScheme> Eq for IssueValidatingKey<S> {}
 
-impl<S: IssuanceAuthSigScheme> IssueAuthSig<S> {
+impl<S: IssueAuthSigScheme> IssueAuthSig<S> {
     /// Serialize the issuance authorization signature to its canonical byte representation.
     pub fn to_bytes(&self) -> Vec<u8> {
         S::sig_to_bytes(&self.0)
@@ -323,19 +323,19 @@ impl<S: IssuanceAuthSigScheme> IssueAuthSig<S> {
     }
 }
 
-impl<S: IssuanceAuthSigScheme> Clone for IssueAuthSig<S> {
+impl<S: IssueAuthSigScheme> Clone for IssueAuthSig<S> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl<S: IssuanceAuthSigScheme> PartialEq for IssueAuthSig<S> {
+impl<S: IssueAuthSigScheme> PartialEq for IssueAuthSig<S> {
     fn eq(&self, other: &Self) -> bool {
         self.to_bytes() == other.to_bytes()
     }
 }
 
-impl<S: IssuanceAuthSigScheme> Eq for IssueAuthSig<S> {}
+impl<S: IssueAuthSigScheme> Eq for IssueAuthSig<S> {}
 
 /// Generators for property testing.
 #[cfg(any(test, feature = "test-dependencies"))]
