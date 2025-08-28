@@ -55,16 +55,21 @@ pub trait IssueAuthSigScheme {
     /// The type of the issuance authorization signature.
     type IssueAuthSigType: Clone + PartialEq;
 
-    /// Signs a 32-byte message using the issuance authorizing key.
+    /// Signs a 32-byte message and auxiliary data using the issuance authorizing key.
     ///
     /// Only supports signing of messages of length 32 bytes, since we will only be using it
     /// to sign 32 byte SIGHASH values.
-    fn try_sign(isk: &Self::IskType, msg: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error>;
+    fn try_sign_with_aux(
+        isk: &Self::IskType,
+        msg: &[u8; 32],
+        aux_data: &[u8; 32],
+    ) -> Result<Self::IssueAuthSigType, Error>;
 
-    /// Verifies a signature over a message using the issuance validating key.
-    fn verify(
+    /// Verifies a signature over a message and auxiliary data using the issuance validating key.
+    fn verify_with_aux(
         ik: &Self::IkType,
         msg: &[u8],
+        aux_data: &[u8; 32],
         signature: &Self::IssueAuthSigType,
     ) -> Result<(), Error>;
 }
@@ -78,10 +83,16 @@ pub trait IssueAuthSigScheme {
 pub struct IssueAuthKey<S: IssueAuthSigScheme>(S::IskType);
 
 impl<S: IssueAuthSigScheme> IssueAuthKey<S> {
-    /// Sign the provided message using the `IssueAuthKey`.
-    /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign 32 byte SIGHASH values.
-    pub fn try_sign(&self, msg: &[u8; 32]) -> Result<IssueAuthSig<S>, Error> {
-        S::try_sign(&self.0, msg).map(IssueAuthSig)
+    /// Sign the provided message and auxiliary data using the `IssueAuthKey`.
+    ///
+    /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign
+    /// 32 byte SIGHASH values.
+    pub fn try_sign_with_aux(
+        &self,
+        msg: &[u8; 32],
+        aux_data: &[u8; 32],
+    ) -> Result<IssueAuthSig<S>, Error> {
+        S::try_sign_with_aux(&self.0, msg, aux_data).map(IssueAuthSig)
     }
 }
 
@@ -94,9 +105,14 @@ impl<S: IssueAuthSigScheme> IssueAuthKey<S> {
 pub struct IssueValidatingKey<S: IssueAuthSigScheme>(S::IkType);
 
 impl<S: IssueAuthSigScheme> IssueValidatingKey<S> {
-    /// Verifies a purported `signature` over `msg` made by this verification key.
-    pub fn verify(&self, msg: &[u8], sig: &IssueAuthSig<S>) -> Result<(), Error> {
-        S::verify(&self.0, msg, &sig.0)
+    /// Verifies a purported `signature` over `msg` and `aux_data` made by this verification key.
+    pub fn verify_with_aux(
+        &self,
+        msg: &[u8],
+        aux_data: &[u8; 32],
+        sig: &IssueAuthSig<S>,
+    ) -> Result<(), Error> {
+        S::verify_with_aux(&self.0, msg, aux_data, &sig.0)
     }
 }
 
@@ -119,13 +135,32 @@ impl IssueAuthSigScheme for ZSASchnorr {
     type IkType = VerifyingKey;
     type IssueAuthSigType = schnorr::Signature;
 
-    fn try_sign(isk: &Self::IskType, msg: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error> {
+    fn try_sign_with_aux(
+        isk: &Self::IskType,
+        msg: &[u8; 32],
+        aux_data: &[u8; 32],
+    ) -> Result<Self::IssueAuthSigType, Error> {
+        // Check aux_data is all zeroes.
+        if aux_data.iter().any(|&b| b != 0) {
+            return Err(Error::InvalidIssueBundleSig);
+        }
+
         schnorr::SigningKey::from(*isk)
             .sign_prehash(msg)
             .map_err(|_| Error::InvalidIssueBundleSig)
     }
 
-    fn verify(ik: &Self::IkType, msg: &[u8], sig: &Self::IssueAuthSigType) -> Result<(), Error> {
+    fn verify_with_aux(
+        ik: &Self::IkType,
+        msg: &[u8],
+        aux_data: &[u8; 32],
+        sig: &Self::IssueAuthSigType,
+    ) -> Result<(), Error> {
+        // Check aux_data is all zeroes.
+        if aux_data.iter().any(|&b| b != 0) {
+            return Err(Error::InvalidIssueBundleSig);
+        }
+
         ik.verify_prehash(msg, sig)
             .map_err(|_| Error::InvalidIssueBundleSig)
     }
@@ -174,6 +209,14 @@ impl IssueAuthKey<ZSASchnorr> {
             .to_bytes();
 
         Self::from_bytes(&isk_bytes).ok_or(zip32::Error::InvalidSpendingKey)
+    }
+
+    /// Signs a 32-byte message using the issuance authorizing key.
+    ///
+    /// Only supports signing of messages of length 32 bytes, since we will only be using it
+    /// to sign 32 byte SIGHASH values.
+    pub fn try_sign(&self, msg: &[u8; 32]) -> Result<IssueAuthSig<ZSASchnorr>, Error> {
+        ZSASchnorr::try_sign_with_aux(&self.0, msg, &[0u8; 32]).map(IssueAuthSig::<ZSASchnorr>)
     }
 }
 
@@ -224,6 +267,11 @@ impl IssueValidatingKey<ZSASchnorr> {
         }
 
         Self::from_bytes(key_bytes).ok_or(Error::InvalidIssueValidatingKey)
+    }
+
+    /// Verifies a signature over a message using the issuance validating key.
+    pub fn verify(&self, msg: &[u8], sig: &IssueAuthSig<ZSASchnorr>) -> Result<(), Error> {
+        ZSASchnorr::verify_with_aux(&self.0, msg, &[0u8; 32], &sig.0)
     }
 }
 
