@@ -30,6 +30,8 @@ pub enum Error {
     InvalidSpendingKey,
     /// A child index in a derivation path exceeded 2^31
     InvalidChildIndex(u32),
+    /// A non zero account when deriving an Orchard-ZSA issuance key
+    NonZeroAccount,
 }
 
 impl fmt::Display for Error {

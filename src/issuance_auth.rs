@@ -181,6 +181,10 @@ impl<S: IssuanceAuthSigScheme> IssueAuthKey<S> {
         coin_type: u32,
         account: u32,
     ) -> Result<Self, zip32::Error> {
+        if account != 0 {
+            return Err(zip32::Error::NonZeroAccount);
+        }
+
         // Call zip32 logic
         let path = &[
             ChildIndex::hardened(ZIP32_PURPOSE_FOR_ISSUANCE),
