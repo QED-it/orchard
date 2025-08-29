@@ -215,7 +215,7 @@ impl IssueAuthSig<ZSASchnorr> {
     pub(crate) fn encode(&self) -> Vec<u8> {
         let sig_bytes = self.0.to_bytes().to_vec();
         let mut encoded = Vec::with_capacity(
-            std::mem::size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + sig_bytes.len(),
+            core::mem::size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + sig_bytes.len(),
         );
         encoded.push(ZSASchnorr::ALGORITHM_BYTE);
         encoded.extend(sig_bytes);
