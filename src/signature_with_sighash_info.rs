@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use crate::{
     pczt::ParseError,
-    primitives::redpallas::{self, Binding, SigType, SpendAuth},
+    primitives::redpallas::{self, Binding, SpendAuth},
 };
 
 /// The sighash version and associated information
@@ -49,15 +49,15 @@ pub(crate) const ORCHARD_SIG_V0: SighashInfo = SighashInfo {
 
 /// Redpallas signature with SighashInfo.
 #[derive(Debug, Clone)]
-pub struct SignatureWithSighashInfo<T: SigType> {
+pub struct SignatureWithSighashInfo<S> {
     info: SighashInfo,
-    signature: redpallas::Signature<T>,
+    signature: S,
 }
 
-impl<T: SigType> SignatureWithSighashInfo<T> {
+impl<S> SignatureWithSighashInfo<S> {
     /// Constructs a new `SignatureWithSighashInfo` with the default `SighashInfo` and the given
     /// signature.
-    pub fn new_with_default_sighash_info(signature: redpallas::Signature<T>) -> Self {
+    pub fn new_with_default_sighash_info(signature: S) -> Self {
         Self {
             info: ORCHARD_SIG_V0,
             signature,
@@ -65,7 +65,7 @@ impl<T: SigType> SignatureWithSighashInfo<T> {
     }
 
     /// Constructs a new `SignatureWithSighashInfo` with the given `SighashInfo` and signature.
-    pub fn new(info: SighashInfo, signature: redpallas::Signature<T>) -> Self {
+    pub fn new(info: SighashInfo, signature: S) -> Self {
         Self { info, signature }
     }
 
@@ -75,10 +75,19 @@ impl<T: SigType> SignatureWithSighashInfo<T> {
     }
 
     /// Returns the signature.
-    pub fn signature(&self) -> &redpallas::Signature<T> {
+    pub fn signature(&self) -> &S {
         &self.signature
     }
+}
 
+/// Binding signature containing the sighash information and the signature itself.
+pub type BindingSignatureWithSighashInfo = SignatureWithSighashInfo<redpallas::Signature<Binding>>;
+
+/// Authorizing signature containing the sighash information and the signature itself.
+pub type SpendAuthSignatureWithSighashInfo =
+    SignatureWithSighashInfo<redpallas::Signature<SpendAuth>>;
+
+impl SpendAuthSignatureWithSighashInfo {
     /// Parses a SpendAuthSignatureWithSighashInfo from its raw bytes components.
     ///
     /// Returns an error `sighash_info` is empty.
@@ -90,12 +99,6 @@ impl<T: SigType> SignatureWithSighashInfo<T> {
         })
     }
 }
-
-/// Binding signature containing the sighash information and the signature itself.
-pub type BindingSignatureWithSighashInfo = SignatureWithSighashInfo<Binding>;
-
-/// Authorizing signature containing the sighash information and the signature itself.
-pub type SpendAuthSignatureWithSighashInfo = SignatureWithSighashInfo<SpendAuth>;
 
 #[cfg(test)]
 mod tests {
