@@ -185,8 +185,9 @@ impl IssueValidatingKey<ZSASchnorr> {
     /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#derivation-of-issuance-validating-key
     pub fn encode(&self) -> Vec<u8> {
         let ik_bytes = self.0.to_bytes().to_vec();
-        let mut encoded =
-            Vec::with_capacity(std::mem::size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + ik_bytes.len());
+        let mut encoded = Vec::with_capacity(
+            core::mem::size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + ik_bytes.len(),
+        );
         encoded.push(ZSASchnorr::ALGORITHM_BYTE);
         encoded.extend(ik_bytes);
         encoded
