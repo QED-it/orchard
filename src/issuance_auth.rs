@@ -361,13 +361,13 @@ mod tests {
             let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&tv.isk).unwrap();
 
             let ik = IssueValidatingKey::from(&isk);
-            assert_eq!(ik.encode(), &tv.ik);
+            assert_eq!(ik.encode(), &tv.ik_encoding);
 
             let message = tv.msg;
 
             let sig = isk.try_sign(&message).unwrap();
             let sig_bytes = sig.encode();
-            assert_eq!(sig_bytes, &tv.sig);
+            assert_eq!(sig_bytes, &tv.issue_auth_sig);
 
             assert!(ik.verify(&message, &sig).is_ok());
         }
