@@ -1928,7 +1928,9 @@ mod tests {
 pub mod testing {
     use crate::{
         issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed},
-        issuance_auth::{testing::arb_issuance_validating_key, IssueAuthSig, ZSASchnorr},
+        issuance_auth::{
+            testing::arb_issuance_validating_key, IssueAuthSig, IssueAuthSigScheme, ZSASchnorr,
+        },
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
     };
@@ -1942,7 +1944,9 @@ pub mod testing {
         pub(crate) fn arb_signature()(
             sig_bytes in vec(prop::num::u8::ANY, 64)
         ) -> IssueAuthSig<ZSASchnorr> {
-                IssueAuthSig::from_bytes(&sig_bytes).unwrap()
+            let mut encoded = vec![ZSASchnorr::ALGORITHM_BYTE];
+            encoded.extend(sig_bytes);
+            IssueAuthSig::decode(&encoded).unwrap()
         }
     }
 

@@ -180,19 +180,11 @@ impl From<&IssueAuthKey<ZSASchnorr>> for IssueValidatingKey<ZSASchnorr> {
 }
 
 impl IssueValidatingKey<ZSASchnorr> {
-    pub(crate) fn to_bytes(&self) -> Vec<u8> {
-        self.0.to_bytes().to_vec()
-    }
-
-    fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        VerifyingKey::from_bytes(bytes).ok().map(Self)
-    }
-
     /// Encodes the issuance validating key into a byte vector, in the manner defined in [ZIP 227][issuancekeycomponents].
     ///
     /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#derivation-of-issuance-validating-key
     pub fn encode(&self) -> Vec<u8> {
-        let ik_bytes = self.to_bytes();
+        let ik_bytes = self.0.to_bytes().to_vec();
         let mut encoded =
             Vec::with_capacity(std::mem::size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + ik_bytes.len());
         encoded.push(ZSASchnorr::ALGORITHM_BYTE);
@@ -206,7 +198,9 @@ impl IssueValidatingKey<ZSASchnorr> {
     pub fn decode(bytes: &[u8]) -> Result<Self, Error> {
         if let Some((&algorithm_byte, key_bytes)) = bytes.split_first() {
             if algorithm_byte == ZSASchnorr::ALGORITHM_BYTE {
-                return Self::from_bytes(key_bytes).ok_or(Error::InvalidIssueValidatingKey);
+                return VerifyingKey::from_bytes(key_bytes)
+                    .map(Self)
+                    .map_err(|_| Error::InvalidIssueValidatingKey);
             }
         }
         Err(Error::InvalidIssueValidatingKey)
@@ -214,20 +208,12 @@ impl IssueValidatingKey<ZSASchnorr> {
 }
 
 impl IssueAuthSig<ZSASchnorr> {
-    fn to_bytes(&self) -> Vec<u8> {
-        self.0.to_bytes().to_vec()
-    }
-
-    pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        schnorr::Signature::try_from(bytes).ok().map(Self)
-    }
-
     /// Encodes the issuance authorization signature into a byte vector, in the manner
     /// defined in [ZIP 227][issueauthsig].
     ///
     /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signing-and-validation
     pub(crate) fn encode(&self) -> Vec<u8> {
-        let sig_bytes = self.to_bytes();
+        let sig_bytes = self.0.to_bytes().to_vec();
         let mut encoded = Vec::with_capacity(
             std::mem::size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + sig_bytes.len(),
         );
@@ -243,7 +229,9 @@ impl IssueAuthSig<ZSASchnorr> {
     pub(crate) fn decode(bytes: &[u8]) -> Result<Self, Error> {
         if let Some((&algorithm_byte, key_bytes)) = bytes.split_first() {
             if algorithm_byte == ZSASchnorr::ALGORITHM_BYTE {
-                return Self::from_bytes(key_bytes).ok_or(Error::InvalidIssueBundleSig);
+                return schnorr::Signature::try_from(key_bytes)
+                    .map(Self)
+                    .map_err(|_| Error::InvalidIssueBundleSig);
             }
         }
         Err(Error::InvalidIssueBundleSig)
@@ -252,7 +240,7 @@ impl IssueAuthSig<ZSASchnorr> {
 
 impl Debug for IssueValidatingKey<ZSASchnorr> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        let ik_bytes = self.to_bytes();
+        let ik_bytes = self.encode();
         let last4 = &ik_bytes[(ik_bytes.len() - 4)..];
 
         write!(
@@ -323,21 +311,21 @@ mod tests {
     }
 
     #[test]
-    fn issuance_validating_key_from_bytes_to_bytes_roundtrip() {
+    fn issuance_validating_key_encode_decode_roundtrip() {
         let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
         let ik = IssueValidatingKey::from(&isk);
-        let ik_bytes = ik.to_bytes();
-        let ik_roundtrip = IssueValidatingKey::from_bytes(&ik_bytes).unwrap();
-        assert_eq!(ik_bytes, ik_roundtrip.to_bytes());
+        let ik_bytes = ik.encode();
+        let ik_roundtrip = IssueValidatingKey::decode(&ik_bytes).unwrap();
+        assert_eq!(ik_bytes, ik_roundtrip.encode());
     }
 
     #[test]
-    fn issuance_authorization_signature_from_bytes_to_bytes_roundtrip() {
+    fn issuance_authorization_signature_encode_decode_roundtrip() {
         let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
         let sig = isk.try_sign(&[1u8; 32]).unwrap();
-        let sig_bytes = sig.to_bytes();
-        let sig_roundtrip = IssueAuthSig::<ZSASchnorr>::from_bytes(&sig_bytes).unwrap();
-        assert_eq!(sig_bytes, sig_roundtrip.to_bytes());
+        let sig_bytes = sig.encode();
+        let sig_roundtrip = IssueAuthSig::<ZSASchnorr>::decode(&sig_bytes).unwrap();
+        assert_eq!(sig_bytes, sig_roundtrip.encode());
     }
 
     #[test]
@@ -372,12 +360,12 @@ mod tests {
             let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&tv.isk).unwrap();
 
             let ik = IssueValidatingKey::from(&isk);
-            assert_eq!(ik.to_bytes(), &tv.ik);
+            assert_eq!(ik.encode(), &tv.ik);
 
             let message = tv.msg;
 
             let sig = isk.try_sign(&message).unwrap();
-            let sig_bytes = sig.to_bytes();
+            let sig_bytes = sig.encode();
             assert_eq!(sig_bytes, &tv.sig);
 
             assert!(ik.verify(&message, &sig).is_ok());
