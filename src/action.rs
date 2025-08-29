@@ -4,6 +4,7 @@ use crate::{
     note::{ExtractedNoteCommitment, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, SpendAuth},
     primitives::OrchardPrimitives,
+    signature_with_sighash_info::SpendAuthSignatureWithSighashInfo,
     value::ValueCommitment,
 };
 
@@ -107,7 +108,7 @@ impl<A, P: OrchardPrimitives> Action<A, P> {
     }
 }
 
-impl<P: OrchardPrimitives> DynamicUsage for Action<redpallas::Signature<SpendAuth>, P> {
+impl<P: OrchardPrimitives> DynamicUsage for Action<SpendAuthSignatureWithSighashInfo, P> {
     #[inline(always)]
     fn dynamic_usage(&self) -> usize {
         0
@@ -125,7 +126,6 @@ impl<P: OrchardPrimitives> DynamicUsage for Action<redpallas::Signature<SpendAut
 pub(crate) mod testing {
     use alloc::vec::Vec;
     use rand::{rngs::StdRng, SeedableRng};
-    use reddsa::orchard::SpendAuth;
 
     use proptest::prelude::*;
 
@@ -141,6 +141,7 @@ pub(crate) mod testing {
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
         },
         primitives::{OrchardDomain, OrchardPrimitives},
+        signature_with_sighash_info::{SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0},
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
@@ -212,7 +213,7 @@ pub(crate) mod testing {
                 fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
                 asset in arb_asset_base(),
                 memo in prop::collection::vec(prop::num::u8::ANY, 512),
-            ) -> Action<redpallas::Signature<SpendAuth>, P> {
+            ) -> Action<SpendAuthSignatureWithSighashInfo, P> {
                 let cmx = ExtractedNoteCommitment::from(note.commitment());
                 let cv_net = ValueCommitment::derive(
                     spend_value - output_value,
@@ -230,7 +231,7 @@ pub(crate) mod testing {
                     cmx,
                     encrypted_note,
                     cv_net,
-                    authorization: sk.sign(rng, &fake_sighash),
+                    authorization: SpendAuthSignatureWithSighashInfo::new(ORCHARD_SIG_V0, sk.sign(rng, &fake_sighash)),
                 }
             }
         }

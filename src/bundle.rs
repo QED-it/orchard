@@ -25,8 +25,11 @@ use crate::{
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::redpallas::{self, Binding},
     primitives::{OrchardDomain, OrchardPrimitives},
+    signature_with_sighash_info::{
+        BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo,
+    },
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -519,16 +522,16 @@ impl Authorization for EffectsOnly {
 #[derive(Debug, Clone)]
 pub struct Authorized {
     proof: Proof,
-    binding_signature: redpallas::Signature<Binding>,
+    binding_signature: BindingSignatureWithSighashInfo,
 }
 
 impl Authorization for Authorized {
-    type SpendAuth = redpallas::Signature<SpendAuth>;
+    type SpendAuth = SpendAuthSignatureWithSighashInfo;
 }
 
 impl Authorized {
     /// Constructs the authorizing data for a bundle of actions from its constituent parts.
-    pub fn from_parts(proof: Proof, binding_signature: redpallas::Signature<Binding>) -> Self {
+    pub fn from_parts(proof: Proof, binding_signature: BindingSignatureWithSighashInfo) -> Self {
         Authorized {
             proof,
             binding_signature,
@@ -541,7 +544,7 @@ impl Authorized {
     }
 
     /// Return the binding signature.
-    pub fn binding_signature(&self) -> &redpallas::Signature<Binding> {
+    pub fn binding_signature(&self) -> &BindingSignatureWithSighashInfo {
         &self.binding_signature
     }
 }
@@ -617,13 +620,15 @@ pub mod testing {
     use nonempty::NonEmpty;
     use pasta_curves::pallas;
     use rand::{rngs::StdRng, SeedableRng};
-    use reddsa::orchard::SpendAuth;
 
     use proptest::collection::vec;
     use proptest::prelude::*;
 
     use crate::{
-        primitives::redpallas::{self, testing::arb_binding_signing_key},
+        primitives::redpallas::testing::arb_binding_signing_key,
+        signature_with_sighash_info::{
+            BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0,
+        },
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, Proof,
     };
@@ -676,7 +681,8 @@ pub mod testing {
         pub fn arb_action_n(
             n_actions: usize,
             flags: Flags,
-        ) -> impl Strategy<Value = (ValueSum, Action<redpallas::Signature<SpendAuth>, P>)> {
+        ) -> impl Strategy<Value = (ValueSum, Action<SpendAuthSignatureWithSighashInfo, P>)>
+        {
             let spend_value_gen = if flags.spends_enabled {
                 Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
             } else {
@@ -780,7 +786,7 @@ pub mod testing {
                     anchor,
                     Authorized {
                         proof: Proof::new(fake_proof),
-                        binding_signature: sk.sign(rng, &fake_sighash),
+                        binding_signature: BindingSignatureWithSighashInfo::new(ORCHARD_SIG_V0, sk.sign(rng, &fake_sighash)),
                     },
                 )
             }

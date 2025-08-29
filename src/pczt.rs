@@ -18,6 +18,7 @@ use crate::{
     },
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::OrchardPrimitives,
+    signature_with_sighash_info::SpendAuthSignatureWithSighashInfo,
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof,
@@ -159,7 +160,7 @@ pub struct Spend {
     /// The spend authorization signature.
     ///
     /// This is set by the Signer.
-    pub(crate) spend_auth_sig: Option<redpallas::Signature<SpendAuth>>,
+    pub(crate) spend_auth_sig: Option<SpendAuthSignatureWithSighashInfo>,
 
     /// The address that received the note being spent.
     ///

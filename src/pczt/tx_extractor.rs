@@ -4,8 +4,11 @@ use rand::{CryptoRng, RngCore};
 use super::Action;
 use crate::{
     bundle::{Authorization, Authorized, EffectsOnly},
-    primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::redpallas::{self, Binding},
     primitives::OrchardPrimitives,
+    signature_with_sighash_info::{
+        BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0,
+    },
     Proof,
 };
 
@@ -125,7 +128,7 @@ pub struct Unbound {
 }
 
 impl Authorization for Unbound {
-    type SpendAuth = redpallas::Signature<SpendAuth>;
+    type SpendAuth = SpendAuthSignatureWithSighashInfo;
 }
 
 impl<P: OrchardPrimitives, V> crate::Bundle<Unbound, V, P> {
@@ -137,15 +140,24 @@ impl<P: OrchardPrimitives, V> crate::Bundle<Unbound, V, P> {
         sighash: [u8; 32],
         rng: R,
     ) -> Option<crate::Bundle<Authorized, V, P>> {
-        if self
-            .actions()
-            .iter()
-            .all(|action| action.rk().verify(&sighash, action.authorization()).is_ok())
-        {
+        if self.actions().iter().all(|action| {
+            action
+                .rk()
+                .verify(&sighash, action.authorization().signature())
+                .is_ok()
+        }) {
             Some(self.map_authorization(
                 &mut (),
                 |_, _, a| a,
-                |_, Unbound { proof, bsk }| Authorized::from_parts(proof, bsk.sign(rng, &sighash)),
+                |_, Unbound { proof, bsk }| {
+                    Authorized::from_parts(
+                        proof,
+                        BindingSignatureWithSighashInfo::new(
+                            ORCHARD_SIG_V0,
+                            bsk.sign(rng, &sighash),
+                        ),
+                    )
+                },
             ))
         } else {
             None
