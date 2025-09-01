@@ -55,13 +55,13 @@ pub trait IssueAuthSigScheme {
     /// The type of the issuance authorization signature.
     type IssueAuthSigType: Clone + PartialEq;
 
-    /// Signs a 32-byte sighash using the issuance authorizing key.
-    fn try_sign(isk: &Self::IskType, sighash: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error>;
+    /// Signs a sighash using the issuance authorizing key.
+    fn try_sign(isk: &Self::IskType, sighash: &[u8]) -> Result<Self::IssueAuthSigType, Error>;
 
-    /// Verifies that the provided signature for a given 32-byte sighash is authentic.
+    /// Verifies that the provided signature for a given sighash is authentic.
     fn verify(
         ik: &Self::IkType,
-        sighash: &[u8; 32],
+        sighash: &[u8],
         signature: &Self::IssueAuthSigType,
     ) -> Result<(), Error>;
 }
@@ -75,8 +75,8 @@ pub trait IssueAuthSigScheme {
 pub struct IssueAuthKey<S: IssueAuthSigScheme>(S::IskType);
 
 impl<S: IssueAuthSigScheme> IssueAuthKey<S> {
-    /// Signs a 32-byte sighash using the issuance authorizing key.
-    pub fn try_sign(&self, sighash: &[u8; 32]) -> Result<IssueAuthSig<S>, Error> {
+    /// Signs a sighash using the issuance authorizing key.
+    pub fn try_sign(&self, sighash: &[u8]) -> Result<IssueAuthSig<S>, Error> {
         S::try_sign(&self.0, sighash).map(IssueAuthSig)
     }
 }
@@ -90,8 +90,8 @@ impl<S: IssueAuthSigScheme> IssueAuthKey<S> {
 pub struct IssueValidatingKey<S: IssueAuthSigScheme>(S::IkType);
 
 impl<S: IssueAuthSigScheme> IssueValidatingKey<S> {
-    /// Verifies that the provided signature for a given 32-byte sighash is authentic.
-    pub fn verify(&self, sighash: &[u8; 32], sig: &IssueAuthSig<S>) -> Result<(), Error> {
+    /// Verifies that the provided signature for a given sighash is authentic.
+    pub fn verify(&self, sighash: &[u8], sig: &IssueAuthSig<S>) -> Result<(), Error> {
         S::verify(&self.0, sighash, &sig.0)
     }
 }
@@ -115,14 +115,14 @@ impl IssueAuthSigScheme for ZSASchnorr {
     type IkType = VerifyingKey;
     type IssueAuthSigType = schnorr::Signature;
 
-    fn try_sign(isk: &Self::IskType, sighash: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error> {
+    fn try_sign(isk: &Self::IskType, sighash: &[u8]) -> Result<Self::IssueAuthSigType, Error> {
         schnorr::SigningKey::sign_raw(&schnorr::SigningKey::from(*isk), sighash, &[0u8; 32])
             .map_err(|_| Error::InvalidIssueBundleSig)
     }
 
     fn verify(
         ik: &Self::IkType,
-        sighash: &[u8; 32],
+        sighash: &[u8],
         sig: &Self::IssueAuthSigType,
     ) -> Result<(), Error> {
         ik.verify_prehash(sighash, sig)
