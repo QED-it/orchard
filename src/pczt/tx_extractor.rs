@@ -8,7 +8,9 @@ use crate::{
         redpallas::{self, Binding},
         OrchardPrimitives,
     },
-    signature_with_sighash_info::{BindingSigWithInfo, SpendAuthSigWithInfo, ORCHARD_INFO_V0},
+    signature_with_sighash_info::{
+        BindingSigWithInfo, SpendAuthSigWithInfo, ORCHARD_ISSUE_INFO_V0,
+    },
     Proof,
 };
 
@@ -152,7 +154,7 @@ impl<P: OrchardPrimitives, V> crate::Bundle<Unbound, V, P> {
                 |_, Unbound { proof, bsk }| {
                     Authorized::from_parts(
                         proof,
-                        BindingSigWithInfo::new(ORCHARD_INFO_V0, bsk.sign(rng, &sighash)),
+                        BindingSigWithInfo::new(ORCHARD_ISSUE_INFO_V0, bsk.sign(rng, &sighash)),
                     )
                 },
             ))

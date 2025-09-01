@@ -26,7 +26,7 @@ use crate::{
     constants::reference_keys::ReferenceKeys,
     issuance_auth::{IssueAuthKey, IssueAuthSig, IssueValidatingKey},
     note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
-    signature_with_sighash_info::{BIP340IssueAuthSigWithInfo, ORCHARD_INFO_V0},
+    signature_with_sighash_info::{BIP340IssueAuthSigWithInfo, ORCHARD_ISSUE_INFO_V0},
     value::NoteValue,
     Address, Note,
 };
@@ -256,7 +256,7 @@ impl Signed {
     pub fn from_data(data: &[u8]) -> Self {
         Signed {
             signature: BIP340IssueAuthSigWithInfo::new(
-                ORCHARD_INFO_V0,
+                ORCHARD_ISSUE_INFO_V0,
                 IssueAuthSig::decode(data).unwrap(),
             ),
         }
@@ -563,7 +563,7 @@ impl IssueBundle<Prepared> {
             ik: self.ik,
             actions: self.actions,
             authorization: Signed {
-                signature: BIP340IssueAuthSigWithInfo::new(ORCHARD_INFO_V0, signature),
+                signature: BIP340IssueAuthSigWithInfo::new(ORCHARD_ISSUE_INFO_V0, signature),
             },
         })
     }
@@ -600,7 +600,7 @@ impl IssueBundle<Signed> {
 /// Validates an [`IssueBundle`] by performing the following checks:
 ///
 /// - **IssueBundle Auth signature verification**:
-///   - Ensure that the `SighashInfo` in the signature matches `ORCHARD_INFO_V0`.
+///   - Ensure that the `SighashInfo` in the signature matches `ORCHARD_ISSUE_INFO_V0`.
 ///   - Ensures the signature on the provided `sighash` matches the bundle's authorization.
 /// - **Static IssueAction verification**:
 ///   - Runs checks using the `IssueAction::verify` method.
@@ -630,7 +630,7 @@ impl IssueBundle<Signed> {
 ///
 /// # Errors
 ///
-/// * `InvalidSighashInfo`: The `SighashInfo` in the signature does not match `ORCHARD_INFO_V0`.
+/// * `InvalidSighashInfo`: The `SighashInfo` in the signature does not match `ORCHARD_ISSUE_INFO_V0`.
 /// * `IssueBundleInvalidSignature`: Signature verification for the provided `sighash` fails.
 /// * `ValueOverflow`: adding the new amount to the existing total supply causes an overflow.
 /// * `IssueActionPreviouslyFinalizedAssetBase`: An action is attempted on an asset that has
@@ -647,7 +647,7 @@ pub fn verify_issue_bundle(
     get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
-    if *bundle.authorization().signature().info() != ORCHARD_INFO_V0 {
+    if *bundle.authorization().signature().info() != ORCHARD_ISSUE_INFO_V0 {
         return Err(InvalidSighashInfo);
     }
 
@@ -823,7 +823,7 @@ mod tests {
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
-        signature_with_sighash_info::{BIP340IssueAuthSigWithInfo, ORCHARD_INFO_V0},
+        signature_with_sighash_info::{BIP340IssueAuthSigWithInfo, ORCHARD_ISSUE_INFO_V0},
         tree::{MerkleHashOrchard, MerklePath},
         value::NoteValue,
         Address, Anchor, Bundle, Note,
@@ -1590,7 +1590,7 @@ mod tests {
 
         signed.set_authorization(Signed {
             signature: BIP340IssueAuthSigWithInfo::new(
-                ORCHARD_INFO_V0,
+                ORCHARD_ISSUE_INFO_V0,
                 wrong_isk.try_sign(&sighash).unwrap(),
             ),
         });
@@ -1955,7 +1955,7 @@ pub mod testing {
         },
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
-        signature_with_sighash_info::{BIP340IssueAuthSigWithInfo, ORCHARD_INFO_V0},
+        signature_with_sighash_info::{BIP340IssueAuthSigWithInfo, ORCHARD_ISSUE_INFO_V0},
     };
     use nonempty::NonEmpty;
     use proptest::collection::vec;
@@ -1970,7 +1970,7 @@ pub mod testing {
             let mut encoded = vec![ZSASchnorr::ALGORITHM_BYTE];
             encoded.extend(sig_bytes);
             let sig = IssueAuthSig::decode(&encoded).unwrap();
-            BIP340IssueAuthSigWithInfo::new(ORCHARD_INFO_V0, sig)
+            BIP340IssueAuthSigWithInfo::new(ORCHARD_ISSUE_INFO_V0, sig)
         }
     }
 

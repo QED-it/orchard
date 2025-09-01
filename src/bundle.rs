@@ -624,7 +624,9 @@ pub mod testing {
 
     use crate::{
         primitives::redpallas::testing::arb_binding_signing_key,
-        signature_with_sighash_info::{BindingSigWithInfo, SpendAuthSigWithInfo, ORCHARD_INFO_V0},
+        signature_with_sighash_info::{
+            BindingSigWithInfo, SpendAuthSigWithInfo, ORCHARD_ISSUE_INFO_V0,
+        },
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, Proof,
     };
@@ -782,7 +784,7 @@ pub mod testing {
                     anchor,
                     Authorized {
                         proof: Proof::new(fake_proof),
-                        binding_signature: BindingSigWithInfo::new(ORCHARD_INFO_V0, sk.sign(rng, &fake_sighash)),
+                        binding_signature: BindingSigWithInfo::new(ORCHARD_ISSUE_INFO_V0, sk.sign(rng, &fake_sighash)),
                     },
                 )
             }

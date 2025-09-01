@@ -43,7 +43,7 @@ impl SighashInfo {
 /// The `SighashInfo` for OrchardZSA binding,authorizing and issuance authorization signatures.
 ///
 /// It is also the default `SighashInfo` used for Vanilla transactions.
-pub(crate) const ORCHARD_INFO_V0: SighashInfo = SighashInfo {
+pub(crate) const ORCHARD_ISSUE_INFO_V0: SighashInfo = SighashInfo {
     version: 0x00,
     associated_information: vec![],
 };
@@ -59,7 +59,7 @@ impl<S> SigWithInfo<S> {
     /// Constructs a new `SigWithInfo` with the default `SighashInfo` and the given signature.
     pub fn new_with_default_info(sig: S) -> Self {
         Self {
-            info: ORCHARD_INFO_V0,
+            info: ORCHARD_ISSUE_INFO_V0,
             sig,
         }
     }
@@ -104,12 +104,12 @@ pub type BIP340IssueAuthSigWithInfo = SigWithInfo<IssueAuthSig<ZSASchnorr>>;
 
 #[cfg(test)]
 mod tests {
-    use super::{SighashInfo, ORCHARD_INFO_V0};
+    use super::{SighashInfo, ORCHARD_ISSUE_INFO_V0};
     use rand::Rng;
 
     #[test]
     fn default_sighash_info() {
-        let bytes = ORCHARD_INFO_V0.to_bytes();
+        let bytes = ORCHARD_ISSUE_INFO_V0.to_bytes();
         assert_eq!(bytes, [0u8; 1]);
     }
 
