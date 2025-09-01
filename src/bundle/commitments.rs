@@ -123,7 +123,15 @@ pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>)
 /// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION);
-    h.update(&bundle.authorization().signature().encode());
+    h.update(
+        bundle
+            .authorization()
+            .signature()
+            .sighash_info()
+            .to_bytes()
+            .as_slice(),
+    );
+    h.update(&bundle.authorization().signature().signature().encode());
     h.finalize()
 }
 

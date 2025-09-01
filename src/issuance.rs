@@ -26,6 +26,7 @@ use crate::{
     constants::reference_keys::ReferenceKeys,
     issuance_auth::{IssueAuthKey, IssueAuthSig, IssueValidatingKey},
     note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
+    signature_with_sighash_info::{IssueAuthSigWithSighashInfo, ORCHARD_SIG_V0},
     value::NoteValue,
     Address, Note,
 };
@@ -241,19 +242,22 @@ pub struct Prepared {
 /// Marker for an authorized bundle.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Signed {
-    signature: IssueAuthSig<ZSASchnorr>,
+    signature: IssueAuthSigWithSighashInfo,
 }
 
 impl Signed {
     /// Returns the signature for this authorization.
-    pub fn signature(&self) -> &IssueAuthSig<ZSASchnorr> {
+    pub fn signature(&self) -> &IssueAuthSigWithSighashInfo {
         &self.signature
     }
 
     /// Constructs a `Signed` from a byte array containing an `IssueAuthSig` in raw bytes.
     pub fn from_data(data: &[u8]) -> Self {
         Signed {
-            signature: IssueAuthSig::decode(data).unwrap(),
+            signature: IssueAuthSigWithSighashInfo::new(
+                ORCHARD_SIG_V0,
+                IssueAuthSig::decode(data).unwrap(),
+            ),
         }
     }
 }
@@ -554,10 +558,14 @@ impl IssueBundle<Prepared> {
             .try_sign(&self.authorization.sighash)
             .map_err(|_| InvalidIssueBundleSig)?;
 
+        let sig_with_sighash_info = IssueAuthSigWithSighashInfo::new(ORCHARD_SIG_V0, signature);
+
         Ok(IssueBundle {
             ik: self.ik,
             actions: self.actions,
-            authorization: Signed { signature },
+            authorization: Signed {
+                signature: sig_with_sighash_info,
+            },
         })
     }
 }
@@ -640,7 +648,7 @@ pub fn verify_issue_bundle(
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
     bundle
         .ik()
-        .verify(&sighash, bundle.authorization().signature())
+        .verify(&sighash, bundle.authorization().signature().signature())
         .map_err(|_| InvalidIssueBundleSig)?;
 
     bundle.actions().iter().enumerate().try_fold(
@@ -805,6 +813,7 @@ mod tests {
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
+        signature_with_sighash_info::{IssueAuthSigWithSighashInfo, ORCHARD_SIG_V0},
         tree::{MerkleHashOrchard, MerklePath},
         value::NoteValue,
         Address, Anchor, Bundle, Note,
@@ -1151,7 +1160,7 @@ mod tests {
             .sign(&isk)
             .unwrap();
 
-        ik.verify(&sighash, &signed.authorization.signature)
+        ik.verify(&sighash, signed.authorization.signature.signature())
             .expect("signature should be valid");
     }
 
@@ -1570,7 +1579,10 @@ mod tests {
             .unwrap();
 
         signed.set_authorization(Signed {
-            signature: wrong_isk.try_sign(&sighash).unwrap(),
+            signature: IssueAuthSigWithSighashInfo::new(
+                ORCHARD_SIG_V0,
+                wrong_isk.try_sign(&sighash).unwrap(),
+            ),
         });
 
         assert_eq!(
@@ -1933,6 +1945,7 @@ pub mod testing {
         },
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
+        signature_with_sighash_info::{IssueAuthSigWithSighashInfo, ORCHARD_SIG_V0},
     };
     use nonempty::NonEmpty;
     use proptest::collection::vec;
@@ -1943,10 +1956,11 @@ pub mod testing {
         /// Generate a uniformly distributed ZSA Schnorr signature
         pub(crate) fn arb_signature()(
             sig_bytes in vec(prop::num::u8::ANY, 64)
-        ) -> IssueAuthSig<ZSASchnorr> {
+        ) -> IssueAuthSigWithSighashInfo {
             let mut encoded = vec![ZSASchnorr::ALGORITHM_BYTE];
             encoded.extend(sig_bytes);
-            IssueAuthSig::decode(&encoded).unwrap()
+            let sig = IssueAuthSig::decode(&encoded).unwrap();
+            IssueAuthSigWithSighashInfo::new(ORCHARD_SIG_V0, sig)
         }
     }
 

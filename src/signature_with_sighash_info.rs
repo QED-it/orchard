@@ -3,12 +3,13 @@
 use alloc::vec::Vec;
 
 use crate::{
+    issuance_auth::{IssueAuthSig, ZSASchnorr},
     pczt::ParseError,
     primitives::redpallas::{self, Binding, SpendAuth},
 };
 
 /// The sighash version and associated information
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SighashInfo {
     version: u8,
     associated_information: Vec<u8>,
@@ -39,7 +40,7 @@ impl SighashInfo {
     }
 }
 
-/// The `SighashInfo` for OrchardZSA binding/authorizing signatures.
+/// The `SighashInfo` for OrchardZSA binding,authorizing and issuance authorization signatures.
 ///
 /// It is also the default `SighashInfo` used for Vanilla transactions.
 pub(crate) const ORCHARD_SIG_V0: SighashInfo = SighashInfo {
@@ -47,8 +48,8 @@ pub(crate) const ORCHARD_SIG_V0: SighashInfo = SighashInfo {
     associated_information: vec![],
 };
 
-/// Redpallas signature with SighashInfo.
-#[derive(Debug, Clone)]
+/// Signature with `SighashInfo`.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignatureWithSighashInfo<S> {
     info: SighashInfo,
     signature: S,
@@ -80,17 +81,17 @@ impl<S> SignatureWithSighashInfo<S> {
     }
 }
 
-/// Binding signature containing the sighash information and the signature itself.
+/// Binding signature containing its sighash information and the signature itself.
 pub type BindingSignatureWithSighashInfo = SignatureWithSighashInfo<redpallas::Signature<Binding>>;
 
-/// Authorizing signature containing the sighash information and the signature itself.
+/// Authorizing signature containing its sighash information and the signature itself.
 pub type SpendAuthSignatureWithSighashInfo =
     SignatureWithSighashInfo<redpallas::Signature<SpendAuth>>;
 
 impl SpendAuthSignatureWithSighashInfo {
-    /// Parses a SpendAuthSignatureWithSighashInfo from its raw bytes components.
+    /// Parses a `SpendAuthSignatureWithSighashInfo` from its raw bytes components.
     ///
-    /// Returns an error `sighash_info` is empty.
+    /// Returns an error when `sighash_info` is empty.
     pub fn parse(sighash_info: Vec<u8>, signature: [u8; 64]) -> Result<Self, ParseError> {
         let info = SighashInfo::from_bytes(&sighash_info).ok_or(ParseError::InvalidSighashInfo)?;
         Ok(Self {
@@ -99,6 +100,9 @@ impl SpendAuthSignatureWithSighashInfo {
         })
     }
 }
+
+/// Issuance authorization signature containing its sighash information and the signature itself.
+pub type IssueAuthSigWithSighashInfo = SignatureWithSighashInfo<IssueAuthSig<ZSASchnorr>>;
 
 #[cfg(test)]
 mod tests {
