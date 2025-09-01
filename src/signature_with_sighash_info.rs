@@ -99,8 +99,8 @@ impl SpendAuthSigWithInfo {
     }
 }
 
-/// Issuance authorization signature  with its `SighashInfo`.
-pub type IssueAuthSigWithInfo = SigWithInfo<IssueAuthSig<ZSASchnorr>>;
+/// Issuance authorization signature based on BIP 340 Schnorr with its `SighashInfo`.
+pub type BIP340IssueAuthSigWithInfo = SigWithInfo<IssueAuthSig<ZSASchnorr>>;
 
 #[cfg(test)]
 mod tests {
