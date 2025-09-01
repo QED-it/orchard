@@ -34,9 +34,10 @@ use crate::{
 use crate::issuance_auth::ZSASchnorr;
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IncorrectRhoDerivation,
-    InvalidIssueAuthKey, InvalidIssueBundleSig, InvalidIssueValidatingKey, IssueActionNotFound,
-    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    InvalidIssueAuthKey, InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashInfo,
+    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
+    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 /// Checks if a given note is a reference note.
@@ -599,6 +600,7 @@ impl IssueBundle<Signed> {
 /// Validates an [`IssueBundle`] by performing the following checks:
 ///
 /// - **IssueBundle Auth signature verification**:
+///   - Ensure that the `SighashInfo` in the signature matches `ORCHARD_INFO_V0`.
 ///   - Ensures the signature on the provided `sighash` matches the bundle's authorization.
 /// - **Static IssueAction verification**:
 ///   - Runs checks using the `IssueAction::verify` method.
@@ -628,6 +630,7 @@ impl IssueBundle<Signed> {
 ///
 /// # Errors
 ///
+/// * `InvalidSighashInfo`: The `SighashInfo` in the signature does not match `ORCHARD_INFO_V0`.
 /// * `IssueBundleInvalidSignature`: Signature verification for the provided `sighash` fails.
 /// * `ValueOverflow`: adding the new amount to the existing total supply causes an overflow.
 /// * `IssueActionPreviouslyFinalizedAssetBase`: An action is attempted on an asset that has
@@ -644,6 +647,10 @@ pub fn verify_issue_bundle(
     get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
+    if *bundle.authorization().signature().info() != ORCHARD_INFO_V0 {
+        return Err(InvalidSighashInfo);
+    }
+
     bundle
         .ik()
         .verify(&sighash, bundle.authorization().signature().sig())
@@ -718,6 +725,8 @@ pub enum Error {
     /// Verification errors:
     /// Invalid issuance validating key.
     InvalidIssueValidatingKey,
+    /// Invalid SighashInfo in the signature.
+    InvalidSighashInfo,
     /// Invalid IssueBundle signature.
     InvalidIssueBundleSig,
     /// The provided `AssetBase` has been previously finalized.
@@ -767,6 +776,9 @@ impl fmt::Display for Error {
             }
             InvalidIssueValidatingKey => {
                 write!(f, "invalid issuance validating key")
+            }
+            InvalidSighashInfo => {
+                write!(f, "invalid SighashInfo in the IssueBundle signature")
             }
             InvalidIssueBundleSig => {
                 write!(f, "invalid IssueBundle signature")
