@@ -19,7 +19,10 @@
 //! [ZIP 227]: https://zips.z.cash/zip-0227
 
 use alloc::vec::Vec;
-use core::fmt::{Debug, Formatter};
+use core::{
+    fmt::{Debug, Formatter},
+    mem::size_of_val,
+};
 
 use k256::{
     schnorr,
@@ -185,9 +188,8 @@ impl IssueValidatingKey<ZSASchnorr> {
     /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#derivation-of-issuance-validating-key
     pub fn encode(&self) -> Vec<u8> {
         let ik_bytes = self.0.to_bytes().to_vec();
-        let mut encoded = Vec::with_capacity(
-            core::mem::size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + ik_bytes.len(),
-        );
+        let mut encoded =
+            Vec::with_capacity(size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + ik_bytes.len());
         encoded.push(ZSASchnorr::ALGORITHM_BYTE);
         encoded.extend(ik_bytes);
         encoded
@@ -215,9 +217,8 @@ impl IssueAuthSig<ZSASchnorr> {
     /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signing-and-validation
     pub(crate) fn encode(&self) -> Vec<u8> {
         let sig_bytes = self.0.to_bytes().to_vec();
-        let mut encoded = Vec::with_capacity(
-            core::mem::size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + sig_bytes.len(),
-        );
+        let mut encoded =
+            Vec::with_capacity(size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + sig_bytes.len());
         encoded.push(ZSASchnorr::ALGORITHM_BYTE);
         encoded.extend(sig_bytes);
         encoded
