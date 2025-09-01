@@ -1353,7 +1353,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
     /// will be returned if the signature is not valid for any inputs, or if it is valid
     /// for more than one input.
     ///
-    /// [`Signature`]: SpendAuthSignatureWithSighashInfo
+    /// [`Signature`]: SpendAuthSigWithInfo
     pub fn append_signatures(
         self,
         signatures: &[SpendAuthSigWithInfo],
