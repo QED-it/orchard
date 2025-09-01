@@ -62,9 +62,12 @@ pub trait IssueAuthSigScheme {
     fn try_sign(isk: &Self::IskType, msg: &[u8; 32]) -> Result<Self::IssueAuthSigType, Error>;
 
     /// Verifies a signature over a message using the issuance validating key.
+    ///
+    /// Only supports verifying of messages of length 32 bytes, since we will only be using it
+    /// to verify 32 byte SIGHASH values.
     fn verify(
         ik: &Self::IkType,
-        msg: &[u8],
+        msg: &[u8; 32],
         signature: &Self::IssueAuthSigType,
     ) -> Result<(), Error>;
 }
@@ -79,7 +82,9 @@ pub struct IssueAuthKey<S: IssueAuthSigScheme>(S::IskType);
 
 impl<S: IssueAuthSigScheme> IssueAuthKey<S> {
     /// Sign the provided message using the `IssueAuthKey`.
-    /// Only supports signing of messages of length 32 bytes, since we will only be using it to sign 32 byte SIGHASH values.
+    ///
+    /// Only supports signing of messages of length 32 bytes, since we will only be using it
+    /// to sign 32 byte SIGHASH values.
     pub fn try_sign(&self, msg: &[u8; 32]) -> Result<IssueAuthSig<S>, Error> {
         S::try_sign(&self.0, msg).map(IssueAuthSig)
     }
@@ -95,7 +100,10 @@ pub struct IssueValidatingKey<S: IssueAuthSigScheme>(S::IkType);
 
 impl<S: IssueAuthSigScheme> IssueValidatingKey<S> {
     /// Verifies a purported `signature` over `msg` made by this verification key.
-    pub fn verify(&self, msg: &[u8], sig: &IssueAuthSig<S>) -> Result<(), Error> {
+    ///
+    /// Only supports verifying of messages of length 32 bytes, since we will only be using it
+    /// to verify 32 byte SIGHASH values.
+    pub fn verify(&self, msg: &[u8; 32], sig: &IssueAuthSig<S>) -> Result<(), Error> {
         S::verify(&self.0, msg, &sig.0)
     }
 }
@@ -124,7 +132,11 @@ impl IssueAuthSigScheme for ZSASchnorr {
             .map_err(|_| Error::InvalidIssueBundleSig)
     }
 
-    fn verify(ik: &Self::IkType, msg: &[u8], sig: &Self::IssueAuthSigType) -> Result<(), Error> {
+    fn verify(
+        ik: &Self::IkType,
+        msg: &[u8; 32],
+        sig: &Self::IssueAuthSigType,
+    ) -> Result<(), Error> {
         ik.verify_prehash(msg, sig)
             .map_err(|_| Error::InvalidIssueBundleSig)
     }
