@@ -26,7 +26,7 @@ use crate::{
     constants::reference_keys::ReferenceKeys,
     issuance_auth::{IssueAuthKey, IssueAuthSig, IssueValidatingKey},
     note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
-    signature_with_sighash_info::{BIP340IssueAuthSigWithInfo, ORCHARD_ISSUE_INFO_V0},
+    signature_with_sighash_info::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_INFO_V0},
     value::NoteValue,
     Address, Note,
 };
@@ -243,19 +243,19 @@ pub struct Prepared {
 /// Marker for an authorized bundle.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Signed {
-    signature: BIP340IssueAuthSigWithInfo,
+    signature: VerBIP340IssueAuthSig,
 }
 
 impl Signed {
     /// Returns the signature for this authorization.
-    pub fn signature(&self) -> &BIP340IssueAuthSigWithInfo {
+    pub fn signature(&self) -> &VerBIP340IssueAuthSig {
         &self.signature
     }
 
     /// Constructs a `Signed` from a byte array containing an `IssueAuthSig` in raw bytes.
     pub fn from_data(data: &[u8]) -> Self {
         Signed {
-            signature: BIP340IssueAuthSigWithInfo::new(
+            signature: VerBIP340IssueAuthSig::new(
                 ORCHARD_ISSUE_INFO_V0,
                 IssueAuthSig::decode(data).unwrap(),
             ),
@@ -563,7 +563,7 @@ impl IssueBundle<Prepared> {
             ik: self.ik,
             actions: self.actions,
             authorization: Signed {
-                signature: BIP340IssueAuthSigWithInfo::new(ORCHARD_ISSUE_INFO_V0, signature),
+                signature: VerBIP340IssueAuthSig::new(ORCHARD_ISSUE_INFO_V0, signature),
             },
         })
     }
@@ -647,7 +647,7 @@ pub fn verify_issue_bundle(
     get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
-    if *bundle.authorization().signature().info() != ORCHARD_ISSUE_INFO_V0 {
+    if *bundle.authorization().signature().version() != ORCHARD_ISSUE_INFO_V0 {
         return Err(InvalidSighashInfo);
     }
 
@@ -823,7 +823,7 @@ mod tests {
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
-        signature_with_sighash_info::{BIP340IssueAuthSigWithInfo, ORCHARD_ISSUE_INFO_V0},
+        signature_with_sighash_info::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_INFO_V0},
         tree::{MerkleHashOrchard, MerklePath},
         value::NoteValue,
         Address, Anchor, Bundle, Note,
@@ -1589,7 +1589,7 @@ mod tests {
             .unwrap();
 
         signed.set_authorization(Signed {
-            signature: BIP340IssueAuthSigWithInfo::new(
+            signature: VerBIP340IssueAuthSig::new(
                 ORCHARD_ISSUE_INFO_V0,
                 wrong_isk.try_sign(&sighash).unwrap(),
             ),
@@ -1955,7 +1955,7 @@ pub mod testing {
         },
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
-        signature_with_sighash_info::{BIP340IssueAuthSigWithInfo, ORCHARD_ISSUE_INFO_V0},
+        signature_with_sighash_info::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_INFO_V0},
     };
     use nonempty::NonEmpty;
     use proptest::collection::vec;
@@ -1966,11 +1966,11 @@ pub mod testing {
         /// Generate a uniformly distributed ZSA Schnorr signature
         pub(crate) fn arb_signature()(
             sig_bytes in vec(prop::num::u8::ANY, 64)
-        ) -> BIP340IssueAuthSigWithInfo {
+        ) -> VerBIP340IssueAuthSig {
             let mut encoded = vec![ZSASchnorr::ALGORITHM_BYTE];
             encoded.extend(sig_bytes);
             let sig = IssueAuthSig::decode(&encoded).unwrap();
-            BIP340IssueAuthSigWithInfo::new(ORCHARD_ISSUE_INFO_V0, sig)
+            VerBIP340IssueAuthSig::new(ORCHARD_ISSUE_INFO_V0, sig)
         }
     }
 

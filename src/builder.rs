@@ -22,9 +22,7 @@ use crate::{
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
-    signature_with_sighash_info::{
-        BindingSigWithInfo, SpendAuthSigWithInfo, ORCHARD_ISSUE_INFO_V0,
-    },
+    signature_with_sighash_info::{VerBindingSig, VerSpendAuthSig, ORCHARD_ISSUE_INFO_V0},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -1241,7 +1239,7 @@ pub struct SigningMetadata {
 /// Marker for a partially-authorized bundle, in the process of being signed.
 #[derive(Debug)]
 pub struct PartiallyAuthorized {
-    binding_signature: BindingSigWithInfo,
+    binding_signature: VerBindingSig,
     sighash: [u8; 32],
 }
 
@@ -1257,11 +1255,11 @@ pub enum MaybeSigned {
     /// The information needed to sign this [`Action`].
     SigningMetadata(SigningParts),
     /// The signature for this [`Action`].
-    Signature(SpendAuthSigWithInfo),
+    Signature(VerSpendAuthSig),
 }
 
 impl MaybeSigned {
-    fn finalize(self) -> Result<SpendAuthSigWithInfo, BuildError> {
+    fn finalize(self) -> Result<VerSpendAuthSig, BuildError> {
         match self {
             Self::Signature(sig) => Ok(sig),
             _ => Err(BuildError::MissingSignatures),
@@ -1284,7 +1282,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
                 // We can create signatures for dummy spends immediately.
                 dummy_ask
                     .map(|ask| {
-                        SpendAuthSigWithInfo::new(
+                        VerSpendAuthSig::new(
                             ORCHARD_ISSUE_INFO_V0,
                             ask.randomize(&parts.alpha).sign(rng, &sighash),
                         )
@@ -1295,7 +1293,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
             |rng, auth| InProgress {
                 proof: auth.proof,
                 sigs: PartiallyAuthorized {
-                    binding_signature: BindingSigWithInfo::new(
+                    binding_signature: VerBindingSig::new(
                         ORCHARD_ISSUE_INFO_V0,
                         auth.sigs.bsk.sign(rng, &sighash),
                     ),
@@ -1339,7 +1337,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
             &mut rng,
             |rng, partial, maybe| match maybe {
                 MaybeSigned::SigningMetadata(parts) if parts.ak == expected_ak => {
-                    MaybeSigned::Signature(SpendAuthSigWithInfo::new(
+                    MaybeSigned::Signature(VerSpendAuthSig::new(
                         ORCHARD_ISSUE_INFO_V0,
                         ask.randomize(&parts.alpha).sign(rng, &partial.sigs.sighash),
                     ))
@@ -1356,14 +1354,11 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
     /// for more than one input.
     ///
     /// [`Signature`]: SpendAuthSigWithInfo
-    pub fn append_signatures(
-        self,
-        signatures: &[SpendAuthSigWithInfo],
-    ) -> Result<Self, BuildError> {
+    pub fn append_signatures(self, signatures: &[VerSpendAuthSig]) -> Result<Self, BuildError> {
         signatures.iter().try_fold(self, Self::append_signature)
     }
 
-    fn append_signature(self, signature: &SpendAuthSigWithInfo) -> Result<Self, BuildError> {
+    fn append_signature(self, signature: &VerSpendAuthSig) -> Result<Self, BuildError> {
         let mut signature_valid_for = 0usize;
         let bundle = self.map_authorization(
             &mut signature_valid_for,

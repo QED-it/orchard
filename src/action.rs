@@ -4,7 +4,7 @@ use crate::{
     note::{ExtractedNoteCommitment, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, SpendAuth},
     primitives::OrchardPrimitives,
-    signature_with_sighash_info::SpendAuthSigWithInfo,
+    signature_with_sighash_info::VerSpendAuthSig,
     value::ValueCommitment,
 };
 
@@ -108,7 +108,7 @@ impl<A, P: OrchardPrimitives> Action<A, P> {
     }
 }
 
-impl<P: OrchardPrimitives> DynamicUsage for Action<SpendAuthSigWithInfo, P> {
+impl<P: OrchardPrimitives> DynamicUsage for Action<VerSpendAuthSig, P> {
     #[inline(always)]
     fn dynamic_usage(&self) -> usize {
         0
@@ -141,7 +141,7 @@ pub(crate) mod testing {
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
         },
         primitives::{OrchardDomain, OrchardPrimitives},
-        signature_with_sighash_info::{SpendAuthSigWithInfo, ORCHARD_ISSUE_INFO_V0},
+        signature_with_sighash_info::{VerSpendAuthSig, ORCHARD_ISSUE_INFO_V0},
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
@@ -213,7 +213,7 @@ pub(crate) mod testing {
                 fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
                 asset in arb_asset_base(),
                 memo in prop::collection::vec(prop::num::u8::ANY, 512),
-            ) -> Action<SpendAuthSigWithInfo, P> {
+            ) -> Action<VerSpendAuthSig, P> {
                 let cmx = ExtractedNoteCommitment::from(note.commitment());
                 let cv_net = ValueCommitment::derive(
                     spend_value - output_value,
@@ -231,7 +231,7 @@ pub(crate) mod testing {
                     cmx,
                     encrypted_note,
                     cv_net,
-                    authorization: SpendAuthSigWithInfo::new(ORCHARD_ISSUE_INFO_V0, sk.sign(rng, &fake_sighash)),
+                    authorization: VerSpendAuthSig::new(ORCHARD_ISSUE_INFO_V0, sk.sign(rng, &fake_sighash)),
                 }
             }
         }

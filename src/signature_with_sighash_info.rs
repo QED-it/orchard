@@ -8,11 +8,68 @@ use crate::{
     primitives::redpallas::{self, Binding, SpendAuth},
 };
 
-/// The sighash version and associated information
+/// A versioned signature as per [ZIP-246].
+///
+/// [ZIP-246]: https://zips.z.cash/zip-0246
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VersionedSig<S> {
+    version: SighashInfo,
+    sig: S,
+}
+
+impl<S> VersionedSig<S> {
+    /// Constructs a new `VersionedSig` with the default version and the given signature.
+    pub fn new_with_default_info(sig: S) -> Self {
+        Self {
+            version: ORCHARD_ISSUE_INFO_V0,
+            sig,
+        }
+    }
+
+    /// Constructs a new `VersionedSig` with the given version and signature.
+    pub fn new(version: SighashInfo, sig: S) -> Self {
+        Self { version, sig }
+    }
+
+    /// Returns the version.
+    pub fn version(&self) -> &SighashInfo {
+        &self.version
+    }
+
+    /// Returns the signature.
+    pub fn sig(&self) -> &S {
+        &self.sig
+    }
+}
+
+/// A versioned binding signature.
+pub type VerBindingSig = VersionedSig<redpallas::Signature<Binding>>;
+
+/// A versioned SpendAuth signature.
+pub type VerSpendAuthSig = VersionedSig<redpallas::Signature<SpendAuth>>;
+
+impl VerSpendAuthSig {
+    /// Parses a `VerSpendAuthSig` from its raw bytes components.
+    ///
+    /// Returns an error when `version_bytes` is empty.
+    pub fn parse(version_bytes: Vec<u8>, sig_bytes: [u8; 64]) -> Result<Self, ParseError> {
+        let version =
+            SighashInfo::from_bytes(&version_bytes).ok_or(ParseError::InvalidSighashInfo)?;
+        Ok(Self {
+            version,
+            sig: sig_bytes.into(),
+        })
+    }
+}
+
+/// A versioned Issuance authorization signature based on BIP 340 Schnorr.
+pub type VerBIP340IssueAuthSig = VersionedSig<IssueAuthSig<ZSASchnorr>>;
+
+/// The sighash version and associated data
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SighashInfo {
     version: u8,
-    associated_information: Vec<u8>,
+    associated_data: Vec<u8>,
 }
 
 impl SighashInfo {
@@ -24,18 +81,18 @@ impl SighashInfo {
             return None;
         }
         let version = bytes[0];
-        let associated_information = bytes[1..].to_vec();
+        let associated_data = bytes[1..].to_vec();
         Some(Self {
             version,
-            associated_information,
+            associated_data,
         })
     }
 
     /// Returns the raw bytes of the `SighashInfo`.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(1 + self.associated_information.len());
+        let mut result = Vec::with_capacity(1 + self.associated_data.len());
         result.push(self.version);
-        result.extend_from_slice(&self.associated_information);
+        result.extend_from_slice(&self.associated_data);
         result
     }
 }
@@ -45,62 +102,8 @@ impl SighashInfo {
 /// It is also the default `SighashInfo` used for Vanilla transactions.
 pub(crate) const ORCHARD_ISSUE_INFO_V0: SighashInfo = SighashInfo {
     version: 0x00,
-    associated_information: vec![],
+    associated_data: vec![],
 };
-
-/// Signature with `SighashInfo`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SigWithInfo<S> {
-    info: SighashInfo,
-    sig: S,
-}
-
-impl<S> SigWithInfo<S> {
-    /// Constructs a new `SigWithInfo` with the default `SighashInfo` and the given signature.
-    pub fn new_with_default_info(sig: S) -> Self {
-        Self {
-            info: ORCHARD_ISSUE_INFO_V0,
-            sig,
-        }
-    }
-
-    /// Constructs a new `SigWithInfo` with the given `SighashInfo` and signature.
-    pub fn new(info: SighashInfo, sig: S) -> Self {
-        Self { info, sig }
-    }
-
-    /// Returns the `SighashInfo`.
-    pub fn info(&self) -> &SighashInfo {
-        &self.info
-    }
-
-    /// Returns the signature.
-    pub fn sig(&self) -> &S {
-        &self.sig
-    }
-}
-
-/// Binding signature with its `SighashInfo`.
-pub type BindingSigWithInfo = SigWithInfo<redpallas::Signature<Binding>>;
-
-/// Authorizing signature with its `SighashInfo`.
-pub type SpendAuthSigWithInfo = SigWithInfo<redpallas::Signature<SpendAuth>>;
-
-impl SpendAuthSigWithInfo {
-    /// Parses a `SpendAuthSigWithInfo` from its raw bytes components.
-    ///
-    /// Returns an error when `info_bytes` is empty.
-    pub fn parse(info_bytes: Vec<u8>, sig_bytes: [u8; 64]) -> Result<Self, ParseError> {
-        let info = SighashInfo::from_bytes(&info_bytes).ok_or(ParseError::InvalidSighashInfo)?;
-        Ok(Self {
-            info,
-            sig: sig_bytes.into(),
-        })
-    }
-}
-
-/// Issuance authorization signature based on BIP 340 Schnorr with its `SighashInfo`.
-pub type BIP340IssueAuthSigWithInfo = SigWithInfo<IssueAuthSig<ZSASchnorr>>;
 
 #[cfg(test)]
 mod tests {
@@ -119,7 +122,7 @@ mod tests {
         let bytes: [u8; 10] = rng.gen();
         let sighash_info = SighashInfo::from_bytes(&bytes).unwrap();
         assert_eq!(bytes[0], sighash_info.version);
-        assert_eq!(bytes[1..], sighash_info.associated_information);
+        assert_eq!(bytes[1..], sighash_info.associated_data);
 
         let sighash_info_bytes = sighash_info.to_bytes();
         assert_eq!(bytes, sighash_info_bytes.as_slice());

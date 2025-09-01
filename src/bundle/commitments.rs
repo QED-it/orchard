@@ -127,7 +127,7 @@ pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake
         bundle
             .authorization()
             .signature()
-            .info()
+            .version()
             .to_bytes()
             .as_slice(),
     );
