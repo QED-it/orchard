@@ -16,8 +16,10 @@ use crate::{
     note::{
         AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
     },
-    primitives::redpallas::{self, Binding, SpendAuth},
-    primitives::OrchardPrimitives,
+    primitives::{
+        redpallas::{self, Binding, SpendAuth},
+        OrchardPrimitives,
+    },
     signature_with_sighash_info::SpendAuthSigWithInfo,
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},

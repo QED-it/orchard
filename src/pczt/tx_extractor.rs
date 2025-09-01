@@ -4,8 +4,10 @@ use rand::{CryptoRng, RngCore};
 use super::Action;
 use crate::{
     bundle::{Authorization, Authorized, EffectsOnly},
-    primitives::redpallas::{self, Binding},
-    primitives::OrchardPrimitives,
+    primitives::{
+        redpallas::{self, Binding},
+        OrchardPrimitives,
+    },
     signature_with_sighash_info::{BindingSigWithInfo, SpendAuthSigWithInfo, ORCHARD_INFO_V0},
     Proof,
 };

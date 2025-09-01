@@ -89,7 +89,7 @@ pub type SpendAuthSigWithInfo = SigWithInfo<redpallas::Signature<SpendAuth>>;
 impl SpendAuthSigWithInfo {
     /// Parses a `SpendAuthSigWithInfo` from its raw bytes components.
     ///
-    /// Returns an error when `info` is empty.
+    /// Returns an error when `info_bytes` is empty.
     pub fn parse(info_bytes: Vec<u8>, sig_bytes: [u8; 64]) -> Result<Self, ParseError> {
         let info = SighashInfo::from_bytes(&info_bytes).ok_or(ParseError::InvalidSighashInfo)?;
         Ok(Self {

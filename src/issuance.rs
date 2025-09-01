@@ -558,13 +558,11 @@ impl IssueBundle<Prepared> {
             .try_sign(&self.authorization.sighash)
             .map_err(|_| InvalidIssueBundleSig)?;
 
-        let sig_with_sighash_info = BIP340IssueAuthSigWithInfo::new(ORCHARD_INFO_V0, signature);
-
         Ok(IssueBundle {
             ik: self.ik,
             actions: self.actions,
             authorization: Signed {
-                signature: sig_with_sighash_info,
+                signature: BIP340IssueAuthSigWithInfo::new(ORCHARD_INFO_V0, signature),
             },
         })
     }
