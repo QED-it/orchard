@@ -28,17 +28,12 @@ pub fn verify_bundle<P: OrchardPrimitives>(
     let bvk = bundle.binding_validating_key();
     for action in bundle.actions() {
         assert_eq!(
-            action
-                .rk()
-                .verify(&sighash, action.authorization().signature()),
+            action.rk().verify(&sighash, action.authorization().sig()),
             Ok(())
         );
     }
     assert_eq!(
-        bvk.verify(
-            &sighash,
-            bundle.authorization().binding_signature().signature()
-        ),
+        bvk.verify(&sighash, bundle.authorization().binding_signature().sig()),
         Ok(())
     );
 }

@@ -27,9 +27,7 @@ use crate::{
     note::{AssetBase, Note},
     primitives::redpallas::{self, Binding},
     primitives::{OrchardDomain, OrchardPrimitives},
-    signature_with_sighash_info::{
-        BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo,
-    },
+    signature_with_sighash_info::{BindingSigWithInfo, SpendAuthSigWithInfo},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -522,16 +520,16 @@ impl Authorization for EffectsOnly {
 #[derive(Debug, Clone)]
 pub struct Authorized {
     proof: Proof,
-    binding_signature: BindingSignatureWithSighashInfo,
+    binding_signature: BindingSigWithInfo,
 }
 
 impl Authorization for Authorized {
-    type SpendAuth = SpendAuthSignatureWithSighashInfo;
+    type SpendAuth = SpendAuthSigWithInfo;
 }
 
 impl Authorized {
     /// Constructs the authorizing data for a bundle of actions from its constituent parts.
-    pub fn from_parts(proof: Proof, binding_signature: BindingSignatureWithSighashInfo) -> Self {
+    pub fn from_parts(proof: Proof, binding_signature: BindingSigWithInfo) -> Self {
         Authorized {
             proof,
             binding_signature,
@@ -544,7 +542,7 @@ impl Authorized {
     }
 
     /// Return the binding signature.
-    pub fn binding_signature(&self) -> &BindingSignatureWithSighashInfo {
+    pub fn binding_signature(&self) -> &BindingSigWithInfo {
         &self.binding_signature
     }
 }
@@ -626,9 +624,7 @@ pub mod testing {
 
     use crate::{
         primitives::redpallas::testing::arb_binding_signing_key,
-        signature_with_sighash_info::{
-            BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0,
-        },
+        signature_with_sighash_info::{BindingSigWithInfo, SpendAuthSigWithInfo, ORCHARD_SIG_V0},
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, Proof,
     };
@@ -682,8 +678,7 @@ pub mod testing {
         pub fn arb_action_n(
             n_actions: usize,
             flags: Flags,
-        ) -> impl Strategy<Value = (ValueSum, Action<SpendAuthSignatureWithSighashInfo, P>)>
-        {
+        ) -> impl Strategy<Value = (ValueSum, Action<SpendAuthSigWithInfo, P>)> {
             let spend_value_gen = if flags.spends_enabled {
                 Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
             } else {
@@ -787,7 +782,7 @@ pub mod testing {
                     anchor,
                     Authorized {
                         proof: Proof::new(fake_proof),
-                        binding_signature: BindingSignatureWithSighashInfo::new(ORCHARD_SIG_V0, sk.sign(rng, &fake_sighash)),
+                        binding_signature: BindingSigWithInfo::new(ORCHARD_SIG_V0, sk.sign(rng, &fake_sighash)),
                     },
                 )
             }

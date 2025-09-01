@@ -14,7 +14,7 @@ use crate::{
     keys::{FullViewingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
     primitives::redpallas,
-    signature_with_sighash_info::SpendAuthSignatureWithSighashInfo,
+    signature_with_sighash_info::SpendAuthSigWithInfo,
     tree::{MerkleHashOrchard, MerklePath},
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof, NOTE_COMMITMENT_TREE_DEPTH,
@@ -118,7 +118,7 @@ impl Spend {
     pub fn parse(
         nullifier: [u8; 32],
         rk: [u8; 32],
-        spend_auth_sig: Option<SpendAuthSignatureWithSighashInfo>,
+        spend_auth_sig: Option<SpendAuthSigWithInfo>,
         recipient: Option<[u8; 43]>,
         value: Option<u64>,
         asset: Option<[u8; 32]>,

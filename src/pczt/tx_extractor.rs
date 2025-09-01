@@ -6,9 +6,7 @@ use crate::{
     bundle::{Authorization, Authorized, EffectsOnly},
     primitives::redpallas::{self, Binding},
     primitives::OrchardPrimitives,
-    signature_with_sighash_info::{
-        BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0,
-    },
+    signature_with_sighash_info::{BindingSigWithInfo, SpendAuthSigWithInfo, ORCHARD_SIG_V0},
     Proof,
 };
 
@@ -128,7 +126,7 @@ pub struct Unbound {
 }
 
 impl Authorization for Unbound {
-    type SpendAuth = SpendAuthSignatureWithSighashInfo;
+    type SpendAuth = SpendAuthSigWithInfo;
 }
 
 impl<P: OrchardPrimitives, V> crate::Bundle<Unbound, V, P> {
@@ -143,7 +141,7 @@ impl<P: OrchardPrimitives, V> crate::Bundle<Unbound, V, P> {
         if self.actions().iter().all(|action| {
             action
                 .rk()
-                .verify(&sighash, action.authorization().signature())
+                .verify(&sighash, action.authorization().sig())
                 .is_ok()
         }) {
             Some(self.map_authorization(
@@ -152,10 +150,7 @@ impl<P: OrchardPrimitives, V> crate::Bundle<Unbound, V, P> {
                 |_, Unbound { proof, bsk }| {
                     Authorized::from_parts(
                         proof,
-                        BindingSignatureWithSighashInfo::new(
-                            ORCHARD_SIG_V0,
-                            bsk.sign(rng, &sighash),
-                        ),
+                        BindingSigWithInfo::new(ORCHARD_SIG_V0, bsk.sign(rng, &sighash)),
                     )
                 },
             ))

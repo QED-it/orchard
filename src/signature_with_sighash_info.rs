@@ -50,59 +50,57 @@ pub(crate) const ORCHARD_SIG_V0: SighashInfo = SighashInfo {
 
 /// Signature with `SighashInfo`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SignatureWithSighashInfo<S> {
+pub struct SigWithInfo<S> {
     info: SighashInfo,
-    signature: S,
+    sig: S,
 }
 
-impl<S> SignatureWithSighashInfo<S> {
-    /// Constructs a new `SignatureWithSighashInfo` with the default `SighashInfo` and the given
-    /// signature.
-    pub fn new_with_default_sighash_info(signature: S) -> Self {
+impl<S> SigWithInfo<S> {
+    /// Constructs a new `SigWithInfo` with the default `SighashInfo` and the given signature.
+    pub fn new_with_default_info(sig: S) -> Self {
         Self {
             info: ORCHARD_SIG_V0,
-            signature,
+            sig,
         }
     }
 
-    /// Constructs a new `SignatureWithSighashInfo` with the given `SighashInfo` and signature.
-    pub fn new(info: SighashInfo, signature: S) -> Self {
-        Self { info, signature }
+    /// Constructs a new `SigWithInfo` with the given `SighashInfo` and signature.
+    pub fn new(info: SighashInfo, sig: S) -> Self {
+        Self { info, sig }
     }
 
     /// Returns the `SighashInfo`.
-    pub fn sighash_info(&self) -> &SighashInfo {
+    pub fn info(&self) -> &SighashInfo {
         &self.info
     }
 
     /// Returns the signature.
-    pub fn signature(&self) -> &S {
-        &self.signature
+    pub fn sig(&self) -> &S {
+        &self.sig
     }
 }
 
-/// Binding signature containing its sighash information and the signature itself.
-pub type BindingSignatureWithSighashInfo = SignatureWithSighashInfo<redpallas::Signature<Binding>>;
+/// Binding signature with its `SighashInfo`.
+pub type BindingSigWithInfo = SigWithInfo<redpallas::Signature<Binding>>;
 
-/// Authorizing signature containing its sighash information and the signature itself.
-pub type SpendAuthSignatureWithSighashInfo =
-    SignatureWithSighashInfo<redpallas::Signature<SpendAuth>>;
+/// Authorizing signature with its `SighashInfo`.
+pub type SpendAuthSigWithInfo = SigWithInfo<redpallas::Signature<SpendAuth>>;
 
-impl SpendAuthSignatureWithSighashInfo {
-    /// Parses a `SpendAuthSignatureWithSighashInfo` from its raw bytes components.
+impl SpendAuthSigWithInfo {
+    /// Parses a `SpendAuthSigWithInfo` from its raw bytes components.
     ///
-    /// Returns an error when `sighash_info` is empty.
-    pub fn parse(sighash_info: Vec<u8>, signature: [u8; 64]) -> Result<Self, ParseError> {
-        let info = SighashInfo::from_bytes(&sighash_info).ok_or(ParseError::InvalidSighashInfo)?;
+    /// Returns an error when `info` is empty.
+    pub fn parse(info_bytes: Vec<u8>, sig_bytes: [u8; 64]) -> Result<Self, ParseError> {
+        let info = SighashInfo::from_bytes(&info_bytes).ok_or(ParseError::InvalidSighashInfo)?;
         Ok(Self {
             info,
-            signature: signature.into(),
+            sig: sig_bytes.into(),
         })
     }
 }
 
-/// Issuance authorization signature containing its sighash information and the signature itself.
-pub type IssueAuthSigWithSighashInfo = SignatureWithSighashInfo<IssueAuthSig<ZSASchnorr>>;
+/// Issuance authorization signature  with its `SighashInfo`.
+pub type IssueAuthSigWithInfo = SigWithInfo<IssueAuthSig<ZSASchnorr>>;
 
 #[cfg(test)]
 mod tests {
@@ -116,7 +114,7 @@ mod tests {
     }
 
     #[test]
-    fn sighash_info_from_to_bytes() {
+    fn sighash_info_from_to_bytes_roundtrip() {
         let mut rng = rand::thread_rng();
         let bytes: [u8; 10] = rng.gen();
         let sighash_info = SighashInfo::from_bytes(&bytes).unwrap();

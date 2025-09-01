@@ -22,9 +22,7 @@ use crate::{
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
-    signature_with_sighash_info::{
-        BindingSignatureWithSighashInfo, SpendAuthSignatureWithSighashInfo, ORCHARD_SIG_V0,
-    },
+    signature_with_sighash_info::{BindingSigWithInfo, SpendAuthSigWithInfo, ORCHARD_SIG_V0},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -1241,7 +1239,7 @@ pub struct SigningMetadata {
 /// Marker for a partially-authorized bundle, in the process of being signed.
 #[derive(Debug)]
 pub struct PartiallyAuthorized {
-    binding_signature: BindingSignatureWithSighashInfo,
+    binding_signature: BindingSigWithInfo,
     sighash: [u8; 32],
 }
 
@@ -1257,11 +1255,11 @@ pub enum MaybeSigned {
     /// The information needed to sign this [`Action`].
     SigningMetadata(SigningParts),
     /// The signature for this [`Action`].
-    Signature(SpendAuthSignatureWithSighashInfo),
+    Signature(SpendAuthSigWithInfo),
 }
 
 impl MaybeSigned {
-    fn finalize(self) -> Result<SpendAuthSignatureWithSighashInfo, BuildError> {
+    fn finalize(self) -> Result<SpendAuthSigWithInfo, BuildError> {
         match self {
             Self::Signature(sig) => Ok(sig),
             _ => Err(BuildError::MissingSignatures),
@@ -1284,7 +1282,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
                 // We can create signatures for dummy spends immediately.
                 dummy_ask
                     .map(|ask| {
-                        SpendAuthSignatureWithSighashInfo::new(
+                        SpendAuthSigWithInfo::new(
                             ORCHARD_SIG_V0,
                             ask.randomize(&parts.alpha).sign(rng, &sighash),
                         )
@@ -1295,7 +1293,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
             |rng, auth| InProgress {
                 proof: auth.proof,
                 sigs: PartiallyAuthorized {
-                    binding_signature: BindingSignatureWithSighashInfo::new(
+                    binding_signature: BindingSigWithInfo::new(
                         ORCHARD_SIG_V0,
                         auth.sigs.bsk.sign(rng, &sighash),
                     ),
@@ -1339,7 +1337,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
             &mut rng,
             |rng, partial, maybe| match maybe {
                 MaybeSigned::SigningMetadata(parts) if parts.ak == expected_ak => {
-                    MaybeSigned::Signature(SpendAuthSignatureWithSighashInfo::new(
+                    MaybeSigned::Signature(SpendAuthSigWithInfo::new(
                         ORCHARD_SIG_V0,
                         ask.randomize(&parts.alpha).sign(rng, &partial.sigs.sighash),
                     ))
@@ -1358,15 +1356,12 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
     /// [`Signature`]: SpendAuthSignatureWithSighashInfo
     pub fn append_signatures(
         self,
-        signatures: &[SpendAuthSignatureWithSighashInfo],
+        signatures: &[SpendAuthSigWithInfo],
     ) -> Result<Self, BuildError> {
         signatures.iter().try_fold(self, Self::append_signature)
     }
 
-    fn append_signature(
-        self,
-        signature: &SpendAuthSignatureWithSighashInfo,
-    ) -> Result<Self, BuildError> {
+    fn append_signature(self, signature: &SpendAuthSigWithInfo) -> Result<Self, BuildError> {
         let mut signature_valid_for = 0usize;
         let bundle = self.map_authorization(
             &mut signature_valid_for,
@@ -1374,7 +1369,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
                 MaybeSigned::SigningMetadata(parts) => {
                     let rk = parts.ak.randomize(&parts.alpha);
                     if rk
-                        .verify(&partial.sigs.sighash[..], signature.signature())
+                        .verify(&partial.sigs.sighash[..], signature.sig())
                         .is_ok()
                     {
                         *valid_for += 1;
