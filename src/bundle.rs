@@ -27,7 +27,7 @@ use crate::{
     note::{AssetBase, Note},
     primitives::redpallas::{self, Binding},
     primitives::{OrchardDomain, OrchardPrimitives},
-    signature_with_sighash_info::{VerBindingSig, VerSpendAuthSig},
+    sighash_version::{VerBindingSig, VerSpendAuthSig},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -624,7 +624,7 @@ pub mod testing {
 
     use crate::{
         primitives::redpallas::testing::arb_binding_signing_key,
-        signature_with_sighash_info::{VerBindingSig, VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
+        sighash_version::{VerBindingSig, VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, Proof,
     };

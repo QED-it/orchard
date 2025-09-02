@@ -20,7 +20,7 @@ use crate::{
         redpallas::{self, Binding, SpendAuth},
         OrchardPrimitives,
     },
-    signature_with_sighash_info::VerSpendAuthSig,
+    sighash_version::VerSpendAuthSig,
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof,

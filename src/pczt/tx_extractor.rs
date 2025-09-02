@@ -8,7 +8,7 @@ use crate::{
         redpallas::{self, Binding},
         OrchardPrimitives,
     },
-    signature_with_sighash_info::{VerBindingSig, VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
+    sighash_version::{VerBindingSig, VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
     Proof,
 };
 

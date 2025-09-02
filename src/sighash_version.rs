@@ -95,14 +95,14 @@ mod tests {
     use rand::Rng;
 
     #[test]
-    fn sighash_info_from_to_bytes_roundtrip() {
+    fn sighash_version_from_to_bytes_roundtrip() {
         let mut rng = rand::thread_rng();
         let bytes: [u8; 10] = rng.gen();
-        let sighash_info = SighashVersion::from_bytes(&bytes).unwrap();
-        assert_eq!(bytes[0], sighash_info.version);
-        assert_eq!(bytes[1..], sighash_info.associated_data);
+        let sighash_version = SighashVersion::from_bytes(&bytes).unwrap();
+        assert_eq!(bytes[0], sighash_version.version);
+        assert_eq!(bytes[1..], sighash_version.associated_data);
 
-        let sighash_info_bytes = sighash_info.to_bytes();
-        assert_eq!(bytes, sighash_info_bytes.as_slice());
+        let sighash_version_bytes = sighash_version.to_bytes();
+        assert_eq!(bytes, sighash_version_bytes.as_slice());
     }
 }

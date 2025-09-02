@@ -26,9 +26,7 @@ use crate::{
     constants::reference_keys::ReferenceKeys,
     issuance_auth::{IssueAuthKey, IssueAuthSig, IssueValidatingKey},
     note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
-    signature_with_sighash_info::{
-        SighashVersion, VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0,
-    },
+    sighash_version::{SighashVersion, VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
     value::NoteValue,
     Address, Note,
 };
@@ -825,7 +823,7 @@ mod tests {
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
-        signature_with_sighash_info::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
+        sighash_version::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
         tree::{MerkleHashOrchard, MerklePath},
         value::NoteValue,
         Address, Anchor, Bundle, Note,
@@ -1957,7 +1955,7 @@ pub mod testing {
         },
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
-        signature_with_sighash_info::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
+        sighash_version::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
     };
     use nonempty::NonEmpty;
     use proptest::collection::vec;

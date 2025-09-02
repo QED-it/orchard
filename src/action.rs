@@ -4,7 +4,7 @@ use crate::{
     note::{ExtractedNoteCommitment, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, SpendAuth},
     primitives::OrchardPrimitives,
-    signature_with_sighash_info::VerSpendAuthSig,
+    sighash_version::VerSpendAuthSig,
     value::ValueCommitment,
 };
 
@@ -141,7 +141,7 @@ pub(crate) mod testing {
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
         },
         primitives::{OrchardDomain, OrchardPrimitives},
-        signature_with_sighash_info::{VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
+        sighash_version::{VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 

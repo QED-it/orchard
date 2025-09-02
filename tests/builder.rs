@@ -7,7 +7,7 @@ use orchard::{
     note::{AssetBase, ExtractedNoteCommitment},
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     primitives::{OrchardDomain, OrchardPrimitives},
-    signature_with_sighash_info::ORCHARD_ISSUE_SIGHASH_V0,
+    sighash_version::ORCHARD_ISSUE_SIGHASH_V0,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
