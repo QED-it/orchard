@@ -1353,7 +1353,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
     /// will be returned if the signature is not valid for any inputs, or if it is valid
     /// for more than one input.
     ///
-    /// [`Signature`]: SpendAuthSigWithInfo
+    /// [`Signature`]: VerSpendAuthSig
     pub fn append_signatures(self, signatures: &[VerSpendAuthSig]) -> Result<Self, BuildError> {
         signatures.iter().try_fold(self, Self::append_signature)
     }
