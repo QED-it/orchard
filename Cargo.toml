@@ -48,6 +48,7 @@ incrementalmerkletree = "0.8.1"
 zcash_spec = "0.2.1"
 zip32 = { version = "0.2.0", default-features = false }
 visibility = "0.1.1"
+zcash_encoding = "0.3"
 
 # Circuit
 halo2_gadgets = { git = "https://github.com/QED-it/halo2", branch = "zsa1", optional = true, default-features = false }

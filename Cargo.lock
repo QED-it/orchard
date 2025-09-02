@@ -1579,6 +1579,7 @@ dependencies = [
  "subtle",
  "tracing",
  "visibility",
+ "zcash_encoding",
  "zcash_note_encryption",
  "zcash_spec",
  "zip32",
@@ -2719,6 +2720,16 @@ dependencies = [
  "dlib",
  "once_cell",
  "pkg-config",
+]
+
+[[package]]
+name = "zcash_encoding"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bca38087e6524e5f51a5b0fb3fc18f36d7b84bf67b2056f494ca0c281590953d"
+dependencies = [
+ "core2",
+ "nonempty",
 ]
 
 [[package]]
