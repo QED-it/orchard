@@ -26,7 +26,9 @@ use crate::{
     constants::reference_keys::ReferenceKeys,
     issuance_auth::{IssueAuthKey, IssueAuthSig, IssueValidatingKey},
     note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
-    signature_with_sighash_info::{SighashInfo, VerBIP340IssueAuthSig, ORCHARD_ISSUE_INFO_V0},
+    signature_with_sighash_info::{
+        SighashVersion, VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0,
+    },
     value::NoteValue,
     Address, Note,
 };
@@ -34,7 +36,7 @@ use crate::{
 use crate::issuance_auth::ZSASchnorr;
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IncorrectRhoDerivation,
-    InvalidIssueAuthKey, InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashInfo,
+    InvalidIssueAuthKey, InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashVersion,
     IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
     IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
     MissingReferenceNoteOnFirstIssuance, ValueOverflow,
@@ -253,11 +255,11 @@ impl Signed {
     }
 
     /// Constructs a `Signed` from
-    /// - one byte array containing a `SighashInfo` in raw bytes, and
+    /// - one byte array containing a `SighashVersion` in raw bytes, and
     /// - one byte array containing an `IssueAuthSig` in raw bytes.
-    pub fn from_data(sighash_info: &[u8], sig: &[u8]) -> Option<Self> {
-        SighashInfo::from_bytes(sighash_info).map(|info| Signed {
-            signature: VerBIP340IssueAuthSig::new(info, IssueAuthSig::decode(sig).unwrap()),
+    pub fn from_data(version: &[u8], sig: &[u8]) -> Option<Self> {
+        SighashVersion::from_bytes(version).map(|ver| Signed {
+            signature: VerBIP340IssueAuthSig::new(ver, IssueAuthSig::decode(sig).unwrap()),
         })
     }
 }
@@ -562,7 +564,7 @@ impl IssueBundle<Prepared> {
             ik: self.ik,
             actions: self.actions,
             authorization: Signed {
-                signature: VerBIP340IssueAuthSig::new(ORCHARD_ISSUE_INFO_V0, signature),
+                signature: VerBIP340IssueAuthSig::new(ORCHARD_ISSUE_SIGHASH_V0, signature),
             },
         })
     }
@@ -599,7 +601,7 @@ impl IssueBundle<Signed> {
 /// Validates an [`IssueBundle`] by performing the following checks:
 ///
 /// - **IssueBundle Auth signature verification**:
-///   - Ensure that the `SighashInfo` in the signature matches `ORCHARD_ISSUE_INFO_V0`.
+///   - Ensure that the `SighashVersion` in the signature matches `ORCHARD_ISSUE_SIGHASH_V0`.
 ///   - Ensures the signature on the provided `sighash` matches the bundle's authorization.
 /// - **Static IssueAction verification**:
 ///   - Runs checks using the `IssueAction::verify` method.
@@ -629,7 +631,8 @@ impl IssueBundle<Signed> {
 ///
 /// # Errors
 ///
-/// * `InvalidSighashInfo`: The `SighashInfo` in the signature does not match `ORCHARD_ISSUE_INFO_V0`.
+/// * `InvalidSighashVersion`: The `SighashVersion` in the signature does not match
+///   `ORCHARD_ISSUE_SIGHASH_V0`.
 /// * `IssueBundleInvalidSignature`: Signature verification for the provided `sighash` fails.
 /// * `ValueOverflow`: adding the new amount to the existing total supply causes an overflow.
 /// * `IssueActionPreviouslyFinalizedAssetBase`: An action is attempted on an asset that has
@@ -646,8 +649,8 @@ pub fn verify_issue_bundle(
     get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
-    if bundle.authorization().signature().version() != &ORCHARD_ISSUE_INFO_V0 {
-        return Err(InvalidSighashInfo);
+    if bundle.authorization().signature().version() != &ORCHARD_ISSUE_SIGHASH_V0 {
+        return Err(InvalidSighashVersion);
     }
 
     bundle
@@ -724,8 +727,8 @@ pub enum Error {
     /// Verification errors:
     /// Invalid issuance validating key.
     InvalidIssueValidatingKey,
-    /// Invalid SighashInfo in the signature.
-    InvalidSighashInfo,
+    /// Invalid SighashVersion in the signature.
+    InvalidSighashVersion,
     /// Invalid IssueBundle signature.
     InvalidIssueBundleSig,
     /// The provided `AssetBase` has been previously finalized.
@@ -776,8 +779,8 @@ impl fmt::Display for Error {
             InvalidIssueValidatingKey => {
                 write!(f, "invalid issuance validating key")
             }
-            InvalidSighashInfo => {
-                write!(f, "invalid SighashInfo in the IssueBundle signature")
+            InvalidSighashVersion => {
+                write!(f, "invalid SighashVersion in the IssueBundle signature")
             }
             InvalidIssueBundleSig => {
                 write!(f, "invalid IssueBundle signature")
@@ -822,7 +825,7 @@ mod tests {
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
-        signature_with_sighash_info::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_INFO_V0},
+        signature_with_sighash_info::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
         tree::{MerkleHashOrchard, MerklePath},
         value::NoteValue,
         Address, Anchor, Bundle, Note,
@@ -1589,7 +1592,7 @@ mod tests {
 
         signed.set_authorization(Signed {
             signature: VerBIP340IssueAuthSig::new(
-                ORCHARD_ISSUE_INFO_V0,
+                ORCHARD_ISSUE_SIGHASH_V0,
                 wrong_isk.try_sign(&sighash).unwrap(),
             ),
         });
@@ -1954,7 +1957,7 @@ pub mod testing {
         },
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
-        signature_with_sighash_info::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_INFO_V0},
+        signature_with_sighash_info::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
     };
     use nonempty::NonEmpty;
     use proptest::collection::vec;
@@ -1969,7 +1972,7 @@ pub mod testing {
             let mut encoded = vec![ZSASchnorr::ALGORITHM_BYTE];
             encoded.extend(sig_bytes);
             let sig = IssueAuthSig::decode(&encoded).unwrap();
-            VerBIP340IssueAuthSig::new(ORCHARD_ISSUE_INFO_V0, sig)
+            VerBIP340IssueAuthSig::new(ORCHARD_ISSUE_SIGHASH_V0, sig)
         }
     }
 

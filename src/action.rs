@@ -141,7 +141,7 @@ pub(crate) mod testing {
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
         },
         primitives::{OrchardDomain, OrchardPrimitives},
-        signature_with_sighash_info::{VerSpendAuthSig, ORCHARD_ISSUE_INFO_V0},
+        signature_with_sighash_info::{VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
@@ -231,7 +231,7 @@ pub(crate) mod testing {
                     cmx,
                     encrypted_note,
                     cv_net,
-                    authorization: VerSpendAuthSig::new(ORCHARD_ISSUE_INFO_V0, sk.sign(rng, &fake_sighash)),
+                    authorization: VerSpendAuthSig::new(ORCHARD_ISSUE_SIGHASH_V0, sk.sign(rng, &fake_sighash)),
                 }
             }
         }

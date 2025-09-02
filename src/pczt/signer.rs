@@ -3,7 +3,7 @@ use rand::{CryptoRng, RngCore};
 use crate::{
     keys::SpendAuthorizingKey,
     primitives::redpallas,
-    signature_with_sighash_info::{VerSpendAuthSig, ORCHARD_ISSUE_INFO_V0},
+    signature_with_sighash_info::{VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
 };
 
 impl super::Action {
@@ -28,7 +28,7 @@ impl super::Action {
 
         if self.spend.rk == rk {
             self.spend.spend_auth_sig = Some(VerSpendAuthSig::new(
-                ORCHARD_ISSUE_INFO_V0,
+                ORCHARD_ISSUE_SIGHASH_V0,
                 rsk.sign(rng, &sighash),
             ));
             Ok(())

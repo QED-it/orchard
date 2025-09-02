@@ -1,4 +1,4 @@
-//! Defines `SighashInfo` and signatures with `SighashInfo`.
+//! Defines versioned signatures.
 
 use alloc::vec::Vec;
 
@@ -13,18 +13,18 @@ use crate::{
 /// [ZIP-246]: https://zips.z.cash/zip-0246
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VersionedSig<S> {
-    version: SighashInfo,
+    version: SighashVersion,
     sig: S,
 }
 
 impl<S> VersionedSig<S> {
     /// Constructs a new `VersionedSig` with the given version and signature.
-    pub fn new(version: SighashInfo, sig: S) -> Self {
+    pub fn new(version: SighashVersion, sig: S) -> Self {
         Self { version, sig }
     }
 
     /// Returns the version.
-    pub fn version(&self) -> &SighashInfo {
+    pub fn version(&self) -> &SighashVersion {
         &self.version
     }
 
@@ -46,7 +46,7 @@ impl VerSpendAuthSig {
     /// Returns an error when `version_bytes` is empty.
     pub fn parse(version_bytes: Vec<u8>, sig_bytes: [u8; 64]) -> Result<Self, ParseError> {
         let version =
-            SighashInfo::from_bytes(&version_bytes).ok_or(ParseError::InvalidSighashInfo)?;
+            SighashVersion::from_bytes(&version_bytes).ok_or(ParseError::InvalidSighashVersion)?;
         Ok(Self {
             version,
             sig: sig_bytes.into(),
@@ -59,13 +59,13 @@ pub type VerBIP340IssueAuthSig = VersionedSig<IssueAuthSig<ZSASchnorr>>;
 
 /// The sighash version and associated data
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SighashInfo {
+pub struct SighashVersion {
     version: u8,
     associated_data: Vec<u8>,
 }
 
-impl SighashInfo {
-    /// Constructs a `SighashInfo` from raw bytes.
+impl SighashVersion {
+    /// Constructs a `SighashVersion` from raw bytes.
     ///
     /// Returns `None` if `bytes` is empty.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
@@ -75,30 +75,30 @@ impl SighashInfo {
         })
     }
 
-    /// Returns the raw bytes of the `SighashInfo`.
+    /// Returns the raw bytes of the `SighashVersion`.
     pub fn to_bytes(&self) -> Vec<u8> {
         [vec![self.version], self.associated_data.clone()].concat()
     }
 }
 
-/// The `SighashInfo` for OrchardZSA binding,authorizing and issuance authorization signatures.
+/// The `SighashVersion` for OrchardZSA binding,authorizing and issuance authorization signatures.
 ///
-/// It is also the default `SighashInfo` used for Vanilla transactions.
-pub const ORCHARD_ISSUE_INFO_V0: SighashInfo = SighashInfo {
+/// It is also the default `SighashVersion` used for Vanilla transactions.
+pub const ORCHARD_ISSUE_SIGHASH_V0: SighashVersion = SighashVersion {
     version: 0x00,
     associated_data: vec![],
 };
 
 #[cfg(test)]
 mod tests {
-    use super::SighashInfo;
+    use super::SighashVersion;
     use rand::Rng;
 
     #[test]
     fn sighash_info_from_to_bytes_roundtrip() {
         let mut rng = rand::thread_rng();
         let bytes: [u8; 10] = rng.gen();
-        let sighash_info = SighashInfo::from_bytes(&bytes).unwrap();
+        let sighash_info = SighashVersion::from_bytes(&bytes).unwrap();
         assert_eq!(bytes[0], sighash_info.version);
         assert_eq!(bytes[1..], sighash_info.associated_data);
 

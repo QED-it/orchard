@@ -22,7 +22,7 @@ use crate::{
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
-    signature_with_sighash_info::{VerBindingSig, VerSpendAuthSig, ORCHARD_ISSUE_INFO_V0},
+    signature_with_sighash_info::{VerBindingSig, VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -1283,7 +1283,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
                 dummy_ask
                     .map(|ask| {
                         VerSpendAuthSig::new(
-                            ORCHARD_ISSUE_INFO_V0,
+                            ORCHARD_ISSUE_SIGHASH_V0,
                             ask.randomize(&parts.alpha).sign(rng, &sighash),
                         )
                     })
@@ -1294,7 +1294,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
                 proof: auth.proof,
                 sigs: PartiallyAuthorized {
                     binding_signature: VerBindingSig::new(
-                        ORCHARD_ISSUE_INFO_V0,
+                        ORCHARD_ISSUE_SIGHASH_V0,
                         auth.sigs.bsk.sign(rng, &sighash),
                     ),
 
@@ -1338,7 +1338,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
             |rng, partial, maybe| match maybe {
                 MaybeSigned::SigningMetadata(parts) if parts.ak == expected_ak => {
                     MaybeSigned::Signature(VerSpendAuthSig::new(
-                        ORCHARD_ISSUE_INFO_V0,
+                        ORCHARD_ISSUE_SIGHASH_V0,
                         ask.randomize(&parts.alpha).sign(rng, &partial.sigs.sighash),
                     ))
                 }
