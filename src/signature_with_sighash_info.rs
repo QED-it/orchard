@@ -18,14 +18,6 @@ pub struct VersionedSig<S> {
 }
 
 impl<S> VersionedSig<S> {
-    /// Constructs a new `VersionedSig` with the default version and the given signature.
-    pub fn new_with_default_info(sig: S) -> Self {
-        Self {
-            version: ORCHARD_ISSUE_INFO_V0,
-            sig,
-        }
-    }
-
     /// Constructs a new `VersionedSig` with the given version and signature.
     pub fn new(version: SighashInfo, sig: S) -> Self {
         Self { version, sig }
@@ -77,44 +69,30 @@ impl SighashInfo {
     ///
     /// Returns `None` if `bytes` is empty.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.is_empty() {
-            return None;
-        }
-        let version = bytes[0];
-        let associated_data = bytes[1..].to_vec();
-        Some(Self {
+        bytes.split_first().map(|(&version, info)| Self {
             version,
-            associated_data,
+            associated_data: info.to_vec(),
         })
     }
 
     /// Returns the raw bytes of the `SighashInfo`.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(1 + self.associated_data.len());
-        result.push(self.version);
-        result.extend_from_slice(&self.associated_data);
-        result
+        [vec![self.version], self.associated_data.clone()].concat()
     }
 }
 
 /// The `SighashInfo` for OrchardZSA binding,authorizing and issuance authorization signatures.
 ///
 /// It is also the default `SighashInfo` used for Vanilla transactions.
-pub(crate) const ORCHARD_ISSUE_INFO_V0: SighashInfo = SighashInfo {
+pub const ORCHARD_ISSUE_INFO_V0: SighashInfo = SighashInfo {
     version: 0x00,
     associated_data: vec![],
 };
 
 #[cfg(test)]
 mod tests {
-    use super::{SighashInfo, ORCHARD_ISSUE_INFO_V0};
+    use super::SighashInfo;
     use rand::Rng;
-
-    #[test]
-    fn default_sighash_info() {
-        let bytes = ORCHARD_ISSUE_INFO_V0.to_bytes();
-        assert_eq!(bytes, [0u8; 1]);
-    }
 
     #[test]
     fn sighash_info_from_to_bytes_roundtrip() {

@@ -7,6 +7,7 @@ use orchard::{
     note::{AssetBase, ExtractedNoteCommitment},
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     primitives::{OrchardDomain, OrchardPrimitives},
+    signature_with_sighash_info::ORCHARD_ISSUE_INFO_V0,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
@@ -27,6 +28,7 @@ pub fn verify_bundle<P: OrchardPrimitives>(
     let sighash: [u8; 32] = bundle.commitment().into();
     let bvk = bundle.binding_validating_key();
     for action in bundle.actions() {
+        assert_eq!(action.authorization().version(), &ORCHARD_ISSUE_INFO_V0);
         assert_eq!(
             action.rk().verify(&sighash, action.authorization().sig()),
             Ok(())

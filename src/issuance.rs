@@ -26,7 +26,7 @@ use crate::{
     constants::reference_keys::ReferenceKeys,
     issuance_auth::{IssueAuthKey, IssueAuthSig, IssueValidatingKey},
     note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
-    signature_with_sighash_info::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_INFO_V0},
+    signature_with_sighash_info::{SighashInfo, VerBIP340IssueAuthSig, ORCHARD_ISSUE_INFO_V0},
     value::NoteValue,
     Address, Note,
 };
@@ -252,14 +252,13 @@ impl Signed {
         &self.signature
     }
 
-    /// Constructs a `Signed` from a byte array containing an `IssueAuthSig` in raw bytes.
-    pub fn from_data(data: &[u8]) -> Self {
-        Signed {
-            signature: VerBIP340IssueAuthSig::new(
-                ORCHARD_ISSUE_INFO_V0,
-                IssueAuthSig::decode(data).unwrap(),
-            ),
-        }
+    /// Constructs a `Signed` from
+    /// - one byte array containing a `SighashInfo` in raw bytes, and
+    /// - one byte array containing an `IssueAuthSig` in raw bytes.
+    pub fn from_data(sighash_info: &[u8], sig: &[u8]) -> Option<Self> {
+        SighashInfo::from_bytes(sighash_info).map(|info| Signed {
+            signature: VerBIP340IssueAuthSig::new(info, IssueAuthSig::decode(sig).unwrap()),
+        })
     }
 }
 
@@ -647,7 +646,7 @@ pub fn verify_issue_bundle(
     get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
-    if *bundle.authorization().signature().version() != ORCHARD_ISSUE_INFO_V0 {
+    if bundle.authorization().signature().version() != &ORCHARD_ISSUE_INFO_V0 {
         return Err(InvalidSighashInfo);
     }
 
