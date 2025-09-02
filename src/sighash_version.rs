@@ -1,4 +1,27 @@
-//! Defines versioned signatures.
+//! Versioned signatures for OrchardZSA.
+//!
+//! This module defines [`VersionedSig`], which pairs a signature with a [`SighashVersion`],
+//! as specified in [ZIP-246]. It supports binding, spend authorization, and issuance
+//! authorization (BIP-340 Schnorr) signatures.
+//!
+//! # Example
+//! ```
+//! use rand::rngs::OsRng;
+//! use orchard::issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
+//! use orchard::sighash_version::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0};
+//!
+//! let mut rng = OsRng;
+//! let isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
+//! let ik = IssueValidatingKey::from(&isk);
+//! let msg = [1u8; 32];
+//!
+//! let sig = isk.try_sign(&msg).unwrap();
+//! let ver_sig = VerBIP340IssueAuthSig::new(ORCHARD_ISSUE_SIGHASH_V0, sig);
+//!
+//! ik.verify(&msg, ver_sig.sig()).unwrap();
+//! ```
+//!
+//! [ZIP-246]: https://zips.z.cash/zip-0246
 
 use alloc::vec::Vec;
 
