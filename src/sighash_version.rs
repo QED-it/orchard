@@ -117,6 +117,9 @@ pub const ORCHARD_ISSUE_SIGHASH_V0: SighashVersion = SighashVersion {
     associated_data: vec![],
 };
 
+/// Encodes a size in the CompactSize format.
+///
+/// Cannot use zcash_encoding crate to avoid circular dependency
 fn get_compact_size(size: usize) -> Vec<u8> {
     match size {
         s if s < 253 => vec![s as u8],
