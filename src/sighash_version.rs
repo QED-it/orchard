@@ -31,8 +31,6 @@ use crate::{
     primitives::redpallas::{self, Binding, SpendAuth},
 };
 
-use zcash_encoding::CompactSize;
-
 /// A versioned signature as per [ZIP-246].
 ///
 /// [ZIP-246]: https://zips.z.cash/zip-0246
@@ -107,10 +105,7 @@ impl SighashVersion {
 
     pub(crate) fn encode(&self) -> Vec<u8> {
         let version_bytes = self.to_bytes();
-        let mut result = Vec::new();
-        CompactSize::write(&mut result, version_bytes.len()).unwrap();
-        result.extend_from_slice(&version_bytes);
-        result
+        [get_compact_size(version_bytes.len()), version_bytes].concat()
     }
 }
 
@@ -122,9 +117,18 @@ pub const ORCHARD_ISSUE_SIGHASH_V0: SighashVersion = SighashVersion {
     associated_data: vec![],
 };
 
+fn get_compact_size(size: usize) -> Vec<u8> {
+    match size {
+        s if s < 253 => vec![s as u8],
+        s if s <= 0xFFFF => [&[253_u8], &(s as u16).to_le_bytes()[..]].concat(),
+        s if s <= 0xFFFFFFFF => [&[254_u8], &(s as u32).to_le_bytes()[..]].concat(),
+        s => [&[255_u8], &(s as u64).to_le_bytes()[..]].concat(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::SighashVersion;
+    use super::{get_compact_size, SighashVersion};
     use rand::Rng;
 
     #[test]
@@ -137,5 +141,19 @@ mod tests {
 
         let sighash_version_bytes = sighash_version.to_bytes();
         assert_eq!(bytes, sighash_version_bytes.as_slice());
+    }
+
+    #[test]
+    fn test_compact_size() {
+        assert_eq!(get_compact_size(0), vec![0]);
+        assert_eq!(get_compact_size(1), vec![1]);
+        assert_eq!(get_compact_size(252), vec![252]);
+        assert_eq!(get_compact_size(253), vec![253, 253, 0]);
+        assert_eq!(get_compact_size(254), vec![253, 254, 0]);
+        assert_eq!(get_compact_size(255), vec![253, 255, 0]);
+        assert_eq!(get_compact_size(65535), vec![253, 255, 255]);
+        assert_eq!(get_compact_size(65536), vec![254, 0, 0, 1, 0]);
+        assert_eq!(get_compact_size(65537), vec![254, 1, 0, 1, 0]);
+        assert_eq!(get_compact_size(33554432), vec![254, 0, 0, 0, 2]);
     }
 }
