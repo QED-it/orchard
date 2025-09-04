@@ -1255,12 +1255,12 @@ pub type VerSpendAuthSig = VersionedSig<redpallas::Signature<SpendAuth>>;
 
 /// A heisen[`Signature`] for a particular [`Action`].
 ///
-/// [`Signature`]: redpallas::Signature
+/// [`Signature`]: VerSpendAuthSig
 #[derive(Debug, Clone)]
 pub enum MaybeSigned {
     /// The information needed to sign this [`Action`].
     SigningMetadata(SigningParts),
-    /// The signature for this [`Action`].
+    /// The versioned signature for this [`Action`].
     Signature(VerSpendAuthSig),
 }
 
@@ -1285,7 +1285,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
         self.map_authorization(
             &mut rng,
             |rng, _, SigningMetadata { dummy_ask, parts }| {
-                // We can create signatures for dummy spends immediately.
+                // We can create versioned signatures for dummy spends immediately.
                 dummy_ask
                     .map(|ask| {
                         VerSpendAuthSig::new(
@@ -1336,7 +1336,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
 {
     /// Signs this bundle with the given [`SpendAuthorizingKey`].
     ///
-    /// This will apply signatures for all notes controlled by this spending key.
+    /// This will apply versioned signatures for all notes controlled by this spending key.
     pub fn sign<R: RngCore + CryptoRng>(self, mut rng: R, ask: &SpendAuthorizingKey) -> Self {
         let expected_ak = ask.into();
         self.map_authorization(
@@ -1353,10 +1353,10 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
             |_, partial| partial,
         )
     }
-    /// Appends externally computed [`Signature`]s.
+    /// Appends externally computed versioned signatures.
     ///
-    /// Each signature will be applied to the one input for which it is valid. An error
-    /// will be returned if the signature is not valid for any inputs, or if it is valid
+    /// Each versioned signature will be applied to the one input for which it is valid. An error
+    /// will be returned if the versioned signature is not valid for any inputs, or if it is valid
     /// for more than one input.
     ///
     /// [`Signature`]: VerSpendAuthSig

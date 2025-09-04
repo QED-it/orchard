@@ -250,7 +250,7 @@ pub struct Signed {
 }
 
 impl Signed {
-    /// Returns the signature for this authorization.
+    /// Returns the versioned signature for this authorization.
     pub fn signature(&self) -> &VerBIP340IssueAuthSig {
         &self.signature
     }
@@ -602,7 +602,7 @@ impl IssueBundle<Signed> {
 /// Validates an [`IssueBundle`] by performing the following checks:
 ///
 /// - **IssueBundle Auth signature verification**:
-///   - Ensure that the `SighashVersion` in the signature matches `ORCHARD_ISSUE_SIGHASH_V0`.
+///   - Ensure that the `SighashVersion` in the versioned signature matches `SIGHASH_V0`.
 ///   - Ensures the signature on the provided `sighash` matches the bundle's authorization.
 /// - **Static IssueAction verification**:
 ///   - Runs checks using the `IssueAction::verify` method.
@@ -632,8 +632,7 @@ impl IssueBundle<Signed> {
 ///
 /// # Errors
 ///
-/// * `InvalidSighashVersion`: The `SighashVersion` in the signature does not match
-///   `ORCHARD_ISSUE_SIGHASH_V0`.
+/// * `InvalidSighashVersion`: The `SighashVersion` in the signature does not match `SIGHASH_V0`.
 /// * `IssueBundleInvalidSignature`: Signature verification for the provided `sighash` fails.
 /// * `ValueOverflow`: adding the new amount to the existing total supply causes an overflow.
 /// * `IssueActionPreviouslyFinalizedAssetBase`: An action is attempted on an asset that has
@@ -728,7 +727,7 @@ pub enum Error {
     /// Verification errors:
     /// Invalid issuance validating key.
     InvalidIssueValidatingKey,
-    /// Invalid SighashVersion in the signature.
+    /// Invalid SighashVersion in the versioned signature.
     InvalidSighashVersion,
     /// Invalid IssueBundle signature.
     InvalidIssueBundleSig,
@@ -781,7 +780,10 @@ impl fmt::Display for Error {
                 write!(f, "invalid issuance validating key")
             }
             InvalidSighashVersion => {
-                write!(f, "invalid SighashVersion in the IssueBundle signature")
+                write!(
+                    f,
+                    "invalid SighashVersion in the versioned IssueBundle signature"
+                )
             }
             InvalidIssueBundleSig => {
                 write!(f, "invalid IssueBundle signature")

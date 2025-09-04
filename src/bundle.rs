@@ -541,7 +541,7 @@ impl Authorized {
         &self.proof
     }
 
-    /// Return the binding signature.
+    /// Return the versioned binding signature.
     pub fn binding_signature(&self) -> &VerBindingSig {
         &self.binding_signature
     }

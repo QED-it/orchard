@@ -159,7 +159,7 @@ pub struct Spend {
     /// The randomized verification key for the note being spent.
     pub(crate) rk: redpallas::VerificationKey<SpendAuth>,
 
-    /// The spend authorization signature.
+    /// The versioned spend authorization signature.
     ///
     /// This is set by the Signer.
     pub(crate) spend_auth_sig: Option<VerSpendAuthSig>,
