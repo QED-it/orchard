@@ -11,7 +11,7 @@ use crate::{
     },
     Proof,
 };
-use zcash_spec::SIGHASH_V0;
+use zcash_spec::versioned_signature::SIGHASH_V0;
 
 impl super::Bundle {
     /// Extracts the effects of this PCZT bundle as a [regular `Bundle`].

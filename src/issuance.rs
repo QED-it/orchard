@@ -19,7 +19,7 @@ use core::fmt::Debug;
 use group::Group;
 use nonempty::NonEmpty;
 use rand::RngCore;
-use zcash_spec::{SighashVersion, VersionedSig, SIGHASH_V0};
+use zcash_spec::versioned_signature::{SighashVersion, VersionedSig, SIGHASH_V0};
 
 use crate::{
     asset_record::AssetRecord,
@@ -843,7 +843,7 @@ mod tests {
     use rand::RngCore;
     use shardtree::store::memory::MemoryShardStore;
     use shardtree::ShardTree;
-    use zcash_spec::SIGHASH_V0;
+    use zcash_spec::versioned_signature::SIGHASH_V0;
 
     /// Validation for reference note
     ///
@@ -1967,7 +1967,7 @@ pub mod testing {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
-    use zcash_spec::SIGHASH_V0;
+    use zcash_spec::versioned_signature::SIGHASH_V0;
 
     prop_compose! {
         /// Generate a uniformly distributed ZSA Schnorr signature

@@ -2,7 +2,7 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{builder::VerSpendAuthSig, keys::SpendAuthorizingKey, primitives::redpallas};
 
-use zcash_spec::SIGHASH_V0;
+use zcash_spec::versioned_signature::SIGHASH_V0;
 
 impl super::Action {
     /// Signs the Orchard spend with the given spend authorizing key.

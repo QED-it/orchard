@@ -130,7 +130,7 @@ pub(crate) mod testing {
     use proptest::prelude::*;
 
     use zcash_note_encryption::NoteEncryption;
-    use zcash_spec::SIGHASH_V0;
+    use zcash_spec::versioned_signature::SIGHASH_V0;
 
     use crate::{
         builder::VerSpendAuthSig,

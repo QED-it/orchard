@@ -2736,7 +2736,7 @@ dependencies = [
 [[package]]
 name = "zcash_spec"
 version = "0.2.1"
-source = "git+https://github.com/QED-it/zcash_spec?branch=sighash_version#5a526f0cf36baba140a235379723eabdba0b56fc"
+source = "git+https://github.com/QED-it/zcash_spec?branch=sighash_version#8561f6359144b86a854b97c6afcab6363cc2e4d2"
 dependencies = [
  "blake2b_simd",
 ]

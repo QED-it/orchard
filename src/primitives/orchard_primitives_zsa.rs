@@ -3,6 +3,7 @@
 
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::note_bytes::NoteBytesData;
+use zcash_spec::versioned_signature::get_compact_size;
 
 use crate::{
     bundle::{
@@ -89,17 +90,19 @@ impl OrchardPrimitives for OrchardZSA {
         let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION);
         agh.update(bundle.authorization().proof().as_ref());
         for action in bundle.actions().iter() {
-            agh.update(&action.authorization().version().encode());
+            let version_bytes = action.authorization().version().to_bytes();
+            agh.update(&get_compact_size(version_bytes.len()));
+            agh.update(&version_bytes);
             agh.update(&<[u8; 64]>::from(action.authorization().sig()));
         }
         h.update(agh.finalize().as_bytes());
-        h.update(
-            &bundle
-                .authorization()
-                .binding_signature()
-                .version()
-                .encode(),
-        );
+        let version_bytes = bundle
+            .authorization()
+            .binding_signature()
+            .version()
+            .to_bytes();
+        h.update(&get_compact_size(version_bytes.len()));
+        h.update(&version_bytes);
         h.update(&<[u8; 64]>::from(
             bundle.authorization().binding_signature().sig(),
         ));
