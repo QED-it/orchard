@@ -11,6 +11,7 @@ use zcash_note_encryption::{note_bytes::NoteBytes, OutgoingCipherKey};
 use zip32::ChildIndex;
 
 use crate::{
+    builder::VerSpendAuthSig,
     bundle::Flags,
     keys::{FullViewingKey, SpendingKey},
     note::{
@@ -20,7 +21,6 @@ use crate::{
         redpallas::{self, Binding, SpendAuth},
         OrchardPrimitives,
     },
-    sighash_version::VerSpendAuthSig,
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof,

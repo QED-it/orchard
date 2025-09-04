@@ -19,6 +19,7 @@ use core::fmt::Debug;
 use group::Group;
 use nonempty::NonEmpty;
 use rand::RngCore;
+use zcash_spec::{SighashVersion, VersionedSig, SIGHASH_V0};
 
 use crate::{
     asset_record::AssetRecord,
@@ -26,7 +27,6 @@ use crate::{
     constants::reference_keys::ReferenceKeys,
     issuance_auth::{IssueAuthKey, IssueAuthSig, IssueValidatingKey},
     note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
-    sighash_version::{SighashVersion, VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
     value::NoteValue,
     Address, Note,
 };
@@ -239,6 +239,9 @@ pub struct AwaitingSighash;
 pub struct Prepared {
     sighash: [u8; 32],
 }
+
+/// A versioned Issuance authorization signature based on BIP 340 Schnorr.
+pub type VerBIP340IssueAuthSig = VersionedSig<IssueAuthSig<ZSASchnorr>>;
 
 /// Marker for an authorized bundle.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -562,7 +565,7 @@ impl IssueBundle<Prepared> {
             ik: self.ik,
             actions: self.actions,
             authorization: Signed {
-                signature: VerBIP340IssueAuthSig::new(ORCHARD_ISSUE_SIGHASH_V0, signature),
+                signature: VerBIP340IssueAuthSig::new(SIGHASH_V0, signature),
             },
         })
     }
@@ -647,7 +650,7 @@ pub fn verify_issue_bundle(
     get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
-    if bundle.authorization().signature().version() != &ORCHARD_ISSUE_SIGHASH_V0 {
+    if bundle.authorization().signature().version() != &SIGHASH_V0 {
         return Err(InvalidSighashVersion);
     }
 
@@ -817,13 +820,12 @@ mod tests {
         },
         issuance::{
             compute_asset_desc_hash, is_reference_note, verify_issue_bundle, IssueAction,
-            IssueBundle, IssueInfo, Signed,
+            IssueBundle, IssueInfo, Signed, VerBIP340IssueAuthSig,
         },
         issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
-        sighash_version::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
         tree::{MerkleHashOrchard, MerklePath},
         value::NoteValue,
         Address, Anchor, Bundle, Note,
@@ -839,6 +841,7 @@ mod tests {
     use rand::RngCore;
     use shardtree::store::memory::MemoryShardStore;
     use shardtree::ShardTree;
+    use zcash_spec::SIGHASH_V0;
 
     /// Validation for reference note
     ///
@@ -1590,7 +1593,7 @@ mod tests {
 
         signed.set_authorization(Signed {
             signature: VerBIP340IssueAuthSig::new(
-                ORCHARD_ISSUE_SIGHASH_V0,
+                SIGHASH_V0,
                 wrong_isk.try_sign(&sighash).unwrap(),
             ),
         });
@@ -1949,18 +1952,20 @@ mod tests {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use crate::{
-        issuance::{AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed},
+        issuance::{
+            AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed, VerBIP340IssueAuthSig,
+        },
         issuance_auth::{
             testing::arb_issuance_validating_key, IssueAuthSig, IssueAuthSigScheme, ZSASchnorr,
         },
         note::asset_base::testing::zsa_asset_base,
         note::testing::arb_zsa_note,
-        sighash_version::{VerBIP340IssueAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
     };
     use nonempty::NonEmpty;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::prop_compose;
+    use zcash_spec::SIGHASH_V0;
 
     prop_compose! {
         /// Generate a uniformly distributed ZSA Schnorr signature
@@ -1970,7 +1975,7 @@ pub mod testing {
             let mut encoded = vec![ZSASchnorr::ALGORITHM_BYTE];
             encoded.extend(sig_bytes);
             let sig = IssueAuthSig::decode(&encoded).unwrap();
-            VerBIP340IssueAuthSig::new(ORCHARD_ISSUE_SIGHASH_V0, sig)
+            VerBIP340IssueAuthSig::new(SIGHASH_V0, sig)
         }
     }
 

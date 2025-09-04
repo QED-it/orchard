@@ -22,12 +22,12 @@ use memuse::DynamicUsage;
 use crate::{
     action::Action,
     address::Address,
+    builder::{VerBindingSig, VerSpendAuthSig},
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
     primitives::redpallas::{self, Binding},
     primitives::{OrchardDomain, OrchardPrimitives},
-    sighash_version::{VerBindingSig, VerSpendAuthSig},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -618,13 +618,14 @@ pub mod testing {
     use nonempty::NonEmpty;
     use pasta_curves::pallas;
     use rand::{rngs::StdRng, SeedableRng};
+    use zcash_spec::SIGHASH_V0;
 
     use proptest::collection::vec;
     use proptest::prelude::*;
 
     use crate::{
+        builder::{VerBindingSig, VerSpendAuthSig},
         primitives::redpallas::testing::arb_binding_signing_key,
-        sighash_version::{VerBindingSig, VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
         value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, Proof,
     };
@@ -782,7 +783,7 @@ pub mod testing {
                     anchor,
                     Authorized {
                         proof: Proof::new(fake_proof),
-                        binding_signature: VerBindingSig::new(ORCHARD_ISSUE_SIGHASH_V0, sk.sign(rng, &fake_sighash)),
+                        binding_signature: VerBindingSig::new(SIGHASH_V0, sk.sign(rng, &fake_sighash)),
                     },
                 )
             }

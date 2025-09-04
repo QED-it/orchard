@@ -1,10 +1,10 @@
 use memuse::DynamicUsage;
 
 use crate::{
+    builder::VerSpendAuthSig,
     note::{ExtractedNoteCommitment, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, SpendAuth},
     primitives::OrchardPrimitives,
-    sighash_version::VerSpendAuthSig,
     value::ValueCommitment,
 };
 
@@ -130,8 +130,10 @@ pub(crate) mod testing {
     use proptest::prelude::*;
 
     use zcash_note_encryption::NoteEncryption;
+    use zcash_spec::SIGHASH_V0;
 
     use crate::{
+        builder::VerSpendAuthSig,
         note::{
             asset_base::testing::arb_asset_base, commitment::ExtractedNoteCommitment,
             nullifier::testing::arb_nullifier, testing::arb_note, Note, TransmittedNoteCiphertext,
@@ -141,7 +143,6 @@ pub(crate) mod testing {
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
         },
         primitives::{OrchardDomain, OrchardPrimitives},
-        sighash_version::{VerSpendAuthSig, ORCHARD_ISSUE_SIGHASH_V0},
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
@@ -231,7 +232,7 @@ pub(crate) mod testing {
                     cmx,
                     encrypted_note,
                     cv_net,
-                    authorization: VerSpendAuthSig::new(ORCHARD_ISSUE_SIGHASH_V0, sk.sign(rng, &fake_sighash)),
+                    authorization: VerSpendAuthSig::new(SIGHASH_V0, sk.sign(rng, &fake_sighash)),
                 }
             }
         }

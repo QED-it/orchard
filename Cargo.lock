@@ -2736,8 +2736,7 @@ dependencies = [
 [[package]]
 name = "zcash_spec"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ded3f58b93486aa79b85acba1001f5298f27a46489859934954d262533ee2915"
+source = "git+https://github.com/QED-it/zcash_spec?branch=sighash_version#5a526f0cf36baba140a235379723eabdba0b56fc"
 dependencies = [
  "blake2b_simd",
 ]

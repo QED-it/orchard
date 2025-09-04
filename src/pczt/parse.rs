@@ -10,11 +10,11 @@ use zip32::ChildIndex;
 
 use super::{Action, Bundle, Output, PcztTransmittedNoteCiphertext, Spend, Zip32Derivation};
 use crate::{
+    builder::VerSpendAuthSig,
     bundle::Flags,
     keys::{FullViewingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
     primitives::redpallas,
-    sighash_version::VerSpendAuthSig,
     tree::{MerkleHashOrchard, MerklePath},
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof, NOTE_COMMITMENT_TREE_DEPTH,

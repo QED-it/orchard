@@ -7,7 +7,6 @@ use orchard::{
     note::{AssetBase, ExtractedNoteCommitment},
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     primitives::{OrchardDomain, OrchardPrimitives},
-    sighash_version::ORCHARD_ISSUE_SIGHASH_V0,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
@@ -16,6 +15,7 @@ use rand::rngs::StdRng;
 use rand::SeedableRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
+use zcash_spec::SIGHASH_V0;
 
 pub fn verify_bundle<P: OrchardPrimitives>(
     bundle: &Bundle<Authorized, i64, P>,
@@ -28,7 +28,7 @@ pub fn verify_bundle<P: OrchardPrimitives>(
     let sighash: [u8; 32] = bundle.commitment().into();
     let bvk = bundle.binding_validating_key();
     for action in bundle.actions() {
-        assert_eq!(action.authorization().version(), &ORCHARD_ISSUE_SIGHASH_V0);
+        assert_eq!(action.authorization().version(), &SIGHASH_V0);
         assert_eq!(
             action.rk().verify(&sighash, action.authorization().sig()),
             Ok(())
