@@ -250,6 +250,10 @@ pub struct Signed {
 }
 
 impl Signed {
+    /// Constructs a new `Signed` authorization with the given signature.
+    pub fn new(signature: VerBIP340IssueAuthSig) -> Self {
+        Signed { signature }
+    }
     /// Returns the versioned signature for this authorization.
     pub fn signature(&self) -> &VerBIP340IssueAuthSig {
         &self.signature
