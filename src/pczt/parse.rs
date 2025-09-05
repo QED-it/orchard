@@ -6,7 +6,6 @@ use ff::PrimeField;
 use incrementalmerkletree::Hashable;
 use pasta_curves::pallas;
 use zcash_note_encryption::OutgoingCipherKey;
-use zcash_spec::sighash_versioning::SighashVersion;
 use zip32::ChildIndex;
 
 use super::{Action, Bundle, Output, PcztTransmittedNoteCiphertext, Spend, Zip32Derivation};
@@ -323,31 +322,6 @@ impl Zip32Derivation {
     }
 }
 
-/// Parses a `VerSpendAuthSig` from its raw byte components.
-///
-/// # Arguments
-///
-/// * `version_bytes`: The raw bytes representing a `SighashVersion`.
-/// * `sig_bytes`: The raw bytes of a `repallas::Signature<SpendAuth>`.
-///
-/// # Returns
-///
-/// A `Result` containing a `VerSpendAuthSig` if successful.
-/// The `version` field is derived from `version_bytes`.
-/// The `signature` field is derived from `sig_bytes`.
-///
-/// # Errors
-///
-/// * `InvalidSighashVersion`: The `version_bytes` is empty.
-pub fn parse_ver_spend_auth_sig(
-    version_bytes: Vec<u8>,
-    sig_bytes: [u8; 64],
-) -> Result<VerSpendAuthSig, ParseError> {
-    let version =
-        SighashVersion::from_bytes(&version_bytes).ok_or(ParseError::InvalidSighashVersion)?;
-    Ok(VerSpendAuthSig::new(version, sig_bytes.into()))
-}
-
 /// Errors that can occur while parsing a PCZT bundle.
 #[derive(Debug)]
 pub enum ParseError {
@@ -393,20 +367,4 @@ pub enum ParseError {
     MissingRho,
     /// The provided `flags` field had unexpected bits set.
     UnexpectedFlagBitsSet,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_ver_spend_auth_sig;
-    use crate::builder::VerSpendAuthSig;
-    use zcash_spec::sighash_versioning::SIGHASH_V0;
-
-    #[test]
-    fn test_parse_ver_spend_auth_sig() {
-        let sig_bytes = [1_u8; 64];
-        let versioned_sig = VerSpendAuthSig::new(SIGHASH_V0, sig_bytes.into());
-        let version_bytes = versioned_sig.version().to_bytes();
-        let versioned_sig_2 = parse_ver_spend_auth_sig(version_bytes, sig_bytes).unwrap();
-        assert_eq!(versioned_sig, versioned_sig_2);
-    }
 }
