@@ -250,11 +250,9 @@ impl Signed {
         &self.signature
     }
 
-    /// Constructs a `Signed` from a byte array containing an `IssueAuthSig` in raw bytes.
-    pub fn from_data(data: &[u8]) -> Self {
-        Signed {
-            signature: IssueAuthSig::decode(data).unwrap(),
-        }
+    /// Constructs a `Signed` from an `IssueAuthSig`.
+    pub fn from_sig(signature: IssueAuthSig<ZSASchnorr>) -> Self {
+        Signed { signature }
     }
 }
 
