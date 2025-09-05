@@ -19,7 +19,7 @@ use core::fmt::Debug;
 use group::Group;
 use nonempty::NonEmpty;
 use rand::RngCore;
-use zcash_spec::sighash_versioning::{SighashVersion, VersionedSig, SIGHASH_V0};
+use zcash_spec::sighash_versioning::{VersionedSig, SIGHASH_V0};
 
 use crate::{
     asset_record::AssetRecord,
@@ -253,15 +253,6 @@ impl Signed {
     /// Returns the versioned signature for this authorization.
     pub fn signature(&self) -> &VerBIP340IssueAuthSig {
         &self.signature
-    }
-
-    /// Constructs a `Signed` from
-    /// - one byte array containing a `SighashVersion` in raw bytes, and
-    /// - one byte array containing an `IssueAuthSig` in raw bytes.
-    pub fn from_data(version: &[u8], sig: &[u8]) -> Option<Self> {
-        SighashVersion::from_bytes(version).map(|ver| Signed {
-            signature: VerBIP340IssueAuthSig::new(ver, IssueAuthSig::decode(sig).unwrap()),
-        })
     }
 }
 
