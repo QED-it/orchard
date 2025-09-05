@@ -3,7 +3,7 @@
 
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::note_bytes::NoteBytesData;
-use zcash_spec::versioned_signature::get_compact_size;
+use zcash_spec::sighash_versioning::get_compact_size;
 
 use crate::{
     bundle::{

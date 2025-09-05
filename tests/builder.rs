@@ -15,7 +15,7 @@ use rand::rngs::StdRng;
 use rand::SeedableRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
-use zcash_spec::versioned_signature::SIGHASH_V0;
+use zcash_spec::sighash_versioning::SIGHASH_V0;
 
 pub fn verify_bundle<P: OrchardPrimitives>(
     bundle: &Bundle<Authorized, i64, P>,

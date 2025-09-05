@@ -618,7 +618,7 @@ pub mod testing {
     use nonempty::NonEmpty;
     use pasta_curves::pallas;
     use rand::{rngs::StdRng, SeedableRng};
-    use zcash_spec::versioned_signature::SIGHASH_V0;
+    use zcash_spec::sighash_versioning::SIGHASH_V0;
 
     use proptest::collection::vec;
     use proptest::prelude::*;

@@ -10,7 +10,7 @@ use pasta_curves::pallas;
 use rand::{prelude::SliceRandom, CryptoRng, RngCore};
 
 use zcash_note_encryption::NoteEncryption;
-use zcash_spec::versioned_signature::{VersionedSig, SIGHASH_V0};
+use zcash_spec::sighash_versioning::{VersionedSig, SIGHASH_V0};
 
 use crate::{
     address::Address,

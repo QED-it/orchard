@@ -1,7 +1,7 @@
 //! Utility functions for computing bundle commitments
 
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
-use zcash_spec::versioned_signature::get_compact_size;
+use zcash_spec::sighash_versioning::get_compact_size;
 
 use crate::{
     bundle::{Authorization, Authorized, Bundle},
