@@ -383,7 +383,7 @@ impl Zip32Derivation {
 ///
 /// # Errors
 ///
-/// * `InvalidSighashVersion`: The `version_bytes` is empty.
+/// * `InvalidSighashVersion`: If `version_bytes` cannot be parsed into a valid `SighashVersion`.
 pub fn parse_ver_spend_auth_sig(
     version_bytes: Vec<u8>,
     sig_bytes: [u8; 64],
