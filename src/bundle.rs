@@ -260,6 +260,7 @@ impl<A: Authorization, V, P: OrchardPrimitives> Bundle<A, V, P> {
             value_balance,
             burn,
             anchor,
+            // For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
             expiry_height: 0,
             authorization,
         }
