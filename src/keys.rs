@@ -12,7 +12,7 @@ use group::{
     prime::PrimeCurveAffine,
     Curve, GroupEncoding,
 };
-use pasta_curves::{pallas, pallas::Scalar};
+use pasta_curves::pallas;
 use rand::RngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use zcash_note_encryption::EphemeralKeyBytes;
@@ -141,17 +141,13 @@ impl From<&SpendingKey> for SpendAuthorizingKey {
         // SpendingKey cannot be constructed such that this assertion would fail.
         assert!(!bool::from(ask.is_zero()));
         // TODO: Add TryFrom<S::Scalar> for SpendAuthorizingKey.
-        SpendAuthorizingKey(conditionally_negate(ask))
-    }
-}
-
-// If the last bit of repr_P(ak) is 1, negate ask.
-fn conditionally_negate<T: redpallas::SigType>(scalar: Scalar) -> redpallas::SigningKey<T> {
-    let ret = redpallas::SigningKey::<T>(scalar.to_repr().try_into().unwrap());
-    if (<[u8; 32]>::from(redpallas::VerificationKey::<T>::from(&ret).0)[31] >> 7) == 1 {
-        redpallas::SigningKey::<T>((-scalar).to_repr().try_into().unwrap())
-    } else {
-        ret
+        let ret = SpendAuthorizingKey(ask.to_repr().try_into().unwrap());
+        // If the last bit of repr_P(ak) is 1, negate ask.
+        if (<[u8; 32]>::from(SpendValidatingKey::from(&ret).0)[31] >> 7) == 1 {
+            SpendAuthorizingKey((-ask).to_repr().try_into().unwrap())
+        } else {
+            ret
+        }
     }
 }
 
