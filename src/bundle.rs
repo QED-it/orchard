@@ -626,19 +626,18 @@ pub mod testing {
 
     use crate::{
         builder::{VerBindingSig, VerSpendAuthSig},
-        primitives::redpallas::testing::arb_binding_signing_key,
-        value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
+        note::{asset_base::testing::arb_zsa_asset_base, AssetBase},
+        primitives::{redpallas::testing::arb_binding_signing_key, OrchardPrimitives},
+        value::{
+            testing::{arb_note_value, arb_note_value_bounded},
+            NoteValue, ValueSum, MAX_NOTE_VALUE,
+        },
         Anchor, Proof,
     };
 
     use super::{Action, Authorized, Bundle, Flags};
 
     pub use crate::action::testing::ActionArb;
-    use crate::{
-        note::{asset_base::testing::arb_zsa_asset_base, AssetBase},
-        primitives::OrchardPrimitives,
-        value::testing::arb_note_value,
-    };
 
     /// Marker type for a bundle that contains no authorizing data.
     pub type Unauthorized = super::EffectsOnly;

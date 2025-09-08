@@ -560,7 +560,7 @@ impl ActionInfo {
 ///
 /// This is returned by [`Builder::build`].
 #[cfg(feature = "circuit")]
-pub type UnauthorizedBundle<V, D> = Bundle<InProgress<Unproven, Unauthorized>, V, D>;
+pub type UnauthorizedBundle<V, P> = Bundle<InProgress<Unproven, Unauthorized>, V, P>;
 
 /// Metadata about a bundle created by [`bundle`] or [`Builder::build`] that is not
 /// necessarily recoverable from the bundle itself.
