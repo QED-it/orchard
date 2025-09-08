@@ -916,8 +916,9 @@ impl SharedSecret {
 #[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
-    use super::{DiversifierIndex, DiversifierKey, EphemeralSecretKey, SpendingKey};
     use proptest::prelude::*;
+
+    use super::{DiversifierIndex, DiversifierKey, EphemeralSecretKey, SpendingKey};
 
     prop_compose! {
         /// Generate a uniformly distributed Orchard spending key.
