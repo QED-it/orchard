@@ -13,9 +13,13 @@ pub(crate) const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardH
 pub(crate) const ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActGHash";
 pub(crate) const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] =
     b"ZTxIdOrcActCHash";
+pub(crate) const ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION_V6: &[u8; 16] =
+    b"ZTxId6OActC_Hash";
 pub(crate) const ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActMHash";
 pub(crate) const ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] =
     b"ZTxIdOrcActNHash";
+pub(crate) const ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION_V6: &[u8; 16] =
+    b"ZTxId6OActN_Hash";
 pub(crate) const ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcBurnHash";
 pub(crate) const ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrchaHash";
 pub(crate) const ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION: &[u8; 16] =
@@ -75,14 +79,6 @@ pub fn hash_bundle_auth_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION).finalize()
 }
 
-/// Construct the `issuance_auth_digest` commitment for an absent issue bundle as defined in
-/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
-///
-/// [zip246]: https://zips.z.cash/zip-0246
-pub fn hash_issue_bundle_auth_empty() -> Blake2bHash {
-    hasher(ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION).finalize()
-}
-
 /// Construct the `issuance_digest` commitment for an absent issue bundle as defined in
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
@@ -97,12 +93,12 @@ pub fn hash_issue_bundle_txid_empty() -> Blake2bHash {
 /// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION);
-    let mut ia = hasher(ZCASH_ORCHARD_ZSA_ISSUE_ACTION_PERSONALIZATION);
 
     let ik_encoding = bundle.ik().encode();
     h.update(&get_compact_size(ik_encoding.len()));
     h.update(&ik_encoding);
 
+    let mut ia = hasher(ZCASH_ORCHARD_ZSA_ISSUE_ACTION_PERSONALIZATION);
     for action in bundle.actions() {
         ia.update(action.asset_desc_hash());
 
@@ -120,6 +116,14 @@ pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>)
     h.finalize()
 }
 
+/// Construct the `issuance_auth_digest` commitment for an absent issue bundle as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
+///
+/// [zip246]: https://zips.z.cash/zip-0246
+pub fn hash_issue_bundle_auth_empty() -> Blake2bHash {
+    hasher(ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION).finalize()
+}
+
 /// Construct the `issuance_auth_digest` commitment to the authorizing data of an
 /// authorized issue bundle as defined in
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
@@ -130,7 +134,12 @@ pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake
     let version_bytes = bundle.authorization().signature().version().to_bytes();
     h.update(&get_compact_size(version_bytes.len()));
     h.update(&version_bytes);
-    h.update(&bundle.authorization().signature().sig().encode());
+
+    let sig_enc = bundle.authorization().signature().sig().encode(); // 65 bytes
+    assert_eq!(sig_enc.len(), 65);
+    assert_eq!(sig_enc[0], 0x00); // ZIP-230: algorithm byte must be 0x00
+    h.update(&get_compact_size(sig_enc.len()));
+    h.update(&sig_enc);
     h.finalize()
 }
 
