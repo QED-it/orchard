@@ -135,7 +135,7 @@ pub(crate) fn hash_issue_bundle_auth_data(bundle: &IssueBundle<Signed>) -> Blake
     h.update(&get_compact_size(version_bytes.len()));
     h.update(&version_bytes);
 
-    let sig_enc = bundle.authorization().signature().sig().encode(); // 65 bytes
+    let sig_enc = bundle.authorization().signature().sig().encode();
     assert_eq!(sig_enc.len(), 65);
     assert_eq!(sig_enc[0], 0x00); // ZIP-230: algorithm byte must be 0x00
     h.update(&get_compact_size(sig_enc.len()));
