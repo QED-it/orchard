@@ -75,15 +75,16 @@ impl OrchardPrimitives for OrchardZSA {
             ch.update(&action.nullifier().to_bytes());
             ch.update(&action.cmx().to_bytes());
             ch.update(&action.encrypted_note().epk_bytes);
+            // TODO Remove once new Memo Bundles are implemented (ZIP-231).
             ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..Self::COMPACT_NOTE_SIZE]);
+            // TODO Uncomment once new Memo Bundles are implemented (ZIP-231).
+            // ch.update(&action.encrypted_note().enc_ciphertext.as_ref());
 
             // TODO Remove once new Memo Bundles are implemented (ZIP-231).
             mh.update(
                 &action.encrypted_note().enc_ciphertext.as_ref()
                     [Self::COMPACT_NOTE_SIZE..Self::COMPACT_NOTE_SIZE + MEMO_SIZE],
             );
-            // TODO Uncomment once new Memo Bundles are implemented (ZIP-231).
-            // mh.update(&action.encrypted_note().enc_ciphertext.as_ref());
 
             nh.update(&action.cv_net().to_bytes());
             nh.update(&<[u8; 32]>::from(action.rk()));
@@ -96,6 +97,7 @@ impl OrchardPrimitives for OrchardZSA {
         }
 
         agh.update(ch.finalize().as_bytes());
+        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
         agh.update(mh.finalize().as_bytes());
         agh.update(nh.finalize().as_bytes());
 
