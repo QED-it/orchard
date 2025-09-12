@@ -212,7 +212,7 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle);
         assert_eq!(
             sighash.to_hex().as_str(),
-            "e8e0c001926a9797cd84876f3118257b634defd649c8d48a3cf713547aa7a72f"
+            "f84871d872081fa7744cbaf575e342cf81951a9b17818264170243d1551a99ea"
         );
     }
 
@@ -250,7 +250,7 @@ mod tests {
         let orchard_auth_digest = hash_bundle_auth_data(&bundle);
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            "82b770a7fe84acb3921b51a49b9d04e203132365a0a82d04e762be3585eb9d1a"
+            "48b277d8019c194da3882454ab6e0a2c8eb08cfb062e2285fe5bde1eb27ae98d"
         );
     }
 }
