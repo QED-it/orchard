@@ -10,11 +10,11 @@ use zip32::ChildIndex;
 
 use super::{Action, Bundle, Output, PcztTransmittedNoteCiphertext, Spend, Zip32Derivation};
 use crate::{
-    builder::VerSpendAuthSig,
     bundle::Flags,
     keys::{FullViewingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
-    primitives::redpallas,
+    orchard_sighash_versioning::{orchard_sighash_version_from_u8, VerSpendAuthSig},
+    primitives::redpallas::{self, SpendAuth},
     tree::{MerkleHashOrchard, MerklePath},
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof, NOTE_COMMITMENT_TREE_DEPTH,
@@ -118,7 +118,7 @@ impl Spend {
     pub fn parse(
         nullifier: [u8; 32],
         rk: [u8; 32],
-        spend_auth_sig: Option<VerSpendAuthSig>,
+        spend_auth_sig: Option<(u8, [u8; 64])>,
         recipient: Option<[u8; 43]>,
         value: Option<u64>,
         asset: Option<[u8; 32]>,
@@ -139,6 +139,16 @@ impl Spend {
 
         let rk = redpallas::VerificationKey::try_from(rk)
             .map_err(|_| ParseError::InvalidRandomizedKey)?;
+
+        let spend_auth_sig = spend_auth_sig
+            .as_ref()
+            .map(|(version, sig)| {
+                let version = orchard_sighash_version_from_u8(*version)
+                    .ok_or(ParseError::InvalidSighashVersion)?;
+                let sig = redpallas::Signature::<SpendAuth>::from(*sig);
+                Ok(VerSpendAuthSig::new(version, sig))
+            })
+            .transpose()?;
 
         let recipient = recipient
             .as_ref()

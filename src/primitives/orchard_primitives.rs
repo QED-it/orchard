@@ -1,6 +1,7 @@
 //! The OrchardPrimitives trait represents the difference between the `OrchardVanilla` and the
 //! `OrchardZSA` commitment, encryption and decryption procedures.
 
+use alloc::{collections::BTreeMap, vec::Vec};
 use core::fmt;
 
 use blake2b_simd::Hash as Blake2bHash;
@@ -9,6 +10,7 @@ use zcash_note_encryption::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
 use crate::{
     bundle::{Authorization, Authorized},
     note::AssetBase,
+    orchard_sighash_versioning::OrchardSighashVersion,
     primitives::zcash_note_encryption_domain::{Memo, MEMO_SIZE},
     Bundle, Note,
 };
@@ -60,5 +62,14 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
     ///
     /// [zip244]: https://zips.z.cash/zip-0244
     /// [zip246]: https://zips.z.cash/zip-0246
-    fn hash_bundle_auth_data<V>(bundle: &Bundle<Authorized, V, Self>) -> Blake2bHash;
+    fn hash_bundle_auth_data<V>(
+        bundle: &Bundle<Authorized, V, Self>,
+        version_to_bytes: BTreeMap<OrchardSighashVersion, Vec<u8>>,
+    ) -> Blake2bHash;
+
+    /// Returns the default Orchard sighash version.
+    ///
+    /// For OrchardVanilla, the default version is `OrchardSighashVersion::UNKNOWN`.
+    /// For OrchardZSA, the default version is `OrchardSighashVersion::V0`.
+    fn default_orchard_version() -> OrchardSighashVersion;
 }
