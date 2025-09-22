@@ -41,15 +41,3 @@ pub type VerSpendAuthSig = OrchardVersionedSig<SpendAuth>;
 
 /// A versioned Orchard binding signature.
 pub type VerBindingSig = OrchardVersionedSig<Binding>;
-
-#[cfg(test)]
-pub mod test_utils {
-    use super::OrchardSighashVersion;
-    use alloc::{collections::BTreeMap, vec::Vec};
-
-    pub fn orchard_version_to_bytes_map() -> BTreeMap<OrchardSighashVersion, Vec<u8>> {
-        let mut map = BTreeMap::new();
-        map.insert(OrchardSighashVersion::V0, vec![0]);
-        map
-    }
-}

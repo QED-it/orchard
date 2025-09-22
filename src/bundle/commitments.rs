@@ -178,7 +178,7 @@ mod tests {
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
         orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
-        orchard_sighash_versioning::test_utils::orchard_version_to_bytes_map,
+        orchard_sighash_versioning::OrchardSighashVersion,
         value::NoteValue,
         Anchor,
     };
@@ -271,8 +271,11 @@ mod tests {
     /// reference value to ensure consistency.
     #[test]
     fn test_hash_bundle_auth_data_for_orchard_zsa() {
+        let mut orchard_version_to_bytes = BTreeMap::new();
+        orchard_version_to_bytes.insert(OrchardSighashVersion::V0, vec![0]);
+
         let bundle = generate_auth_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA);
-        let orchard_auth_digest = hash_bundle_auth_data(&bundle, &orchard_version_to_bytes_map());
+        let orchard_auth_digest = hash_bundle_auth_data(&bundle, &orchard_version_to_bytes);
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
             "48b277d8019c194da3882454ab6e0a2c8eb08cfb062e2285fe5bde1eb27ae98d"
