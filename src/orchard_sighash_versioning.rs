@@ -44,3 +44,14 @@ pub type VerSpendAuthSig = OrchardVersionedSig<SpendAuth>;
 
 /// A versioned Orchard binding signature.
 pub type VerBindingSig = OrchardVersionedSig<Binding>;
+
+#[cfg(test)]
+mod tests {
+    use super::OrchardSighashVersion;
+    #[test]
+    fn lock_orchard_sighash_version_encoding() {
+        // Ensure the encoding of OrchardSighashVersion is as expected.
+        assert_eq!(OrchardSighashVersion::V0 as u8, 0);
+        assert_eq!(OrchardSighashVersion::NoVersion as u8, u8::MAX);
+    }
+}
