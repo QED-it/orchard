@@ -116,7 +116,7 @@ impl Action {
 fn orchard_sighash_version_from_u8(n: u8) -> Option<OrchardSighashVersion> {
     match n {
         0 => Some(OrchardSighashVersion::V0),
-        u8::MAX => Some(OrchardSighashVersion::UNKNOWN),
+        u8::MAX => Some(OrchardSighashVersion::NoVersion),
         _ => None,
     }
 }

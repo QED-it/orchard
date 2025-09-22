@@ -3,13 +3,16 @@
 use crate::primitives::redpallas::{Binding, SigType, Signature, SpendAuth};
 
 /// The Orchard Sighash version.
+/// Represented as a `u8` for compatibility with the PCZT encoding.
 #[repr(u8)]
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub enum OrchardSighashVersion {
     /// Version V0.
     V0 = 0,
-    /// Unknown version.
-    UNKNOWN = u8::MAX,
+
+    /// No version (used for Orchard and TXv5 compatibility).
+    /// TXv5 does not require the sighash versioning bytes.
+    NoVersion = u8::MAX,
 }
 
 /// The Orchard versioned signature.

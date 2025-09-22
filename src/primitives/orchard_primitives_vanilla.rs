@@ -111,7 +111,7 @@ impl OrchardPrimitives for OrchardVanilla {
     }
 
     fn default_sighash_version() -> OrchardSighashVersion {
-        OrchardSighashVersion::UNKNOWN
+        OrchardSighashVersion::NoVersion
     }
 }
 
