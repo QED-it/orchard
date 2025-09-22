@@ -171,18 +171,25 @@ mod tests {
     use crate::{
         builder::{Builder, BundleType, UnauthorizedBundle},
         bundle::{
-            commitments::{get_compact_size, hash_bundle_auth_data, hash_bundle_txid_data},
+            commitments::{
+                get_compact_size, hash_bundle_auth_data, hash_bundle_txid_data,
+                hash_issue_bundle_auth_data, hash_issue_bundle_txid_data,
+            },
             Authorized, Bundle,
         },
         circuit::ProvingKey,
+        issuance::{compute_asset_desc_hash, AwaitingSighash, IssueBundle, IssueInfo},
+        issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
+        issuance_sighash_versioning::IssueSighashVersion,
         keys::{FullViewingKey, Scope, SpendingKey},
-        note::AssetBase,
+        note::{AssetBase, Nullifier},
         orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         orchard_sighash_versioning::OrchardSighashVersion,
         value::NoteValue,
         Anchor,
     };
     use alloc::collections::BTreeMap;
+    use nonempty::NonEmpty;
     use rand::{rngs::StdRng, SeedableRng};
 
     fn generate_bundle<FL: OrchardFlavor>(bundle_type: BundleType) -> UnauthorizedBundle<i64, FL> {
@@ -294,5 +301,86 @@ mod tests {
         assert_eq!(get_compact_size(65536), vec![254, 0, 0, 1, 0]);
         assert_eq!(get_compact_size(65537), vec![254, 1, 0, 1, 0]);
         assert_eq!(get_compact_size(33554432), vec![254, 0, 0, 0, 2]);
+    }
+
+    fn generate_issue_bundle() -> (IssueBundle<AwaitingSighash>, IssueAuthKey<ZSASchnorr>) {
+        let mut rng = StdRng::seed_from_u64(5);
+
+        let isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
+        let ik = IssueValidatingKey::from(&isk);
+        let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
+        let recipient = fvk.address_at(0u32, Scope::External);
+        let first_nullifier = Nullifier::dummy(&mut rng);
+
+        let asset_desc_hash_1 =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"first asset").unwrap());
+        let asset_desc_hash_2 =
+            compute_asset_desc_hash(&NonEmpty::from_slice(b"second asset").unwrap());
+
+        let (mut bundle, asset) = IssueBundle::new(
+            ik.clone(),
+            asset_desc_hash_1,
+            Some(IssueInfo {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
+            true,
+            &mut rng,
+        );
+
+        let another_asset = bundle
+            .add_recipient(
+                asset_desc_hash_1,
+                recipient,
+                NoteValue::from_raw(10),
+                false,
+                &mut rng,
+            )
+            .unwrap();
+        assert_eq!(asset, another_asset);
+
+        let third_asset = bundle
+            .add_recipient(
+                asset_desc_hash_2,
+                recipient,
+                NoteValue::from_raw(15),
+                true,
+                &mut rng,
+            )
+            .unwrap();
+        assert_ne!(asset, third_asset);
+
+        (bundle.update_rho(&first_nullifier), isk)
+    }
+
+    /// Verify that the `issuance_digest` of an IssueBundle matches a fixed reference value
+    /// to ensure consistency.
+    #[test]
+    fn test_hash_issue_bundle_txid_data() {
+        let (bundle, _) = generate_issue_bundle();
+        let issuance_digest = hash_issue_bundle_txid_data(&bundle);
+        assert_eq!(
+            issuance_digest.to_hex().as_str(),
+            "7d7e9b66cee8896453aa7dffdbe885b880b700a49cfff947ab1503a2407b5e1b"
+        );
+    }
+
+    /// Verify that the `issuance_auth_digest` of an IssueBundle matches a fixed reference value
+    /// to ensure consistency.
+    #[test]
+    fn test_hash_issue_bundle_auth_data() {
+        let (bundle, isk) = generate_issue_bundle();
+        let issuance_digest = bundle.commitment().into();
+        let signed_bundle = bundle.prepare(issuance_digest).sign(&isk).unwrap();
+
+        let mut sighash_version_map = BTreeMap::new();
+        sighash_version_map.insert(IssueSighashVersion::V0, vec![0]);
+
+        let issuance_auth_digest =
+            hash_issue_bundle_auth_data(&signed_bundle, &sighash_version_map);
+        assert_eq!(
+            issuance_auth_digest.to_hex().as_str(),
+            "b0e465381e86b4462403723283e75b5b1928110cf2a45a0602d5a5037f07c9ad"
+        );
     }
 }
