@@ -13,7 +13,7 @@ use crate::{
     bundle::Flags,
     keys::{FullViewingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, Nullifier, RandomSeed, Rho},
-    orchard_sighash_versioning::{orchard_sighash_version_from_u8, VerSpendAuthSig},
+    orchard_sighash_versioning::{OrchardSighashVersion, VerSpendAuthSig},
     primitives::redpallas::{self, SpendAuth},
     tree::{MerkleHashOrchard, MerklePath},
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -109,6 +109,15 @@ impl Action {
             output,
             rcv,
         })
+    }
+}
+
+/// Converts an unsigned 8-bit integer into an `Option<OrchardSighashVersion>`.
+fn orchard_sighash_version_from_u8(n: u8) -> Option<OrchardSighashVersion> {
+    match n {
+        0 => Some(OrchardSighashVersion::V0),
+        u8::MAX => Some(OrchardSighashVersion::UNKNOWN),
+        _ => None,
     }
 }
 

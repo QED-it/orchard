@@ -6,19 +6,10 @@ use crate::primitives::redpallas::{Binding, SigType, Signature, SpendAuth};
 #[repr(u8)]
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub enum OrchardSighashVersion {
-    /// Unknown version.
-    UNKNOWN = u8::MAX,
     /// Version V0.
     V0 = 0,
-}
-
-/// Converts an unsigned 8-bit integer into an `Option<OrchardSighashVersion>`.
-pub fn orchard_sighash_version_from_u8(n: u8) -> Option<OrchardSighashVersion> {
-    match n {
-        0 => Some(OrchardSighashVersion::V0),
-        u8::MAX => Some(OrchardSighashVersion::UNKNOWN),
-        _ => None,
-    }
+    /// Unknown version.
+    UNKNOWN = u8::MAX,
 }
 
 /// The Orchard versioned signature.

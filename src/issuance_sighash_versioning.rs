@@ -5,10 +5,10 @@ use crate::issuance_auth::{IssueAuthSig, IssueAuthSigScheme, ZSASchnorr};
 /// The Issuance Sighash version.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IssueSighashVersion {
-    /// Unknown version.
-    UNKNOWN,
     /// Version V0.
     V0,
+    /// Unknown version.
+    UNKNOWN,
 }
 
 /// The Issuance spend auth versioned signature.
