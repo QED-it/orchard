@@ -586,7 +586,7 @@ impl IssueBundle<Signed> {
     /// This together with `IssueBundle::commitment` bind the entire bundle.
     pub fn authorizing_commitment(
         &self,
-        version_to_bytes: BTreeMap<IssueSighashVersion, Vec<u8>>,
+        version_to_bytes: &BTreeMap<IssueSighashVersion, Vec<u8>>,
     ) -> IssueBundleAuthorizingCommitment {
         IssueBundleAuthorizingCommitment(hash_issue_bundle_auth_data(self, version_to_bytes))
     }

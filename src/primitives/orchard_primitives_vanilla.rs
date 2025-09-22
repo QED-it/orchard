@@ -97,7 +97,7 @@ impl OrchardPrimitives for OrchardVanilla {
     /// [zip244]: https://zips.z.cash/zip-0244
     fn hash_bundle_auth_data<V>(
         bundle: &Bundle<Authorized, V, OrchardVanilla>,
-        _: BTreeMap<OrchardSighashVersion, Vec<u8>>,
+        _: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
         h.update(bundle.authorization().proof().as_ref());
