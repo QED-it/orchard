@@ -786,7 +786,7 @@ pub mod testing {
                     anchor,
                     Authorized {
                         proof: Proof::new(fake_proof),
-                        binding_signature: VerBindingSig::new(P::default_orchard_sighash_version(), sk.sign(rng, &fake_sighash)),
+                        binding_signature: VerBindingSig::new(P::default_sighash_version(), sk.sign(rng, &fake_sighash)),
                     },
                 )
             }

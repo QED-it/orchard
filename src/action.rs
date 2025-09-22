@@ -231,7 +231,7 @@ pub(crate) mod testing {
                     cmx,
                     encrypted_note,
                     cv_net,
-                    authorization: VerSpendAuthSig::new(P::default_orchard_sighash_version(), sk.sign(rng, &fake_sighash)),
+                    authorization: VerSpendAuthSig::new(P::default_sighash_version(), sk.sign(rng, &fake_sighash)),
                 }
             }
         }
