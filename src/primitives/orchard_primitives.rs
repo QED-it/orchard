@@ -71,5 +71,5 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
     ///
     /// For OrchardVanilla, the default version is `OrchardSighashVersion::UNKNOWN`.
     /// For OrchardZSA, the default version is `OrchardSighashVersion::V0`.
-    fn default_orchard_version() -> OrchardSighashVersion;
+    fn default_orchard_sighash_version() -> OrchardSighashVersion;
 }

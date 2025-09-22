@@ -29,7 +29,7 @@ pub fn verify_bundle<P: OrchardPrimitives>(
     for action in bundle.actions() {
         assert_eq!(
             action.authorization().version(),
-            &P::default_orchard_version()
+            &P::default_orchard_sighash_version()
         );
         assert_eq!(
             action.rk().verify(&sighash, action.authorization().sig()),

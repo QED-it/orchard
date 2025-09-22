@@ -150,7 +150,7 @@ impl OrchardPrimitives for OrchardZSA {
         h.finalize()
     }
 
-    fn default_orchard_version() -> OrchardSighashVersion {
+    fn default_orchard_sighash_version() -> OrchardSighashVersion {
         OrchardSighashVersion::V0
     }
 }

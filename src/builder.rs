@@ -1270,7 +1270,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
                 dummy_ask
                     .map(|ask| {
                         VerSpendAuthSig::new(
-                            P::default_orchard_version(),
+                            P::default_orchard_sighash_version(),
                             ask.randomize(&parts.alpha).sign(rng, &sighash),
                         )
                     })
@@ -1281,7 +1281,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
                 proof: auth.proof,
                 sigs: PartiallyAuthorized {
                     binding_signature: VerBindingSig::new(
-                        P::default_orchard_version(),
+                        P::default_orchard_sighash_version(),
                         auth.sigs.bsk.sign(rng, &sighash),
                     ),
 
@@ -1325,7 +1325,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
             |rng, partial, maybe| match maybe {
                 MaybeSigned::SigningMetadata(parts) if parts.ak == expected_ak => {
                     MaybeSigned::Signature(VerSpendAuthSig::new(
-                        P::default_orchard_version(),
+                        P::default_orchard_sighash_version(),
                         ask.randomize(&parts.alpha).sign(rng, &partial.sigs.sighash),
                     ))
                 }
