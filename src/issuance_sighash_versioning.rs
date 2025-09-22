@@ -7,8 +7,6 @@ use crate::issuance_auth::{IssueAuthSig, IssueAuthSigScheme, ZSASchnorr};
 pub enum IssueSighashVersion {
     /// Version V0.
     V0,
-    /// Unknown version.
-    UNKNOWN,
 }
 
 /// The Issuance spend auth versioned signature.
