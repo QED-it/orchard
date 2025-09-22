@@ -69,9 +69,9 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 /// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_bundle_auth_data<V, P: OrchardPrimitives>(
     bundle: &Bundle<Authorized, V, P>,
-    version_to_bytes: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
+    sighash_version_map: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
 ) -> Blake2bHash {
-    P::hash_bundle_auth_data(bundle, version_to_bytes)
+    P::hash_bundle_auth_data(bundle, sighash_version_map)
 }
 
 /// Construct the `orchard_auth_digest` commitment for an absent bundle as defined in
@@ -134,10 +134,10 @@ pub fn hash_issue_bundle_auth_empty() -> Blake2bHash {
 /// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_issue_bundle_auth_data(
     bundle: &IssueBundle<Signed>,
-    version_to_bytes: &BTreeMap<IssueSighashVersion, Vec<u8>>,
+    sighash_version_map: &BTreeMap<IssueSighashVersion, Vec<u8>>,
 ) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION);
-    let version_bytes = version_to_bytes
+    let version_bytes = sighash_version_map
         .get(bundle.authorization().signature().version())
         .expect("Unknown issue sighash version.");
     h.update(&get_compact_size(version_bytes.len()));
@@ -271,11 +271,11 @@ mod tests {
     /// reference value to ensure consistency.
     #[test]
     fn test_hash_bundle_auth_data_for_orchard_zsa() {
-        let mut orchard_version_to_bytes = BTreeMap::new();
-        orchard_version_to_bytes.insert(OrchardSighashVersion::V0, vec![0]);
+        let mut sighash_version_map = BTreeMap::new();
+        sighash_version_map.insert(OrchardSighashVersion::V0, vec![0]);
 
         let bundle = generate_auth_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA);
-        let orchard_auth_digest = hash_bundle_auth_data(&bundle, &orchard_version_to_bytes);
+        let orchard_auth_digest = hash_bundle_auth_data(&bundle, &sighash_version_map);
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
             "48b277d8019c194da3882454ab6e0a2c8eb08cfb062e2285fe5bde1eb27ae98d"

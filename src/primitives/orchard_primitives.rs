@@ -64,7 +64,7 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
     /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_auth_data<V>(
         bundle: &Bundle<Authorized, V, Self>,
-        version_to_bytes: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
+        sighash_version_map: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
     ) -> Blake2bHash;
 
     /// Returns the default Orchard sighash version.

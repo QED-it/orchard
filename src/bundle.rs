@@ -555,9 +555,9 @@ impl<V, P: OrchardPrimitives> Bundle<Authorized, V, P> {
     /// This together with `Bundle::commitment` bind the entire bundle.
     pub fn authorizing_commitment(
         &self,
-        version_to_bytes: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
+        sighash_version_map: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
     ) -> BundleAuthorizingCommitment {
-        BundleAuthorizingCommitment(hash_bundle_auth_data(self, version_to_bytes))
+        BundleAuthorizingCommitment(hash_bundle_auth_data(self, sighash_version_map))
     }
 
     /// Verifies the proof for this bundle.
