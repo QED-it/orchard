@@ -553,6 +553,9 @@ impl<V, P: OrchardPrimitives> Bundle<Authorized, V, P> {
     /// Computes a commitment to the authorizing data within for this bundle.
     ///
     /// This together with `Bundle::commitment` bind the entire bundle.
+    /// The `sighash_version_map` provides the mapping from each
+    /// `OrchardSighashVersion` to the corresponding `SighashInfo`
+    /// encoding.
     pub fn authorizing_commitment(
         &self,
         sighash_version_map: &BTreeMap<OrchardSighashVersion, Vec<u8>>,

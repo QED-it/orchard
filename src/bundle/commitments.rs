@@ -65,6 +65,10 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 /// for OrchardZSA
 ///
+/// The `sighash_version_map` provides the mapping from each
+/// `OrchardSighashVersion` to the corresponding `SighashInfo`
+/// encoding.
+///
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_bundle_auth_data<V, P: OrchardPrimitives>(
@@ -130,6 +134,10 @@ pub fn hash_issue_bundle_auth_empty() -> Blake2bHash {
 /// Construct the `issuance_auth_digest` commitment to the authorizing data of an
 /// authorized issue bundle as defined in
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
+///
+/// The `sighash_version_map` provides the mapping from each
+/// `IssueSighashVersion` to the corresponding `SighashInfo`
+/// encoding.
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_issue_bundle_auth_data(

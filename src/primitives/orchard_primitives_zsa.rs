@@ -121,6 +121,10 @@ impl OrchardPrimitives for OrchardZSA {
     /// Evaluate `orchard_auth_digest` for the bundle as defined in
     /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
     ///
+    /// The `sighash_version_map` provides the mapping from each
+    /// `OrchardSighashVersion` to the corresponding `SighashInfo`
+    /// encoding.
+    ///
     /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_auth_data<V>(
         bundle: &Bundle<Authorized, V, OrchardZSA>,

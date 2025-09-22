@@ -60,6 +60,10 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
     /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
     /// for OrchardZSA
     ///
+    /// The `sighash_version_map` provides the mapping from each
+    /// `OrchardSighashVersion` to the corresponding `SighashInfo`
+    /// encoding.
+    ///
     /// [zip244]: https://zips.z.cash/zip-0244
     /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_auth_data<V>(

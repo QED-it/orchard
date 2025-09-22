@@ -584,6 +584,9 @@ impl IssueBundle<Signed> {
     /// Computes a commitment to the authorizing data contained in this bundle.
     ///
     /// This together with `IssueBundle::commitment` bind the entire bundle.
+    /// The `sighash_version_map` provides the mapping from each
+    /// `IssueSighashVersion` to the corresponding `SighashInfo`
+    /// encoding.
     pub fn authorizing_commitment(
         &self,
         sighash_version_map: &BTreeMap<IssueSighashVersion, Vec<u8>>,
