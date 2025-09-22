@@ -629,7 +629,7 @@ pub mod testing {
 
     use crate::{
         note::{asset_base::testing::arb_zsa_asset_base, AssetBase},
-        orchard_sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
+        orchard_sighash_versioning::{VerBindingSig, VerSpendAuthSig},
         primitives::{redpallas::testing::arb_binding_signing_key, OrchardPrimitives},
         value::{
             testing::{arb_note_value, arb_note_value_bounded},
@@ -786,7 +786,7 @@ pub mod testing {
                     anchor,
                     Authorized {
                         proof: Proof::new(fake_proof),
-                        binding_signature: VerBindingSig::new(OrchardSighashVersion::V0, sk.sign(rng, &fake_sighash)),
+                        binding_signature: VerBindingSig::new(P::default_orchard_sighash_version(), sk.sign(rng, &fake_sighash)),
                     },
                 )
             }

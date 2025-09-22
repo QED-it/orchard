@@ -136,7 +136,7 @@ pub(crate) mod testing {
             asset_base::testing::arb_asset_base, commitment::ExtractedNoteCommitment,
             nullifier::testing::arb_nullifier, testing::arb_note, Note, TransmittedNoteCiphertext,
         },
-        orchard_sighash_versioning::{OrchardSighashVersion, VerSpendAuthSig},
+        orchard_sighash_versioning::VerSpendAuthSig,
         primitives::redpallas::{
             self,
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},
@@ -231,7 +231,7 @@ pub(crate) mod testing {
                     cmx,
                     encrypted_note,
                     cv_net,
-                    authorization: VerSpendAuthSig::new(OrchardSighashVersion::V0, sk.sign(rng, &fake_sighash)),
+                    authorization: VerSpendAuthSig::new(P::default_orchard_sighash_version(), sk.sign(rng, &fake_sighash)),
                 }
             }
         }
