@@ -314,7 +314,7 @@ mod tests {
     fn generate_issue_bundle() -> (IssueBundle<AwaitingSighash>, IssueAuthKey<ZSASchnorr>) {
         let mut rng = StdRng::seed_from_u64(5);
 
-        let isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
+        let isk = IssueAuthKey::random(&mut rng);
         let ik = IssueValidatingKey::from(&isk);
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
         let recipient = fvk.address_at(0u32, Scope::External);
