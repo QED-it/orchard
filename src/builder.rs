@@ -735,7 +735,7 @@ impl Builder {
         note: Note,
         merkle_path: MerklePath,
     ) -> Result<(), SpendError> {
-        let spend = SpendInfo::new(fvk, note, merkle_path, false).ok_or(SpendError::FvkMismatch)?;
+        let spend = SpendInfo::new(fvk, note, merkle_path, true).ok_or(SpendError::FvkMismatch)?;
 
         // Consistency check: all anchors must be equal.
         if !spend.has_matching_anchor(&self.anchor) {
