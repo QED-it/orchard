@@ -445,7 +445,7 @@ fn build_and_verify_action_group(
             .try_for_each(|spend| {
                 builder.add_reference_note(
                     ReferenceKeys::fvk(),
-                    spend.note,
+                    spend.note.create_split_note(&mut OsRng),
                     spend.merkle_path().clone(),
                 )
             })
