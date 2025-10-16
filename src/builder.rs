@@ -1012,6 +1012,7 @@ fn build_bundle<B, R: RngCore>(
             Vec::with_capacity(spends.len().max(outputs.len()).max(MIN_ACTIONS));
 
         let spends_outputs_by_asset = partition_by_asset(&spends, &outputs, &mut rng);
+        let asset_count = spends_outputs_by_asset.len();
 
         indexed_spends_outputs.extend(spends_outputs_by_asset.into_iter().flat_map(
             |(asset, (spends, outputs))| {
@@ -1060,6 +1061,13 @@ fn build_bundle<B, R: RngCore>(
             })
             .take(MIN_ACTIONS.saturating_sub(indexed_spends_outputs.len())),
         );
+
+        // Shuffle all spends and outputs to avoid having the list sorted by asset,
+        // which could reveal information about the assets involved in the transaction.
+        // If there is only one asset, skip this step to keep backward compatibility.
+        if asset_count > 1 {
+            indexed_spends_outputs.shuffle(&mut rng);
+        }
 
         let mut bundle_meta = BundleMetadata::new(num_requested_spends, num_requested_outputs);
         let pre_actions = indexed_spends_outputs
