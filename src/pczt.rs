@@ -405,6 +405,7 @@ mod tests {
     use blake2b_simd::Hash as Blake2bHash;
     use ff::{Field, PrimeField};
     use incrementalmerkletree::{Marking, Retention};
+    use nonempty::NonEmpty;
     use pasta_curves::pallas;
     use rand::{rngs::StdRng, SeedableRng};
     use shardtree::{store::memory::MemoryShardStore, ShardTree};
@@ -414,6 +415,8 @@ mod tests {
         bundle::commitments::hash_bundle_txid_data,
         circuit::ProvingKey,
         constants::MERKLE_DEPTH_ORCHARD,
+        issuance::compute_asset_desc_hash,
+        issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
         orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
@@ -501,9 +504,20 @@ mod tests {
         );
     }
 
-    fn shielded_bundle<FL: OrchardFlavor>(bundle_type: BundleType) -> Blake2bHash {
+    fn shielded_bundle<FL: OrchardFlavor>(bundle_type: BundleType, zsa_asset: bool) -> Blake2bHash {
         let pk = ProvingKey::build::<FL>();
         let mut rng = StdRng::seed_from_u64(1u64);
+
+        let asset = if zsa_asset {
+            // Create a ZSA asset from its issue validating key.
+            let isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
+            let ik = IssueValidatingKey::from(&isk);
+            let asset_desc_hash =
+                compute_asset_desc_hash(&NonEmpty::from_slice(b"asset1").unwrap());
+            AssetBase::derive(&ik, &asset_desc_hash)
+        } else {
+            AssetBase::native()
+        };
 
         // Pretend we derived the spending key via ZIP 32.
         let zip32_derivation = Zip32Derivation::parse([1; 32], vec![]).unwrap();
@@ -520,7 +534,7 @@ mod tests {
                 if let Some(note) = Note::from_parts(
                     recipient,
                     value,
-                    AssetBase::native(),
+                    asset,
                     rho,
                     RandomSeed::random(&mut rng, &rho),
                 )
@@ -565,7 +579,7 @@ mod tests {
                 None,
                 recipient,
                 NoteValue::from_raw(10_000),
-                AssetBase::native(),
+                asset,
                 [0u8; 512],
             )
             .unwrap();
@@ -574,7 +588,7 @@ mod tests {
                 Some(fvk.to_ovk(Scope::Internal)),
                 fvk.address_at(0u32, Scope::Internal),
                 NoteValue::from_raw(5_000),
-                AssetBase::native(),
+                asset,
                 [0u8; 512],
             )
             .unwrap();
@@ -609,6 +623,24 @@ mod tests {
             }
         }
 
+        // Verify the PCZT bundle before extraction.
+        pczt_bundle
+            .actions
+            .iter()
+            .for_each(|action| action.verify_cv_net().unwrap());
+        pczt_bundle
+            .actions
+            .iter()
+            .for_each(|action| action.spend.verify_nullifier(Some(&fvk)).unwrap());
+        pczt_bundle
+            .actions
+            .iter()
+            .for_each(|action| action.spend.verify_rk(Some(&fvk)).unwrap());
+        pczt_bundle
+            .actions
+            .iter()
+            .for_each(|action| action.output.verify_note_commitment(&action.spend).unwrap());
+
         // Run the Transaction Extractor role.
         let bundle = pczt_bundle.extract::<i64, FL>().unwrap().unwrap();
 
@@ -623,16 +655,16 @@ mod tests {
 
     #[test]
     fn shielded_bundle_orchard_zsa() {
-        let orchard_digest = shielded_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA);
+        let orchard_digest = shielded_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA, true);
         assert_eq!(
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
             &[
-                218, 22, 234, 22, 19, 32, 189, 26, 106, 174, 84, 221, 11, 105, 226, 206, 222, 24,
-                168, 56, 27, 7, 34, 88, 229, 42, 235, 145, 57, 222, 144, 233
+                33, 116, 149, 252, 16, 204, 63, 29, 8, 12, 36, 186, 53, 223, 109, 30, 47, 191, 24,
+                195, 112, 40, 221, 60, 147, 95, 42, 230, 66, 107, 62, 55
             ],
         );
-        let orchard_digest = shielded_bundle::<OrchardZSA>(BundleType::DEFAULT_VANILLA);
+        let orchard_digest = shielded_bundle::<OrchardZSA>(BundleType::DEFAULT_VANILLA, false);
         assert_eq!(
             orchard_digest.as_bytes(),
             // Locks the `orchard_digest` for OrchardZSA
@@ -645,7 +677,7 @@ mod tests {
 
     #[test]
     fn shielded_bundle_orchard_vanilla() {
-        let orchard_digest = shielded_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
+        let orchard_digest = shielded_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA, false);
         assert_eq!(
             orchard_digest.as_bytes(),
             // `orchard_digest` taken from the `zcash/orchard` repository at commit `4ac248d0` (v0.11.0)
