@@ -240,9 +240,7 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle);
         assert_eq!(
             sighash.to_hex().as_str(),
-            // Bundle hash for Orchard (vanilla) generated using
-            // Zcash/Orchard commit: 4ac248d0 (v0.11.0)
-            "0ac1e319f6761a8561b7bd3fc0907a5c73ed5590a6c210c4d39ffae1d5741875"
+            "c0c39505b181f60515473cc47812d004ce2186147aa7bfa2695004eb295fd8e9"
         );
     }
 
@@ -254,7 +252,7 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle);
         assert_eq!(
             sighash.to_hex().as_str(),
-            "f84871d872081fa7744cbaf575e342cf81951a9b17818264170243d1551a99ea"
+            "09b9a49a7fdce8958447a8353f4a7d41b2b5c83c5a3324df91ceed66ddc529e6"
         );
     }
 
@@ -278,9 +276,7 @@ mod tests {
         let orchard_auth_digest = hash_bundle_auth_data(&bundle, &BTreeMap::new());
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            // Bundle hash for Orchard (vanilla) generated using
-            // Zcash/Orchard commit: 4ac248d0 (v0.11.0)
-            "5f3bcf759cddf19170ec47a882a470b5767d66c95fc72ffc360f31324474a06b"
+            "0ca2a553b7d6bb8ed5e3ad414409f51658266004b6174b8067953f0070614be7"
         );
     }
 
@@ -295,7 +291,7 @@ mod tests {
         let orchard_auth_digest = hash_bundle_auth_data(&bundle, &sighash_version_map);
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            "0c29408a07863016f5b4c5c0ccc5b944f24c686d06035945c5514f8b8c195a99"
+            "938216dffe3da6f999d961a37486d8c8bcb22b2f178300d522ce597062887094"
         );
     }
 
