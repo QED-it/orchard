@@ -215,6 +215,32 @@ impl Note {
         CtOption::new(note, note.commitment_inner().is_some())
     }
 
+    /// Creates a `Note` from its component parts.
+    ///
+    /// Returns `None` if a valid [`NoteCommitment`] cannot be derived from the note.
+    pub(crate) fn from_parts_with_rseed_split_note(
+        recipient: Address,
+        value: NoteValue,
+        asset: AssetBase,
+        rho: Rho,
+        rseed: RandomSeed,
+        rseed_split_note: Option<RandomSeed>,
+    ) -> CtOption<Self> {
+        let rseed_split_note = match rseed_split_note {
+            Some(rseed_split) => CtOption::new(rseed_split, 1u8.into()),
+            None => CtOption::new(rseed, 0u8.into()),
+        };
+        let note = Note {
+            recipient,
+            value,
+            asset,
+            rho,
+            rseed,
+            rseed_split_note,
+        };
+        CtOption::new(note, note.commitment_inner().is_some())
+    }
+
     /// Generates a new note.
     ///
     /// Defined in [Zcash Protocol Spec § 4.7.3: Sending Notes (Orchard)][orchardsend].

@@ -1,7 +1,7 @@
 use crate::{
     keys::{FullViewingKey, SpendValidatingKey},
     note::{ExtractedNoteCommitment, Rho},
-    value::ValueCommitment,
+    value::{NoteValue, ValueCommitment},
     Note,
 };
 
@@ -13,7 +13,17 @@ impl super::Action {
     /// - `output.value`
     /// - `rcv`
     pub fn verify_cv_net(&self) -> Result<(), VerifyError> {
-        let spend_value = self.spend().value.ok_or(VerifyError::MissingValue)?;
+        let spend_value = if self
+            .spend()
+            .split_flag
+            .ok_or(VerifyError::MissingSplitFlag)?
+        {
+            NoteValue::zero()
+        } else {
+            self.spend().value.ok_or(VerifyError::MissingValue)?
+        };
+
+        self.spend().value.ok_or(VerifyError::MissingValue)?;
         let output_value = self.output().value.ok_or(VerifyError::MissingValue)?;
         let rcv = self.rcv.ok_or(VerifyError::MissingValueCommitTrapdoor)?;
 
@@ -67,12 +77,13 @@ impl super::Spend {
     ) -> Result<(), VerifyError> {
         let fvk = self.fvk_for_validation(expected_fvk)?;
 
-        let note = Note::from_parts(
+        let note = Note::from_parts_with_rseed_split_note(
             self.recipient.ok_or(VerifyError::MissingRecipient)?,
             self.value.ok_or(VerifyError::MissingValue)?,
             self.asset.ok_or(VerifyError::MissingAsset)?,
             self.rho.ok_or(VerifyError::MissingRho)?,
             self.rseed.ok_or(VerifyError::MissingRandomSeed)?,
+            self.rseed_split_note,
         )
         .into_option()
         .ok_or(VerifyError::InvalidSpendNote)?;
@@ -175,6 +186,8 @@ pub enum VerifyError {
     MissingValue,
     /// Verification requires `asset` to be set.
     MissingAsset,
+    /// Verification requires `split_flag` to be set.
+    MissingSplitFlag,
     /// `cv_net` verification requires `rcv` to be set.
     MissingValueCommitTrapdoor,
     /// The provided `fvk` does not own the spent note.

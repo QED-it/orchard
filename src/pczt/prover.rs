@@ -36,7 +36,7 @@ impl super::Bundle {
 
                 let asset = action.spend.asset.ok_or(ProverError::MissingAsset)?;
 
-                let note = Note::from_parts(
+                let note = Note::from_parts_with_rseed_split_note(
                     action
                         .spend
                         .recipient
@@ -45,6 +45,7 @@ impl super::Bundle {
                     asset,
                     action.spend.rho.ok_or(ProverError::MissingRho)?,
                     action.spend.rseed.ok_or(ProverError::MissingRandomSeed)?,
+                    action.spend.rseed_split_note,
                 )
                 .into_option()
                 .ok_or(ProverError::InvalidSpendNote)?;
