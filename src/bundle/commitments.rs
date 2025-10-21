@@ -240,7 +240,7 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle);
         assert_eq!(
             sighash.to_hex().as_str(),
-            "c0c39505b181f60515473cc47812d004ce2186147aa7bfa2695004eb295fd8e9"
+            "f3ea89ea2b1e17b3313a6f2f9e4e47c21eec1574902f5ea6961227e1eaed2327"
         );
     }
 
@@ -252,7 +252,7 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle);
         assert_eq!(
             sighash.to_hex().as_str(),
-            "09b9a49a7fdce8958447a8353f4a7d41b2b5c83c5a3324df91ceed66ddc529e6"
+            "a0d843b7278788e3b47dc9fe1e1da227a94898b7111d76514a87df486d32773c"
         );
     }
 
@@ -276,7 +276,7 @@ mod tests {
         let orchard_auth_digest = hash_bundle_auth_data(&bundle, &BTreeMap::new());
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            "0ca2a553b7d6bb8ed5e3ad414409f51658266004b6174b8067953f0070614be7"
+            "c99aa5a33fd4e7b78de0ee846397e2eb0da3a5d176e6df57d0401c49f51d7295"
         );
     }
 
@@ -291,7 +291,7 @@ mod tests {
         let orchard_auth_digest = hash_bundle_auth_data(&bundle, &sighash_version_map);
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            "938216dffe3da6f999d961a37486d8c8bcb22b2f178300d522ce597062887094"
+            "9d47819082f2323b30ceabe0fea993b39541cc0e62a8be6e1bc2a19840b0d9ab"
         );
     }
 
