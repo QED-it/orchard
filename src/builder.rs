@@ -817,13 +817,14 @@ impl Builder {
 /// The index is used to track the position of the note in the bundle.
 type MetadataIdx = Option<usize>;
 
-/// Partition a list of spends and outputs by note types.
+/// Partitions the provided spends and outputs by asset.
 ///
-/// Normally, spends and outputs are used as provided. However, in the special cases where:
-/// - both spends and outputs are empty, or
-/// - only native assets are present and there are not enough spends or outputs,
-/// this method adds dummy spends and outputs until the minimum number of actions is reached.
-/// Dummy spends and outputs are added before shuffling to ensure backward compatibility.
+/// Groups the input `spends` and `outputs` by their `AssetBase` and returns a
+/// `BTreeMap` from asset to the corresponding vectors of items, each tagged with
+/// its original index within the input slices.
+///
+/// - Key: `AssetBase` for the note.
+/// - Value: a pair of vectors `(Vec<(SpendInfo, MetadataIdx)>, Vec<(OutputInfo, MetadataIdx)>)`.
 #[allow(clippy::type_complexity)]
 fn partition_by_asset(
     spends: &[SpendInfo],
@@ -1004,9 +1005,8 @@ fn build_bundle<B, R: RngCore>(
                     .take(num_asset_pre_actions)
                     .collect::<Vec<_>>();
 
-                // Shuffle the spends and outputs, so that learning the position of a
-                // specific spent note or output note doesn't reveal anything on its own about
-                // the meaning of that note in the transaction context.
+                // Shuffle the spends and outputs, so that the position does not reveal any
+                // information about the content.
                 indexed_spends.shuffle(&mut rng);
                 indexed_outputs.shuffle(&mut rng);
 
@@ -1026,9 +1026,8 @@ fn build_bundle<B, R: RngCore>(
             .take(MIN_ACTIONS.saturating_sub(indexed_spends_outputs.len())),
         );
 
-        // Shuffle the spends and outputs, so that learning the position of a
-        // specific spent note or output note doesn't reveal anything on its own about
-        // the meaning of that note in the transaction context.
+        // Shuffle the spends and outputs, so that the position does not reveal any information
+        // about the content.
         indexed_spends_outputs.shuffle(&mut rng);
 
         let mut bundle_meta = BundleMetadata::new(num_requested_spends, num_requested_outputs);
