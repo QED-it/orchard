@@ -13,14 +13,13 @@ impl super::Action {
     /// - `output.value`
     /// - `rcv`
     pub fn verify_cv_net(&self) -> Result<(), VerifyError> {
-        let spend_value = if self
+        let spend_value = match self
             .spend()
             .split_flag
             .ok_or(VerifyError::MissingSplitFlag)?
         {
-            NoteValue::zero()
-        } else {
-            self.spend().value.ok_or(VerifyError::MissingValue)?
+            true => NoteValue::zero(),
+            false => self.spend().value.ok_or(VerifyError::MissingValue)?,
         };
 
         self.spend().value.ok_or(VerifyError::MissingValue)?;
