@@ -984,7 +984,7 @@ fn build_bundle<B, R: RngCore>(
 
                 let first_spend = spends.first().map(|(s, _)| s.clone());
 
-                let indexed_spends = spends
+                let mut indexed_spends = spends
                     .into_iter()
                     .chain(iter::repeat_with(|| {
                         (
@@ -996,13 +996,19 @@ fn build_bundle<B, R: RngCore>(
                     .take(num_asset_pre_actions)
                     .collect::<Vec<_>>();
 
-                let indexed_outputs = outputs
+                let mut indexed_outputs = outputs
                     .into_iter()
                     .chain(iter::repeat_with(|| {
                         (OutputInfo::dummy(&mut rng, asset), None)
                     }))
                     .take(num_asset_pre_actions)
                     .collect::<Vec<_>>();
+
+                // Shuffle the spends and outputs, so that learning the position of a
+                // specific spent note or output note doesn't reveal anything on its own about
+                // the meaning of that note in the transaction context.
+                indexed_spends.shuffle(&mut rng);
+                indexed_outputs.shuffle(&mut rng);
 
                 assert_eq!(indexed_spends.len(), indexed_outputs.len());
 
