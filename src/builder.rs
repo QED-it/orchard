@@ -14,8 +14,7 @@ use zcash_note_encryption::NoteEncryption;
 use crate::{
     address::Address,
     builder::BuildError::{BurnNative, BurnZero},
-    bundle::{derive_bvk, Authorization, Authorized, Bundle, Flags},
-    circuit::{Circuit, Instance, OrchardCircuit, Proof, ProvingKey},
+    bundle::{Authorization, Authorized, Bundle, Flags},
     constants::reference_keys::ReferenceKeys,
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
@@ -24,7 +23,7 @@ use crate::{
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     orchard_sighash_versioning::{VerBindingSig, VerSpendAuthSig},
     primitives::redpallas::{self, Binding, SpendAuth},
-    swap_bundle::{ActionGroup, ActionGroupAuthorized},
+    swap_bundle::ActionGroupAuthorized,
     primitives::{OrchardDomain, OrchardPrimitives},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -43,7 +42,6 @@ use {
 };
 use crate::orchard_flavor::OrchardZSA;
 use crate::primitives::redpallas::SigningKey;
-use crate::swap_bundle::ActionGroupAuthorized;
 
 const MIN_ACTIONS: usize = 2;
 
@@ -633,12 +631,6 @@ impl BundleMetadata {
 #[cfg(feature = "circuit")]
 pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, BundleMetadata);
 
-/// A tuple containing an in-progress action group with no proofs or signatures, and its associated metadata.
-pub type UnauthorizedActionGroupWithMetadata<V> = (
-    ActionGroup<InProgress<Unproven<OrchardZSA>, Unauthorized>, V>,
-    BundleMetadata,
-);
-
 /// A builder for constructing an Orchard [`Bundle`] by specifying notes to spend, outputs to
 /// receive, and assets to burn.
 /// This builder provides a structured way to incrementally assemble the components of a bundle.
@@ -1065,7 +1057,6 @@ fn build_bundle<B, R: RngCore>(
     bundle_type: BundleType,
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
-    expiry_height: u32,
     burn: BTreeMap<AssetBase, NoteValue>,
     is_action_group: bool,
     reference_notes: Option<BTreeMap<AssetBase, SpendInfo>>,
@@ -1207,8 +1198,6 @@ fn build_bundle<B, R: RngCore>(
         flags,
         native_value_balance,
         burn_vec,
-        timelimit,
-        is_action_group,
         bundle_meta,
         rng,
     )
@@ -1225,6 +1214,19 @@ pub trait InProgressSignatures: fmt::Debug {
 pub struct InProgress<P, S: InProgressSignatures> {
     proof: P,
     sigs: S,
+}
+
+impl<P, S: InProgressSignatures> InProgress<P, S> {
+    /// Mutate the proof using the provided function.
+    pub fn map_proof<F, P2>(self, f: F) -> InProgress<P2, S>
+    where
+        F: FnOnce(P) -> P2,
+    {
+        InProgress {
+            proof: f(self.proof),
+            sigs: self.sigs,
+        }
+    }
 }
 
 impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> {
@@ -1424,17 +1426,19 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauth
             |rng, _, SigningMetadata { dummy_ask, parts }| {
                 if let Some(ask) = dummy_ask {
                     // We can create signatures for dummy spends immediately.
-                    return MaybeSigned::Signature(
+                    return MaybeSigned::Signature(VerSpendAuthSig::new(
+                        P::default_sighash_version(),
                         ask.randomize(&parts.alpha).sign(rng, &action_group_digest),
-                    );
+                    ));
                 }
                 if parts.ak == reference_ak {
                     // We can create signatures for reference notes immediately.
-                    MaybeSigned::Signature(
+                    MaybeSigned::Signature(VerSpendAuthSig::new(
+                        P::default_sighash_version(),
                         reference_ask
                             .randomize(&parts.alpha)
                             .sign(rng, &action_group_digest),
-                    )
+                    ))
                 } else {
                     MaybeSigned::SigningMetadata(parts)
                 }
@@ -1497,10 +1501,11 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Action
             &mut rng,
             |rng, partial, maybe| match maybe {
                 MaybeSigned::SigningMetadata(parts) if parts.ak == expected_ak => {
-                    MaybeSigned::Signature(
+                    MaybeSigned::Signature(VerSpendAuthSig::new(
+                        P::default_sighash_version(),
                         ask.randomize(&parts.alpha)
                             .sign(rng, &partial.sigs.action_group_digest),
-                    )
+                    ))
                 }
                 s => s,
             },

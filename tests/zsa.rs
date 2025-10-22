@@ -1,18 +1,13 @@
 mod builder;
 
 use crate::builder::{verify_action_group, verify_bundle, verify_swap_bundle};
-use bridgetree::BridgeTree;
-use incrementalmerkletree::Hashable;
-use orchard::bundle::Authorization;
 use orchard::{
     builder::{Builder, BundleType},
     bundle::Authorized,
     circuit::{ProvingKey, VerifyingKey},
-    issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed, Unauthorized},
+    issuance::{verify_issue_bundle, IssueBundle, IssueInfo, Signed},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
-    keys::{IssuanceAuthorizingKey, IssuanceValidatingKey},
     note::{AssetBase, ExtractedNoteCommitment},
-    note_encryption::OrchardDomain,
     orchard_flavor::OrchardZSA,
     primitives::redpallas::{Binding, SigningKey},
     swap_bundle::{ActionGroupAuthorized, SwapBundle},
@@ -22,8 +17,15 @@ use orchard::{
 use rand::rngs::OsRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use std::collections::HashSet;
+use incrementalmerkletree::{Hashable, Marking, Retention};
+use nonempty::NonEmpty;
 use zcash_note_encryption::try_note_decryption;
 use orchard::bundle::Authorization;
+use orchard::issuance::{compute_asset_desc_hash, AwaitingNullifier};
+use orchard::issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
+use orchard::note::Nullifier;
+use orchard::primitives::OrchardDomain;
+use orchard::tree::{MerkleHashOrchard, MerklePath};
 
 #[derive(Debug)]
 struct Keychain {
@@ -167,40 +169,6 @@ fn build_merkle_paths(notes: Vec<&Note>) -> (Vec<MerklePath>, Anchor) {
     (merkle_paths, root.into())
 }
 
-fn build_merkle_paths(notes: Vec<&Note>) -> (Vec<MerklePath>, Anchor) {
-    let mut tree = BridgeTree::<MerkleHashOrchard, u32, 32>::new(100);
-
-    let mut commitments = vec![];
-    let mut positions = vec![];
-
-    // Add leaves
-    for note in notes {
-        let cmx: ExtractedNoteCommitment = note.commitment().into();
-        commitments.push(cmx);
-        let leaf = MerkleHashOrchard::from_cmx(&cmx);
-        tree.append(leaf);
-        positions.push(tree.mark().unwrap());
-    }
-
-    let root = tree.root(0).unwrap();
-    let anchor = root.into();
-
-    // Calculate paths
-    let mut merkle_paths = vec![];
-    for (position, commitment) in positions.iter().zip(commitments.iter()) {
-        let auth_path = tree.witness(*position, 0).unwrap();
-        let merkle_path = MerklePath::from_parts(
-            u64::from(*position).try_into().unwrap(),
-            auth_path[..].try_into().unwrap(),
-        );
-        merkle_paths.push(merkle_path.clone());
-        assert_eq!(anchor, merkle_path.root(*commitment));
-    }
-
-    (merkle_paths, anchor)
-}
-
-
 fn issue_zsa_notes(
     asset_descr: &[u8],
     keys: &Keychain,
@@ -247,64 +215,6 @@ fn issue_zsa_notes(
         issue_bundle.commitment().into(),
         |_| None,
         first_nullifier
-    )
-    .is_ok());
-
-    (*reference_note, *note1, *note2)
-}
-
-fn issue_zsa_notes_with_reference_note(
-    asset_descr: &[u8],
-    keys: &Keychain,
-    reference_address: Address,
-) -> (Note, Note, Note) {
-    let mut rng = OsRng;
-    // Create a issuance bundle
-    let unauthorized_asset = IssueBundle::new(
-        keys.ik().clone(),
-        asset_descr.to_owned(),
-        Some(IssueInfo {
-            recipient: keys.recipient,
-            value: NoteValue::from_raw(40),
-        }),
-        &mut rng,
-    );
-
-    assert!(unauthorized_asset.is_ok());
-
-    let (mut unauthorized, _) = unauthorized_asset.unwrap();
-
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr,
-            keys.recipient,
-            NoteValue::from_raw(2),
-            &mut rng,
-        )
-        .is_ok());
-
-    // Create a reference note (with a note value equal to 0)
-    assert!(unauthorized
-        .add_recipient(
-            asset_descr,
-            reference_address,
-            NoteValue::from_raw(0),
-            &mut rng,
-        )
-        .is_ok());
-
-    let issue_bundle = sign_issue_bundle(unauthorized, keys.isk());
-
-    // Take notes from first action
-    let notes = issue_bundle.get_all_notes();
-    let note1 = notes[0];
-    let note2 = notes[1];
-    let note3 = notes[2];
-
-    assert!(verify_issue_bundle(
-        &issue_bundle,
-        issue_bundle.commitment().into(),
-        &HashSet::new(),
     )
     .is_ok());
 
@@ -798,19 +708,20 @@ fn action_group_and_swap_bundle() {
     // Create notes for user1
     let keys1 = prepare_keys(pk.clone(), vk.clone(),5);
 
-    let asset_descr1 = b"zsa_asset1".to_vec();
-    let (asset1_reference_note, asset1_note1, asset1_note2) =
-        issue_zsa_notes(&asset_descr1, &keys1);
-
     let user1_native_note1 = create_native_note(&keys1);
     let user1_native_note2 = create_native_note(&keys1);
+
+    let asset_descr1 = b"zsa_asset1".to_vec();
+    let (asset1_reference_note, asset1_note1, asset1_note2) =
+        issue_zsa_notes(&asset_descr1, &keys1, &user1_native_note1.nullifier(keys1.fvk()));
+
 
     // Create notes for user2
     let keys2 = prepare_keys(pk.clone(), vk.clone(),10);
 
     let asset_descr2 = b"zsa_asset2".to_vec();
     let (asset2_reference_note, asset2_note1, asset2_note2) =
-        issue_zsa_notes(&asset_descr2, &keys2);
+        issue_zsa_notes(&asset_descr2, &keys2, &user1_native_note2.nullifier(keys1.fvk()));
 
     let user2_native_note1 = create_native_note(&keys2);
     let user2_native_note2 = create_native_note(&keys2);

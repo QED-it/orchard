@@ -14,7 +14,6 @@ use core::fmt;
 
 use alloc::collections::BTreeMap;
 use blake2b_simd::Hash as Blake2bHash;
-use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
 use nonempty::NonEmpty;
 use zcash_note_encryption::{try_note_decryption, try_output_recovery_with_ovk};
 
@@ -25,21 +24,19 @@ use crate::{
     action::Action,
     address::Address,
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data, hash_action_group},
-    circuit::{Instance, Proof, VerifyingKey},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    note_encryption::{OrchardDomain, OrchardDomainCommon},
-    orchard_flavor::OrchardFlavor,
-    primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::redpallas::{self, Binding},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
 };
-use crate::bundle::commitments::hash_action_group;
 use crate::orchard_flavor::OrchardZSA;
 
 #[cfg(feature = "circuit")]
 use crate::circuit::{Instance, VerifyingKey};
+use crate::orchard_sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig};
+use crate::primitives::{OrchardDomain, OrchardPrimitives};
 
 #[cfg(feature = "circuit")]
 impl<A, P: OrchardPrimitives> Action<A, P> {
@@ -497,21 +494,6 @@ impl<A: Authorization, V, P: OrchardPrimitives> Bundle<A, V, P> {
     }
 }
 
-/// A swap bundle to be applied to the ledger.
-#[derive(Clone, Debug)]
-pub struct SwapBundle<V> {
-    /// The list of action groups that make up this swap bundle.
-    action_groups: Vec<Bundle<Authorized, V, OrchardZSA>>,
-    /// Orchard-specific transaction-level flags for this swap.
-    flags: Flags,
-    /// The net value moved out of this swap.
-    ///
-    /// This is the sum of Orchard spends minus the sum of Orchard outputs.
-    value_balance: V,
-    /// The binding signature for this swap.
-    binding_signature: redpallas::Signature<Binding>,
-}
-
 pub(crate) fn derive_bvk<A, V: Clone + Into<i64>, P: OrchardPrimitives>(
     actions: &NonEmpty<Action<A, P>>,
     value_balance: V,
@@ -626,38 +608,6 @@ impl<V, P: OrchardPrimitives> Bundle<Authorized, V, P> {
         self.authorization()
             .proof()
             .unwrap()
-            .verify(vk, &self.to_instances())
-    }
-}
-
-/// Authorizing data for an action group, ready to be sent to the matcher.
-#[derive(Debug, Clone)]
-pub struct ActionGroupAuthorized {
-    proof: Proof,
-}
-
-impl Authorization for ActionGroupAuthorized {
-    type SpendAuth = redpallas::Signature<SpendAuth>;
-}
-
-impl ActionGroupAuthorized {
-    /// Constructs the authorizing data for a bundle of actions from its constituent parts.
-    pub fn from_parts(proof: Proof) -> Self {
-        ActionGroupAuthorized { proof }
-    }
-
-    /// Return the proof component of the authorizing data.
-    pub fn proof(&self) -> &Proof {
-        &self.proof
-    }
-}
-
-impl<V, D: OrchardDomainCommon> Bundle<ActionGroupAuthorized, V, D> {
-    /// Verifies the proof for this bundle.
-    #[cfg(feature = "circuit")]
-    pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
-        self.authorization()
-            .proof()
             .verify(vk, &self.to_instances())
     }
 }

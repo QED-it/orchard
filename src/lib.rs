@@ -37,10 +37,7 @@ pub mod issuance_auth;
 pub mod issuance_sighash_versioning;
 pub mod keys;
 pub mod note;
-pub mod supply_info;
 pub mod swap_bundle;
-
-pub mod note_encryption;
 
 pub mod orchard_flavor;
 pub mod orchard_sighash_versioning;

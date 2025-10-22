@@ -6,9 +6,8 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
     orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
-    swap_bundle::SwapBundle,
     primitives::{OrchardDomain, OrchardPrimitives},
-    swap_bundle::{ActionGroup, ActionGroupAuthorized, SwapBundle},
+    swap_bundle::{ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
@@ -76,7 +75,7 @@ pub fn verify_action_group(
         assert_eq!(
             action
                 .rk()
-                .verify(&action_group_digest, action.authorization()),
+                .verify(&action_group_digest, action.authorization().sig()),
             Ok(())
         );
     }

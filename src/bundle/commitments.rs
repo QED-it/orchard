@@ -11,7 +11,6 @@ use crate::{
     primitives::OrchardPrimitives,
     orchard_flavor::OrchardZSA,
 };
-use crate::orchard_flavor::OrchardZSA;
 
 // TODO remove
 const MEMO_SIZE: usize = 512;
@@ -72,19 +71,42 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
     action_group: &Bundle<A, V, OrchardZSA>,
 ) -> Blake2bHash {
-    let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUP_HASH_PERSONALIZATION);
-    let mut ch = hasher(ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION);
+    let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION);
+
+    let mut ch = hasher(ZCASH_ORCHARD_ACTIONS_COMPACT_HASH_PERSONALIZATION_V6);
+    // TODO Remove mh once new Memo Bundles are implemented (ZIP-231).
     let mut mh = hasher(ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION);
-    let mut nh = hasher(ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION);
-    for action in action_group.action_group().actions().iter() {
+    let mut nh = hasher(ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION_V6);
+
+    for action in action_group.actions().iter() {
         ch.update(&action.nullifier().to_bytes());
         ch.update(&action.cmx().to_bytes());
         ch.update(&action.encrypted_note().epk_bytes);
-        ch.update(
-            &action.encrypted_note().enc_ciphertext.as_ref()[..OrchardZSA::COMPACT_NOTE_SIZE],
+        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
+        ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..OrchardZSA::COMPACT_NOTE_SIZE]);
+        // TODO Uncomment once new Memo Bundles are implemented (ZIP-231).
+        // ch.update(&action.encrypted_note().enc_ciphertext.as_ref());
+
+        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
+        mh.update(
+            &action.encrypted_note().enc_ciphertext.as_ref()
+                [OrchardZSA::COMPACT_NOTE_SIZE..OrchardZSA::COMPACT_NOTE_SIZE + MEMO_SIZE],
         );
 
-    OrchardZSA::update_hash_with_actions(&mut agh, action_group);
+        nh.update(&action.cv_net().to_bytes());
+        nh.update(&<[u8; 32]>::from(action.rk()));
+        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
+        nh.update(
+            &action.encrypted_note().enc_ciphertext.as_ref()
+                [OrchardZSA::COMPACT_NOTE_SIZE + MEMO_SIZE..],
+        );
+        nh.update(&action.encrypted_note().out_ciphertext);
+    }
+
+    agh.update(ch.finalize().as_bytes());
+    // TODO Remove once new Memo Bundles are implemented (ZIP-231).
+    agh.update(mh.finalize().as_bytes());
+    agh.update(nh.finalize().as_bytes());
 
     agh.update(&[action_group.flags().to_byte()]);
     agh.update(&action_group.anchor().to_bytes());
@@ -95,7 +117,6 @@ pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
         burn_hasher.update(&burn_item.0.to_bytes());
         burn_hasher.update(&burn_item.1.to_bytes());
     }
-
     agh.update(burn_hasher.finalize().as_bytes());
     agh.finalize()
 }
@@ -116,14 +137,6 @@ pub(crate) fn hash_swap_bundle<A: Authorization, V: Copy + Into<i64>>(
 
     h.update(&value_balance.into().to_le_bytes());
     h.finalize()
-}
-
-/// Construct the commitment for the absent bundle as defined in
-/// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
-///
-/// [zip244]: https://zips.z.cash/zip-0244
-pub fn hash_bundle_txid_empty() -> Blake2bHash {
-    hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION).finalize()
 }
 
 /// Construct the `orchard_auth_digest` commitment to the authorizing data of an
@@ -248,8 +261,7 @@ mod tests {
         builder::{Builder, BundleType, UnauthorizedBundle},
         bundle::{
             commitments::{
-                get_compact_size, hash_bundle_auth_data, hash_bundle_txid_data,
-                hash_issue_bundle_auth_data, hash_issue_bundle_txid_data,
+                hash_bundle_txid_data,
             },
             Authorized, Bundle,
         },
@@ -267,6 +279,7 @@ mod tests {
     use alloc::collections::BTreeMap;
     use nonempty::NonEmpty;
     use rand::{rngs::StdRng, SeedableRng};
+    use crate::bundle::commitments::{get_compact_size, hash_bundle_auth_data, hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 
     fn generate_bundle<FL: OrchardFlavor>(bundle_type: BundleType) -> UnauthorizedBundle<i64, FL> {
         let rng = StdRng::seed_from_u64(5);
@@ -460,3 +473,4 @@ mod tests {
         );
     }
 }
+

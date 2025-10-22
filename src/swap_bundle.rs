@@ -3,12 +3,9 @@
 use crate::{
     bundle::commitments::hash_swap_bundle,
     bundle::{derive_bvk, Authorization, Bundle, BundleCommitment},
-    circuit::{ProvingKey, VerifyingKey},
-    keys::SpendAuthorizingKey,
-    note::AssetBase,
-    note_encryption::OrchardDomainCommon,
+    circuit::VerifyingKey,
     orchard_flavor::OrchardZSA,
-    primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::redpallas::{self, Binding},
     value::ValueCommitTrapdoor,
     Proof,
 };
@@ -16,108 +13,8 @@ use alloc::vec::Vec;
 
 use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
 use nonempty::NonEmpty;
+use crate::orchard_sighash_versioning::VerSpendAuthSig;
 use crate::primitives::OrchardPrimitives;
-
-/// An action group.
-#[derive(Debug)]
-pub struct ActionGroup<A: Authorization, V> {
-    /// The action group main content.
-    action_group: Bundle<A, V, OrchardZSA>,
-    /// The action group timelimit.
-    timelimit: u32,
-    /// The binding signature key for the action group.
-    ///
-    /// During the building of the action group, this key is not set.
-    /// Once the action group is finalized (it contains a spend authorizing signature for each
-    /// action and a proof), the key is set.
-    bsk: Option<redpallas::SigningKey<Binding>>,
-}
-
-impl<A: Authorization, V> ActionGroup<A, V> {
-    /// Constructs an `ActionGroup` from its constituent parts.
-    pub fn from_parts(
-        action_group: Bundle<A, V, OrchardZSA>,
-        timelimit: u32,
-        bsk: Option<redpallas::SigningKey<Binding>>,
-    ) -> Self {
-        ActionGroup {
-            action_group,
-            timelimit,
-            bsk,
-        }
-    }
-
-    /// Returns the action group's main content.
-    pub fn action_group(&self) -> &Bundle<A, V, OrchardZSA> {
-        &self.action_group
-    }
-
-    /// Returns the action group's timelimit.
-    pub fn timelimit(&self) -> u32 {
-        self.timelimit
-    }
-
-    /// Returns the action group's binding signature key.
-    pub fn bsk(&self) -> Option<&redpallas::SigningKey<Binding>> {
-        self.bsk.as_ref()
-    }
-
-    /// Remove bsk from this action group
-    ///
-    /// When creating a SwapBundle from a list of action groups, we evaluate the binding signature
-    /// by signing the sighash with the sum of the bsk of each action group.
-    /// Then, we remove the bsk of each action group as it is no longer needed.
-    fn remove_bsk(&mut self) {
-        self.bsk = None;
-    }
-}
-
-impl<S: InProgressSignatures, V> ActionGroup<InProgress<Unproven<OrchardZSA>, S>, V> {
-    /// Creates the proof for this action group.
-    pub fn create_proof(
-        self,
-        pk: &ProvingKey,
-        mut rng: impl RngCore,
-    ) -> Result<ActionGroup<InProgress<Proof, S>, V>, BuildError> {
-        let new_action_group = self.action_group.create_proof(pk, &mut rng)?;
-        Ok(ActionGroup {
-            action_group: new_action_group,
-            timelimit: self.timelimit,
-            bsk: self.bsk,
-        })
-    }
-}
-
-impl<V> ActionGroup<InProgress<Proof, Unauthorized>, V> {
-    /// Applies signatures to this action group, in order to authorize it.
-    pub fn apply_signatures<R: RngCore + CryptoRng>(
-        self,
-        mut rng: R,
-        action_group_digest: [u8; 32],
-        signing_keys: &[SpendAuthorizingKey],
-    ) -> Result<ActionGroup<ActionGroupAuthorized, V>, BuildError> {
-        let (bsk, action_group) = signing_keys
-            .iter()
-            .fold(
-                self.action_group
-                    .prepare_for_action_group(&mut rng, action_group_digest),
-                |partial, ask| partial.sign(&mut rng, ask),
-            )
-            .finalize()?;
-        Ok(ActionGroup {
-            action_group,
-            timelimit: self.timelimit,
-            bsk: Some(bsk),
-        })
-    }
-}
-
-impl<A: Authorization, V: Copy + Into<i64>> ActionGroup<A, V> {
-    /// Computes a commitment to the content of this action group.
-    pub fn commitment(&self) -> BundleCommitment {
-        BundleCommitment(hash_action_group(self))
-    }
-}
 
 /// A swap bundle to be applied to the ledger.
 #[derive(Debug, Clone)]
@@ -189,7 +86,7 @@ pub struct ActionGroupAuthorized {
 }
 
 impl Authorization for ActionGroupAuthorized {
-    type SpendAuth = redpallas::Signature<SpendAuth>;
+    type SpendAuth = VerSpendAuthSig;
 
     /// Return the proof component of the authorizing data.
     fn proof(&self) -> Option<&Proof> {
