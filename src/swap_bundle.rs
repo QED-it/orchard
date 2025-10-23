@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 
 use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
 use nonempty::NonEmpty;
-use crate::orchard_sighash_versioning::VerSpendAuthSig;
+use crate::orchard_sighash_versioning::{VerBindingSig, VerSpendAuthSig};
 use crate::primitives::OrchardPrimitives;
 
 /// A swap bundle to be applied to the ledger.
@@ -26,7 +26,7 @@ pub struct SwapBundle<V> {
     /// This is the sum of Orchard spends minus the sum of Orchard outputs.
     value_balance: V,
     /// The binding signature for this swap.
-    binding_signature: redpallas::Signature<Binding>,
+    binding_signature: VerBindingSig,
 }
 
 impl<V> SwapBundle<V> {
@@ -34,7 +34,7 @@ impl<V> SwapBundle<V> {
     pub fn from_parts(
         action_groups: Vec<Bundle<ActionGroupAuthorized, V, OrchardZSA>>,
         value_balance: V,
-        binding_signature: redpallas::Signature<Binding>,
+        binding_signature: VerBindingSig,
     ) -> Self {
         SwapBundle {
             action_groups,
@@ -69,7 +69,7 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
         .into();
         // Evaluate the swap binding signature which is equal to the signature of the swap sigash
         // with the swap binding signature key bsk.
-        let binding_signature = bsk.sign(rng, &sighash);
+        let binding_signature = VerBindingSig::new(OrchardZSA::default_sighash_version(),bsk.sign(rng, &sighash));
         // Create the swap bundle
         SwapBundle {
             action_groups,
@@ -118,7 +118,7 @@ impl<V> SwapBundle<V> {
     }
 
     /// Returns the binding signature of this swap bundle.
-    pub fn binding_signature(&self) -> &redpallas::Signature<Binding> {
+    pub fn binding_signature(&self) -> &VerBindingSig {
         &self.binding_signature
     }
 

@@ -56,7 +56,7 @@ pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>
     let sighash: [u8; 32] = swap_bundle.commitment().into();
     let bvk = swap_bundle.binding_validating_key();
     assert_eq!(
-        bvk.verify(&sighash, swap_bundle.binding_signature()),
+        bvk.verify(&sighash, swap_bundle.binding_signature().sig()),
         Ok(())
     );
 }
