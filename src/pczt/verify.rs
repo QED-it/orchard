@@ -76,16 +76,19 @@ impl super::Spend {
     ) -> Result<(), VerifyError> {
         let fvk = self.fvk_for_validation(expected_fvk)?;
 
-        let note = Note::from_parts_with_rseed_split_note(
+        let mut note = Note::from_parts(
             self.recipient.ok_or(VerifyError::MissingRecipient)?,
             self.value.ok_or(VerifyError::MissingValue)?,
             self.asset.ok_or(VerifyError::MissingAsset)?,
             self.rho.ok_or(VerifyError::MissingRho)?,
             self.rseed.ok_or(VerifyError::MissingRandomSeed)?,
-            self.rseed_split_note,
         )
         .into_option()
         .ok_or(VerifyError::InvalidSpendNote)?;
+
+        if let Some(rseed) = self.rseed_split_note {
+            note.set_rseed_split_note(rseed);
+        }
 
         // We need both the note and the FVK to verify the nullifier; we have everything
         // needed to also verify that the correct FVK was provided (the nullifier check
