@@ -345,6 +345,7 @@ mod tests {
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
+        orchard_flavor::OrchardVanilla,
         pczt::Zip32Derivation,
         tree::{MerkleHashOrchard, EMPTY_ROOTS},
         value::NoteValue,
@@ -353,7 +354,7 @@ mod tests {
 
     #[test]
     fn shielding_bundle() {
-        let pk = ProvingKey::build();
+        let pk = ProvingKey::build::<OrchardVanilla>();
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -395,7 +396,7 @@ mod tests {
 
     #[test]
     fn shielded_bundle() {
-        let pk = ProvingKey::build();
+        let pk = ProvingKey::build::<OrchardVanilla>();
         let mut rng = OsRng;
 
         // Pretend we derived the spending key via ZIP 32.
