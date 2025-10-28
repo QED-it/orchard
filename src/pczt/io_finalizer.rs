@@ -3,8 +3,9 @@ use alloc::vec::Vec;
 use rand::{CryptoRng, RngCore};
 
 use crate::{
-    bundle::derive_bvk_raw, keys::SpendAuthorizingKey, primitives::redpallas,
-    value::ValueCommitTrapdoor,
+    keys::SpendAuthorizingKey,
+    primitives::redpallas,
+    value::{ValueCommitTrapdoor, ValueCommitment},
 };
 
 use super::SignerError;
@@ -29,15 +30,13 @@ impl super::Bundle {
         let bsk = rcvs.into_iter().sum::<ValueCommitTrapdoor>().into_bsk();
 
         // Verify that bsk and bvk are consistent.
-        let bvk = derive_bvk_raw(
-            &self
-                .actions
-                .iter()
-                .map(|a| a.cv_net().clone())
-                .collect::<Vec<_>>(),
-            self.value_sum,
-            &self.burn,
-        );
+        let bvk = (self
+            .actions
+            .iter()
+            .map(|a| a.cv_net())
+            .sum::<ValueCommitment>()
+            - ValueCommitment::derive(self.value_sum, ValueCommitTrapdoor::zero()))
+        .into_bvk();
         if redpallas::VerificationKey::from(&bsk) != bvk {
             return Err(IoFinalizerError::ValueCommitMismatch);
         }
