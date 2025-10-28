@@ -351,6 +351,9 @@ impl SpendInfo {
     }
 
     fn into_pczt(self, rng: impl RngCore) -> crate::pczt::Spend {
+        assert!(!self.split_flag);
+        assert_eq!(self.note.asset(), AssetBase::native());
+
         let (nf_old, _, alpha, rk) = self.build(rng);
 
         crate::pczt::Spend {
@@ -442,6 +445,8 @@ impl OutputInfo {
         nf_old: Nullifier,
         rng: impl RngCore,
     ) -> crate::pczt::Output {
+        assert_eq!(self.asset, AssetBase::native());
+
         let (note, cmx, encrypted_note) = self.build::<OrchardVanilla>(cv_net, nf_old, rng);
 
         crate::pczt::Output {
