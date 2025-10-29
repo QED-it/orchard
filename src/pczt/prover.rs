@@ -5,15 +5,14 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     builder::SpendInfo,
-    circuit::{Circuit, Instance, ProvingKey, Witnesses},
-    note::{AssetBase, Rho},
-    orchard_flavor::OrchardVanilla,
+    circuit::{Circuit, Instance, OrchardCircuit, ProvingKey, Witnesses},
+    note::Rho,
     Note, Proof,
 };
 
 impl super::Bundle {
     /// Adds a proof to this PCZT bundle.
-    pub fn create_proof<R: RngCore + CryptoRng>(
+    pub fn create_proof<C: OrchardCircuit, R: RngCore + CryptoRng>(
         &mut self,
         pk: &ProvingKey,
         rng: R,
@@ -35,18 +34,24 @@ impl super::Bundle {
                     .clone()
                     .ok_or(ProverError::MissingFullViewingKey)?;
 
-                let note = Note::from_parts(
+                let asset = action.spend.asset.ok_or(ProverError::MissingAsset)?;
+
+                let mut note = Note::from_parts(
                     action
                         .spend
                         .recipient
                         .ok_or(ProverError::MissingRecipient)?,
                     action.spend.value.ok_or(ProverError::MissingValue)?,
-                    AssetBase::native(),
+                    asset,
                     action.spend.rho.ok_or(ProverError::MissingRho)?,
                     action.spend.rseed.ok_or(ProverError::MissingRandomSeed)?,
                 )
                 .into_option()
                 .ok_or(ProverError::InvalidSpendNote)?;
+
+                if let Some(rseed) = action.spend.rseed_split_note {
+                    note.set_rseed_split_note(rseed);
+                }
 
                 let merkle_path = action
                     .spend
@@ -54,8 +59,16 @@ impl super::Bundle {
                     .clone()
                     .ok_or(ProverError::MissingWitness)?;
 
-                let spend = SpendInfo::new(fvk, note, merkle_path, false)
-                    .ok_or(ProverError::WrongFvkForNote)?;
+                let spend = SpendInfo::new(
+                    fvk,
+                    note,
+                    merkle_path,
+                    action
+                        .spend
+                        .split_flag
+                        .ok_or(ProverError::MissingSplitFlag)?,
+                )
+                .ok_or(ProverError::WrongFvkForNote)?;
 
                 let output_note = Note::from_parts(
                     action
@@ -63,7 +76,7 @@ impl super::Bundle {
                         .recipient
                         .ok_or(ProverError::MissingRecipient)?,
                     action.output.value.ok_or(ProverError::MissingValue)?,
-                    AssetBase::native(),
+                    asset,
                     Rho::from_nf_old(action.spend.nullifier),
                     action.output.rseed.ok_or(ProverError::MissingRandomSeed)?,
                 )
@@ -76,9 +89,9 @@ impl super::Bundle {
                     .ok_or(ProverError::MissingSpendAuthRandomizer)?;
                 let rcv = action.rcv.ok_or(ProverError::MissingValueCommitTrapdoor)?;
 
-                Witnesses::from_action_context::<OrchardVanilla>(spend, output_note, alpha, rcv)
+                Witnesses::from_action_context::<C>(spend, output_note, alpha, rcv)
                     .ok_or(ProverError::RhoMismatch)
-                    .map(|witnesses| Circuit::<OrchardVanilla> {
+                    .map(|witnesses| Circuit::<C> {
                         witnesses,
                         phantom: core::marker::PhantomData,
                     })
@@ -128,10 +141,14 @@ pub enum ProverError {
     MissingSpendAuthRandomizer,
     /// The Prover role requires all `value` fields to be set.
     MissingValue,
+    /// The Prover role requires all `asset` fields to be set.
+    MissingAsset,
     /// The Prover role requires `rcv` to be set.
     MissingValueCommitTrapdoor,
     /// The Prover role requires `witness` to be set.
     MissingWitness,
+    /// The Prover role requires `split_flag` to be set.
+    MissingSplitFlag,
     /// An error occurred while creating the proof.
     ProofFailed(plonk::Error),
     /// The `rho` of the `output_note` is not equal to the nullifier of the spent note.
