@@ -148,10 +148,16 @@ impl<V: Copy + Into<i64>> SwapBundle<V> {
             .flat_map(|ag| ag.actions().iter().cloned())
             .collect::<Vec<_>>();
 
+        let burn = self
+            .action_groups
+            .iter()
+            .flat_map(|ag| ag.burn().iter().cloned())
+            .collect::<Vec<_>>();
+
         derive_bvk(
             &NonEmpty::from_vec(actions).expect("SwapBundle must have at least one action"),
             self.value_balance,
-            &[],
+            &burn,
         )
     }
 }
