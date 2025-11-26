@@ -595,66 +595,18 @@ impl IssueBundle<Signed> {
     }
 }
 
-/// Validates an [`IssueBundle`] by performing the following checks:
+/// Validates an [`IssueBundle`] without signature verification.
 ///
-/// - **IssueBundle Auth signature verification**:
-///   - Ensure that the `SighashVersion` in the versioned signature matches `SIGHASH_V0`.
-///   - Ensures the signature on the provided `sighash` matches the bundle's authorization.
-/// - **Static IssueAction verification**:
-///   - Runs checks using the `IssueAction::verify` method.
-/// - **Node global state related verification**:
-///   - Ensures the total supply value does not overflow when adding the new amount to the existing supply.
-///   - Verifies that the `AssetBase` has not already been finalized.
-///   - Requires a reference note for the *first issuance* of an asset; subsequent issuance may omit it.
-/// - **Rho computation**:
-///   - Ensures that the `rho` value of each issuance note is correctly computed from the given
-///     `first_nullifier`.
+/// Performs the same validation as [`verify_issue_bundle`] except skips the signature check.
+/// Use when signatures are already known to be valid (e.g., verifying historical blocks
+/// from a trusted checkpoint).
 ///
-/// # Arguments
-///
-/// * `bundle`: A reference to the [`IssueBundle`] to be validated.
-/// * `sighash`: A 32-byte array representing the `sighash` used to verify the bundle's signature.
-/// * `get_global_asset_state`: A closure that takes a reference to an [`AssetBase`] and returns an
-///   [`Option<AssetRecord>`], representing the current state of the asset from a global store
-///   of previously issued assets.
-/// * `first_nullifier`: A reference to a [`Nullifier`] that is used to compute the `rho` value of
-///   each issuance note.
-///
-/// # Returns
-///
-/// A `Result` containing a [`BTreeMap<AssetBase, AssetRecord>`] upon success, where each key-value
-/// pair represents the new or updated state of an asset. The key is an [`AssetBase`], and the value
-/// is the corresponding updated [`AssetRecord`].
-///
-/// # Errors
-///
-/// * `InvalidSighashVersion`: The `SighashVersion` in the signature does not match
-///   `IssueSighashVersion::V0`.
-/// * `IssueBundleInvalidSignature`: Signature verification for the provided `sighash` fails.
-/// * `ValueOverflow`: adding the new amount to the existing total supply causes an overflow.
-/// * `IssueActionPreviouslyFinalizedAssetBase`: An action is attempted on an asset that has
-///   already been finalized.
-/// * `MissingReferenceNoteOnFirstIssuance`: No reference note is provided for the first
-///   issuance of a new asset.
-/// * `IncorrectRhoDerivation`: If the `rho` value of any issuance note is not correctly derived
-///   from the `first_nullifier`.
-/// * **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
-///   propagated
-pub fn verify_issue_bundle(
+/// See [`verify_issue_bundle`] for full documentation of validation rules and errors.
+pub fn verify_trusted_issue_bundle(
     bundle: &IssueBundle<Signed>,
-    sighash: [u8; 32],
-    get_global_records: impl Fn(&AssetBase) -> Option<AssetRecord>,
+    mut get_global_records: impl FnMut(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
-    if bundle.authorization().signature().version() != &IssueSighashVersion::V0 {
-        return Err(InvalidSighashVersion);
-    }
-
-    bundle
-        .ik()
-        .verify(&sighash, bundle.authorization().signature().sig())
-        .map_err(|_| InvalidIssueBundleSig)?;
-
     bundle.actions().iter().enumerate().try_fold(
         BTreeMap::new(),
         |mut new_records, (index_action, action)| {
@@ -703,6 +655,71 @@ pub fn verify_issue_bundle(
     )
 }
 
+/// Validates an [`IssueBundle`] by performing the following checks:
+///
+/// - **IssueBundle Auth signature verification**:
+///   - Ensure that the `SighashVersion` in the versioned signature matches `SIGHASH_V0`.
+///   - Ensures the signature on the provided `sighash` matches the bundle's authorization.
+/// - **Static IssueAction verification**:
+///   - Runs checks using the `IssueAction::verify` method.
+/// - **Node global state related verification**:
+///   - Ensures the total supply value does not overflow when adding the new amount to the existing supply.
+///   - Verifies that the `AssetBase` has not already been finalized.
+///   - Requires a reference note for the *first issuance* of an asset; subsequent issuance may omit it.
+/// - **Rho computation**:
+///   - Ensures that the `rho` value of each issuance note is correctly computed from the given
+///     `first_nullifier`.
+///
+/// # Arguments
+///
+/// * `bundle`: A reference to the [`IssueBundle`] to be validated.
+/// * `sighash`: A 32-byte array representing the `sighash` used to verify the bundle's signature.
+/// * `get_global_asset_state`: A closure that takes a reference to an [`AssetBase`] and returns an
+///   [`Option<AssetRecord>`], representing the current state of the asset from a global store
+///   of previously issued assets.
+/// * `first_nullifier`: A reference to a [`Nullifier`] that is used to compute the `rho` value of
+///   each issuance note.
+///
+/// # Returns
+///
+/// A `Result` containing a [`BTreeMap<AssetBase, AssetRecord>`] upon success, where each key-value
+/// pair represents the new or updated state of an asset. The key is an [`AssetBase`], and the value
+/// is the corresponding updated [`AssetRecord`].
+///
+/// # Errors
+///
+/// * `InvalidSighashVersion`: The `SighashVersion` in the signature does not match
+///   `IssueSighashVersion::V0`.
+/// * `IssueBundleInvalidSignature`: Signature verification for the provided `sighash` fails.
+/// * `ValueOverflow`: adding the new amount to the existing total supply causes an overflow.
+/// * `IssueActionPreviouslyFinalizedAssetBase`: An action is attempted on an asset that has
+///   already been finalized.
+/// * `MissingReferenceNoteOnFirstIssuance`: No reference note is provided for the first
+///   issuance of a new asset.
+/// * `IncorrectRhoDerivation`: If the `rho` value of any issuance note is not correctly derived
+///   from the `first_nullifier`.
+/// * **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
+///   propagated
+pub fn verify_issue_bundle(
+    bundle: &IssueBundle<Signed>,
+    sighash: [u8; 32],
+    get_global_records: impl FnMut(&AssetBase) -> Option<AssetRecord>,
+    first_nullifier: &Nullifier,
+) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
+    if bundle.authorization().signature().version() != &IssueSighashVersion::V0 {
+        return Err(InvalidSighashVersion);
+    }
+
+    bundle
+        .ik()
+        .verify(&sighash, bundle.authorization().signature().sig())
+        .map_err(|_| InvalidIssueBundleSig)?;
+
+    verify_trusted_issue_bundle(bundle, get_global_records, first_nullifier)
+}
+
+// FIXME: move it and add tests ...
+
 /// Represents aggregated information about an asset, including its supply, finalization status,
 /// and reference note.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -729,7 +746,7 @@ impl AssetRecord {
 }
 
 /// Errors produced during the issuance process
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     /// The requested IssueAction not exists in the bundle.
     IssueActionNotFound,
