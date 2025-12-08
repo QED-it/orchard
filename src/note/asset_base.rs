@@ -13,7 +13,10 @@ use crate::{
     constants::fixed_bases::{
         NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
     },
-    issuance::{compute_asset_desc_hash,auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr}},
+    issuance::{
+        auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
+        compute_asset_desc_hash,
+    },
 };
 
 /// Note type identifier.

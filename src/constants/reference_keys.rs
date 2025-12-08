@@ -41,7 +41,7 @@ impl ReferenceKeys {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keys::{FullViewingKey, Scope};
+    use crate::keys::Scope;
 
     #[test]
     fn recipient() {

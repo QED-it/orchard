@@ -21,9 +21,9 @@ use crate::{
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     orchard_flavor::OrchardVanilla,
-    sighash_versioning::{VerBindingSig, VerSpendAuthSig},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
+    sighash_versioning::{VerBindingSig, VerSpendAuthSig},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -515,7 +515,7 @@ impl ActionInfo {
         );
 
         let v_net = self.value_sum();
-        let cv_net = ValueCommitment::derive(v_net, self.rcv, self.output.asset);
+        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.output.asset);
 
         let (nf_old, ak, alpha, rk) = self.spend.build(&mut rng);
         let (note, cmx, encrypted_note) = self.output.build(&cv_net, nf_old, &mut rng);
@@ -543,7 +543,7 @@ impl ActionInfo {
             "spend and recipient note types must be equal"
         );
         let v_net = self.value_sum();
-        let cv_net = ValueCommitment::derive(v_net, self.rcv, self.spend.note.asset());
+        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.spend.note.asset());
 
         let spend = self.spend.into_pczt(&mut rng);
         let output = self.output.into_pczt(&cv_net, spend.nullifier, &mut rng);

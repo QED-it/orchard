@@ -17,7 +17,6 @@ use crate::{
     },
     note::{AssetBase, Note},
     orchard_flavor::OrchardVanilla,
-    sighash_versioning::OrchardSighashVersion,
     primitives::{
         orchard_primitives::OrchardPrimitives,
         zcash_note_encryption_domain::{
@@ -25,6 +24,7 @@ use crate::{
             NOTE_VERSION_BYTE_V2,
         },
     },
+    sighash_versioning::OrchardSighashVersion,
     Bundle,
 };
 

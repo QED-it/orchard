@@ -66,7 +66,10 @@ impl fmt::Display for BurnError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{issuance::{compute_asset_desc_hash, auth::ZSASchnorr}, value::NoteValue};
+    use crate::{
+        issuance::{auth::ZSASchnorr, compute_asset_desc_hash},
+        value::NoteValue,
+    };
     use nonempty::NonEmpty;
 
     /// Creates an item of bundle burn list for a given asset description hash and value.

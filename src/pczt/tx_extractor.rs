@@ -5,8 +5,8 @@ use super::Action;
 use crate::{
     bundle::{Authorization, Authorized, EffectsOnly},
     orchard_flavor::OrchardVanilla,
-    sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
     primitives::redpallas::{self, Binding, SpendAuth},
+    sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
     Proof,
 };
 

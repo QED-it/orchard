@@ -845,10 +845,14 @@ mod tests {
             IncorrectRhoDerivation, InvalidIssueBundleSig, IssueActionNotFound,
             IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         },
-        issuance::{{
-            compute_asset_desc_hash, is_reference_note, verify_issue_bundle, AssetRecord,
-            IssueAction, IssueBundle, IssueInfo, Signed,
-        },auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},sighash_versioning::{IssueSighashVersion, VerBIP340IssueAuthSig}},
+        issuance::{
+            auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
+            sighash_versioning::{IssueSighashVersion, VerBIP340IssueAuthSig},
+            {
+                compute_asset_desc_hash, is_reference_note, verify_issue_bundle, AssetRecord,
+                IssueAction, IssueBundle, IssueInfo, Signed,
+            },
+        },
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
         orchard_flavor::OrchardZSA,
@@ -1977,13 +1981,17 @@ mod tests {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use crate::{
-        issuance::{{
-            AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed, VerBIP340IssueAuthSig,
-        },auth::{
-            testing::arb_issuance_validating_key, IssueAuthSig, IssueAuthSigScheme,
-            IssueValidatingKey, ZSASchnorr,
+        issuance::{
+            auth::{
+                testing::arb_issuance_validating_key, IssueAuthSig, IssueAuthSigScheme,
+                IssueValidatingKey, ZSASchnorr,
+            },
+            sighash_versioning::IssueSighashVersion,
+            {
+                AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed,
+                VerBIP340IssueAuthSig,
+            },
         },
-        sighash_versioning::IssueSighashVersion},
         note::testing::arb_zsa_note,
     };
     use nonempty::NonEmpty;
