@@ -32,13 +32,12 @@ pub mod bundle;
 #[cfg(feature = "circuit")]
 pub mod circuit;
 mod constants;
+#[cfg(feature = "circuit")]
 pub mod issuance;
-pub mod issuance_auth;
-pub mod issuance_sighash_versioning;
 pub mod keys;
 pub mod note;
 pub mod orchard_flavor;
-pub mod orchard_sighash_versioning;
+pub mod sighash_versioning;
 pub mod pczt;
 pub mod primitives;
 mod spec;
@@ -52,12 +51,8 @@ mod test_vectors;
 pub use action::Action;
 pub use address::Address;
 pub use bundle::Bundle;
-pub use constants::reference_keys::ReferenceKeys;
 pub use constants::MERKLE_DEPTH_ORCHARD as NOTE_COMMITMENT_TREE_DEPTH;
-pub use note::{
-    commitment::{ExtractedNoteCommitment, NoteCommitment},
-    Note,
-};
+pub use note::Note;
 pub use tree::Anchor;
 
 /// A proof of the validity of an Orchard [`Bundle`].

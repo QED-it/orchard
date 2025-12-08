@@ -30,9 +30,6 @@ we do not verify that the corresponding spent note commitment is part of the Mer
 
 ## Split notes for OrchardZSA
 
-For OrchardZSA, if the number of inputs exceeds the number of outputs,
-we use dummy output notes (as in Orchard) to fill all actions.
-Conversely, if the number of outputs exceeds the number of inputs, we use split notes to fill the actions.
 In OrchardZSA, ensuring that the AssetBase is correctly created is crucial.
 For this reason, split notes are used instead of dummy spent notes.
 Split notes are essentially duplicates of actual spent notes,

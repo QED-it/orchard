@@ -26,7 +26,7 @@ use crate::{
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    orchard_sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
+    sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
     primitives::redpallas::{self, Binding},
     primitives::{OrchardDomain, OrchardPrimitives},
     tree::Anchor,
@@ -632,7 +632,7 @@ pub mod testing {
 
     use crate::{
         note::{asset_base::testing::arb_zsa_asset_base, AssetBase},
-        orchard_sighash_versioning::{VerBindingSig, VerSpendAuthSig},
+        sighash_versioning::{VerBindingSig, VerSpendAuthSig},
         primitives::{redpallas::testing::arb_binding_signing_key, OrchardPrimitives},
         value::{
             testing::{arb_note_value, arb_note_value_bounded},

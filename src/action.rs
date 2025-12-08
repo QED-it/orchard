@@ -2,7 +2,7 @@ use memuse::DynamicUsage;
 
 use crate::{
     note::{ExtractedNoteCommitment, Nullifier, Rho, TransmittedNoteCiphertext},
-    orchard_sighash_versioning::VerSpendAuthSig,
+    sighash_versioning::VerSpendAuthSig,
     primitives::redpallas::{self, SpendAuth},
     primitives::OrchardPrimitives,
     value::ValueCommitment,
@@ -136,7 +136,7 @@ pub(crate) mod testing {
             asset_base::testing::arb_asset_base, commitment::ExtractedNoteCommitment,
             nullifier::testing::arb_nullifier, testing::arb_note, Note, TransmittedNoteCiphertext,
         },
-        orchard_sighash_versioning::VerSpendAuthSig,
+        sighash_versioning::VerSpendAuthSig,
         primitives::redpallas::{
             self,
             testing::{arb_spendauth_signing_key, arb_spendauth_verification_key},

@@ -13,8 +13,7 @@ use crate::{
     constants::fixed_bases::{
         NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION, ZSA_ASSET_BASE_PERSONALIZATION,
     },
-    issuance::compute_asset_desc_hash,
-    issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
+    issuance::{compute_asset_desc_hash,auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr}},
 };
 
 /// Note type identifier.
@@ -164,7 +163,7 @@ pub mod testing {
 
     use proptest::prelude::*;
 
-    use crate::issuance_auth::{
+    use crate::issuance::auth::{
         testing::arb_issuance_authorizing_key, IssueValidatingKey, ZSASchnorr,
     };
 
@@ -206,7 +205,7 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use crate::{
-        issuance_auth::{IssueValidatingKey, ZSASchnorr},
+        issuance::auth::{IssueValidatingKey, ZSASchnorr},
         note::AssetBase,
     };
 

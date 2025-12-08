@@ -429,7 +429,7 @@ pub mod testing {
 
     use crate::{
         address::testing::arb_address,
-        issuance_auth::{IssueValidatingKey, ZSASchnorr},
+        issuance::auth::{IssueValidatingKey, ZSASchnorr},
         note::{asset_base::testing::arb_asset_base, nullifier::testing::arb_nullifier, AssetBase},
         value::{testing::arb_note_value, NoteValue},
     };

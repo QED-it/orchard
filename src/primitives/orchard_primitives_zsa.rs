@@ -21,7 +21,7 @@ use crate::{
     },
     note::{AssetBase, Note},
     orchard_flavor::OrchardZSA,
-    orchard_sighash_versioning::OrchardSighashVersion,
+    sighash_versioning::OrchardSighashVersion,
     primitives::{
         orchard_primitives::OrchardPrimitives,
         zcash_note_encryption_domain::{

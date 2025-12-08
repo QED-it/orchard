@@ -10,7 +10,7 @@ use zcash_note_encryption::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
 use crate::{
     bundle::{Authorization, Authorized},
     note::AssetBase,
-    orchard_sighash_versioning::OrchardSighashVersion,
+    sighash_versioning::OrchardSighashVersion,
     primitives::zcash_note_encryption_domain::{Memo, MEMO_SIZE},
     Bundle, Note,
 };

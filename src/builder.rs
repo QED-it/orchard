@@ -21,7 +21,7 @@ use crate::{
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     orchard_flavor::OrchardVanilla,
-    orchard_sighash_versioning::{VerBindingSig, VerSpendAuthSig},
+    sighash_versioning::{VerBindingSig, VerSpendAuthSig},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
     tree::{Anchor, MerklePath},
