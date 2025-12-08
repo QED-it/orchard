@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use orchard::{
-    builder::{Builder, BundleType},
+    builder::Builder,
     circuit::ProvingKey,
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
@@ -51,7 +51,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
 
     let bundle = {
         let mut builder = Builder::new(
-            BundleType::DEFAULT_VANILLA,
+            FL::DEFAULT_BUNDLE_TYPE,
             Anchor::from_bytes([0; 32]).unwrap(),
         );
         // The builder pads to two actions, and shuffles their order. Add two recipients

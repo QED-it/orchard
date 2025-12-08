@@ -8,10 +8,10 @@ use orchard::{
     bundle::Authorized,
     circuit::{ProvingKey, VerifyingKey},
     issuance::{
+        auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
         compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo,
         Signed,
     },
-    issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, Nullifier},
     orchard_flavor::OrchardZSA,
