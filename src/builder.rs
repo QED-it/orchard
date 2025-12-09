@@ -859,7 +859,7 @@ impl Builder {
             self.burn,
             false,
             Some(self.reference_notes),
-            |pre_actions, flags, value_sum, burn_vec, bundle_meta, mut rng| {
+            |pre_actions, flags, value_sum, _burn_vec, bundle_meta, mut rng| {
                 // Create the actions.
                 let actions = pre_actions
                     .into_iter()

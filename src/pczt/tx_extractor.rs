@@ -96,7 +96,7 @@ impl super::Bundle {
                 value_balance,
                 vec![], //No burn in PCZT V1
                 self.anchor,
-                self.expiry_height,
+                0, // No expiry height in PCZT V1
                 authorization,
             ))
         } else {
