@@ -21,6 +21,7 @@ use crate::{
         SpendingKey,
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
+    orchard_flavor::OrchardVanilla,
     orchard_sighash_versioning::{VerBindingSig, VerSpendAuthSig},
     primitives::redpallas::{self, Binding, SpendAuth},
     swap_bundle::ActionGroupAuthorized,
@@ -365,6 +366,9 @@ impl SpendInfo {
     }
 
     fn into_pczt(self, rng: impl RngCore) -> crate::pczt::Spend {
+        assert!(!self.split_flag);
+        assert_eq!(self.note.asset(), AssetBase::native());
+
         let (nf_old, _, alpha, rk) = self.build(rng);
 
         crate::pczt::Spend {
@@ -373,14 +377,11 @@ impl SpendInfo {
             spend_auth_sig: None,
             recipient: Some(self.note.recipient()),
             value: Some(self.note.value()),
-            asset: Some(self.note.asset()),
             rho: Some(self.note.rho()),
             rseed: Some(*self.note.rseed()),
-            rseed_split_note: self.note.rseed_split_note().into(),
             fvk: Some(self.fvk),
             witness: Some(self.merkle_path),
             alpha: Some(alpha),
-            split_flag: Some(self.split_flag),
             zip32_derivation: None,
             dummy_sk: self.dummy_sk,
             proprietary: BTreeMap::new(),
@@ -453,17 +454,19 @@ impl OutputInfo {
         (note, cmx, encrypted_note)
     }
 
-    fn into_pczt<P: OrchardPrimitives>(
+    fn into_pczt(
         self,
         cv_net: &ValueCommitment,
         nf_old: Nullifier,
         rng: impl RngCore,
     ) -> crate::pczt::Output {
-        let (note, cmx, encrypted_note) = self.build::<P>(cv_net, nf_old, rng);
+        assert_eq!(self.asset, AssetBase::native());
+
+        let (note, cmx, encrypted_note) = self.build::<OrchardVanilla>(cv_net, nf_old, rng);
 
         crate::pczt::Output {
             cmx,
-            encrypted_note: encrypted_note.into(),
+            encrypted_note,
             recipient: Some(self.recipient),
             value: Some(self.value),
             rseed: Some(*note.rseed()),
@@ -548,7 +551,7 @@ impl ActionInfo {
         )
     }
 
-    fn build_for_pczt<P: OrchardPrimitives>(self, mut rng: impl RngCore) -> crate::pczt::Action {
+    fn build_for_pczt(self, mut rng: impl RngCore) -> crate::pczt::Action {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -558,9 +561,7 @@ impl ActionInfo {
         let cv_net = ValueCommitment::derive(v_net, self.rcv, self.spend.note.asset());
 
         let spend = self.spend.into_pczt(&mut rng);
-        let output = self
-            .output
-            .into_pczt::<P>(&cv_net, spend.nullifier, &mut rng);
+        let output = self.output.into_pczt(&cv_net, spend.nullifier, &mut rng);
 
         crate::pczt::Action {
             cv_net,
@@ -845,7 +846,7 @@ impl Builder {
 
     /// Builds a bundle containing the given spent notes and outputs along with their
     /// metadata, for inclusion in a PCZT.
-    pub fn build_for_pczt<P: OrchardPrimitives>(
+    pub fn build_for_pczt(
         self,
         rng: impl RngCore,
     ) -> Result<(crate::pczt::Bundle, BundleMetadata), BuildError> {
@@ -862,7 +863,7 @@ impl Builder {
                 // Create the actions.
                 let actions = pre_actions
                     .into_iter()
-                    .map(|a| a.build_for_pczt::<P>(&mut rng))
+                    .map(|a| a.build_for_pczt(&mut rng))
                     .collect::<Vec<_>>();
 
                 Ok((
@@ -871,8 +872,6 @@ impl Builder {
                         flags,
                         value_sum,
                         anchor: self.anchor,
-                        burn: burn_vec,
-                        expiry_height: 0,
                         zkproof: None,
                         bsk: None,
                     },
@@ -888,18 +887,18 @@ impl Builder {
 /// The index is used to track the position of the note in the bundle.
 type MetadataIdx = Option<usize>;
 
-/// Partition a list of spends and outputs by note types.
+/// Partitions the provided spends and outputs by asset.
 ///
-/// Normally, spends and outputs are used as provided. However, in the special cases where:
-/// - both spends and outputs are empty, or
-/// - only native assets are present and there are not enough spends or outputs,
-/// this method adds dummy spends and outputs until the minimum number of actions is reached.
-/// Dummy spends and outputs are added before shuffling to ensure backward compatibility.
+/// Groups the input `spends` and `outputs` by their `AssetBase` and returns a
+/// `BTreeMap` from asset to the corresponding vectors of items, each tagged with
+/// its original index within the input slices.
+///
+/// - Key: `AssetBase` for the note.
+/// - Value: a pair of vectors `(Vec<(SpendInfo, MetadataIdx)>, Vec<(OutputInfo, MetadataIdx)>)`.
 #[allow(clippy::type_complexity)]
 fn partition_by_asset(
     spends: &[SpendInfo],
     outputs: &[OutputInfo],
-    rng: &mut impl RngCore,
 ) -> BTreeMap<
     AssetBase,
     (
@@ -921,40 +920,6 @@ fn partition_by_asset(
             .or_insert((vec![], vec![]))
             .1
             .push((o.clone(), Some(i)));
-    }
-
-    // To ensure backward compatibility, if
-    // - both spends and outputs are empty, or
-    // - only native assets are present and there are not enough spends or outputs,
-    // this method adds dummy spends and outputs until the minimum number of actions is reached.
-    // Dummy spends and outputs are added before shuffling.
-    if hm.is_empty() {
-        // dummy_spend should not be included in the indexing and marked as None.
-        hm.insert(
-            AssetBase::native(),
-            (
-                vec![(SpendInfo::dummy(AssetBase::native(), rng), None)],
-                vec![],
-            ),
-        );
-    }
-    if hm.len() == 1 {
-        // All spends and outputs have the same asset.
-        if let Some((spends, outputs)) = hm.get_mut(&AssetBase::native()) {
-            // This asset is the native asset.
-            // So, we have to add dummy spends and outputs until the minimum number of actions is reached.
-            let pad_spends = MIN_ACTIONS.saturating_sub(spends.len());
-            let pad_outputs = MIN_ACTIONS.saturating_sub(outputs.len());
-
-            spends.extend(
-                iter::repeat_with(|| (SpendInfo::dummy(AssetBase::native(), rng), None))
-                    .take(pad_spends),
-            );
-            outputs.extend(
-                iter::repeat_with(|| (OutputInfo::dummy(rng, AssetBase::native()), None))
-                    .take(pad_outputs),
-            );
-        }
     }
 
     hm
@@ -1094,7 +1059,7 @@ fn build_bundle<B, R: RngCore>(
         let mut indexed_spends_outputs =
             Vec::with_capacity(spends.len().max(outputs.len()).max(MIN_ACTIONS));
 
-        let spends_outputs_by_asset = partition_by_asset(&spends, &outputs, &mut rng);
+        let spends_outputs_by_asset = partition_by_asset(&spends, &outputs);
 
         indexed_spends_outputs.extend(spends_outputs_by_asset.into_iter().flat_map(
             |(asset, (spends, outputs))| {
@@ -1129,9 +1094,8 @@ fn build_bundle<B, R: RngCore>(
                     .take(num_asset_pre_actions)
                     .collect::<Vec<_>>();
 
-                // Shuffle the spends and outputs, so that learning the position of a
-                // specific spent note or output note doesn't reveal anything on its own about
-                // the meaning of that note in the transaction context.
+                // Shuffle the spends and outputs, so that the position does not reveal any
+                // information about the content.
                 indexed_spends.shuffle(&mut rng);
                 indexed_outputs.shuffle(&mut rng);
 
@@ -1150,6 +1114,10 @@ fn build_bundle<B, R: RngCore>(
             })
             .take(MIN_ACTIONS.saturating_sub(indexed_spends_outputs.len())),
         );
+
+        // Shuffle the spends and outputs, so that the position does not reveal any information
+        // about the content.
+        indexed_spends_outputs.shuffle(&mut rng);
 
         let mut bundle_meta = BundleMetadata::new(num_requested_spends, num_requested_outputs);
         let pre_actions = indexed_spends_outputs
