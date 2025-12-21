@@ -36,8 +36,7 @@ const NOTE_VALUE_OFFSET: usize = NOTE_DIVERSIFIER_OFFSET + NOTE_DIVERSIFIER_SIZE
 const NOTE_RSEED_OFFSET: usize = NOTE_VALUE_OFFSET + NOTE_VALUE_SIZE;
 
 /// The size of a Vanilla compact note.
-pub(super) const COMPACT_NOTE_SIZE_VANILLA: usize =
-    NOTE_VERSION_SIZE + NOTE_DIVERSIFIER_SIZE + NOTE_VALUE_SIZE + NOTE_RSEED_SIZE;
+pub(super) const COMPACT_NOTE_SIZE_VANILLA: usize = NOTE_RSEED_OFFSET + NOTE_RSEED_SIZE;
 
 /// The size of the encoding of a ZSA asset.
 const ZSA_ASSET_SIZE: usize = 32;
