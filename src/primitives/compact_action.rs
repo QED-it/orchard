@@ -1,7 +1,5 @@
 //! Defines actions for Orchard shielded outputs and compact action for light clients.
 
-// Review hint: this file is largely derived from src/note_encryption.rs
-
 use core::fmt;
 
 use zcash_note_encryption::{note_bytes::NoteBytes, EphemeralKeyBytes, ShieldedOutput};
@@ -34,7 +32,7 @@ impl<A, P: OrchardPrimitives> ShieldedOutput<OrchardDomain<P>> for Action<A, P> 
         P::CompactNoteCiphertextBytes::from_slice(
             &self.encrypted_note().enc_ciphertext.as_ref()[..P::COMPACT_NOTE_SIZE],
         )
-        .unwrap()
+        .expect("P::CompactNoteCiphertextBytes should have size P::COMPACT_NOTE_SIZE")
     }
 }
 
@@ -85,7 +83,7 @@ impl<P: OrchardPrimitives> ShieldedOutput<OrchardDomain<P>> for CompactAction<P>
     }
 
     fn enc_ciphertext_compact(&self) -> P::CompactNoteCiphertextBytes {
-        P::CompactNoteCiphertextBytes::from_slice(self.enc_ciphertext.as_ref()).unwrap()
+        self.enc_ciphertext
     }
 }
 

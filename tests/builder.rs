@@ -74,7 +74,7 @@ trait BundleOrchardFlavor: OrchardFlavor {
 
 impl BundleOrchardFlavor for OrchardVanilla {
     const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT_VANILLA;
-    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED_WITHOUT_ZSA;
+    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED;
 }
 
 impl BundleOrchardFlavor for OrchardZSA {
@@ -154,9 +154,9 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
 
         let mut builder = Builder::new(
             BundleType::Transactional {
-                // Intentionally testing with SPENDS_DISABLED_WITHOUT_ZSA as SPENDS_DISABLED_WITH_ZSA is already
+                // Intentionally testing with SPENDS_DISABLED as SPENDS_DISABLED_WITH_ZSA is already
                 // tested above (for OrchardZSA case). Both should work.
-                flags: Flags::SPENDS_DISABLED_WITHOUT_ZSA,
+                flags: Flags::SPENDS_DISABLED,
                 bundle_required: false,
             },
             anchor,

@@ -1,8 +1,8 @@
 //! Structs related to bundles of Orchard actions.
 
-pub mod burn_validation;
 use alloc::vec::Vec;
 
+pub mod burn_validation;
 pub mod commitments;
 
 #[cfg(feature = "circuit")]
@@ -70,10 +70,10 @@ pub struct Flags {
     /// guaranteed to be dummy notes. If `true`, the created notes may be either real or
     /// dummy notes.
     outputs_enabled: bool,
-    /// Flag denoting whether ZSA transaction is enabled.
+    /// Flag denoting whether ZSA functionality is enabled in the transaction.
     ///
-    /// If `false`,  all notes within [`Action`]s in the transaction's [`Bundle`] are
-    /// guaranteed to be notes with native asset.
+    /// If `false`, all notes within [`Action`]s in the transaction's [`Bundle`] are
+    /// guaranteed to be notes with native asset. If `true`, `Action`s may use any asset.
     zsa_enabled: bool,
 }
 
@@ -97,7 +97,7 @@ impl Flags {
     }
 
     /// The flag set with both spends and outputs enabled and ZSA disabled.
-    pub const ENABLED_WITHOUT_ZSA: Flags = Flags {
+    pub const ENABLED: Flags = Flags {
         spends_enabled: true,
         outputs_enabled: true,
         zsa_enabled: false,
@@ -111,7 +111,7 @@ impl Flags {
     };
 
     /// The flag set with spends and ZSA disabled.
-    pub const SPENDS_DISABLED_WITHOUT_ZSA: Flags = Flags {
+    pub const SPENDS_DISABLED: Flags = Flags {
         spends_enabled: false,
         outputs_enabled: true,
         zsa_enabled: false,
@@ -149,10 +149,10 @@ impl Flags {
         self.outputs_enabled
     }
 
-    /// Flag denoting whether ZSA transaction is enabled.
+    /// Flag denoting whether ZSA functionality is enabled in the transaction.
     ///
-    /// If `false`,  all notes within [`Action`]s in the transaction's [`Bundle`] are
-    /// guaranteed to be notes with native asset.
+    /// If `false`, all notes within [`Action`]s in the transaction's [`Bundle`] are
+    /// guaranteed to be notes with native asset. If `true`, `Action`s may use any asset.
     pub fn zsa_enabled(&self) -> bool {
         self.zsa_enabled
     }
@@ -470,16 +470,20 @@ pub(crate) fn derive_bvk<A, V: Clone + Into<i64>, P: OrchardPrimitives>(
     value_balance: V,
     burn: &[(AssetBase, NoteValue)],
 ) -> redpallas::VerificationKey<Binding> {
-    let cv_nets: Vec<_> = actions.into_iter().map(|a| a.cv_net().clone()).collect();
-    derive_bvk_raw(&cv_nets, ValueSum::from_raw(value_balance.into()), burn)
+    derive_bvk_raw(
+        actions.into_iter().map(|a| a.cv_net()),
+        ValueSum::from_raw(value_balance.into()),
+        burn,
+    )
 }
 
-pub(crate) fn derive_bvk_raw(
-    cv_nets: &[ValueCommitment],
+pub(crate) fn derive_bvk_raw<'a>(
+    cv_nets: impl IntoIterator<Item = &'a ValueCommitment>,
     value_balance: ValueSum,
     burn: &[(AssetBase, NoteValue)],
 ) -> redpallas::VerificationKey<Binding> {
-    (cv_nets.iter().sum::<ValueCommitment>()
+    // https://p.z.cash/TCR:bad-txns-orchard-binding-signature-invalid?partial
+    (cv_nets.into_iter().sum::<ValueCommitment>()
         - ValueCommitment::derive(
             value_balance,
             ValueCommitTrapdoor::zero(),

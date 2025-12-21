@@ -1,7 +1,5 @@
 //! Orchard-specific note encryption domain.
 
-// Review hint: this file is largely derived from src/note_encryption.rs
-
 use crate::{
     action::Action, note::Rho, primitives::compact_action::CompactAction,
     primitives::orchard_primitives::OrchardPrimitives,
@@ -15,11 +13,28 @@ pub struct OrchardDomain<P: OrchardPrimitives> {
     phantom: core::marker::PhantomData<P>,
 }
 
+impl<P: OrchardPrimitives> memuse::DynamicUsage for OrchardDomain<P> {
+    fn dynamic_usage(&self) -> usize {
+        self.rho.dynamic_usage()
+    }
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        self.rho.dynamic_usage_bounds()
+    }
+}
+
 impl<P: OrchardPrimitives> OrchardDomain<P> {
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
     pub fn for_action<T>(act: &Action<T, P>) -> Self {
         Self {
             rho: act.rho(),
+            phantom: Default::default(),
+        }
+    }
+
+    /// Constructs a domain that can be used to trial-decrypt a PCZT action's output note.
+    pub fn for_pczt_action(act: &crate::pczt::Action) -> Self {
+        Self {
+            rho: Rho::from_nf_old(act.spend().nullifier),
             phantom: Default::default(),
         }
     }
@@ -34,7 +49,7 @@ impl<P: OrchardPrimitives> OrchardDomain<P> {
 
     /// Constructs a domain from a rho.
     #[cfg(test)]
-    pub fn for_rho(rho: Rho) -> Self {
+    pub(crate) fn for_rho(rho: Rho) -> Self {
         Self {
             rho,
             phantom: Default::default(),
