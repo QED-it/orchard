@@ -396,6 +396,7 @@ impl ValueCommitment {
     #[allow(non_snake_case)]
     pub fn derive(value: ValueSum, rcv: ValueCommitTrapdoor, asset: AssetBase) -> Self {
         let hasher = pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION);
+        let V = asset.cv_base();
         let R = hasher(&VALUE_COMMITMENT_R_BYTES);
         let abs_value = u64::try_from(value.0.abs()).expect("value must be in valid range");
 
@@ -405,9 +406,7 @@ impl ValueCommitment {
             pallas::Scalar::from(abs_value)
         };
 
-        let V_zsa = asset.cv_base();
-
-        ValueCommitment(V_zsa * value + R * rcv.0)
+        ValueCommitment(V * value + R * rcv.0)
     }
 
     pub(crate) fn into_bvk(self) -> redpallas::VerificationKey<Binding> {
@@ -523,7 +522,7 @@ mod tests {
     };
 
     fn check_binding_signature(
-        native_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
+        native_values: &[(ValueSum, ValueCommitTrapdoor)],
         arb_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
         neg_trapdoors: &[ValueCommitTrapdoor],
         arb_values_to_burn: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
@@ -538,12 +537,18 @@ mod tests {
 
         let native_value_balance = native_values
             .iter()
-            .map(|(value, _, _)| value)
+            .map(|(value, _)| value)
             .sum::<Result<ValueSum, OverflowError>>()
             .expect("we generate values that won't overflow");
 
+        let native_values_with_asset: Vec<(ValueSum, ValueCommitTrapdoor, AssetBase)> =
+            native_values
+                .iter()
+                .map(|(value_sum, trapdoor)| (*value_sum, *trapdoor, AssetBase::native()))
+                .collect();
+
         let values = [
-            native_values,
+            &native_values_with_asset,
             arb_values,
             &neg_arb_values,
             arb_values_to_burn,
@@ -581,7 +586,7 @@ mod tests {
         fn bsk_consistent_with_bvk_native_with_zsa_transfer_and_burning(
             native_values in (1usize..10).prop_flat_map(|n_values|
                 arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), Just(AssetBase::native())), n_values)
+                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor()), n_values)
                 )
             ),
             (asset_values, neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|

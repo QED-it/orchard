@@ -354,6 +354,7 @@ impl Note {
     /// Create a split note which has the same values than the input note except for
     /// `rseed_split_note` which is equal to a random seed.
     pub fn create_split_note(self, rng: &mut impl RngCore) -> Self {
+        assert!(bool::from(!self.asset().is_native()));
         Note {
             rseed_split_note: CtOption::new(RandomSeed::random(rng, &self.rho), 1u8.into()),
             ..self
