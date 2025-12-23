@@ -74,6 +74,9 @@ pub struct Flags {
     ///
     /// If `false`,  all notes within [`Action`]s in the transaction's [`Bundle`] are
     /// guaranteed to be notes with native asset.
+    /// This field was introduced with the ZSA feature; older Orchard versions did not
+    /// include it. Because halo2_proofs zero-extends instance values, old proofs are interpreted
+    /// with this flag equal to zero (`false`), so adding it does not break consensus.
     zsa_enabled: bool,
 }
 
