@@ -1016,6 +1016,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_bundle<B, R: RngCore>(
     mut rng: R,
     anchor: Anchor,
