@@ -547,7 +547,9 @@ impl Authorization for EffectsOnly {
     type SpendAuth = ();
 
     /// Return the proof component of the authorizing data.
-    fn proof(&self) -> Option<&Proof> { None }
+    fn proof(&self) -> Option<&Proof> {
+        None
+    }
 }
 
 impl<A: Authorization, V: Copy + Into<i64>> Bundle<A, V, OrchardZSA> {

@@ -69,7 +69,10 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
         .into();
         // Evaluate the swap binding signature which is equal to the signature of the swap sigash
         // with the swap binding signature key bsk.
-        let binding_signature = VerBindingSig::new(OrchardZSA::default_sighash_version(),bsk.sign(rng, &sighash));
+        let binding_signature = VerBindingSig::new(
+            OrchardZSA::default_sighash_version(),
+            bsk.sign(rng, &sighash),
+        );
         // Create the swap bundle
         SwapBundle {
             action_groups,

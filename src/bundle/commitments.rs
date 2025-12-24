@@ -83,7 +83,9 @@ pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
         ch.update(&action.cmx().to_bytes());
         ch.update(&action.encrypted_note().epk_bytes);
         // TODO Remove once new Memo Bundles are implemented (ZIP-231).
-        ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..OrchardZSA::COMPACT_NOTE_SIZE]);
+        ch.update(
+            &action.encrypted_note().enc_ciphertext.as_ref()[..OrchardZSA::COMPACT_NOTE_SIZE],
+        );
         // TODO Uncomment once new Memo Bundles are implemented (ZIP-231).
         // ch.update(&action.encrypted_note().enc_ciphertext.as_ref());
 
@@ -260,9 +262,7 @@ mod tests {
     use crate::{
         builder::{Builder, BundleType, UnauthorizedBundle},
         bundle::{
-            commitments::{
-                hash_bundle_txid_data,
-            },
+            commitments::{hash_bundle_txid_data},
             Authorized, Bundle,
         },
         circuit::ProvingKey,
@@ -279,7 +279,10 @@ mod tests {
     use alloc::collections::BTreeMap;
     use nonempty::NonEmpty;
     use rand::{rngs::StdRng, SeedableRng};
-    use crate::bundle::commitments::{get_compact_size, hash_bundle_auth_data, hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
+    use crate::bundle::commitments::{
+        get_compact_size, hash_bundle_auth_data, hash_issue_bundle_auth_data,
+        hash_issue_bundle_txid_data,
+    };
 
     fn generate_bundle<FL: OrchardFlavor>(bundle_type: BundleType) -> UnauthorizedBundle<i64, FL> {
         let rng = StdRng::seed_from_u64(5);
@@ -469,4 +472,3 @@ mod tests {
         );
     }
 }
-

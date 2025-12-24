@@ -960,7 +960,6 @@ mod tests {
         )
     }
 
-
     #[test]
     fn action_verify_valid() {
         let (ik, test_asset, action) = action_verify_test_params(10, 20, b"Asset 1", None, false);

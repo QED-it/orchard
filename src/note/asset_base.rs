@@ -164,9 +164,7 @@ pub mod testing {
 
     use proptest::prelude::*;
 
-    use crate::issuance_auth::{
-        testing::arb_issuance_authorizing_key, IssueValidatingKey, ZSASchnorr,
-    };
+    use crate::issuance_auth::{testing::arb_issuance_authorizing_key, IssueValidatingKey, ZSASchnorr};
 
     prop_compose! {
         /// Generate a uniformly distributed note type

@@ -128,7 +128,6 @@ fn build_merkle_paths(notes: Vec<&Note>) -> (Vec<MerklePath>, Anchor) {
 
     let max_index = (notes.len() as u32) - 1;
 
-
     let mut commitments = vec![];
     let mut positions = vec![];
 
@@ -173,7 +172,8 @@ fn issue_zsa_notes(
     asset_descr: &[u8],
     keys: &Keychain,
     first_nullifier: &Nullifier,
-) -> (Note, Note, Note) {    let mut rng = OsRng;
+) -> (Note, Note, Note) {
+    let mut rng = OsRng;
     // Create an issuance bundle
     let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(asset_descr).unwrap());
     let (mut awaiting_nullifier_bundle, _) = IssueBundle::new(
@@ -706,28 +706,33 @@ fn action_group_and_swap_bundle() {
     let vk = VerifyingKey::build::<OrchardZSA>();
 
     // Create notes for user1
-    let keys1 = prepare_keys(pk.clone(), vk.clone(),5);
+    let keys1 = prepare_keys(pk.clone(), vk.clone(), 5);
 
     let user1_native_note1 = create_native_note(&keys1);
     let user1_native_note2 = create_native_note(&keys1);
 
     let asset_descr1 = b"zsa_asset1".to_vec();
-    let (asset1_reference_note, asset1_note1, asset1_note2) =
-        issue_zsa_notes(&asset_descr1, &keys1, &user1_native_note1.nullifier(keys1.fvk()));
-
+    let (asset1_reference_note, asset1_note1, asset1_note2) = issue_zsa_notes(
+        &asset_descr1,
+        &keys1,
+        &user1_native_note1.nullifier(keys1.fvk()),
+    );
 
     // Create notes for user2
-    let keys2 = prepare_keys(pk.clone(), vk.clone(),10);
+    let keys2 = prepare_keys(pk.clone(), vk.clone(), 10);
 
     let asset_descr2 = b"zsa_asset2".to_vec();
-    let (asset2_reference_note, asset2_note1, asset2_note2) =
-        issue_zsa_notes(&asset_descr2, &keys2, &user1_native_note2.nullifier(keys1.fvk()));
+    let (asset2_reference_note, asset2_note1, asset2_note2) = issue_zsa_notes(
+        &asset_descr2,
+        &keys2,
+        &user1_native_note2.nullifier(keys1.fvk()),
+    );
 
     let user2_native_note1 = create_native_note(&keys2);
     let user2_native_note2 = create_native_note(&keys2);
 
     // Create matcher keys
-    let matcher_keys = prepare_keys(pk, vk,15);
+    let matcher_keys = prepare_keys(pk, vk, 15);
 
     // Create Merkle tree with all notes
     let (merkle_paths, anchor) = build_merkle_paths(vec![

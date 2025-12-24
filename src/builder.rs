@@ -1065,14 +1065,14 @@ fn build_bundle<B, R: RngCore>(
             |(asset, (spends, outputs))| {
                 let num_asset_pre_actions = spends.len().max(outputs.len());
 
-                    let mut first_spend = spends.first().map(|(s, _)| s.clone());
-                    if is_action_group && first_spend.is_none() {
-                        first_spend = reference_notes
-                            .as_ref()
-                            .expect("Reference notes are required for action group")
-                            .get(&asset)
-                            .cloned();
-                    }
+                let mut first_spend = spends.first().map(|(s, _)| s.clone());
+                if is_action_group && first_spend.is_none() {
+                    first_spend = reference_notes
+                        .as_ref()
+                        .expect("Reference notes are required for action group")
+                        .get(&asset)
+                        .cloned();
+                }
 
                 let mut indexed_spends = spends
                     .into_iter()
@@ -1459,7 +1459,9 @@ impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, P> {
     }
 }
 
-impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, P> {
+impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
+    Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, P>
+{
     /// Signs this action group with the given [`SpendAuthorizingKey`].
     ///
     /// This will apply signatures for all notes controlled by this spending key.
@@ -1483,7 +1485,7 @@ impl<Proof: fmt::Debug, V, P: OrchardPrimitives> Bundle<InProgress<Proof, Action
 }
 
 impl<Proof: fmt::Debug, V, P: OrchardPrimitives>
-Bundle<InProgress<Proof, PartiallyAuthorized>, V, P>
+    Bundle<InProgress<Proof, PartiallyAuthorized>, V, P>
 {
     /// Signs this bundle with the given [`SpendAuthorizingKey`].
     ///

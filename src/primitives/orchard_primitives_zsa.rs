@@ -9,8 +9,7 @@ use crate::bundle::commitments::hash_action_group;
 use crate::{
     bundle::{
         commitments::{
-            get_compact_size, hasher,
-            ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION,
+            get_compact_size, hasher, ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION,
             ZCASH_ORCHARD_HASH_PERSONALIZATION, ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
             ZCASH_ORCHARD_SPEND_AUTH_SIGS_HASH_PERSONALIZATION,
         },
