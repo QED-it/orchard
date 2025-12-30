@@ -1,3 +1,5 @@
+#![cfg(feature = "zsa-issuance")]
+
 mod builder;
 
 use crate::builder::verify_bundle;

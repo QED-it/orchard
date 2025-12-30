@@ -972,19 +972,23 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
-    use ff::PrimeField;
     use proptest::prelude::*;
 
     use super::{
         testing::{arb_diversifier_index, arb_diversifier_key, arb_esk, arb_spending_key},
         *,
     };
+
+    #[cfg(feature = "zsa-issuance")]
+    use crate::issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
+    #[cfg(feature = "zsa-issuance")]
     use crate::{
-        issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
         note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
         value::NoteValue,
         Note,
     };
+    #[cfg(feature = "zsa-issuance")]
+    use ff::PrimeField;
 
     #[test]
     fn spend_validating_key_from_bytes() {
@@ -1031,6 +1035,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "zsa-issuance")]
     #[test]
     fn test_vectors() {
         for tv in crate::test_vectors::keys::TEST_VECTORS {

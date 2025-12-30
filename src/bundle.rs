@@ -1,6 +1,5 @@
 //! Structs related to bundles of Orchard actions.
 
-pub mod burn_validation;
 use alloc::vec::Vec;
 
 pub mod commitments;
@@ -9,6 +8,9 @@ pub mod commitments;
 mod batch;
 #[cfg(feature = "circuit")]
 pub use batch::BatchValidator;
+
+#[cfg(feature = "zsa-issuance")]
+pub mod burn_validation;
 
 use core::fmt;
 
