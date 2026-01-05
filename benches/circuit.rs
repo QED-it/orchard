@@ -9,9 +9,9 @@ use pprof::criterion::{Output, PProfProfiler};
 use orchard::{
     builder::Builder,
     circuit::{ProvingKey, VerifyingKey},
+    flavor::{OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    flavor::{OrchardVanilla, OrchardZSA},
     value::NoteValue,
     Anchor, Bundle,
 };

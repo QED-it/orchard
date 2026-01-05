@@ -2,9 +2,9 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use orchard::{
     builder::Builder,
     circuit::ProvingKey,
+    flavor::{OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    flavor::{OrchardVanilla, OrchardZSA},
     primitives::{CompactAction, OrchardDomain},
     value::NoteValue,
     Anchor, Bundle,
