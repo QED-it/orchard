@@ -5,7 +5,7 @@ use orchard::{
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
-    orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+    flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     primitives::{OrchardDomain, OrchardPrimitives},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,

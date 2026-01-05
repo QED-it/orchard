@@ -11,7 +11,7 @@ use orchard::{
     circuit::{ProvingKey, VerifyingKey},
     keys::{FullViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    orchard_flavor::{OrchardVanilla, OrchardZSA},
+    flavor::{OrchardVanilla, OrchardZSA},
     value::NoteValue,
     Anchor, Bundle,
 };

@@ -2,7 +2,7 @@ use criterion::{measurement::Measurement, BenchmarkGroup, Criterion};
 
 use orchard::{
     builder::BundleType,
-    orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+    flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
 };
 
 pub(crate) trait OrchardFlavorBench: OrchardFlavor {

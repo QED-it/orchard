@@ -14,7 +14,7 @@ use orchard::{
     },
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, Nullifier},
-    orchard_flavor::OrchardZSA,
+    flavor::OrchardZSA,
     primitives::OrchardDomain,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,

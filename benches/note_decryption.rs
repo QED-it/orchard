@@ -4,7 +4,7 @@ use orchard::{
     circuit::ProvingKey,
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    orchard_flavor::{OrchardVanilla, OrchardZSA},
+    flavor::{OrchardVanilla, OrchardZSA},
     primitives::{CompactAction, OrchardDomain},
     value::NoteValue,
     Anchor, Bundle,
