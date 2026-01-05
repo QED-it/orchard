@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core2::io::{self, Read, Write};
 
+use ::zip32::{hardened_only, ChildIndex};
 use aes::Aes256;
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use fpe::ff1::{BinaryNumeralString, FF1};
@@ -28,12 +29,7 @@ use crate::{
     zip32::{self, ExtendedSpendingKey},
 };
 
-// Preserve '::' which specifies the EXTERNAL 'zip32' crate
-#[rustfmt::skip]
 pub use ::zip32::{AccountId, DiversifierIndex, Scope};
-
-#[rustfmt::skip]
-use ::zip32::{ChildIndex, hardened_only};
 
 const KDF_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_OrchardKDF";
 const ZIP32_PURPOSE: u32 = 32;
