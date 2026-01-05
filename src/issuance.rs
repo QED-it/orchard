@@ -58,7 +58,11 @@ pub struct IssueBundle<T: IssueAuth> {
     authorization: T,
 }
 
-/// Flags for an issuance action (`flagsIssuance` in ZIP 230).
+/// Flags for an issuance action.
+///
+/// flagsIssuance is defined in [ZIP-230: Version 6 Transaction Format][issueaction].
+///
+/// [issueaction]: https://zips.z.cash/zip-0230#issuance-action-description-issueaction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IssuanceFlags {
     /// Flag denoting whether issuance of this asset type is finalized.
