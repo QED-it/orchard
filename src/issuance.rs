@@ -81,7 +81,9 @@ impl IssuanceFlags {
         self.finalize
     }
 
-    /// Serialize to `flagsIssuance` byte (ZIP 230).
+    /// Serialize IssuanceFlags to a byte as defined in [ZIP-230: Version 6 Transaction Format][issueaction].
+    ///
+    /// [issueaction]: https://zips.z.cash/zip-0230#issuance-action-description-issueaction
     pub fn to_byte(&self) -> u8 {
         let mut value = 0u8;
         if self.finalize {
