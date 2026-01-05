@@ -480,12 +480,6 @@ impl ActionInfo {
     ///
     /// Panics if the asset types of the spent and output notes do not match.
     fn new(spend: SpendInfo, output: OutputInfo, rng: impl RngCore) -> Self {
-        assert_eq!(
-            spend.note.asset(),
-            output.asset,
-            "spend and recipient note types must be equal"
-        );
-
         ActionInfo {
             spend,
             output,
@@ -516,6 +510,12 @@ impl ActionInfo {
         self,
         mut rng: impl RngCore,
     ) -> (Action<SigningMetadata, FL>, Witnesses) {
+        assert_eq!(
+            self.spend.note.asset(),
+            self.output.asset,
+            "spend and recipient note types must be equal"
+        );
+
         let v_net = self.value_sum();
         let cv_net = ValueCommitment::derive(v_net, self.rcv, self.output.asset);
 
@@ -539,6 +539,11 @@ impl ActionInfo {
     }
 
     fn build_for_pczt(self, mut rng: impl RngCore) -> crate::pczt::Action {
+        assert_eq!(
+            self.spend.note.asset(),
+            self.output.asset,
+            "spend and recipient note types must be equal"
+        );
         let v_net = self.value_sum();
         let cv_net = ValueCommitment::derive(v_net, self.rcv, self.spend.note.asset());
 
