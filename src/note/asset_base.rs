@@ -170,13 +170,11 @@ pub mod testing {
 
     prop_compose! {
         /// Generate a uniformly distributed note type
-            pub fn arb_asset_base()
-                (is_native in prop::bool::ANY)
-                (asset in if is_native {
-                    Just(AssetBase::native()).boxed()
-                } else {
-                    arb_zsa_asset_base().boxed()
-            })
+        pub fn arb_asset_base()
+            (asset in prop_oneof![
+                Just(AssetBase::native()),
+                arb_zsa_asset_base(),
+            ])
             -> AssetBase
         {
             asset
