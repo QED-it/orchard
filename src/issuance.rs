@@ -117,7 +117,7 @@ pub struct IssueAction {
     asset_desc_hash: [u8; 32],
     /// The newly issued notes.
     notes: Vec<Note>,
-    /// Issuance action flags (`flagsIssuance` in ZIP 230).
+    /// Issuance-specific flags for this `IssueAction`.
     flags: IssuanceFlags,
 }
 
