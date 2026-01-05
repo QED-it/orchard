@@ -190,7 +190,7 @@ impl SpendValidatingKey {
         self.0.randomize(randomizer)
     }
 
-    /// Converts this spend key validating to its serialized form,
+    /// Converts this spend validating key to its serialized form,
     /// I2LEOSP_256(ak).
     #[cfg_attr(feature = "unstable-frost", visibility::make(pub))]
     pub(crate) fn to_bytes(&self) -> [u8; 32] {
