@@ -61,6 +61,9 @@ pub struct IssueBundle<T: IssueAuth> {
 /// Flags for an issuance action (`flagsIssuance` in ZIP 230).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IssuanceFlags {
+    /// Flag denoting whether issuance of this asset type is finalized.
+    ///
+    /// If `true`, further issuance of the same asset type is prevented.
     finalize: bool,
 }
 
