@@ -62,7 +62,7 @@ pub enum BundleType {
 impl BundleType {
     /// The default bundle type has all flags enabled, ZSA disabled, and does not require a bundle
     /// to be produced if no spends or outputs have been added to the bundle.
-    pub const DEFAULT_VANILLA: BundleType = BundleType::Transactional {
+    pub const DEFAULT: BundleType = BundleType::Transactional {
         flags: Flags::ENABLED,
         bundle_required: false,
     };
@@ -1562,7 +1562,7 @@ mod tests {
         let recipient = fvk.address_at(0u32, Scope::External);
 
         let mut builder = Builder::new(
-            BundleType::DEFAULT_VANILLA,
+            BundleType::DEFAULT,
             EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
         );
 

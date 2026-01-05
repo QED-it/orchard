@@ -236,7 +236,7 @@ mod tests {
     /// to ensure consistency.
     #[test]
     fn test_hash_bundle_txid_data_for_orchard_vanilla() {
-        let bundle = generate_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
+        let bundle = generate_bundle::<OrchardVanilla>(BundleType::DEFAULT);
         let sighash = hash_bundle_txid_data(&bundle);
         assert_eq!(
             sighash.to_hex().as_str(),
@@ -272,7 +272,7 @@ mod tests {
     /// reference value to ensure consistency.
     #[test]
     fn test_hash_bundle_auth_data_for_orchard_vanilla() {
-        let bundle = generate_auth_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
+        let bundle = generate_auth_bundle::<OrchardVanilla>(BundleType::DEFAULT);
         let orchard_auth_digest = hash_bundle_auth_data(&bundle, &BTreeMap::new());
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),

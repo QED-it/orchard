@@ -73,7 +73,7 @@ trait BundleOrchardFlavor: OrchardFlavor {
 }
 
 impl BundleOrchardFlavor for OrchardVanilla {
-    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT_VANILLA;
+    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT;
     const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED;
 }
 
