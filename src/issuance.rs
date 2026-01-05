@@ -92,9 +92,11 @@ impl IssuanceFlags {
         value
     }
 
-    /// Parse from `flagsIssuance` byte (ZIP 230).
+    /// Parse issuance flags from a single byte as defined in [ZIP-230: Version 6 Transaction Format][issueaction].
     ///
-    /// Returns `None` if any reserved bits are set.
+    /// Returns `None` if unexpected bits are set in the flag byte.
+    ///
+    /// [issueaction]: https://zips.z.cash/zip-0230#issuance-action-description-issueaction
     pub fn from_byte(value: u8) -> Option<Self> {
         if value & ISSUANCE_FLAGS_EXPECTED_UNSET == 0 {
             Some(Self {
