@@ -267,7 +267,8 @@ impl Witnesses {
 }
 
 /// The verifying key for the Orchard Action circuit.
-/// In practice this is constructed for either `OrchardVanilla` or `OrchardZSA`.
+///
+/// In practice, this is constructed for either `OrchardVanilla` or `OrchardZSA`.
 #[derive(Debug, Clone)]
 pub struct VerifyingKey {
     pub(crate) params: halo2_proofs::poly::commitment::Params<vesta::Affine>,
