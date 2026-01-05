@@ -72,7 +72,7 @@ const ISSUANCE_FLAGS_EXPECTED_UNSET: u8 = !ISSUANCE_FLAG_FINALIZE;
 
 impl IssuanceFlags {
     /// Construct a set of flags from its constituent parts
-    pub const fn from_parts(finalize: bool) -> Self {
+    pub(crate) const fn from_parts(finalize: bool) -> Self {
         Self { finalize }
     }
 
