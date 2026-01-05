@@ -46,10 +46,14 @@ pub(crate) fn hasher(personal: &[u8; 16]) -> State {
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip246]: https://zips.z.cash/zip-0246
-pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>, P: OrchardPrimitives>(
-    bundle: &Bundle<A, V, P>,
+pub(crate) fn hash_bundle_txid_data<
+    A: Authorization,
+    V: Copy + Into<i64>,
+    Pr: OrchardPrimitives,
+>(
+    bundle: &Bundle<A, V, Pr>,
 ) -> Blake2bHash {
-    P::hash_bundle_txid_data(bundle)
+    Pr::hash_bundle_txid_data(bundle)
 }
 
 /// Construct the commitment for the absent bundle as defined in
@@ -73,11 +77,11 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip246]: https://zips.z.cash/zip-0246
-pub(crate) fn hash_bundle_auth_data<V, P: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, V, P>,
+pub(crate) fn hash_bundle_auth_data<V, Pr: OrchardPrimitives>(
+    bundle: &Bundle<Authorized, V, Pr>,
     sighash_version_map: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
 ) -> Blake2bHash {
-    P::hash_bundle_auth_data(bundle, sighash_version_map)
+    Pr::hash_bundle_auth_data(bundle, sighash_version_map)
 }
 
 /// Construct the `orchard_auth_digest` commitment for an absent bundle as defined in

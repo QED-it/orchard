@@ -16,8 +16,8 @@ use rand::SeedableRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
 
-pub fn verify_bundle<P: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, i64, P>,
+pub fn verify_bundle<Pr: OrchardPrimitives>(
+    bundle: &Bundle<Authorized, i64, Pr>,
     vk: &VerifyingKey,
     verify_proof: bool,
 ) {
@@ -29,7 +29,7 @@ pub fn verify_bundle<P: OrchardPrimitives>(
     for action in bundle.actions() {
         assert_eq!(
             action.authorization().version(),
-            &P::default_sighash_version()
+            &Pr::default_sighash_version()
         );
         assert_eq!(
             action.rk().verify(&sighash, action.authorization().sig()),

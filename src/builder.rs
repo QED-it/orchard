@@ -417,18 +417,18 @@ impl OutputInfo {
     /// Defined in [Zcash Protocol Spec § 4.7.3: Sending Notes (Orchard)][orchardsend].
     ///
     /// [orchardsend]: https://zips.z.cash/protocol/nu5.pdf#orchardsend
-    fn build<P: OrchardPrimitives>(
+    fn build<Pr: OrchardPrimitives>(
         &self,
         cv_net: &ValueCommitment,
         nf_old: Nullifier,
         mut rng: impl RngCore,
-    ) -> (Note, ExtractedNoteCommitment, TransmittedNoteCiphertext<P>) {
+    ) -> (Note, ExtractedNoteCommitment, TransmittedNoteCiphertext<Pr>) {
         let rho = Rho::from_nf_old(nf_old);
         let note = Note::new(self.recipient, self.value, self.asset, rho, &mut rng);
         let cm_new = note.commitment();
         let cmx = cm_new.into();
 
-        let encryptor = NoteEncryption::<OrchardDomain<P>>::new(self.ovk.clone(), note, self.memo);
+        let encryptor = NoteEncryption::<OrchardDomain<Pr>>::new(self.ovk.clone(), note, self.memo);
 
         let encrypted_note = TransmittedNoteCiphertext {
             epk_bytes: encryptor.epk().to_bytes().0,
@@ -1248,7 +1248,7 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, Unauthorized>
     }
 }
 
-impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, P> {
+impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, Pr> {
     /// Applies signatures to this bundle, in order to authorize it.
     ///
     /// This is a helper method that wraps [`Bundle::prepare`], [`Bundle::sign`], and
@@ -1258,7 +1258,7 @@ impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, P> {
         mut rng: R,
         sighash: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
-    ) -> Result<Bundle<Authorized, V, P>, BuildError> {
+    ) -> Result<Bundle<Authorized, V, Pr>, BuildError> {
         signing_keys
             .iter()
             .fold(self.prepare(&mut rng, sighash), |partial, ask| {
@@ -1330,11 +1330,11 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, PartiallyAuth
     }
 }
 
-impl<V, P: OrchardPrimitives> Bundle<InProgress<Proof, PartiallyAuthorized>, V, P> {
+impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, PartiallyAuthorized>, V, Pr> {
     /// Finalizes this bundle, enabling it to be included in a transaction.
     ///
     /// Returns an error if any signatures are missing.
-    pub fn finalize(self) -> Result<Bundle<Authorized, V, P>, BuildError> {
+    pub fn finalize(self) -> Result<Bundle<Authorized, V, Pr>, BuildError> {
         self.try_map_authorization(
             &mut (),
             |_, _, maybe| maybe.finalize(),
@@ -1464,8 +1464,8 @@ pub mod testing {
     /// `BuilderArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol variations
     /// in property-based testing, addressing proptest crate limitations.
     #[derive(Debug)]
-    pub struct BuilderArb<P: OrchardPrimitives> {
-        phantom: core::marker::PhantomData<P>,
+    pub struct BuilderArb<Pr: OrchardPrimitives> {
+        phantom: core::marker::PhantomData<Pr>,
     }
 
     impl<FL: OrchardFlavor> BuilderArb<FL> {

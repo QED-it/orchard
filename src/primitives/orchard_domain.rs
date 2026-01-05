@@ -7,13 +7,13 @@ use crate::{
 
 /// Orchard-specific note encryption logic.
 #[derive(Debug, Clone)]
-pub struct OrchardDomain<P: OrchardPrimitives> {
+pub struct OrchardDomain<Pr: OrchardPrimitives> {
     /// A parameter needed to generate the nullifier.
     pub rho: Rho,
-    phantom: core::marker::PhantomData<P>,
+    phantom: core::marker::PhantomData<Pr>,
 }
 
-impl<P: OrchardPrimitives> memuse::DynamicUsage for OrchardDomain<P> {
+impl<Pr: OrchardPrimitives> memuse::DynamicUsage for OrchardDomain<Pr> {
     fn dynamic_usage(&self) -> usize {
         self.rho.dynamic_usage()
     }
@@ -22,9 +22,9 @@ impl<P: OrchardPrimitives> memuse::DynamicUsage for OrchardDomain<P> {
     }
 }
 
-impl<P: OrchardPrimitives> OrchardDomain<P> {
+impl<Pr: OrchardPrimitives> OrchardDomain<Pr> {
     /// Constructs a domain that can be used to trial-decrypt this action's output note.
-    pub fn for_action<T>(act: &Action<T, P>) -> Self {
+    pub fn for_action<T>(act: &Action<T, Pr>) -> Self {
         Self {
             rho: act.rho(),
             phantom: Default::default(),
@@ -40,7 +40,7 @@ impl<P: OrchardPrimitives> OrchardDomain<P> {
     }
 
     /// Constructs a domain that can be used to trial-decrypt this compact action's output note.
-    pub fn for_compact_action(act: &CompactAction<P>) -> Self {
+    pub fn for_compact_action(act: &CompactAction<Pr>) -> Self {
         Self {
             rho: act.rho(),
             phantom: Default::default(),
