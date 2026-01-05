@@ -32,7 +32,7 @@ impl<A, Pr: OrchardPrimitives> ShieldedOutput<OrchardDomain<Pr>> for Action<A, P
         Pr::CompactNoteCiphertextBytes::from_slice(
             &self.encrypted_note().enc_ciphertext.as_ref()[..Pr::COMPACT_NOTE_SIZE],
         )
-        .expect("P::CompactNoteCiphertextBytes should have size P::COMPACT_NOTE_SIZE")
+        .expect("Pr::CompactNoteCiphertextBytes should have size Pr::COMPACT_NOTE_SIZE")
     }
 }
 
@@ -168,8 +168,8 @@ pub mod testing {
                 nullifier: nf_old,
                 cmx,
                 ephemeral_key,
-                enc_ciphertext: P::CompactNoteCiphertextBytes::from_slice(
-                    &enc_ciphertext.as_ref()[..P::COMPACT_NOTE_SIZE],
+                enc_ciphertext: Pr::CompactNoteCiphertextBytes::from_slice(
+                    &enc_ciphertext.as_ref()[..Pr::COMPACT_NOTE_SIZE],
                 )
                 .unwrap(),
             },
