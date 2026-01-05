@@ -19,8 +19,8 @@ use crate::{
         },
         Authorization, Authorized,
     },
+    flavor::OrchardZSA,
     note::{AssetBase, Note},
-    orchard_flavor::OrchardZSA,
     primitives::{
         orchard_primitives::OrchardPrimitives,
         zcash_note_encryption_domain::{
@@ -176,6 +176,7 @@ mod tests {
     use crate::{
         action::Action,
         address::Address,
+        flavor::OrchardZSA,
         keys::{
             DiversifiedTransmissionKey, Diversifier, EphemeralSecretKey, IncomingViewingKey,
             OutgoingViewingKey, PreparedIncomingViewingKey,
@@ -184,7 +185,6 @@ mod tests {
             testing::arb_note, AssetBase, ExtractedNoteCommitment, Note, Nullifier, RandomSeed,
             Rho, TransmittedNoteCiphertext,
         },
-        orchard_flavor::OrchardZSA,
         primitives::{
             compact_action::CompactAction,
             orchard_domain::OrchardDomain,

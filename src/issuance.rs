@@ -841,6 +841,7 @@ mod tests {
     use crate::{
         builder::{Builder, BundleType},
         circuit::ProvingKey,
+        flavor::OrchardZSA,
         issuance::Error::{
             IncorrectRhoDerivation, InvalidIssueBundleSig, IssueActionNotFound,
             IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
@@ -855,7 +856,6 @@ mod tests {
         },
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
-        orchard_flavor::OrchardZSA,
         tree::{MerkleHashOrchard, MerklePath},
         value::NoteValue,
         Address, Anchor, Bundle, Note,

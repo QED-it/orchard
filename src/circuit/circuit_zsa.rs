@@ -41,8 +41,8 @@ use crate::{
         ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
     },
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
+    flavor::OrchardZSA,
     note::AssetBase,
-    orchard_flavor::OrchardZSA,
 };
 
 impl OrchardCircuit for OrchardZSA {
@@ -883,9 +883,9 @@ mod tests {
             AdditionalZsaWitnesses, Circuit, Instance, Proof, ProvingKey, VerifyingKey, Witnesses,
             K,
         },
+        flavor::OrchardZSA,
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
-        orchard_flavor::OrchardZSA,
         primitives::redpallas::VerificationKey,
         tree::MerklePath,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},

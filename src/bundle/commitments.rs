@@ -190,6 +190,7 @@ mod tests {
             Authorized, Bundle,
         },
         circuit::ProvingKey,
+        flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         issuance::{
             auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
             sighash_versioning::IssueSighashVersion,
@@ -197,7 +198,6 @@ mod tests {
         },
         keys::{FullViewingKey, Scope, SpendingKey},
         note::{AssetBase, Nullifier},
-        orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         sighash_versioning::OrchardSighashVersion,
         value::NoteValue,
         Anchor,

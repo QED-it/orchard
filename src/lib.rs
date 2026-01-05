@@ -32,10 +32,10 @@ pub mod bundle;
 #[cfg(feature = "circuit")]
 pub mod circuit;
 mod constants;
+pub mod flavor;
 pub mod issuance;
 pub mod keys;
 pub mod note;
-pub mod orchard_flavor;
 pub mod pczt;
 pub mod primitives;
 pub mod sighash_versioning;
