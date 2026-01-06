@@ -60,7 +60,7 @@ pub struct IssueBundle<T: IssueAuth> {
 
 /// Flags for an issuance action.
 ///
-/// flagsIssuance is defined in [ZIP-230: Version 6 Transaction Format][issueaction].
+/// `flagsIssuance` is defined in [ZIP-230: Version 6 Transaction Format][issueaction].
 ///
 /// [issueaction]: https://zips.z.cash/zip-0230#issuance-action-description-issueaction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -85,7 +85,8 @@ impl IssuanceFlags {
         self.finalize
     }
 
-    /// Serialize IssuanceFlags to a byte as defined in [ZIP-230: Version 6 Transaction Format][issueaction].
+    /// Serialize `IssuanceFlags` to a byte as defined in
+    /// [ZIP-230: Version 6 Transaction Format][issueaction].
     ///
     /// [issueaction]: https://zips.z.cash/zip-0230#issuance-action-description-issueaction
     pub fn to_byte(&self) -> u8 {
@@ -96,7 +97,8 @@ impl IssuanceFlags {
         value
     }
 
-    /// Parse issuance flags from a single byte as defined in [ZIP-230: Version 6 Transaction Format][issueaction].
+    /// Parse issuance flags from a single byte as defined in
+    /// [ZIP-230: Version 6 Transaction Format][issueaction].
     ///
     /// Returns `None` if unexpected bits are set in the flag byte.
     ///
