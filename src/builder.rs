@@ -539,6 +539,12 @@ impl ActionInfo {
     }
 
     fn build_for_pczt(self, mut rng: impl RngCore) -> crate::pczt::Action {
+        assert_eq!(
+            self.spend.note.asset(),
+            self.output.asset,
+            "spend and recipient note types must be equal"
+        );
+
         let v_net = self.value_sum();
         let cv_net = ValueCommitment::derive(v_net, self.rcv, self.spend.note.asset());
 
