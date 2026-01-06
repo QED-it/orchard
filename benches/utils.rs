@@ -15,7 +15,7 @@ pub(crate) trait OrchardFlavorBench: OrchardFlavor {
 }
 
 impl OrchardFlavorBench for OrchardVanilla {
-    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT_VANILLA;
+    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT;
 
     fn benchmark_group<'a, M: Measurement>(
         c: &'a mut Criterion<M>,
