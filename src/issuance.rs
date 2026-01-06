@@ -1498,7 +1498,7 @@ mod tests {
             compute_asset_desc_hash(&NonEmpty::from_slice(b"asset desc").unwrap());
 
         let (bundle, _) = IssueBundle::new(
-            ik.clone(),
+            ik,
             asset_desc_hash,
             Some(IssueInfo {
                 recipient,
