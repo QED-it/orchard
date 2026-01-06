@@ -169,7 +169,7 @@ pub mod testing {
     };
 
     prop_compose! {
-        /// Generate a uniformly distributed note type
+        /// Generate a uniformly distributed asset base
         pub fn arb_asset_base()
             (asset in prop_oneof![
                 Just(AssetBase::native()),
