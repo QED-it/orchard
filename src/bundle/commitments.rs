@@ -5,10 +5,12 @@ use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::{
     bundle::{Authorization, Authorized, Bundle},
-    issuance::{IssueAuth, IssueBundle, Signed},
-    issuance_sighash_versioning::IssueSighashVersion,
-    orchard_sighash_versioning::OrchardSighashVersion,
+    issuance::{
+        sighash_versioning::IssueSighashVersion,
+        {IssueAuth, IssueBundle, Signed},
+    },
     primitives::OrchardPrimitives,
+    sighash_versioning::OrchardSighashVersion,
 };
 
 pub(crate) const ZCASH_ORCHARD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
@@ -46,10 +48,14 @@ pub(crate) fn hasher(personal: &[u8; 16]) -> State {
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip246]: https://zips.z.cash/zip-0246
-pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>, P: OrchardPrimitives>(
-    bundle: &Bundle<A, V, P>,
+pub(crate) fn hash_bundle_txid_data<
+    A: Authorization,
+    V: Copy + Into<i64>,
+    Pr: OrchardPrimitives,
+>(
+    bundle: &Bundle<A, V, Pr>,
 ) -> Blake2bHash {
-    P::hash_bundle_txid_data(bundle)
+    Pr::hash_bundle_txid_data(bundle)
 }
 
 /// Construct the commitment for the absent bundle as defined in
@@ -73,11 +79,11 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip246]: https://zips.z.cash/zip-0246
-pub(crate) fn hash_bundle_auth_data<V, P: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, V, P>,
+pub(crate) fn hash_bundle_auth_data<V, Pr: OrchardPrimitives>(
+    bundle: &Bundle<Authorized, V, Pr>,
     sighash_version_map: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
 ) -> Blake2bHash {
-    P::hash_bundle_auth_data(bundle, sighash_version_map)
+    Pr::hash_bundle_auth_data(bundle, sighash_version_map)
 }
 
 /// Construct the `orchard_auth_digest` commitment for an absent bundle as defined in
@@ -119,7 +125,7 @@ pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>)
             ind.update(note.rseed().as_bytes());
         }
         ia.update(ind.finalize().as_bytes());
-        ia.update(&[u8::from(action.is_finalized())]);
+        ia.update(&[action.flags().to_byte()]);
     }
     h.update(ia.finalize().as_bytes());
     h.finalize()
@@ -188,13 +194,15 @@ mod tests {
             Authorized, Bundle,
         },
         circuit::ProvingKey,
-        issuance::{compute_asset_desc_hash, AwaitingSighash, IssueBundle, IssueInfo},
-        issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
-        issuance_sighash_versioning::IssueSighashVersion,
+        flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+        issuance::{
+            auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
+            sighash_versioning::IssueSighashVersion,
+            {compute_asset_desc_hash, AwaitingSighash, IssueBundle, IssueInfo},
+        },
         keys::{FullViewingKey, Scope, SpendingKey},
         note::{AssetBase, Nullifier},
-        orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
-        orchard_sighash_versioning::OrchardSighashVersion,
+        sighash_versioning::OrchardSighashVersion,
         value::NoteValue,
         Anchor,
     };
@@ -236,7 +244,7 @@ mod tests {
     /// to ensure consistency.
     #[test]
     fn test_hash_bundle_txid_data_for_orchard_vanilla() {
-        let bundle = generate_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
+        let bundle = generate_bundle::<OrchardVanilla>(BundleType::DEFAULT);
         let sighash = hash_bundle_txid_data(&bundle);
         assert_eq!(
             sighash.to_hex().as_str(),
@@ -272,7 +280,7 @@ mod tests {
     /// reference value to ensure consistency.
     #[test]
     fn test_hash_bundle_auth_data_for_orchard_vanilla() {
-        let bundle = generate_auth_bundle::<OrchardVanilla>(BundleType::DEFAULT_VANILLA);
+        let bundle = generate_auth_bundle::<OrchardVanilla>(BundleType::DEFAULT);
         let orchard_auth_digest = hash_bundle_auth_data(&bundle, &BTreeMap::new());
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
@@ -324,7 +332,7 @@ mod tests {
             compute_asset_desc_hash(&NonEmpty::from_slice(b"second asset").unwrap());
 
         let (mut bundle, asset) = IssueBundle::new(
-            ik.clone(),
+            ik,
             asset_desc_hash_1,
             Some(IssueInfo {
                 recipient,
