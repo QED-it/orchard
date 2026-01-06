@@ -23,8 +23,6 @@ use rand::RngCore;
 use crate::{
     bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
     constants::reference_keys::ReferenceKeys,
-    issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
-    issuance_sighash_versioning::{IssueSighashVersion, VerBIP340IssueAuthSig},
     note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
     value::NoteValue,
     Address, Note,
@@ -37,6 +35,12 @@ use Error::{
     IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
     MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
+
+pub mod auth;
+pub mod sighash_versioning;
+
+use auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
+use sighash_versioning::{IssueSighashVersion, VerBIP340IssueAuthSig};
 
 /// Checks if a given note is a reference note.
 ///
@@ -58,6 +62,62 @@ pub struct IssueBundle<T: IssueAuth> {
     authorization: T,
 }
 
+/// Flags for an issuance action.
+///
+/// `flagsIssuance` is defined in [ZIP-230: Version 6 Transaction Format][issueaction].
+///
+/// [issueaction]: https://zips.z.cash/zip-0230#issuance-action-description-issueaction
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IssuanceFlags {
+    /// Flag denoting whether issuance of this asset type is finalized.
+    ///
+    /// If `true`, further issuance of the same asset type is prevented.
+    finalize: bool,
+}
+
+const ISSUANCE_FLAG_FINALIZE: u8 = 0b0000_0001;
+const ISSUANCE_FLAGS_EXPECTED_UNSET: u8 = !ISSUANCE_FLAG_FINALIZE;
+
+impl IssuanceFlags {
+    /// Construct a set of flags from its constituent parts
+    pub(crate) const fn from_parts(finalize: bool) -> Self {
+        Self { finalize }
+    }
+
+    /// Returns whether the issuance action is marked as `finalize`.
+    pub const fn finalize(&self) -> bool {
+        self.finalize
+    }
+
+    /// Serialize `IssuanceFlags` to a byte as defined in
+    /// [ZIP-230: Version 6 Transaction Format][issueaction].
+    ///
+    /// [issueaction]: https://zips.z.cash/zip-0230#issuance-action-description-issueaction
+    pub fn to_byte(&self) -> u8 {
+        let mut value = 0u8;
+        if self.finalize {
+            value |= ISSUANCE_FLAG_FINALIZE;
+        }
+        value
+    }
+
+    /// Parse issuance flags from a single byte as defined in
+    /// [ZIP-230: Version 6 Transaction Format][issueaction].
+    ///
+    /// Returns `None` if unexpected bits are set in the flag byte.
+    ///
+    /// [issueaction]: https://zips.z.cash/zip-0230#issuance-action-description-issueaction
+    pub fn from_byte(value: u8) -> Option<Self> {
+        if value & ISSUANCE_FLAGS_EXPECTED_UNSET == 0 {
+            Some(Self {
+                finalize: (value & ISSUANCE_FLAG_FINALIZE) != 0,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 /// An issue action applied to the global ledger.
 ///
 /// Externally, this creates new zsa notes (adding a commitment to the global ledger).
@@ -67,8 +127,8 @@ pub struct IssueAction {
     asset_desc_hash: [u8; 32],
     /// The newly issued notes.
     notes: Vec<Note>,
-    /// `finalize` will prevent further issuance of the same asset type.
-    finalize: bool,
+    /// Issuance-specific flags for this `IssueAction`.
+    flags: IssuanceFlags,
 }
 
 /// The parameters required to add a Note into an IssueAction.
@@ -104,15 +164,11 @@ pub fn compute_asset_desc_hash(asset_desc: &NonEmpty<u8>) -> [u8; 32] {
 impl IssueAction {
     /// Constructs a new `IssueAction`.
     pub fn new_with_flags(asset_desc_hash: [u8; 32], notes: Vec<Note>, flags: u8) -> Option<Self> {
-        let finalize = match flags {
-            0b0000_0000 => false,
-            0b0000_0001 => true,
-            _ => return None,
-        };
+        let flags = IssuanceFlags::from_byte(flags)?;
         Some(IssueAction {
             asset_desc_hash,
             notes,
-            finalize,
+            flags,
         })
     }
 
@@ -121,7 +177,7 @@ impl IssueAction {
         IssueAction {
             asset_desc_hash,
             notes,
-            finalize,
+            flags: IssuanceFlags::from_parts(finalize),
         }
     }
 
@@ -137,7 +193,7 @@ impl IssueAction {
 
     /// Returns whether the asset type was finalized in this action.
     pub fn is_finalized(&self) -> bool {
-        self.finalize
+        self.flags.finalize()
     }
 
     /// Verifies and computes the new asset supply for an `IssueAction`.
@@ -195,14 +251,9 @@ impl IssueAction {
         Ok((issue_asset, value_sum))
     }
 
-    /// Serialize `finalize` flag to a byte
-    #[allow(clippy::bool_to_int_with_if)]
-    pub fn flags(&self) -> u8 {
-        if self.finalize {
-            0b0000_0001
-        } else {
-            0b0000_0000
-        }
+    /// Returns the flags for this action.
+    pub fn flags(&self) -> &IssuanceFlags {
+        &self.flags
     }
 
     /// Returns the reference note if the first note matches the reference note criteria.
@@ -387,7 +438,7 @@ impl IssueBundle<AwaitingNullifier> {
             None => IssueAction {
                 asset_desc_hash,
                 notes,
-                finalize: true,
+                flags: IssuanceFlags::from_parts(true),
             },
             Some(issue_info) => {
                 let note = Note::new(
@@ -403,7 +454,7 @@ impl IssueBundle<AwaitingNullifier> {
                 IssueAction {
                     asset_desc_hash,
                     notes,
-                    finalize: false,
+                    flags: IssuanceFlags::from_parts(false),
                 }
             }
         };
@@ -460,7 +511,7 @@ impl IssueBundle<AwaitingNullifier> {
                 self.actions.push(IssueAction {
                     asset_desc_hash,
                     notes,
-                    finalize: false,
+                    flags: IssuanceFlags::from_parts(false),
                 });
             }
         };
@@ -476,7 +527,7 @@ impl IssueBundle<AwaitingNullifier> {
             .find(|issue_action| issue_action.asset_desc_hash.eq(asset_desc_hash))
         {
             Some(issue_action) => {
-                issue_action.finalize = true;
+                issue_action.flags = IssuanceFlags::from_parts(true);
             }
             None => {
                 return Err(IssueActionNotFound);
@@ -837,19 +888,20 @@ mod tests {
     use crate::{
         builder::{Builder, BundleType},
         circuit::ProvingKey,
+        flavor::OrchardZSA,
         issuance::Error::{
             IncorrectRhoDerivation, InvalidIssueBundleSig, IssueActionNotFound,
             IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
         },
         issuance::{
-            compute_asset_desc_hash, is_reference_note, verify_issue_bundle, AssetRecord,
-            IssueAction, IssueBundle, IssueInfo, Signed,
+            auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
+            compute_asset_desc_hash, is_reference_note,
+            sighash_versioning::{IssueSighashVersion, VerBIP340IssueAuthSig},
+            verify_issue_bundle, AssetRecord, IssuanceFlags, IssueAction, IssueBundle, IssueInfo,
+            Signed,
         },
-        issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
-        issuance_sighash_versioning::{IssueSighashVersion, VerBIP340IssueAuthSig},
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, ExtractedNoteCommitment, Nullifier, Rho},
-        orchard_flavor::OrchardZSA,
         tree::{MerkleHashOrchard, MerklePath},
         value::NoteValue,
         Address, Anchor, Bundle, Note,
@@ -865,6 +917,21 @@ mod tests {
     use rand::RngCore;
     use shardtree::store::memory::MemoryShardStore;
     use shardtree::ShardTree;
+
+    #[test]
+    fn issuance_flags_roundtrip() {
+        for &b in &[0u8, 1u8] {
+            let f = IssuanceFlags::from_byte(b).unwrap();
+            assert_eq!(f.to_byte(), b);
+        }
+    }
+
+    #[test]
+    fn issuance_flags_rejects_reserved_bits() {
+        for b in 2u8..=255 {
+            assert!(IssuanceFlags::from_byte(b).is_none());
+        }
+    }
 
     /// Validation for reference note
     ///
@@ -1492,7 +1559,7 @@ mod tests {
             compute_asset_desc_hash(&NonEmpty::from_slice(b"asset desc").unwrap());
 
         let (bundle, _) = IssueBundle::new(
-            ik.clone(),
+            ik,
             asset_desc_hash,
             Some(IssueInfo {
                 recipient,
@@ -1769,10 +1836,10 @@ mod tests {
             compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset description").unwrap());
 
         let action = IssueAction::new_with_flags(asset_desc_hash, vec![note], 0u8).unwrap();
-        assert_eq!(action.flags(), 0b0000_0000);
+        assert_eq!(action.flags().to_byte(), 0b0000_0000);
 
         let action = IssueAction::new_with_flags(asset_desc_hash, vec![note], 1u8).unwrap();
-        assert_eq!(action.flags(), 0b0000_0001);
+        assert_eq!(action.flags().to_byte(), 0b0000_0001);
 
         let action = IssueAction::new_with_flags(asset_desc_hash, vec![note], 2u8);
         assert!(action.is_none());
@@ -1976,13 +2043,14 @@ mod tests {
 pub mod testing {
     use crate::{
         issuance::{
-            AwaitingNullifier, IssueAction, IssueBundle, Prepared, Signed, VerBIP340IssueAuthSig,
+            auth::{
+                testing::arb_issuance_validating_key, IssueAuthSig, IssueAuthSigScheme,
+                IssueValidatingKey, ZSASchnorr,
+            },
+            sighash_versioning::IssueSighashVersion,
+            AwaitingNullifier, IssuanceFlags, IssueAction, IssueBundle, Prepared, Signed,
+            VerBIP340IssueAuthSig,
         },
-        issuance_auth::{
-            testing::arb_issuance_validating_key, IssueAuthSig, IssueAuthSigScheme,
-            IssueValidatingKey, ZSASchnorr,
-        },
-        issuance_sighash_versioning::IssueSighashVersion,
         note::testing::arb_zsa_note,
     };
     use nonempty::NonEmpty;
@@ -2015,7 +2083,7 @@ pub mod testing {
             IssueAction{
                 asset_desc_hash,
                 notes: vec![note],
-                finalize: false,
+                flags: IssuanceFlags::from_parts(false)
             }
         }
     }
