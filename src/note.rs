@@ -317,6 +317,7 @@ impl Note {
         &self.rseed
     }
 
+    /// Returns the rseed_split_note value of this note.
     pub(crate) fn rseed_split_note(&self) -> CtOption<RandomSeed> {
         self.rseed_split_note
     }
