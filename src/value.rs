@@ -176,7 +176,7 @@ impl ValueSum {
     /// in `Bundle::binding_validating_key`, where we are converting from the user-defined
     /// `valueBalance` type that enforces any additional constraints on the value's valid
     /// range.
-    pub fn from_raw(value: i64) -> Self {
+    pub(crate) fn from_raw(value: i64) -> Self {
         ValueSum(value as i128)
     }
 
