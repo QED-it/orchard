@@ -26,9 +26,9 @@ use crate::{
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    orchard_sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
     primitives::redpallas::{self, Binding},
     primitives::{OrchardDomain, OrchardPrimitives},
+    sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
     tree::Anchor,
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -72,8 +72,12 @@ pub struct Flags {
     outputs_enabled: bool,
     /// Flag denoting whether ZSA functionality is enabled in the transaction.
     ///
-    /// If `false`, all notes within [`Action`]s in the transaction's [`Bundle`] are
+    /// If `false`,  all notes within [`Action`]s in the transaction's [`Bundle`] are
     /// guaranteed to be notes with native asset. If `true`, `Action`s may use any asset.
+    ///
+    /// This field was introduced with the ZSA feature; older Orchard versions did not
+    /// include it. Because halo2_proofs zero-extends instance values, old proofs are interpreted
+    /// with this flag equal to zero (`false`), so adding it does not break consensus.
     zsa_enabled: bool,
 }
 
@@ -216,11 +220,6 @@ pub struct Bundle<A: Authorization, V, Pr: OrchardPrimitives> {
     burn: Vec<(AssetBase, NoteValue)>,
     /// The root of the Orchard commitment tree that this bundle commits to.
     anchor: Anchor,
-    /// Block height after which this Bundle's Actions are invalid by consensus.
-    ///
-    /// For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
-    /// This field is reserved for future use.
-    expiry_height: u32,
     /// The authorization for this bundle.
     authorization: A,
 }
@@ -261,8 +260,6 @@ impl<A: Authorization, V, Pr: OrchardPrimitives> Bundle<A, V, Pr> {
             value_balance,
             burn,
             anchor,
-            // For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
-            expiry_height: 0,
             authorization,
         }
     }
@@ -294,11 +291,6 @@ impl<A: Authorization, V, Pr: OrchardPrimitives> Bundle<A, V, Pr> {
         &self.anchor
     }
 
-    /// Returns the expiry height for this bundle.
-    pub fn expiry_height(&self) -> u32 {
-        self.expiry_height
-    }
-
     /// Returns the authorization for this bundle.
     ///
     /// In the case of a `Bundle<Authorized>`, this is the proof and binding signature.
@@ -318,7 +310,6 @@ impl<A: Authorization, V, Pr: OrchardPrimitives> Bundle<A, V, Pr> {
             value_balance: f(self.value_balance)?,
             burn: self.burn,
             anchor: self.anchor,
-            expiry_height: self.expiry_height,
             authorization: self.authorization,
         })
     }
@@ -339,7 +330,6 @@ impl<A: Authorization, V, Pr: OrchardPrimitives> Bundle<A, V, Pr> {
             value_balance: self.value_balance,
             burn: self.burn,
             anchor: self.anchor,
-            expiry_height: self.expiry_height,
             authorization: step(context, authorization),
         }
     }
@@ -364,7 +354,6 @@ impl<A: Authorization, V, Pr: OrchardPrimitives> Bundle<A, V, Pr> {
             value_balance: self.value_balance,
             burn: self.burn,
             anchor: self.anchor,
-            expiry_height: self.expiry_height,
             authorization: step(context, authorization)?,
         })
     }
@@ -465,8 +454,8 @@ impl<A: Authorization, V, Pr: OrchardPrimitives> Bundle<A, V, Pr> {
     }
 }
 
-pub(crate) fn derive_bvk<A, V: Clone + Into<i64>, Pr: OrchardPrimitives>(
-    actions: &NonEmpty<Action<A, Pr>>,
+pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, Pr: 'a + OrchardPrimitives>(
+    actions: impl IntoIterator<Item = &'a Action<A, Pr>>,
     value_balance: V,
     burn: &[(AssetBase, NoteValue)],
 ) -> redpallas::VerificationKey<Binding> {
@@ -639,9 +628,12 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::{
-        note::{asset_base::testing::arb_zsa_asset_base, AssetBase},
-        orchard_sighash_versioning::{VerBindingSig, VerSpendAuthSig},
+        note::{
+            asset_base::testing::{arb_asset_base, arb_zsa_asset_base},
+            AssetBase,
+        },
         primitives::{redpallas::testing::arb_binding_signing_key, OrchardPrimitives},
+        sighash_versioning::{VerBindingSig, VerSpendAuthSig},
         value::{
             testing::{arb_note_value, arb_note_value_bounded},
             NoteValue, ValueSum, MAX_NOTE_VALUE,
@@ -683,8 +675,11 @@ pub mod testing {
                 };
 
                 output_value_gen.prop_flat_map(move |output_value| {
-                    ActionArb::arb_unauthorized_action(spend_value, output_value)
-                        .prop_map(move |a| (spend_value - output_value, a))
+                    arb_asset_base().prop_flat_map(move |asset| {
+                        let value_sum = spend_value - output_value;
+                        ActionArb::arb_unauthorized_action(spend_value, output_value, asset)
+                            .prop_map(move |a| (value_sum, a))
+                    })
                 })
             })
         }
@@ -708,8 +703,11 @@ pub mod testing {
                 };
 
                 output_value_gen.prop_flat_map(move |output_value| {
-                    ActionArb::arb_action(spend_value, output_value)
-                        .prop_map(move |a| (spend_value - output_value, a))
+                    arb_asset_base().prop_flat_map(move |asset| {
+                        let value_sum = spend_value - output_value;
+                        ActionArb::arb_action(spend_value, output_value, asset)
+                            .prop_map(move |a| (value_sum, a))
+                    })
                 })
             })
         }

@@ -15,15 +15,15 @@ use crate::{
     address::Address,
     builder::BuildError::{BurnNative, BurnZero},
     bundle::{Authorization, Authorized, Bundle, Flags},
+    flavor::OrchardVanilla,
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
-    orchard_flavor::OrchardVanilla,
-    orchard_sighash_versioning::{VerBindingSig, VerSpendAuthSig},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
+    sighash_versioning::{VerBindingSig, VerSpendAuthSig},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -35,7 +35,7 @@ use {
         action::Action,
         bundle::derive_bvk,
         circuit::{Circuit, Instance, OrchardCircuit, ProvingKey, Witnesses},
-        orchard_flavor::OrchardFlavor,
+        flavor::OrchardFlavor,
     },
     nonempty::NonEmpty,
 };
@@ -480,6 +480,12 @@ impl ActionInfo {
     ///
     /// Panics if the asset types of the spent and output notes do not match.
     fn new(spend: SpendInfo, output: OutputInfo, rng: impl RngCore) -> Self {
+        assert_eq!(
+            spend.note.asset(),
+            output.asset,
+            "spend and recipient note types must be equal"
+        );
+
         ActionInfo {
             spend,
             output,
@@ -510,14 +516,8 @@ impl ActionInfo {
         self,
         mut rng: impl RngCore,
     ) -> (Action<SigningMetadata, FL>, Witnesses) {
-        assert_eq!(
-            self.spend.note.asset(),
-            self.output.asset,
-            "spend and recipient note types must be equal"
-        );
-
         let v_net = self.value_sum();
-        let cv_net = ValueCommitment::derive(v_net, self.rcv, self.output.asset);
+        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.output.asset);
 
         let (nf_old, ak, alpha, rk) = self.spend.build(&mut rng);
         let (note, cmx, encrypted_note) = self.output.build(&cv_net, nf_old, &mut rng);
@@ -539,13 +539,8 @@ impl ActionInfo {
     }
 
     fn build_for_pczt(self, mut rng: impl RngCore) -> crate::pczt::Action {
-        assert_eq!(
-            self.spend.note.asset(),
-            self.output.asset,
-            "spend and recipient note types must be equal"
-        );
         let v_net = self.value_sum();
-        let cv_net = ValueCommitment::derive(v_net, self.rcv, self.spend.note.asset());
+        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.spend.note.asset());
 
         let spend = self.spend.into_pczt(&mut rng);
         let output = self.output.into_pczt(&cv_net, spend.nullifier, &mut rng);
@@ -767,7 +762,7 @@ impl Builder {
     pub fn build<V: TryFrom<i64>, FL: OrchardFlavor>(
         self,
         rng: impl RngCore,
-    ) -> Result<UnauthorizedBundleWithMetadata<V, FL>, BuildError> {
+    ) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
         bundle(
             rng,
             self.anchor,
@@ -887,7 +882,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     spends: Vec<SpendInfo>,
     outputs: Vec<OutputInfo>,
     burn: BTreeMap<AssetBase, NoteValue>,
-) -> Result<UnauthorizedBundleWithMetadata<V, FL>, BuildError> {
+) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
     build_bundle(
         rng,
         anchor,
@@ -913,27 +908,26 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
             let (actions, witnesses): (Vec<_>, Vec<_>) =
                 pre_actions.into_iter().map(|a| a.build(&mut rng)).unzip();
 
-            // `actions` is never empty. It contains at least MIN_ACTIONS=2 actions.
-            let actions = NonEmpty::from_vec(actions).unwrap();
-
             // Verify that bsk and bvk are consistent.
             let bvk = derive_bvk(&actions, native_value_balance, &burn_vec);
             assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
 
-            Ok((
-                Bundle::from_parts(
-                    actions,
-                    flags,
-                    result_value_balance,
-                    burn_vec,
-                    anchor,
-                    InProgress {
-                        proof: Unproven { witnesses },
-                        sigs: Unauthorized { bsk },
-                    },
-                ),
-                bundle_meta,
-            ))
+            Ok(NonEmpty::from_vec(actions).map(|actions| {
+                (
+                    Bundle::from_parts(
+                        actions,
+                        flags,
+                        result_value_balance,
+                        burn_vec,
+                        anchor,
+                        InProgress {
+                            proof: Unproven { witnesses },
+                            sigs: Unauthorized { bsk },
+                        },
+                    ),
+                    bundle_meta,
+                )
+            }))
         },
     )
 }
@@ -972,12 +966,15 @@ fn build_bundle<B, R: RngCore>(
         return Err(BuildError::OutputsDisabled);
     }
 
+    let num_actions = bundle_type
+        .num_actions(num_requested_spends, num_requested_outputs)
+        .map_err(|_| BuildError::BundleTypeNotSatisfiable)?;
+
     // Pair up the spends and outputs, extending with dummy values as necessary.
     let (pre_actions, bundle_meta) = {
         // Use Vec::with_capacity().extend(...) instead of .collect() to avoid reallocations,
         // as we can estimate the vector size beforehand.
-        let mut indexed_spends_outputs =
-            Vec::with_capacity(spends.len().max(outputs.len()).max(MIN_ACTIONS));
+        let mut indexed_spends_outputs = Vec::with_capacity(num_actions);
 
         let spends_outputs_by_asset = partition_by_asset(&spends, &outputs);
 
@@ -1026,7 +1023,7 @@ fn build_bundle<B, R: RngCore>(
                     (OutputInfo::dummy(&mut rng, AssetBase::native()), None),
                 )
             })
-            .take(MIN_ACTIONS.saturating_sub(indexed_spends_outputs.len())),
+            .take(num_actions.saturating_sub(indexed_spends_outputs.len())),
         );
 
         // We shuffled the spends and outputs within each `AssetBase` above; now we
@@ -1403,9 +1400,9 @@ pub mod testing {
         address::testing::arb_address,
         bundle::{Authorized, Bundle},
         circuit::ProvingKey,
+        flavor::OrchardFlavor,
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::{testing::arb_note, AssetBase},
-        orchard_flavor::OrchardFlavor,
         primitives::OrchardPrimitives,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
         value::{testing::arb_positive_note_value, NoteValue, MAX_NOTE_VALUE},
@@ -1455,6 +1452,7 @@ pub mod testing {
             let pk = ProvingKey::build::<FL>();
             builder
                 .build(&mut self.rng)
+                .unwrap()
                 .unwrap()
                 .0
                 .create_proof(&pk, &mut self.rng)
@@ -1551,9 +1549,9 @@ mod tests {
         bundle::{Authorized, Bundle},
         circuit::ProvingKey,
         constants::MERKLE_DEPTH_ORCHARD,
+        flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
-        orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         tree::EMPTY_ROOTS,
         value::NoteValue,
     };
@@ -1585,6 +1583,7 @@ mod tests {
 
         let bundle: Bundle<Authorized, i64, FL> = builder
             .build(&mut rng)
+            .unwrap()
             .unwrap()
             .0
             .create_proof(&pk, &mut rng)
