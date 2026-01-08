@@ -13,7 +13,7 @@ use zcash_note_encryption::NoteEncryption;
 
 use crate::{
     address::Address,
-    bundle::{Authorization, Authorized, Bundle, Flags},
+    bundle::{burn_validation::BurnError, Authorization, Authorized, Bundle, Flags},
     flavor::OrchardVanilla,
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
@@ -27,9 +27,6 @@ use crate::{
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
 };
-
-#[cfg(feature = "zsa-issuance")]
-use crate::bundle::burn_validation::BurnError;
 
 #[cfg(feature = "circuit")]
 use {
@@ -155,7 +152,6 @@ pub enum BuildError {
     /// The bundle being constructed violated the construction rules for the requested bundle type.
     BundleTypeNotSatisfiable,
     /// Burn-specific error.
-    #[cfg(feature = "zsa-issuance")]
     Burn(BurnError),
     /// There is no available split note for this asset.
     NoSplitNoteAvailable,
@@ -179,7 +175,6 @@ impl fmt::Display for BuildError {
             AnchorMismatch => {
                 f.write_str("All spends must share the anchor requested for the transaction.")
             }
-            #[cfg(feature = "zsa-issuance")]
             Burn(e) => write!(f, "Burn error: {}", e),
             NoSplitNoteAvailable => f.write_str("No split note has been provided for this asset"),
         }
@@ -693,7 +688,6 @@ impl Builder {
     }
 
     /// Adds an instruction to burn a given amount of a specific asset.
-    #[cfg(feature = "zsa-issuance")]
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
         use alloc::collections::btree_map::Entry;
 

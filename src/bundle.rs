@@ -9,7 +9,6 @@ mod batch;
 #[cfg(feature = "circuit")]
 pub use batch::BatchValidator;
 
-#[cfg(feature = "zsa-issuance")]
 pub mod burn_validation;
 
 use core::fmt;
