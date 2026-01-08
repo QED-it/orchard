@@ -36,8 +36,8 @@ use crate::{
         ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
     },
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
+    flavor::OrchardVanilla,
     note::AssetBase,
-    orchard_flavor::OrchardVanilla,
 };
 
 impl OrchardCircuit for OrchardVanilla {
@@ -641,9 +641,9 @@ mod tests {
     use crate::{
         bundle::Flags,
         circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, Witnesses, K},
+        flavor::OrchardVanilla,
         keys::SpendValidatingKey,
         note::{AssetBase, Note, Rho},
-        orchard_flavor::OrchardVanilla,
         tree::MerklePath,
         value::{ValueCommitTrapdoor, ValueCommitment},
     };

@@ -2,7 +2,7 @@ use criterion::{measurement::Measurement, BenchmarkGroup, Criterion};
 
 use orchard::{
     builder::BundleType,
-    orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
+    flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
 };
 
 pub(crate) trait OrchardFlavorBench: OrchardFlavor {
@@ -15,7 +15,7 @@ pub(crate) trait OrchardFlavorBench: OrchardFlavor {
 }
 
 impl OrchardFlavorBench for OrchardVanilla {
-    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT_VANILLA;
+    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT;
 
     fn benchmark_group<'a, M: Measurement>(
         c: &'a mut Criterion<M>,

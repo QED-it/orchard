@@ -116,7 +116,7 @@ mod tests {
             compute_asset_desc_hash(&NonEmpty::from_slice(b"second asset").unwrap());
 
         let (mut bundle, asset) = IssueBundle::new(
-            ik.clone(),
+            ik,
             asset_desc_hash_1,
             Some(IssueInfo {
                 recipient,
