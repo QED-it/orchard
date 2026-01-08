@@ -4,8 +4,8 @@ use crate::builder::verify_bundle;
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use nonempty::NonEmpty;
 use orchard::{
-    builder::{Builder, BundleType},
-    bundle::Authorized,
+    builder::{BuildError, Builder, BundleType},
+    bundle::{burn_validation::BurnError, Authorized},
     circuit::{ProvingKey, VerifyingKey},
     flavor::OrchardZSA,
     issuance::{
@@ -598,7 +598,7 @@ fn zsa_issue_and_transfer() {
     );
     match result {
         Ok(_) => panic!("Test should fail"),
-        Err(error) => assert_eq!(error, "Burn error: Cannot burn a native asset."),
+        Err(error) => assert_eq!(error, BuildError::Burn(BurnError::NativeAsset).to_string()),
     }
 
     // 12. Try to burn zero value - should fail
@@ -616,6 +616,6 @@ fn zsa_issue_and_transfer() {
     );
     match result {
         Ok(_) => panic!("Test should fail"),
-        Err(error) => assert_eq!(error, "Burn error: Cannot burn an asset with a zero value."),
+        Err(error) => assert_eq!(error, BuildError::Burn(BurnError::ZeroAmount).to_string()),
     }
 }
