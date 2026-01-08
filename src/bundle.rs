@@ -653,7 +653,7 @@ pub mod testing {
     /// in property-based testing, addressing proptest crate limitations.
     #[derive(Debug)]
     pub struct BundleArb<Pr: OrchardPrimitives> {
-        phantom: std::marker::PhantomData<Pr>,
+        phantom: core::marker::PhantomData<Pr>,
     }
 
     impl<Pr: OrchardPrimitives + Default> BundleArb<Pr> {
