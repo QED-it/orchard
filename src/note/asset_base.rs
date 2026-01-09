@@ -6,23 +6,16 @@ use subtle::{Choice, ConstantTimeEq, CtOption};
 
 use crate::constants::fixed_bases::{NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION};
 
-// Conditional imports for ZSA issuance and/or tests
-#[cfg(any(feature = "zsa-issuance", test))]
-use {
-    crate::constants::fixed_bases::ZSA_ASSET_BASE_PERSONALIZATION, group::Group,
-    rand_core::CryptoRngCore,
-};
+#[cfg(test)]
+use rand_core::CryptoRngCore;
 
-// Conditional imports for full ZSA issuance feature
 #[cfg(feature = "zsa-issuance")]
 use {
-    crate::issuance::{
-        auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
-        compute_asset_desc_hash,
-    },
+    crate::constants::fixed_bases::ZSA_ASSET_BASE_PERSONALIZATION,
+    crate::issuance::auth::{IssueValidatingKey, ZSASchnorr},
     alloc::vec::Vec,
     blake2b_simd::{Hash as Blake2bHash, Params},
-    nonempty::NonEmpty,
+    group::Group,
 };
 
 /// Note type identifier.
@@ -120,22 +113,6 @@ impl AssetBase {
         AssetBase(asset_base)
     }
 
-    /// Stub for derive when zsa-issuance is disabled.
-    /// Creates a deterministic asset base from a hash for testing without issuance keys.
-    #[cfg(all(test, not(feature = "zsa-issuance")))]
-    pub(crate) fn derive_stub(asset_desc_hash: &[u8; 32]) -> Self {
-        let asset_base =
-            pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(asset_desc_hash);
-
-        // this will happen with negligible probability.
-        assert!(
-            bool::from(!asset_base.is_identity()),
-            "The Asset Base is the identity point, which is invalid."
-        );
-
-        AssetBase(asset_base)
-    }
-
     /// Note type for the "native" currency (zec), maintains backward compatibility with Orchard untyped notes.
     pub fn native() -> Self {
         AssetBase(pallas::Point::hash_to_curve(
@@ -153,11 +130,13 @@ impl AssetBase {
         self.0.ct_eq(&Self::native().0)
     }
 
-    /// Generates a ZSA random asset.
+    /// Generates a ZSA random asset from a random issuance validating key.
     ///
     /// This is only used in tests.
-    #[cfg(feature = "zsa-issuance")]
+    #[cfg(all(test, feature = "zsa-issuance"))]
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+        use crate::issuance::{auth::IssueAuthKey, compute_asset_desc_hash};
+        use nonempty::NonEmpty;
         let isk = IssueAuthKey::<ZSASchnorr>::random(rng);
         let ik = IssueValidatingKey::from(&isk);
         AssetBase::derive(
@@ -166,10 +145,12 @@ impl AssetBase {
         )
     }
 
-    /// Stub for random when zsa-issuance is disabled.
-    /// Generates a random non-native asset for testing without issuance keys.
+    /// Generates a ZSA random asset from a random Pallas point.
+    ///
+    /// This is only used in tests.
     #[cfg(all(test, not(feature = "zsa-issuance")))]
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+        use group::Group;
         Self(pallas::Point::random(rng))
     }
 }
@@ -188,34 +169,34 @@ impl PartialEq for AssetBase {
 }
 
 /// Generators for property testing.
-#[cfg(all(any(test, feature = "test-dependencies"), feature = "zsa-issuance"))]
+#[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use super::AssetBase;
 
     use proptest::prelude::*;
 
+    #[cfg(feature = "zsa-issuance")]
     use crate::issuance::auth::{
         testing::arb_issuance_authorizing_key, IssueValidatingKey, ZSASchnorr,
     };
 
     prop_compose! {
-        /// Generate a uniformly distributed note type
-        pub fn arb_asset_base()(
-            is_native in prop::bool::ANY,
-            isk in arb_issuance_authorizing_key(),
-            asset_desc_hash in any::<[u8; 32]>(),
-        ) -> AssetBase {
-            if is_native {
-                AssetBase::native()
-            } else {
-                AssetBase::derive(&IssueValidatingKey::from(&isk), &asset_desc_hash)
-            }
+        /// Generate a uniformly distributed asset base.
+        pub fn arb_asset_base()
+            (asset in prop_oneof![
+                Just(AssetBase::native()),
+                arb_zsa_asset_base(),
+            ])
+            -> AssetBase
+        {
+            asset
         }
     }
 
+    #[cfg(feature = "zsa-issuance")]
     prop_compose! {
-        /// Generate an asset ID
+        /// Generate a ZSA asset base.
         pub fn arb_zsa_asset_base()(
             isk in arb_issuance_authorizing_key(),
             asset_desc_hash in any::<[u8; 32]>(),
@@ -224,42 +205,36 @@ pub mod testing {
         }
     }
 
+    #[cfg(not(feature = "zsa-issuance"))]
     prop_compose! {
-        /// Generate an asset base using a specific issuance validating key
+        /// Generates a ZSA asset base from a description hash for testing when zsa-issuance is disabled.
+        pub fn arb_zsa_asset_base()(
+            asset_desc_hash in any::<[u8; 32]>(),
+        ) -> AssetBase {
+            use crate::constants::fixed_bases::ZSA_ASSET_BASE_PERSONALIZATION;
+            use group::Group;
+            use pasta_curves::{arithmetic::CurveExt, pallas};
+
+            let asset_base =
+            pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(&asset_desc_hash);
+
+            // This will happen with negligible probability.
+            assert!(
+                bool::from(!asset_base.is_identity()),
+                "The Asset Base is the identity point, which is invalid."
+            );
+
+            AssetBase(asset_base)
+        }
+    }
+
+    #[cfg(feature = "zsa-issuance")]
+    prop_compose! {
+        /// Generate a ZSA asset base using a specific issuance validating key.
         pub fn zsa_asset_base(ik: IssueValidatingKey<ZSASchnorr>)(
             asset_desc_hash in prop::array::uniform32(prop::num::u8::ANY),
         ) -> AssetBase {
             AssetBase::derive(&ik, &asset_desc_hash)
-        }
-    }
-}
-
-/// Generators for property testing (without zsa-issuance feature).
-#[cfg(all(
-    any(test, feature = "test-dependencies"),
-    not(feature = "zsa-issuance")
-))]
-#[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
-pub mod testing {
-    use super::AssetBase;
-    use proptest::prelude::*;
-
-    prop_compose! {
-        /// Generate a uniformly distributed note type (native only without zsa-issuance feature)
-        pub fn arb_asset_base()
-            (_is_native in prop::bool::ANY)
-            -> AssetBase
-        {
-            AssetBase::native()
-        }
-    }
-
-    prop_compose! {
-        /// Generate a ZSA asset (stub without issuance keys)
-        pub fn arb_zsa_asset_base()(
-            asset_desc_hash in any::<[u8; 32]>(),
-        ) -> AssetBase {
-            AssetBase::derive_stub(&asset_desc_hash)
         }
     }
 }

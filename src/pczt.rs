@@ -12,9 +12,9 @@ use zip32::ChildIndex;
 
 use crate::{
     bundle::Flags,
+    flavor::OrchardVanilla,
     keys::{FullViewingKey, SpendingKey},
     note::{ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext},
-    orchard_flavor::OrchardVanilla,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -331,7 +331,7 @@ impl Zip32Derivation {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "circuit"))]
 mod tests {
     use ff::{Field, PrimeField};
     use incrementalmerkletree::{Marking, Retention};
@@ -343,9 +343,9 @@ mod tests {
         builder::{Builder, BundleType},
         circuit::ProvingKey,
         constants::MERKLE_DEPTH_ORCHARD,
+        flavor::OrchardVanilla,
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
-        orchard_flavor::OrchardVanilla,
         pczt::Zip32Derivation,
         tree::{MerkleHashOrchard, EMPTY_ROOTS},
         value::NoteValue,
@@ -363,7 +363,7 @@ mod tests {
 
         // Run the Creator and Constructor roles.
         let mut builder = Builder::new(
-            BundleType::DEFAULT_VANILLA,
+            BundleType::DEFAULT,
             EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
         );
         builder
@@ -450,7 +450,7 @@ mod tests {
         };
 
         // Run the Creator and Constructor roles.
-        let mut builder = Builder::new(BundleType::DEFAULT_VANILLA, anchor);
+        let mut builder = Builder::new(BundleType::DEFAULT, anchor);
         builder
             .add_spend(fvk.clone(), note, merkle_path.into())
             .unwrap();

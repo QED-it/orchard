@@ -51,4 +51,3 @@ Each Orchard action has a memo field for its corresponding output, as with Sprou
 Sapling. We did at one point consider having a single Orchard memo field per transaction,
 and/or having a mechanism for enabling multiple recipients to decrypt the same memo, but
 these were decided against in order to keep the overall design simpler.
-

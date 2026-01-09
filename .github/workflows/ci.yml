@@ -9,14 +9,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-
     steps:
       - uses: actions/checkout@v4
       - name: Run tests
-        env:
-          # Disable LTO in CI to avoid very slow/hanging release test builds on macOS (rustc/LLVM).
-          CARGO_PROFILE_RELEASE_LTO: "off"
-        run: cargo test --verbose --release
+        run: cargo test --verbose
       - name: Verify working directory is clean
         run: git diff --exit-code
 

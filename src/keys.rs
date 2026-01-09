@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core2::io::{self, Read, Write};
 
+use ::zip32::{hardened_only, ChildIndex};
 use aes::Aes256;
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use fpe::ff1::{BinaryNumeralString, FF1};
@@ -28,12 +29,7 @@ use crate::{
     zip32::{self, ExtendedSpendingKey},
 };
 
-// Preserve '::' which specifies the EXTERNAL 'zip32' crate
-#[rustfmt::skip]
 pub use ::zip32::{AccountId, DiversifierIndex, Scope};
-
-#[rustfmt::skip]
-use ::zip32::{ChildIndex, hardened_only};
 
 const KDF_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_OrchardKDF";
 const ZIP32_PURPOSE: u32 = 32;
@@ -190,7 +186,7 @@ impl SpendValidatingKey {
         self.0.randomize(randomizer)
     }
 
-    /// Converts this spend key validating to its serialized form,
+    /// Converts this spend validating key to its serialized form,
     /// I2LEOSP_256(ak).
     #[cfg_attr(feature = "unstable-frost", visibility::make(pub))]
     pub(crate) fn to_bytes(&self) -> [u8; 32] {
@@ -979,17 +975,6 @@ mod tests {
         *,
     };
 
-    #[cfg(feature = "zsa-issuance")]
-    use crate::issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
-    #[cfg(feature = "zsa-issuance")]
-    use crate::{
-        note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
-        value::NoteValue,
-        Note,
-    };
-    #[cfg(feature = "zsa-issuance")]
-    use ff::PrimeField;
-
     #[test]
     fn spend_validating_key_from_bytes() {
         // ak_P must not be the identity.
@@ -1038,6 +1023,16 @@ mod tests {
     #[cfg(feature = "zsa-issuance")]
     #[test]
     fn test_vectors() {
+        use {
+            crate::{
+                issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
+                note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
+                value::NoteValue,
+                Note,
+            },
+            ff::PrimeField,
+        };
+
         for tv in crate::test_vectors::keys::TEST_VECTORS {
             let sk = SpendingKey::from_bytes(tv.sk).unwrap();
 

@@ -2,9 +2,9 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use orchard::{
     builder::Builder,
     circuit::ProvingKey,
+    flavor::{OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    orchard_flavor::{OrchardVanilla, OrchardZSA},
     primitives::{CompactAction, OrchardDomain},
     value::NoteValue,
     Anchor, Bundle,
@@ -74,7 +74,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 [0; 512],
             )
             .unwrap();
-        let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().0;
+        let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().unwrap().0;
         bundle
             .create_proof(&pk, rng)
             .unwrap()

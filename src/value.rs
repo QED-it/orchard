@@ -41,9 +41,6 @@ use core::fmt::{self, Debug};
 use core::iter::Sum;
 use core::ops::{Add, RangeInclusive, Sub};
 
-#[cfg(feature = "std")]
-use std::ops::Neg;
-
 use bitvec::{array::BitArray, order::Lsb0};
 use ff::{Field, PrimeField};
 use group::{Curve, Group, GroupEncoding};
@@ -129,12 +126,6 @@ impl NoteValue {
 impl From<&NoteValue> for Assigned<pallas::Base> {
     fn from(v: &NoteValue) -> Self {
         pallas::Base::from(v.inner()).into()
-    }
-}
-
-impl From<NoteValue> for i128 {
-    fn from(value: NoteValue) -> Self {
-        value.0 as i128
     }
 }
 
@@ -225,26 +216,13 @@ impl ValueSum {
     }
 }
 
-impl<T: Into<i128>> Add<T> for ValueSum {
+impl Add for ValueSum {
     type Output = Option<ValueSum>;
 
     #[allow(clippy::suspicious_arithmetic_impl)]
-    fn add(self, rhs: T) -> Self::Output {
+    fn add(self, rhs: Self) -> Self::Output {
         self.0
-            .checked_add(rhs.into())
-            .filter(|v| VALUE_SUM_RANGE.contains(v))
-            .map(ValueSum)
-    }
-}
-
-#[cfg(feature = "std")]
-impl Neg for ValueSum {
-    type Output = Option<ValueSum>;
-
-    #[allow(clippy::suspicious_arithmetic_impl)]
-    fn neg(self) -> Self::Output {
-        self.0
-            .checked_neg()
+            .checked_add(rhs.0)
             .filter(|v| VALUE_SUM_RANGE.contains(v))
             .map(ValueSum)
     }
@@ -269,18 +247,6 @@ impl TryFrom<ValueSum> for i64 {
 
     fn try_from(v: ValueSum) -> Result<i64, Self::Error> {
         i64::try_from(v.0).map_err(|_| OverflowError)
-    }
-}
-
-impl From<ValueSum> for i128 {
-    fn from(value: ValueSum) -> Self {
-        value.0
-    }
-}
-
-impl From<NoteValue> for ValueSum {
-    fn from(value: NoteValue) -> Self {
-        Self(value.into())
     }
 }
 
@@ -521,8 +487,19 @@ mod tests {
         note::asset_base::testing::arb_asset_base, note::AssetBase, primitives::redpallas,
     };
 
+    fn negate_value_sum(value: ValueSum) -> ValueSum {
+        use crate::value::Sign;
+
+        let (magnitude, sign) = value.magnitude_sign();
+        let neg_sign = match sign {
+            Sign::Positive => Sign::Negative,
+            Sign::Negative => Sign::Positive,
+        };
+        ValueSum::from_magnitude_sign(magnitude, neg_sign)
+    }
+
     fn check_binding_signature(
-        native_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
+        native_values: &[(ValueSum, ValueCommitTrapdoor)],
         arb_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
         neg_trapdoors: &[ValueCommitTrapdoor],
         arb_values_to_burn: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
@@ -532,17 +509,23 @@ mod tests {
             .iter()
             .cloned()
             .zip(neg_trapdoors.iter().cloned())
-            .map(|((value, _, asset), rcv)| ((-value).unwrap(), rcv, asset))
+            .map(|((value, _, asset), rcv)| (negate_value_sum(value), rcv, asset))
             .collect();
 
         let native_value_balance = native_values
             .iter()
-            .map(|(value, _, _)| value)
+            .map(|(value, _)| value)
             .sum::<Result<ValueSum, OverflowError>>()
             .expect("we generate values that won't overflow");
 
+        let native_values_with_asset: Vec<(ValueSum, ValueCommitTrapdoor, AssetBase)> =
+            native_values
+                .iter()
+                .map(|(value_sum, trapdoor)| (*value_sum, trapdoor.clone(), AssetBase::native()))
+                .collect();
+
         let values = [
-            native_values,
+            &native_values_with_asset,
             arb_values,
             &neg_arb_values,
             arb_values_to_burn,
@@ -580,7 +563,7 @@ mod tests {
         fn bsk_consistent_with_bvk_native_with_zsa_transfer_and_burning(
             native_values in (1usize..10).prop_flat_map(|n_values|
                 arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), Just(AssetBase::native())), n_values)
+                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor()), n_values)
                 )
             ),
             (asset_values, neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|

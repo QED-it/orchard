@@ -19,8 +19,8 @@ use crate::{
         },
         Authorization, Authorized,
     },
+    flavor::OrchardZSA,
     note::{AssetBase, Note},
-    orchard_flavor::OrchardZSA,
     primitives::{
         orchard_primitives::OrchardPrimitives,
         zcash_note_encryption_domain::{
@@ -105,7 +105,8 @@ impl OrchardPrimitives for OrchardZSA {
 
         agh.update(&[bundle.flags().to_byte()]);
         agh.update(&bundle.anchor().to_bytes());
-        agh.update(&bundle.expiry_height().to_le_bytes());
+        // For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
+        agh.update(&0u32.to_le_bytes());
 
         let mut burn_hasher = hasher(ZCASH_ORCHARD_ZSA_BURN_HASH_PERSONALIZATION);
         for burn_item in bundle.burn() {
@@ -176,6 +177,7 @@ mod tests {
     use crate::{
         action::Action,
         address::Address,
+        flavor::OrchardZSA,
         keys::{
             DiversifiedTransmissionKey, Diversifier, EphemeralSecretKey, IncomingViewingKey,
             OutgoingViewingKey, PreparedIncomingViewingKey,
@@ -184,7 +186,6 @@ mod tests {
             testing::arb_note, AssetBase, ExtractedNoteCommitment, Note, Nullifier, RandomSeed,
             Rho, TransmittedNoteCiphertext,
         },
-        orchard_flavor::OrchardZSA,
         primitives::{
             compact_action::CompactAction,
             orchard_domain::OrchardDomain,
