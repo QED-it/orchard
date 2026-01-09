@@ -174,13 +174,14 @@ impl PartialEq for AssetBase {
 }
 
 /// Generators for property testing.
-#[cfg(all(any(test, feature = "test-dependencies"), feature = "zsa-issuance"))]
+#[cfg(all(any(test, feature = "test-dependencies")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use super::AssetBase;
 
     use proptest::prelude::*;
 
+    #[cfg(feature = "zsa-issuance")]
     use crate::issuance::auth::{
         testing::arb_issuance_authorizing_key, IssueValidatingKey, ZSASchnorr,
     };
@@ -198,6 +199,7 @@ pub mod testing {
         }
     }
 
+    #[cfg(feature = "zsa-issuance")]
     prop_compose! {
         /// Generate an asset ID
         pub fn arb_zsa_asset_base()(
@@ -208,36 +210,7 @@ pub mod testing {
         }
     }
 
-    prop_compose! {
-        /// Generate an asset base using a specific issuance validating key
-        pub fn zsa_asset_base(ik: IssueValidatingKey<ZSASchnorr>)(
-            asset_desc_hash in prop::array::uniform32(prop::num::u8::ANY),
-        ) -> AssetBase {
-            AssetBase::derive(&ik, &asset_desc_hash)
-        }
-    }
-}
-
-/// Generators for property testing (without zsa-issuance feature).
-#[cfg(all(
-    any(test, feature = "test-dependencies"),
-    not(feature = "zsa-issuance")
-))]
-#[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
-pub mod testing {
-    use super::AssetBase;
-    use proptest::prelude::*;
-
-    prop_compose! {
-        /// Generate a uniformly distributed note type (native only without zsa-issuance feature)
-        pub fn arb_asset_base()
-            (_is_native in prop::bool::ANY)
-            -> AssetBase
-        {
-            AssetBase::native()
-        }
-    }
-
+    #[cfg(not(feature = "zsa-issuance"))]
     prop_compose! {
         /// Generate a ZSA asset from a hash for testing without issuance keys.
         pub fn arb_zsa_asset_base()(
@@ -246,15 +219,27 @@ pub mod testing {
             use crate::note::asset_base::ZSA_ASSET_BASE_PERSONALIZATION;
             use group::Group;
             use pasta_curves::{arithmetic::CurveExt, pallas};
+
             let asset_base =
             pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(&asset_desc_hash);
 
-            // this will happen with negligible probability.
+            // This will happen with negligible probability.
             assert!(
                 bool::from(!asset_base.is_identity()),
                 "The Asset Base is the identity point, which is invalid."
             );
+
             AssetBase(asset_base)
+        }
+    }
+
+    #[cfg(feature = "zsa-issuance")]
+    prop_compose! {
+        /// Generate an asset base using a specific issuance validating key
+        pub fn zsa_asset_base(ik: IssueValidatingKey<ZSASchnorr>)(
+            asset_desc_hash in prop::array::uniform32(prop::num::u8::ANY),
+        ) -> AssetBase {
+            AssetBase::derive(&ik, &asset_desc_hash)
         }
     }
 }
