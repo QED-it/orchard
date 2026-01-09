@@ -6,14 +6,8 @@ use subtle::{Choice, ConstantTimeEq, CtOption};
 
 use crate::constants::fixed_bases::{NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION};
 
-#[cfg(all(feature = "zsa-issuance", test))]
+#[cfg(test)]
 use rand_core::CryptoRngCore;
-
-#[cfg(all(not(feature = "zsa-issuance"), test))]
-use {
-    crate::constants::fixed_bases::ZSA_ASSET_BASE_PERSONALIZATION, group::Group,
-    rand_core::CryptoRngCore,
-};
 
 #[cfg(feature = "zsa-issuance")]
 use {
@@ -156,6 +150,7 @@ impl AssetBase {
     /// This is only used in tests.
     #[cfg(all(test, not(feature = "zsa-issuance")))]
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+        use group::Group;
         Self(pallas::Point::random(rng))
     }
 }
@@ -216,7 +211,7 @@ pub mod testing {
         pub fn arb_zsa_asset_base()(
             asset_desc_hash in any::<[u8; 32]>(),
         ) -> AssetBase {
-            use crate::note::asset_base::ZSA_ASSET_BASE_PERSONALIZATION;
+            use crate::constants::fixed_bases::ZSA_ASSET_BASE_PERSONALIZATION;
             use group::Group;
             use pasta_curves::{arithmetic::CurveExt, pallas};
 
