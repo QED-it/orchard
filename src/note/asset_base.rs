@@ -119,22 +119,6 @@ impl AssetBase {
         AssetBase(asset_base)
     }
 
-    /// Stub for derive when zsa-issuance is disabled.
-    /// Creates a deterministic asset base from a hash for testing without issuance keys.
-    #[cfg(all(test, not(feature = "zsa-issuance")))]
-    pub(crate) fn derive_stub(asset_desc_hash: &[u8; 32]) -> Self {
-        let asset_base =
-            pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(asset_desc_hash);
-
-        // this will happen with negligible probability.
-        assert!(
-            bool::from(!asset_base.is_identity()),
-            "The Asset Base is the identity point, which is invalid."
-        );
-
-        AssetBase(asset_base)
-    }
-
     /// Note type for the "native" currency (zec), maintains backward compatibility with Orchard untyped notes.
     pub fn native() -> Self {
         AssetBase(pallas::Point::hash_to_curve(
@@ -255,11 +239,22 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate a ZSA asset (stub without issuance keys)
+        /// Generate a ZSA asset from a hash for testing without issuance keys.
         pub fn arb_zsa_asset_base()(
             asset_desc_hash in any::<[u8; 32]>(),
         ) -> AssetBase {
-            AssetBase::derive_stub(&asset_desc_hash)
+            use crate::note::asset_base::ZSA_ASSET_BASE_PERSONALIZATION;
+            use group::Group;
+            use pasta_curves::{arithmetic::CurveExt, pallas};
+            let asset_base =
+            pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(&asset_desc_hash);
+
+            // this will happen with negligible probability.
+            assert!(
+                bool::from(!asset_base.is_identity()),
+                "The Asset Base is the identity point, which is invalid."
+            );
+            AssetBase(asset_base)
         }
     }
 }
