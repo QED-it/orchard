@@ -2,14 +2,13 @@
 
 use alloc::vec::Vec;
 
+pub mod burn_validation;
 pub mod commitments;
 
 #[cfg(feature = "circuit")]
 mod batch;
 #[cfg(feature = "circuit")]
 pub use batch::BatchValidator;
-
-pub mod burn_validation;
 
 use core::fmt;
 

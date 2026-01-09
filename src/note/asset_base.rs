@@ -6,23 +6,22 @@ use subtle::{Choice, ConstantTimeEq, CtOption};
 
 use crate::constants::fixed_bases::{NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION};
 
-// Conditional imports for ZSA issuance and/or tests
-#[cfg(any(feature = "zsa-issuance", test))]
+#[cfg(all(feature = "zsa-issuance", test))]
+use rand_core::CryptoRngCore;
+
+#[cfg(all(not(feature = "zsa-issuance"), test))]
 use {
     crate::constants::fixed_bases::ZSA_ASSET_BASE_PERSONALIZATION, group::Group,
     rand_core::CryptoRngCore,
 };
 
-// Conditional imports for full ZSA issuance feature
 #[cfg(feature = "zsa-issuance")]
 use {
-    crate::issuance::{
-        auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
-        compute_asset_desc_hash,
-    },
+    crate::constants::fixed_bases::ZSA_ASSET_BASE_PERSONALIZATION,
+    crate::issuance::auth::{IssueValidatingKey, ZSASchnorr},
     alloc::vec::Vec,
     blake2b_simd::{Hash as Blake2bHash, Params},
-    nonempty::NonEmpty,
+    group::Group,
 };
 
 /// Note type identifier.
@@ -153,11 +152,13 @@ impl AssetBase {
         self.0.ct_eq(&Self::native().0)
     }
 
-    /// Generates a ZSA random asset.
+    /// Generates a ZSA random asset from a random issuance key.
     ///
     /// This is only used in tests.
-    #[cfg(feature = "zsa-issuance")]
+    #[cfg(all(test, feature = "zsa-issuance"))]
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+        use crate::issuance::{auth::IssueAuthKey, compute_asset_desc_hash};
+        use nonempty::NonEmpty;
         let isk = IssueAuthKey::<ZSASchnorr>::random(rng);
         let ik = IssueValidatingKey::from(&isk);
         AssetBase::derive(
@@ -166,8 +167,9 @@ impl AssetBase {
         )
     }
 
-    /// Stub for random when zsa-issuance is disabled.
-    /// Generates a random non-native asset for testing without issuance keys.
+    /// Generates a ZSA random asset from a random pallas point.
+    ///
+    /// This is only used in tests.
     #[cfg(all(test, not(feature = "zsa-issuance")))]
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
         Self(pallas::Point::random(rng))

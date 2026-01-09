@@ -975,17 +975,6 @@ mod tests {
         *,
     };
 
-    #[cfg(feature = "zsa-issuance")]
-    use crate::issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
-    #[cfg(feature = "zsa-issuance")]
-    use crate::{
-        note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
-        value::NoteValue,
-        Note,
-    };
-    #[cfg(feature = "zsa-issuance")]
-    use ff::PrimeField;
-
     #[test]
     fn spend_validating_key_from_bytes() {
         // ak_P must not be the identity.
@@ -1034,6 +1023,16 @@ mod tests {
     #[cfg(feature = "zsa-issuance")]
     #[test]
     fn test_vectors() {
+        use {
+            crate::{
+                issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
+                note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
+                value::NoteValue,
+                Note,
+            },
+            ff::PrimeField,
+        };
+
         for tv in crate::test_vectors::keys::TEST_VECTORS {
             let sk = SpendingKey::from_bytes(tv.sk).unwrap();
 
