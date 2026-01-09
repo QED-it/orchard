@@ -130,7 +130,7 @@ impl AssetBase {
         self.0.ct_eq(&Self::native().0)
     }
 
-    /// Generates a ZSA random asset from a random issuance key.
+    /// Generates a ZSA random asset from a random issuance validating key.
     ///
     /// This is only used in tests.
     #[cfg(all(test, feature = "zsa-issuance"))]
@@ -145,7 +145,7 @@ impl AssetBase {
         )
     }
 
-    /// Generates a ZSA random asset from a random pallas point.
+    /// Generates a ZSA random asset from a random Pallas point.
     ///
     /// This is only used in tests.
     #[cfg(all(test, not(feature = "zsa-issuance")))]
@@ -169,7 +169,7 @@ impl PartialEq for AssetBase {
 }
 
 /// Generators for property testing.
-#[cfg(all(any(test, feature = "test-dependencies")))]
+#[cfg(any(test, feature = "test-dependencies"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub mod testing {
     use super::AssetBase;
@@ -182,7 +182,7 @@ pub mod testing {
     };
 
     prop_compose! {
-        /// Generate a uniformly distributed asset base
+        /// Generate a uniformly distributed asset base.
         pub fn arb_asset_base()
             (asset in prop_oneof![
                 Just(AssetBase::native()),
@@ -196,7 +196,7 @@ pub mod testing {
 
     #[cfg(feature = "zsa-issuance")]
     prop_compose! {
-        /// Generate an asset ID
+        /// Generate a ZSA asset base.
         pub fn arb_zsa_asset_base()(
             isk in arb_issuance_authorizing_key(),
             asset_desc_hash in any::<[u8; 32]>(),
@@ -207,7 +207,7 @@ pub mod testing {
 
     #[cfg(not(feature = "zsa-issuance"))]
     prop_compose! {
-        /// Generate a ZSA asset from a hash for testing without issuance keys.
+        /// Generates a ZSA asset base from a description hash for testing when zsa-issuance is disabled.
         pub fn arb_zsa_asset_base()(
             asset_desc_hash in any::<[u8; 32]>(),
         ) -> AssetBase {
@@ -230,7 +230,7 @@ pub mod testing {
 
     #[cfg(feature = "zsa-issuance")]
     prop_compose! {
-        /// Generate an asset base using a specific issuance validating key
+        /// Generate a ZSA asset base using a specific issuance validating key.
         pub fn zsa_asset_base(ik: IssueValidatingKey<ZSASchnorr>)(
             asset_desc_hash in prop::array::uniform32(prop::num::u8::ANY),
         ) -> AssetBase {
