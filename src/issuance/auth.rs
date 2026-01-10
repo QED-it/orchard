@@ -38,8 +38,6 @@ pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only}
 
 const ZIP32_PURPOSE_FOR_ISSUANCE: u32 = 227;
 
-const SIGHASH_SIZE: usize = 32;
-
 /// Trait that defines the common interface for issuance authorization signature schemes.
 pub trait IssueAuthSigScheme {
     /// The byte corresponding to this signature scheme, used to encode the issuance validating key
@@ -117,10 +115,6 @@ impl IssueAuthSigScheme for ZSASchnorr {
         let secp = Secp256k1::signing_only();
         let keypair = Keypair::from_secret_key(&secp, isk);
 
-        // For BIP-340 Schnorr, we need a 32-byte message
-        if sighash.len() != SIGHASH_SIZE {
-            return Err(Error::InvalidIssueBundleSig);
-        }
         let msg = Message::from_digest_slice(sighash).map_err(|_| Error::InvalidIssueBundleSig)?;
 
         Ok(secp.sign_schnorr_with_aux_rand(&msg, &keypair, &[0u8; 32]))
@@ -133,9 +127,6 @@ impl IssueAuthSigScheme for ZSASchnorr {
     ) -> Result<(), Error> {
         let secp = Secp256k1::verification_only();
 
-        if sighash.len() != SIGHASH_SIZE {
-            return Err(Error::InvalidIssueBundleSig);
-        }
         let msg = Message::from_digest_slice(sighash).map_err(|_| Error::InvalidIssueBundleSig)?;
 
         secp.verify_schnorr(sig, &msg, ik)
