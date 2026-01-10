@@ -25,9 +25,7 @@ use core::{
 };
 
 use rand_core::CryptoRngCore;
-use secp256k1::{
-    schnorr::Signature as SchnorrSignature, Keypair, Message, Secp256k1, SecretKey, XOnlyPublicKey,
-};
+use secp256k1::{schnorr, Keypair, Message, Secp256k1, SecretKey, XOnlyPublicKey};
 
 use crate::{
     issuance::Error,
@@ -39,6 +37,8 @@ use crate::{
 pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only};
 
 const ZIP32_PURPOSE_FOR_ISSUANCE: u32 = 227;
+
+const SIGHASH_SIZE: usize = 32;
 
 /// Trait that defines the common interface for issuance authorization signature schemes.
 pub trait IssueAuthSigScheme {
@@ -111,20 +111,19 @@ impl IssueAuthSigScheme for ZSASchnorr {
 
     type IskType = SecretKey;
     type IkType = XOnlyPublicKey;
-    type IssueAuthSigType = SchnorrSignature;
+    type IssueAuthSigType = schnorr::Signature;
 
     fn try_sign(isk: &Self::IskType, sighash: &[u8]) -> Result<Self::IssueAuthSigType, Error> {
         let secp = Secp256k1::signing_only();
         let keypair = Keypair::from_secret_key(&secp, isk);
 
         // For BIP-340 Schnorr, we need a 32-byte message
-        if sighash.len() != 32 {
+        if sighash.len() != SIGHASH_SIZE {
             return Err(Error::InvalidIssueBundleSig);
         }
-
         let msg = Message::from_digest_slice(sighash).map_err(|_| Error::InvalidIssueBundleSig)?;
 
-        Ok(secp.sign_schnorr_no_aux_rand(&msg, &keypair))
+        Ok(secp.sign_schnorr_with_aux_rand(&msg, &keypair, &[0u8; 32]))
     }
 
     fn verify(
@@ -134,10 +133,9 @@ impl IssueAuthSigScheme for ZSASchnorr {
     ) -> Result<(), Error> {
         let secp = Secp256k1::verification_only();
 
-        if sighash.len() != 32 {
+        if sighash.len() != SIGHASH_SIZE {
             return Err(Error::InvalidIssueBundleSig);
         }
-
         let msg = Message::from_digest_slice(sighash).map_err(|_| Error::InvalidIssueBundleSig)?;
 
         secp.verify_schnorr(sig, &msg, ik)
@@ -207,11 +205,11 @@ impl IssueValidatingKey<ZSASchnorr> {
     ///
     /// [issuancekeycomponents]: https://zips.z.cash/zip-0227#derivation-of-issuance-validating-key
     pub fn encode(&self) -> Vec<u8> {
-        let ik_bytes = self.0.serialize().to_vec();
+        let ik_bytes = self.0.serialize();
         let mut encoded =
             Vec::with_capacity(size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + ik_bytes.len());
         encoded.push(ZSASchnorr::ALGORITHM_BYTE);
-        encoded.extend(ik_bytes);
+        encoded.extend_from_slice(&ik_bytes);
         encoded
     }
 
@@ -236,11 +234,11 @@ impl IssueAuthSig<ZSASchnorr> {
     ///
     /// [issueauthsig]: https://zips.z.cash/zip-0227#issuance-authorization-signing-and-validation
     pub fn encode(&self) -> Vec<u8> {
-        let sig_bytes = self.0.as_ref().to_vec();
+        let sig_bytes = self.0.serialize();
         let mut encoded =
             Vec::with_capacity(size_of_val(&ZSASchnorr::ALGORITHM_BYTE) + sig_bytes.len());
         encoded.push(ZSASchnorr::ALGORITHM_BYTE);
-        encoded.extend(sig_bytes);
+        encoded.extend_from_slice(&sig_bytes);
         encoded
     }
 
@@ -251,7 +249,7 @@ impl IssueAuthSig<ZSASchnorr> {
     pub fn decode(bytes: &[u8]) -> Result<Self, Error> {
         if let Some((&algorithm_byte, key_bytes)) = bytes.split_first() {
             if algorithm_byte == ZSASchnorr::ALGORITHM_BYTE {
-                return SchnorrSignature::from_slice(key_bytes)
+                return schnorr::Signature::from_slice(key_bytes)
                     .map(Self)
                     .map_err(|_| Error::InvalidIssueBundleSig);
             }
