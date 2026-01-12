@@ -38,15 +38,23 @@ impl Ord for AssetBase {
 }
 
 #[cfg(feature = "zsa-issuance")]
-pub(crate) enum AssetId<'a> {
+pub enum AssetId {
     V0 {
-        ik: &'a IssueValidatingKey<ZSASchnorr>,
-        asset_desc_hash: &'a [u8; 32],
+        ik: IssueValidatingKey<ZSASchnorr>,
+        asset_desc_hash: [u8; 32],
     },
 }
 
 #[cfg(feature = "zsa-issuance")]
-impl<'a> AssetId<'a> {
+impl AssetId {
+    /// Generates a new V0 AssetId.
+    fn new_v0(ik: IssueValidatingKey<ZSASchnorr>, asset_desc_hash: [u8; 32]) -> Self {
+        AssetId::V0 {
+            ik,
+            asset_desc_hash,
+        }
+    }
+
     /// Encoding the Asset Identifier, as defined in [ZIP 227][assetidentifier].
     ///
     /// [assetidentifier]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
@@ -108,10 +116,7 @@ impl AssetBase {
     #[cfg(feature = "zsa-issuance")]
     #[allow(non_snake_case)]
     pub fn derive(ik: &IssueValidatingKey<ZSASchnorr>, asset_desc_hash: &[u8; 32]) -> Self {
-        let asset_id = AssetId::V0 {
-            ik,
-            asset_desc_hash,
-        };
+        let asset_id = AssetId::new_v0(ik.clone(), *asset_desc_hash);
         let asset_digest = asset_id.asset_digest();
 
         let asset_base =
