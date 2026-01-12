@@ -9,13 +9,15 @@ use crate::constants::fixed_bases::{NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_
 #[cfg(test)]
 use rand_core::CryptoRngCore;
 
+#[cfg(any(test, feature = "zsa-issuance"))]
+use group::Group;
+
 #[cfg(feature = "zsa-issuance")]
 use {
     crate::constants::fixed_bases::ZSA_ASSET_BASE_PERSONALIZATION,
     crate::issuance::auth::{IssueValidatingKey, ZSASchnorr},
     alloc::vec::Vec,
     blake2b_simd::{Hash as Blake2bHash, Params},
-    group::Group,
 };
 
 /// Note type identifier.
@@ -130,28 +132,23 @@ impl AssetBase {
         self.0.ct_eq(&Self::native().0)
     }
 
-    /// Generates a ZSA random asset from a random issuance validating key.
+    /// Generates a ZSA random asset from a random non-identity Pallas point.
+    ///
+    /// Normally, an `AssetBase` is derived from an issuance validating key. For testing purposes,
+    /// it is sufficient to use a random non-identity Pallas point. This allows generating a random
+    /// `AssetBase` even when `zsa-issuance` feature is disabled.
     ///
     /// This is only used in tests.
-    #[cfg(all(test, feature = "zsa-issuance"))]
+    #[cfg(test)]
     pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
-        use crate::issuance::{auth::IssueAuthKey, compute_asset_desc_hash};
-        use nonempty::NonEmpty;
-        let isk = IssueAuthKey::<ZSASchnorr>::random(rng);
-        let ik = IssueValidatingKey::from(&isk);
-        AssetBase::derive(
-            &ik,
-            &compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
-        )
-    }
-
-    /// Generates a ZSA random asset from a random Pallas point.
-    ///
-    /// This is only used in tests.
-    #[cfg(all(test, not(feature = "zsa-issuance")))]
-    pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
-        use group::Group;
-        Self(pallas::Point::random(rng))
+        loop {
+            let random_point = pallas::Point::random(&mut *rng);
+            // Extremely unlikely, but we explicitly reject the identity point.
+            if bool::from(random_point.is_identity()) {
+                continue;
+            }
+            return Self(random_point);
+        }
     }
 }
 
