@@ -23,20 +23,20 @@ use {
 /// Asset Identifier
 #[cfg(feature = "zsa-issuance")]
 #[derive(Debug)]
-pub enum AssetId {
+pub enum AssetId<'a> {
     /// Version V0 of AssetId
     V0 {
-        /// Issue Validating Key
-        ik: IssueValidatingKey<ZSASchnorr>,
+        /// Issue validating Key
+        ik: &'a IssueValidatingKey<ZSASchnorr>,
         /// Asset description hash
-        asset_desc_hash: [u8; 32],
+        asset_desc_hash: &'a [u8; 32],
     },
 }
 
 #[cfg(feature = "zsa-issuance")]
-impl AssetId {
+impl<'a> AssetId<'a> {
     /// Generates a new V0 AssetId.
-    pub fn new_v0(ik: IssueValidatingKey<ZSASchnorr>, asset_desc_hash: [u8; 32]) -> Self {
+    pub fn new_v0(ik: &'a IssueValidatingKey<ZSASchnorr>, asset_desc_hash: &'a [u8; 32]) -> Self {
         AssetId::V0 {
             ik,
             asset_desc_hash,
@@ -120,7 +120,7 @@ impl AssetBase {
     /// Panics if the derived AssetBase is the identity point.
     #[cfg(feature = "zsa-issuance")]
     #[allow(non_snake_case)]
-    pub fn custom(asset_id: &AssetId) -> Self {
+    pub fn custom(asset_id: &AssetId<'_>) -> Self {
         let asset_digest = asset_id.asset_digest();
 
         let asset_base =
@@ -252,8 +252,8 @@ mod tests {
                 &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
             );
             let calculated_asset_base = AssetBase::custom(&AssetId::new_v0(
-                IssueValidatingKey::<ZSASchnorr>::decode(&tv.key).unwrap(),
-                asset_desc_hash,
+                &IssueValidatingKey::<ZSASchnorr>::decode(&tv.key).unwrap(),
+                &asset_desc_hash,
             ));
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();
 

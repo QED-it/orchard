@@ -534,7 +534,7 @@ pub mod testing {
             Note {
                 recipient,
                 value,
-                asset: AssetBase::custom(&AssetId::new_v0(ik.clone(), asset_desc_hash)),
+                asset: AssetBase::custom(&AssetId::new_v0(&ik, &asset_desc_hash)),
                 rho,
                 rseed,
                 rseed_split_note: CtOption::new(rseed, 0u8.into()),
