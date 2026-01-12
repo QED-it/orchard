@@ -20,27 +20,15 @@ use {
     blake2b_simd::{Hash as Blake2bHash, Params},
 };
 
-/// Note type identifier.
-#[derive(Clone, Copy, Debug, Eq)]
-pub struct AssetBase(pallas::Point);
-
-// AssetBase must implement PartialOrd and Ord to be used as a key in BTreeMap.
-impl PartialOrd for AssetBase {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for AssetBase {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.0.to_bytes().cmp(&other.0.to_bytes())
-    }
-}
-
+/// Asset Identifier
 #[cfg(feature = "zsa-issuance")]
+#[derive(Debug)]
 pub enum AssetId {
+    /// Version V0 of AssetId
     V0 {
+        /// Issue Validating Key
         ik: IssueValidatingKey<ZSASchnorr>,
+        /// Asset description hash
         asset_desc_hash: [u8; 32],
     },
 }
@@ -48,7 +36,7 @@ pub enum AssetId {
 #[cfg(feature = "zsa-issuance")]
 impl AssetId {
     /// Generates a new V0 AssetId.
-    fn new_v0(ik: IssueValidatingKey<ZSASchnorr>, asset_desc_hash: [u8; 32]) -> Self {
+    pub fn new_v0(ik: IssueValidatingKey<ZSASchnorr>, asset_desc_hash: [u8; 32]) -> Self {
         AssetId::V0 {
             ik,
             asset_desc_hash,
@@ -89,6 +77,23 @@ impl AssetId {
     }
 }
 
+/// Note type identifier.
+#[derive(Clone, Copy, Debug, Eq)]
+pub struct AssetBase(pallas::Point);
+
+// AssetBase must implement PartialOrd and Ord to be used as a key in BTreeMap.
+impl PartialOrd for AssetBase {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for AssetBase {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.to_bytes().cmp(&other.0.to_bytes())
+    }
+}
+
 /// Personalization for the ZSA asset digest generator
 #[cfg(feature = "zsa-issuance")]
 pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
@@ -115,8 +120,7 @@ impl AssetBase {
     /// Panics if the derived AssetBase is the identity point.
     #[cfg(feature = "zsa-issuance")]
     #[allow(non_snake_case)]
-    pub fn derive(ik: &IssueValidatingKey<ZSASchnorr>, asset_desc_hash: &[u8; 32]) -> Self {
-        let asset_id = AssetId::new_v0(ik.clone(), *asset_desc_hash);
+    pub fn derive(asset_id: &AssetId) -> Self {
         let asset_digest = asset_id.asset_digest();
 
         let asset_base =
@@ -236,7 +240,7 @@ pub mod testing {
 mod tests {
     use crate::{
         issuance::auth::{IssueValidatingKey, ZSASchnorr},
-        note::AssetBase,
+        note::{asset_base::AssetId, AssetBase},
     };
 
     #[test]
@@ -247,10 +251,10 @@ mod tests {
             let asset_desc_hash = crate::issuance::compute_asset_desc_hash(
                 &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
             );
-            let calculated_asset_base = AssetBase::derive(
-                &IssueValidatingKey::<ZSASchnorr>::decode(&tv.key).unwrap(),
-                &asset_desc_hash,
-            );
+            let calculated_asset_base = AssetBase::derive(&AssetId::new_v0(
+                IssueValidatingKey::<ZSASchnorr>::decode(&tv.key).unwrap(),
+                asset_desc_hash,
+            ));
             let test_vector_asset_base = AssetBase::from_bytes(&tv.asset_base).unwrap();
 
             assert_eq!(calculated_asset_base, test_vector_asset_base);

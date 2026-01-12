@@ -20,6 +20,8 @@ use crate::{
 
 pub(crate) mod asset_base;
 pub use self::asset_base::AssetBase;
+#[cfg(feature = "zsa-issuance")]
+pub use self::asset_base::AssetId;
 
 pub(crate) mod commitment;
 pub use self::commitment::{ExtractedNoteCommitment, NoteCommitment};
@@ -528,10 +530,11 @@ pub mod testing {
             rho in arb_nullifier().prop_map(Rho::from_nf_old),
             rseed in arb_rseed(),
         ) -> Note {
+            use crate::note::asset_base::AssetId;
             Note {
                 recipient,
                 value,
-                asset: AssetBase::derive(&ik, &asset_desc_hash),
+                asset: AssetBase::derive(&AssetId::new_v0(ik.clone(), asset_desc_hash)),
                 rho,
                 rseed,
                 rseed_split_note: CtOption::new(rseed, 0u8.into()),
