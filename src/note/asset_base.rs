@@ -191,35 +191,28 @@ pub mod testing {
         }
     }
 
-    #[cfg(feature = "zsa-issuance")]
     prop_compose! {
-        /// Generate a ZSA asset base.
+        /// Generates a ZSA asset base from a random asset digest.
+        ///
+        /// Normally, an `AssetBase` is derived from an issuance validating key. For testing purposes,
+        /// it is sufficient to use a random asset digest. This allows generating a random
+        /// `AssetBase` even when `zsa-issuance` feature is disabled.
         pub fn arb_zsa_asset_base()(
-            isk in arb_issuance_authorizing_key(),
-            asset_desc_hash in any::<[u8; 32]>(),
-        ) -> AssetBase {
-            AssetBase::derive(&IssueValidatingKey::from(&isk), &asset_desc_hash)
-        }
-    }
-
-    #[cfg(not(feature = "zsa-issuance"))]
-    prop_compose! {
-        /// Generates a ZSA asset base from a description hash for testing when zsa-issuance is disabled.
-        pub fn arb_zsa_asset_base()(
-            asset_desc_hash in any::<[u8; 32]>(),
+            asset_digest in any::<[u8; 64]>(),
         ) -> AssetBase {
             use crate::constants::fixed_bases::ZSA_ASSET_BASE_PERSONALIZATION;
             use group::Group;
             use pasta_curves::{arithmetic::CurveExt, pallas};
 
-            let asset_base =
-            pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(&asset_desc_hash);
+            let asset_base = loop {
+                let asset_base =
+                pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(&asset_digest);
 
-            // This will happen with negligible probability.
-            assert!(
-                bool::from(!asset_base.is_identity()),
-                "The Asset Base is the identity point, which is invalid."
-            );
+                // Extremely unlikely, but explicitly reject the identity point.
+                if bool::from(!asset_base.is_identity()) {
+                    break asset_base;
+                }
+            };
 
             AssetBase(asset_base)
         }
