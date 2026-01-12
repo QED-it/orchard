@@ -173,11 +173,6 @@ pub mod testing {
 
     use proptest::prelude::*;
 
-    #[cfg(feature = "zsa-issuance")]
-    use crate::issuance::auth::{
-        testing::arb_issuance_authorizing_key, IssueValidatingKey, ZSASchnorr,
-    };
-
     prop_compose! {
         /// Generate a uniformly distributed asset base.
         pub fn arb_asset_base()
@@ -215,16 +210,6 @@ pub mod testing {
             };
 
             AssetBase(asset_base)
-        }
-    }
-
-    #[cfg(feature = "zsa-issuance")]
-    prop_compose! {
-        /// Generate a ZSA asset base using a specific issuance validating key.
-        pub fn zsa_asset_base(ik: IssueValidatingKey<ZSASchnorr>)(
-            asset_desc_hash in prop::array::uniform32(prop::num::u8::ANY),
-        ) -> AssetBase {
-            AssetBase::derive(&ik, &asset_desc_hash)
         }
     }
 }
