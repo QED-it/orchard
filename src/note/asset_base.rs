@@ -37,41 +37,53 @@ impl Ord for AssetBase {
     }
 }
 
+#[cfg(feature = "zsa-issuance")]
+pub(crate) enum AssetId<'a> {
+    V0 {
+        ik: &'a IssueValidatingKey<ZSASchnorr>,
+        asset_desc_hash: &'a [u8; 32],
+    },
+}
+
+#[cfg(feature = "zsa-issuance")]
+impl<'a> AssetId<'a> {
+    /// Encoding the Asset Identifier, as defined in [ZIP 227][assetidentifier].
+    ///
+    /// [assetidentifier]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
+    fn encode_asset_id(&self) -> Vec<u8> {
+        match self {
+            AssetId::V0 {
+                ik,
+                asset_desc_hash,
+            } => {
+                let issuer = ik.encode();
+                let mut asset_id = Vec::with_capacity(1 + issuer.len() + asset_desc_hash.len());
+                asset_id.push(0u8); // version
+                asset_id.extend(issuer);
+                asset_id.extend_from_slice(&asset_desc_hash[..]);
+                asset_id
+            }
+        }
+    }
+
+    /// Derives the Asset Digest for the given ZSA asset.
+    ///
+    /// Defined in [ZIP-227: Issuance of Zcash Shielded Assets][assetdigest].
+    ///
+    /// [assetdigest]: https://zips.z.cash/zip-0227#asset-digests
+    fn asset_digest(&self) -> Blake2bHash {
+        Params::new()
+            .hash_length(64)
+            .personal(ZSA_ASSET_DIGEST_PERSONALIZATION)
+            .to_state()
+            .update(&self.encode_asset_id())
+            .finalize()
+    }
+}
+
 /// Personalization for the ZSA asset digest generator
 #[cfg(feature = "zsa-issuance")]
 pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
-
-/// Derives the Asset Digest for the given ZSA asset.
-///
-/// Defined in [ZIP-227: Issuance of Zcash Shielded Assets][assetdigest].
-///
-/// [assetdigest]: https://zips.z.cash/zip-0227#asset-digests
-#[cfg(feature = "zsa-issuance")]
-pub fn asset_digest(encode_asset_id: &[u8]) -> Blake2bHash {
-    Params::new()
-        .hash_length(64)
-        .personal(ZSA_ASSET_DIGEST_PERSONALIZATION)
-        .to_state()
-        .update(encode_asset_id)
-        .finalize()
-}
-
-/// Encoding the Asset Identifier, as defined in [ZIP 227][assetidentifier].
-///
-/// [assetidentifier]: https://zips.z.cash/zip-0227.html#specification-asset-identifier-asset-digest-and-asset-base
-#[cfg(feature = "zsa-issuance")]
-pub fn encode_asset_id(
-    version: u8,
-    ik: &IssueValidatingKey<ZSASchnorr>,
-    asset_desc_hash: &[u8; 32],
-) -> Vec<u8> {
-    let issuer = ik.encode();
-    let mut asset_id = Vec::with_capacity(1 + issuer.len() + asset_desc_hash.len());
-    asset_id.push(version);
-    asset_id.extend(issuer);
-    asset_id.extend_from_slice(&asset_desc_hash[..]);
-    asset_id
-}
 
 impl AssetBase {
     /// Deserialize the AssetBase from a byte array.
@@ -96,11 +108,11 @@ impl AssetBase {
     #[cfg(feature = "zsa-issuance")]
     #[allow(non_snake_case)]
     pub fn derive(ik: &IssueValidatingKey<ZSASchnorr>, asset_desc_hash: &[u8; 32]) -> Self {
-        let version_byte: u8 = 0x00;
-
-        // EncodeAssetId(ik, asset_desc_hash) = version_byte || ik || asset_desc_hash
-        let asset_id = encode_asset_id(version_byte, ik, asset_desc_hash);
-        let asset_digest = asset_digest(&asset_id);
+        let asset_id = AssetId::V0 {
+            ik,
+            asset_desc_hash,
+        };
+        let asset_digest = asset_id.asset_digest();
 
         let asset_base =
             pallas::Point::hash_to_curve(ZSA_ASSET_BASE_PERSONALIZATION)(asset_digest.as_bytes());
