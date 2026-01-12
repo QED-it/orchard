@@ -227,7 +227,7 @@ impl IssueAction {
             return Err(IssueActionWithoutNoteNotFinalized);
         }
 
-        let issue_asset = AssetBase::derive(&AssetId::new_v0(ik.clone(), self.asset_desc_hash));
+        let issue_asset = AssetBase::custom(&AssetId::new_v0(ik.clone(), self.asset_desc_hash));
 
         // The new asset should not be the identity point of the Pallas curve.
         if bool::from(issue_asset.cv_base().is_identity()) {
@@ -369,7 +369,7 @@ impl<T: IssueAuth> IssueBundle<T> {
             .actions
             .iter()
             .filter(|a| {
-                AssetBase::derive(&AssetId::new_v0(self.ik.clone(), a.asset_desc_hash)).eq(asset)
+                AssetBase::custom(&AssetId::new_v0(self.ik.clone(), a.asset_desc_hash)).eq(asset)
             })
             .collect();
         match issue_actions.len() {
@@ -430,7 +430,7 @@ impl IssueBundle<AwaitingNullifier> {
         first_issuance: bool,
         mut rng: impl RngCore,
     ) -> (IssueBundle<AwaitingNullifier>, AssetBase) {
-        let asset = AssetBase::derive(&AssetId::new_v0(ik.clone(), asset_desc_hash));
+        let asset = AssetBase::custom(&AssetId::new_v0(ik.clone(), asset_desc_hash));
 
         let mut notes = vec![];
         if first_issuance {
@@ -485,7 +485,7 @@ impl IssueBundle<AwaitingNullifier> {
         first_issuance: bool,
         mut rng: impl RngCore,
     ) -> Result<AssetBase, Error> {
-        let asset = AssetBase::derive(&AssetId::new_v0(self.ik.clone(), asset_desc_hash));
+        let asset = AssetBase::custom(&AssetId::new_v0(self.ik.clone(), asset_desc_hash));
 
         let note = Note::new(recipient, value, asset, Rho::zero(), &mut rng);
 
@@ -994,9 +994,9 @@ mod tests {
 
         let note1_asset_desc_hash =
             compute_asset_desc_hash(&NonEmpty::from_slice(note1_asset_desc).unwrap());
-        let asset = AssetBase::derive(&AssetId::new_v0(ik.clone(), note1_asset_desc_hash));
+        let asset = AssetBase::custom(&AssetId::new_v0(ik.clone(), note1_asset_desc_hash));
         let note2_asset = note2_asset_desc.map_or(asset, |desc| {
-            AssetBase::derive(&AssetId::new_v0(
+            AssetBase::custom(&AssetId::new_v0(
                 ik.clone(),
                 compute_asset_desc_hash(&NonEmpty::from_slice(desc).unwrap()),
             ))
@@ -1161,7 +1161,7 @@ mod tests {
         let reference_note = action2.notes.first().unwrap();
         verify_reference_note(
             reference_note,
-            AssetBase::derive(&AssetId::new_v0(ik, asset_desc_hash_2)),
+            AssetBase::custom(&AssetId::new_v0(ik, asset_desc_hash_2)),
         );
         let first_note = action2.notes().get(1).unwrap();
         assert_eq!(first_note.value().inner(), 15);
@@ -1328,7 +1328,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            AssetBase::derive(&AssetId::new_v0(
+            AssetBase::custom(&AssetId::new_v0(
                 bundle.ik().clone(),
                 compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
             )),
@@ -1383,7 +1383,7 @@ mod tests {
         assert_eq!(
             issued_assets,
             BTreeMap::from([(
-                AssetBase::derive(&AssetId::new_v0(ik, asset_desc_hash)),
+                AssetBase::custom(&AssetId::new_v0(ik, asset_desc_hash)),
                 AssetRecord::new(NoteValue::from_raw(5), false, first_note)
             )])
         );
@@ -1429,7 +1429,7 @@ mod tests {
         assert_eq!(
             issued_assets,
             BTreeMap::from([(
-                AssetBase::derive(&AssetId::new_v0(ik, asset_desc_hash)),
+                AssetBase::custom(&AssetId::new_v0(ik, asset_desc_hash)),
                 AssetRecord::new(NoteValue::from_raw(7), true, first_note)
             )])
         );
@@ -1453,9 +1453,9 @@ mod tests {
         let asset3_desc_hash =
             compute_asset_desc_hash(&NonEmpty::from_slice(b"Verify with issued assets 3").unwrap());
 
-        let asset1_base = AssetBase::derive(&AssetId::new_v0(ik.clone(), asset1_desc_hash));
-        let asset2_base = AssetBase::derive(&AssetId::new_v0(ik.clone(), asset2_desc_hash));
-        let asset3_base = AssetBase::derive(&AssetId::new_v0(ik.clone(), asset3_desc_hash));
+        let asset1_base = AssetBase::custom(&AssetId::new_v0(ik.clone(), asset1_desc_hash));
+        let asset2_base = AssetBase::custom(&AssetId::new_v0(ik.clone(), asset2_desc_hash));
+        let asset3_base = AssetBase::custom(&AssetId::new_v0(ik.clone(), asset3_desc_hash));
 
         let (mut bundle, _) = IssueBundle::new(
             ik,
@@ -1612,7 +1612,7 @@ mod tests {
             .sign(&isk)
             .unwrap();
 
-        let final_type = AssetBase::derive(&AssetId::new_v0(ik, asset_desc_hash));
+        let final_type = AssetBase::custom(&AssetId::new_v0(ik, asset_desc_hash));
 
         let issued_assets = [(
             final_type,
@@ -1760,7 +1760,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(5),
-            AssetBase::derive(&AssetId::new_v0(
+            AssetBase::custom(&AssetId::new_v0(
                 signed.ik().clone(),
                 compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset").unwrap()),
             )),
@@ -1813,7 +1813,7 @@ mod tests {
         let note = Note::new(
             recipient,
             NoteValue::from_raw(55),
-            AssetBase::derive(&AssetId::new_v0(incorrect_ik, asset_desc_hash)),
+            AssetBase::custom(&AssetId::new_v0(incorrect_ik, asset_desc_hash)),
             rho_for_issuance_note(&first_nullifier, 0, 0),
             &mut rng,
         );
@@ -1919,7 +1919,7 @@ mod tests {
 
         // Setup note and merkle tree
         let mut rng = OsRng;
-        let asset1 = AssetBase::derive(&AssetId::new_v0(
+        let asset1 = AssetBase::custom(&AssetId::new_v0(
             ik.clone(),
             compute_asset_desc_hash(&NonEmpty::from_slice(b"zsa_asset1").unwrap()),
         ));

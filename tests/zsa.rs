@@ -184,7 +184,7 @@ fn issue_zsa_notes(
 
     verify_reference_note(
         reference_note,
-        AssetBase::derive(&AssetId::new_v0(keys.ik().clone(), asset_desc_hash)),
+        AssetBase::custom(&AssetId::new_v0(keys.ik().clone(), asset_desc_hash)),
     );
 
     assert!(verify_issue_bundle(

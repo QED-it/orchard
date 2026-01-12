@@ -120,7 +120,7 @@ impl AssetBase {
     /// Panics if the derived AssetBase is the identity point.
     #[cfg(feature = "zsa-issuance")]
     #[allow(non_snake_case)]
-    pub fn derive(asset_id: &AssetId) -> Self {
+    pub fn custom(asset_id: &AssetId) -> Self {
         let asset_digest = asset_id.asset_digest();
 
         let asset_base =
@@ -251,7 +251,7 @@ mod tests {
             let asset_desc_hash = crate::issuance::compute_asset_desc_hash(
                 &nonempty::NonEmpty::from_slice(&tv.description).unwrap(),
             );
-            let calculated_asset_base = AssetBase::derive(&AssetId::new_v0(
+            let calculated_asset_base = AssetBase::custom(&AssetId::new_v0(
                 IssueValidatingKey::<ZSASchnorr>::decode(&tv.key).unwrap(),
                 asset_desc_hash,
             ));
