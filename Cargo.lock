@@ -2603,7 +2603,7 @@ dependencies = [
 [[package]]
 name = "zcash_spec"
 version = "0.2.1"
-source = "git+https://github.com/QED-it/zcash_spec?branch=pr471_prf_expand#6277711d509276aa0f3c71527ac01c5306cb2fae"
+source = "git+https://github.com/QED-it/zcash_spec?rev=d5e84264d2ad0646b587a837f4e2424ca64d3a05#d5e84264d2ad0646b587a837f4e2424ca64d3a05"
 dependencies = [
  "blake2b_simd",
 ]
