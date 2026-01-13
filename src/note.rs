@@ -1,6 +1,5 @@
 //! Data structures used for note construction.
 use alloc::vec::Vec;
-use blake2b_simd::Params;
 use core::fmt;
 use memuse::DynamicUsage;
 
@@ -417,20 +416,11 @@ pub(crate) fn rho_for_issuance_note(
     index_action: u32,
     index_note: u32,
 ) -> Rho {
-    Rho(to_base(
-        Params::new()
-            .hash_length(64)
-            .personal(ZSA_ISSUE_NOTE_RHO_PERSONALIZATION)
-            .to_state()
-            .update(&nullifier.to_bytes())
-            .update(&[0x84])
-            .update(index_action.to_le_bytes().as_ref())
-            .update(index_note.to_le_bytes().as_ref())
-            .finalize()
-            .as_bytes()
-            .try_into()
-            .unwrap(),
-    ))
+    Rho(to_base(PrfExpand::ORCHARD_DERIVED_ISSUE_RHO.with(
+        &nullifier.to_bytes(),
+        &index_action.to_le_bytes(),
+        &index_note.to_le_bytes(),
+    )))
 }
 
 /// An encrypted note.
