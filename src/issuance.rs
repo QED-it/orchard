@@ -23,7 +23,7 @@ use rand::RngCore;
 use crate::{
     bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
     constants::reference_keys::ReferenceKeys,
-    note::{rho_for_issuance_note, AssetBase, Nullifier, Rho},
+    note::{rho_for_issuance_note, AssetBase, AssetId, Nullifier, Rho},
     value::NoteValue,
     Address, Note,
 };
@@ -39,7 +39,6 @@ use Error::{
 pub mod auth;
 pub mod sighash_versioning;
 
-use crate::note::asset_base::AssetId;
 use auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
 use sighash_versioning::{IssueSighashVersion, VerBIP340IssueAuthSig};
 
@@ -899,7 +898,7 @@ mod tests {
             Signed,
         },
         keys::{FullViewingKey, Scope, SpendingKey},
-        note::{asset_base::AssetId, rho_for_issuance_note, AssetBase, Nullifier, Rho},
+        note::{rho_for_issuance_note, AssetBase, AssetId, Nullifier, Rho},
         value::NoteValue,
         Address, Note,
     };

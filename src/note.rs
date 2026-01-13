@@ -530,7 +530,7 @@ pub mod testing {
             rho in arb_nullifier().prop_map(Rho::from_nf_old),
             rseed in arb_rseed(),
         ) -> Note {
-            use crate::note::asset_base::AssetId;
+            use crate::note::AssetId;
             Note {
                 recipient,
                 value,

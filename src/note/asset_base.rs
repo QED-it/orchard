@@ -240,7 +240,7 @@ pub mod testing {
 mod tests {
     use crate::{
         issuance::auth::{IssueValidatingKey, ZSASchnorr},
-        note::{asset_base::AssetId, AssetBase},
+        note::{AssetBase, AssetId},
     };
 
     #[test]
