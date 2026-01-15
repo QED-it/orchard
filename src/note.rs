@@ -152,10 +152,17 @@ pub struct Note {
     asset: AssetBase,
     /// A unique creation ID for this note.
     ///
-    /// This is produced from the nullifier of the note that will be spent in the [`Action`] that
-    /// creates this note.
+    /// For notes created by spending an existing note, `rho` is derived from the
+    /// nullifier of the spent note.
     ///
-    /// [`Action`]: crate::action::Action
+    /// For issuance notes ([ZIP-227]), `rho` is initially unset and later
+    /// deterministically derived from the issuance context when
+    /// `update_rho_for_issuance_note` is called.
+    ///
+    /// The `rho` value is used as domain-separated randomness in the note
+    /// commitment and must be initialized before commitment or equality checks.
+    ///
+    /// [ZIP-227]: https://zips.z.cash/zip-0227
     rho: Option<Rho>,
     /// The seed randomness for various note components.
     rseed: RandomSeed,
@@ -265,8 +272,16 @@ impl Note {
         }
     }
 
-    // TODO add comment
-    // We have to check note.commitment_inner().is_some() after setting rho
+    /// Generates a new issuance note with an uninitialized `rho`.
+    ///
+    /// For issuance notes ([ZIP-227]), the `rho` value is not known at creation
+    /// time and is therefore left unset. It is later deterministically derived
+    /// from the issuance context and assigned via `update_rho_for_issuance_note`.
+    ///
+    /// A temporary `rseed` is sampled at construction time and later updated
+    /// by `update_rho_for_issuance_note` to ensure a valid note commitment.
+    ///
+    /// [ZIP-227]: https://zips.z.cash/zip-0227
     pub(crate) fn new_issue_note(
         recipient: Address,
         value: NoteValue,
@@ -336,13 +351,7 @@ impl Note {
 
     /// Derives the ephemeral secret key for this note.
     pub(crate) fn esk(&self) -> EphemeralSecretKey {
-        EphemeralSecretKey(
-            self.rseed.esk(
-                &self
-                    .rho
-                    .expect("must call Note::update_rho_for_issuance_note first"),
-            ),
-        )
+        EphemeralSecretKey(self.rseed.esk(&self.rho()))
     }
 
     /// Returns rho of this note.
@@ -377,28 +386,26 @@ impl Note {
     /// [notes]: https://zips.z.cash/protocol/nu5.pdf#notes
     fn commitment_inner(&self) -> CtOption<NoteCommitment> {
         let g_d = self.recipient.g_d();
-        let rho = self.rho();
 
         NoteCommitment::derive(
             g_d.to_bytes(),
             self.recipient.pk_d().to_bytes(),
             self.value,
             self.asset,
-            rho.0,
-            self.rseed.psi(&rho),
-            self.rseed.rcm(&rho),
+            self.rho().0,
+            self.rseed.psi(&self.rho()),
+            self.rseed.rcm(&self.rho()),
         )
     }
 
     /// Derives the nullifier for this note.
     pub fn nullifier(&self, fvk: &FullViewingKey) -> Nullifier {
         let selected_rseed = self.rseed_split_note.unwrap_or(self.rseed);
-        let rho = self.rho();
 
         Nullifier::derive(
             fvk.nk(),
-            rho.0,
-            selected_rseed.psi(&rho),
+            self.rho().0,
+            selected_rseed.psi(&self.rho()),
             self.commitment(),
             self.rseed_split_note.is_some(),
         )
@@ -420,12 +427,19 @@ impl Note {
         }
     }
 
-    /// Update the rho value of the issuance note (see
-    /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227]).
+    /// Updates the `rho` value of an issuance note as specified in
+    /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227].
     ///
-    /// TODO
+    /// The `rho` value is deterministically derived from the note context and used
+    /// in the Sinsemilla-based note commitment. As required by
+    /// [Section 5.4.8.4] of the Zcash Protocol Specification, the commitment must not
+    /// evaluate to ⊥.
+    ///
+    /// Although the probability of observing ⊥ is negligible, this method enforces
+    /// this invariant by resampling a random `rseed` until a valid commitment is produced.
     ///
     /// [zip227]: https://zips.z.cash/zip-0227
+    /// [Section 5.4.8.4]: https://zips.z.cash/protocol/protocol.pdf#concretesinsemillacommit
     pub(crate) fn update_rho_for_issuance_note(
         &mut self,
         nullifier: &Nullifier,
@@ -433,9 +447,9 @@ impl Note {
         index_note: u32,
         mut rng: impl RngCore,
     ) {
+        let rho = rho_for_issuance_note(nullifier, index_action, index_note);
+        self.rho = Some(rho);
         loop {
-            let rho = rho_for_issuance_note(nullifier, index_action, index_note);
-            self.rho = Some(rho);
             self.rseed = RandomSeed::random(&mut rng, &rho);
             if self.commitment_inner().is_some().into() {
                 break;
