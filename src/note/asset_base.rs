@@ -100,8 +100,12 @@ pub const ZSA_ASSET_DIGEST_PERSONALIZATION: &[u8; 16] = b"ZSA-Asset-Digest";
 
 impl AssetBase {
     /// Deserialize the AssetBase from a byte array.
+    ///
+    /// Returns `None` if the byte encoding is invalid or if it corresponds
+    /// to the identity point.
     pub fn from_bytes(bytes: &[u8; 32]) -> CtOption<Self> {
-        pallas::Point::from_bytes(bytes).map(AssetBase)
+        pallas::Point::from_bytes(bytes)
+            .and_then(|asset| CtOption::new(AssetBase(asset), !asset.is_identity()))
     }
 
     /// Serialize the AssetBase to its canonical byte representation.
