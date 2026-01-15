@@ -22,7 +22,7 @@ use crate::{
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
-    sighash_versioning::{VerBindingSig, VerSpendAuthSig},
+    sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
     tree::{Anchor, MerklePath},
     value::{self, NoteValue, OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -1296,6 +1296,9 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, PartiallyAuth
     }
 
     fn append_signature(self, signature: &VerSpendAuthSig) -> Result<Self, BuildError> {
+        if signature.version() != &OrchardSighashVersion::V0 {
+            return Err(BuildError::InvalidExternalSignature);
+        }
         let mut signature_valid_for = 0usize;
         let bundle = self.map_authorization(
             &mut signature_valid_for,
