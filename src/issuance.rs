@@ -1698,10 +1698,9 @@ mod tests {
             rng,
         );
 
-        let sighash: [u8; 32] = bundle.commitment().into();
         let signed = bundle
             .update_rho(&first_nullifier, rng)
-            .prepare(sighash)
+            .prepare([0_u8; 32])
             .sign(&isk)
             .unwrap();
 
@@ -1830,7 +1829,11 @@ mod tests {
     #[test]
     fn test_get_action_by_desc_hash() {
         let TestParams {
-            rng, ik, recipient, ..
+            rng,
+            ik,
+            recipient,
+            first_nullifier,
+            ..
         } = setup_params();
 
         // UTF heavy test string
@@ -1850,14 +1853,20 @@ mod tests {
             rng,
         );
 
+        // NOTE: Equality between two IssueActions can only be tested once `rho` is initialized.
+        // This call is required for the final `assert_eq!`.
+        let bundle_with_rho = bundle.update_rho(&first_nullifier, rng);
+
         // Checks for the case of UTF-8 encoded asset description.
-        let action = bundle.get_action_by_asset(&asset_base_1).unwrap();
+        let action = bundle_with_rho.get_action_by_asset(&asset_base_1).unwrap();
         assert_eq!(action.asset_desc_hash(), &asset_desc_hash_1);
         let reference_note = action.notes.first().unwrap();
         verify_reference_note(reference_note, asset_base_1);
         assert_eq!(action.notes.get(1).unwrap().value().inner(), 5);
         assert_eq!(
-            bundle.get_action_by_desc_hash(&asset_desc_hash_1).unwrap(),
+            bundle_with_rho
+                .get_action_by_desc_hash(&asset_desc_hash_1)
+                .unwrap(),
             action
         );
     }
