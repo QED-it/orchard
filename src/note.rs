@@ -64,12 +64,6 @@ impl Rho {
     pub(crate) fn into_inner(self) -> pallas::Base {
         self.0
     }
-
-    /// When creating an issuance note, the rho value is initialized with the Pallas base element zero.
-    /// This value will be updated later by calling `update_rho` method on the `IssueBundle`.
-    pub(crate) fn zero() -> Self {
-        Rho(pallas::Base::zero())
-    }
 }
 
 /// The ZIP 212 seed randomness for a note.
@@ -162,7 +156,7 @@ pub struct Note {
     /// creates this note.
     ///
     /// [`Action`]: crate::action::Action
-    rho: Rho,
+    rho: Option<Rho>,
     /// The seed randomness for various note components.
     rseed: RandomSeed,
     /// The seed randomness for split notes.
@@ -238,7 +232,7 @@ impl Note {
             recipient,
             value,
             asset,
-            rho,
+            rho: Some(rho),
             rseed,
             rseed_split_note,
         };
@@ -268,6 +262,25 @@ impl Note {
             if note.is_some().into() {
                 break note.unwrap();
             }
+        }
+    }
+
+    // TODO add comment
+    // We have to check note.commitment_inner().is_some() after setting rho
+    pub(crate) fn new_issue_note(
+        recipient: Address,
+        value: NoteValue,
+        asset: AssetBase,
+        mut rng: impl RngCore,
+    ) -> Self {
+        let rseed = RandomSeed::random(&mut rng, &Rho(pallas::Base::zero()));
+        Note {
+            recipient,
+            value,
+            asset,
+            rho: None,
+            rseed,
+            rseed_split_note: CtOption::new(rseed, 0u8.into()),
         }
     }
 
@@ -323,12 +336,24 @@ impl Note {
 
     /// Derives the ephemeral secret key for this note.
     pub(crate) fn esk(&self) -> EphemeralSecretKey {
-        EphemeralSecretKey(self.rseed.esk(&self.rho))
+        EphemeralSecretKey(
+            self.rseed.esk(
+                &self
+                    .rho
+                    .expect("must call Note::update_rho_for_issuance_note first"),
+            ),
+        )
     }
 
     /// Returns rho of this note.
     pub fn rho(&self) -> Rho {
         self.rho
+            .expect("must call Note::update_rho_for_issuance_note first")
+    }
+
+    #[cfg(test)]
+    pub fn has_rho(&self) -> bool {
+        self.rho.is_some()
     }
 
     /// Derives the commitment to this note.
@@ -352,26 +377,28 @@ impl Note {
     /// [notes]: https://zips.z.cash/protocol/nu5.pdf#notes
     fn commitment_inner(&self) -> CtOption<NoteCommitment> {
         let g_d = self.recipient.g_d();
+        let rho = self.rho();
 
         NoteCommitment::derive(
             g_d.to_bytes(),
             self.recipient.pk_d().to_bytes(),
             self.value,
             self.asset,
-            self.rho.0,
-            self.rseed.psi(&self.rho),
-            self.rseed.rcm(&self.rho),
+            rho.0,
+            self.rseed.psi(&rho),
+            self.rseed.rcm(&rho),
         )
     }
 
     /// Derives the nullifier for this note.
     pub fn nullifier(&self, fvk: &FullViewingKey) -> Nullifier {
         let selected_rseed = self.rseed_split_note.unwrap_or(self.rseed);
+        let rho = self.rho();
 
         Nullifier::derive(
             fvk.nk(),
-            self.rho.0,
-            selected_rseed.psi(&self.rho),
+            rho.0,
+            selected_rseed.psi(&rho),
             self.commitment(),
             self.rseed_split_note.is_some(),
         )
@@ -388,7 +415,7 @@ impl Note {
     pub fn create_split_note(self, rng: &mut impl RngCore) -> Self {
         assert!(bool::from(!self.asset().is_native()));
         Note {
-            rseed_split_note: CtOption::new(RandomSeed::random(rng, &self.rho), 1u8.into()),
+            rseed_split_note: CtOption::new(RandomSeed::random(rng, &self.rho()), 1u8.into()),
             ..self
         }
     }
@@ -396,14 +423,24 @@ impl Note {
     /// Update the rho value of the issuance note (see
     /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227]).
     ///
+    /// TODO
+    ///
     /// [zip227]: https://zips.z.cash/zip-0227
     pub(crate) fn update_rho_for_issuance_note(
         &mut self,
         nullifier: &Nullifier,
         index_action: u32,
         index_note: u32,
+        mut rng: impl RngCore,
     ) {
-        self.rho = rho_for_issuance_note(nullifier, index_action, index_note);
+        loop {
+            let rho = rho_for_issuance_note(nullifier, index_action, index_note);
+            self.rho = Some(rho);
+            self.rseed = RandomSeed::random(&mut rng, &rho);
+            if self.commitment_inner().is_some().into() {
+                break;
+            }
+        }
     }
 }
 
@@ -483,7 +520,7 @@ pub mod testing {
                 recipient,
                 value,
                 asset,
-                rho,
+                rho: Some(rho),
                 rseed,
                 rseed_split_note: CtOption::new(rseed, 0u8.into()),
             }
@@ -502,7 +539,7 @@ pub mod testing {
                 recipient,
                 value,
                 asset: AssetBase::native(),
-                rho,
+                rho: Some(rho),
                 rseed,
                 rseed_split_note: CtOption::new(rseed, 0u8.into())
             }
@@ -523,7 +560,7 @@ pub mod testing {
                 recipient,
                 value,
                 asset: AssetBase::custom(&AssetId::new_v0(&ik, &asset_desc_hash)),
-                rho,
+                rho: Some(rho),
                 rseed,
                 rseed_split_note: CtOption::new(rseed, 0u8.into()),
             }

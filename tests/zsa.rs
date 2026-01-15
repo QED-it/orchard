@@ -23,6 +23,7 @@ use orchard::{
     Address, Anchor, Bundle, Note,
 };
 use rand::rngs::OsRng;
+use rand_core::RngCore;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use std::collections::HashSet;
 use zcash_note_encryption::try_note_decryption;
@@ -78,8 +79,9 @@ fn sign_issue_bundle(
     awaiting_nullifier_bundle: IssueBundle<AwaitingNullifier>,
     isk: &IssueAuthKey<ZSASchnorr>,
     first_nullifier: &Nullifier,
+    rng: impl RngCore,
 ) -> IssueBundle<Signed> {
-    let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier);
+    let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier, rng);
     let sighash = awaiting_sighash_bundle.commitment().into();
     let prepared_bundle = awaiting_sighash_bundle.prepare(sighash);
     prepared_bundle.sign(isk).unwrap()
@@ -174,7 +176,8 @@ fn issue_zsa_notes(
         )
         .is_ok());
 
-    let issue_bundle = sign_issue_bundle(awaiting_nullifier_bundle, keys.isk(), first_nullifier);
+    let issue_bundle =
+        sign_issue_bundle(awaiting_nullifier_bundle, keys.isk(), first_nullifier, rng);
 
     // Take notes from first action
     let notes = issue_bundle.get_all_notes();

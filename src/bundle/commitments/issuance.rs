@@ -148,7 +148,7 @@ mod tests {
             .unwrap();
         assert_ne!(asset, third_asset);
 
-        (bundle.update_rho(&first_nullifier), isk)
+        (bundle.update_rho(&first_nullifier, rng), isk)
     }
 
     /// Verify that the `issuance_digest` of an IssueBundle matches a fixed reference value
