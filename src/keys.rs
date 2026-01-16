@@ -322,8 +322,8 @@ impl From<&SpendingKey> for FullViewingKey {
     }
 }
 
-impl<C: hardened_only::Context> From<&ExtendedSpendingKey<C>> for FullViewingKey {
-    fn from(extsk: &ExtendedSpendingKey<C>) -> Self {
+impl From<&ExtendedSpendingKey> for FullViewingKey {
+    fn from(extsk: &ExtendedSpendingKey) -> Self {
         (&extsk.sk()).into()
     }
 }
