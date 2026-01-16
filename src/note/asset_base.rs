@@ -1,6 +1,6 @@
 use core::cmp::Ordering;
 use core::hash::{Hash, Hasher};
-use group::GroupEncoding;
+use group::{Group, GroupEncoding};
 use pasta_curves::{arithmetic::CurveExt, pallas};
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
@@ -8,9 +8,6 @@ use crate::constants::fixed_bases::{NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_
 
 #[cfg(test)]
 use rand_core::CryptoRngCore;
-
-#[cfg(any(test, feature = "zsa-issuance"))]
-use group::Group;
 
 #[cfg(feature = "zsa-issuance")]
 use {
