@@ -30,9 +30,9 @@ use secp256k1::{schnorr, Keypair, Message, Secp256k1, SecretKey, XOnlyPublicKey}
 
 use crate::issuance::Error;
 
-// Preserve '::' which specifies the EXTERNAL 'zip32' crate
-#[rustfmt::skip]
-pub use ::zip32::{AccountId, ChildIndex, DiversifierIndex, Scope, hardened_only, hardened_only::HardenedOnlyKey};
+pub use ::zip32::{
+    hardened_only, hardened_only::HardenedOnlyKey, AccountId, ChildIndex, DiversifierIndex, Scope,
+};
 use zcash_spec::{PrfExpand, VariableLengthSlice};
 
 const ZIP32_PURPOSE_FOR_ISSUANCE: u32 = 227;
