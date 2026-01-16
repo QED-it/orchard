@@ -699,6 +699,11 @@ impl Builder {
             return Err(BuildError::Burn(BurnError::ZeroAmount));
         }
 
+        // Check that the burn amount fits in u63
+        if value.inner() >= (1u64 << 63) {
+            return Err(BuildError::Burn(BurnError::InvalidAmount));
+        }
+
         match self.burn.entry(asset) {
             Entry::Occupied(_) => Err(BuildError::Burn(BurnError::DuplicateAsset)),
             Entry::Vacant(entry) => {
