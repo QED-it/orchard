@@ -1072,7 +1072,7 @@ fn build_bundle<B, R: RngCore>(
 /// Marker trait representing bundle signatures in the process of being created.
 pub trait InProgressSignatures: fmt::Debug {
     /// The authorization type of an Orchard action in the process of being authorized.
-    type SpendAuth: fmt::Debug + Clone;
+    type SpendAuth: fmt::Debug;
 }
 
 /// Marker for a bundle in the process of being built.
