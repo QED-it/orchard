@@ -8,7 +8,8 @@ use core::fmt;
 use crate::{issuance::AssetRecord, note::AssetBase, value::NoteValue};
 
 /// Possible errors that can occur during bundle burn validation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum BurnError {
     /// Encountered a duplicate asset to burn.
     DuplicateAsset,
@@ -16,6 +17,8 @@ pub enum BurnError {
     NativeAsset,
     /// Cannot burn an asset with a zero value.
     ZeroAmount,
+    /// Burn amount does not fit in u63.
+    InvalidAmount,
     /// Asset not found in state
     AssetNotFoundInState,
     /// Insufficient supply for burn
@@ -25,7 +28,7 @@ pub enum BurnError {
 /// Validates burn operations for a bundle and computes the resulting asset states.
 ///
 /// This function validates burn operations by:
-/// - Ensuring each asset is unique, non-native, and has a non-zero burn value
+/// - Ensuring each asset is unique, non-native, fits in u63, and has a non-zero burn value
 /// - Verifying that each asset exists in the current state
 /// - Checking that there is sufficient supply to burn
 /// - Computing the new asset records after burning
@@ -46,6 +49,7 @@ pub enum BurnError {
 /// Returns a `BurnError` if:
 /// * Any asset in the `burn` vector is native (`BurnError::NativeAsset`).
 /// * Any asset in the `burn` vector has a zero value (`BurnError::ZeroAmount`).
+/// * Any burn amount in the `burn` vector is out of the u63 range (`BurnError::InvalidAmount`).
 /// * Any asset in the `burn` vector is not unique (`BurnError::DuplicateAsset`).
 /// * Any asset is not found in the current state (`BurnError::AssetNotFoundInState`).
 /// * Any asset has insufficient supply for the burn amount (`BurnError::InsufficientSupply`).
@@ -63,6 +67,9 @@ pub fn validate_bundle_burn(
         let burn_amount_raw = burn_amount.inner();
         if burn_amount_raw == 0 {
             return Err(BurnError::ZeroAmount);
+        }
+        if burn_amount_raw >= (1u64 << 63) {
+            return Err(BurnError::InvalidAmount);
         }
 
         let current_record = get_current_record(&asset).ok_or(BurnError::AssetNotFoundInState)?;
@@ -94,6 +101,9 @@ impl fmt::Display for BurnError {
             BurnError::ZeroAmount => {
                 write!(f, "Cannot burn an asset with a zero value.")
             }
+            BurnError::InvalidAmount => {
+                write!(f, "Burn amount must fit in u63.")
+            }
             BurnError::AssetNotFoundInState => write!(f, "Asset not found in state."),
             BurnError::InsufficientSupply => write!(f, "Insufficient supply for burn"),
         }
@@ -103,65 +113,50 @@ impl fmt::Display for BurnError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{issuance::compute_asset_desc_hash, value::NoteValue, Note};
-    use nonempty::NonEmpty;
+    use crate::{value::NoteValue, Note};
 
-    /// Creates an item of bundle burn list for a given asset description hash and value.
-    ///
-    /// This function is deterministic and guarantees that each call with the same parameters
-    /// will return the same result. It achieves determinism by using a static `IssueAuthKey`.
-    ///
-    /// # Arguments
-    ///
-    /// * `asset_desc_hash` - The asset description hash.
-    /// * `value` - The value for the burn.
-    ///
-    /// # Returns
-    ///
-    /// A tuple `(AssetBase, Amount)` representing the burn list item.
-    ///
-    fn get_burn_tuple(asset_desc_hash: &[u8; 32], value: u64) -> (AssetBase, NoteValue) {
-        use crate::issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
+    use alloc::{collections::BTreeSet, vec::Vec};
+    use rand_core::OsRng;
 
-        let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&[1u8; 32]).unwrap();
+    /// Generates a vector of unique random assets.
+    fn generate_unique_assets(count: usize) -> Vec<AssetBase> {
+        let mut rng = OsRng;
+        let mut used = BTreeSet::new();
 
-        (
-            AssetBase::derive(&IssueValidatingKey::from(&isk), asset_desc_hash),
-            NoteValue::from_raw(value),
-        )
+        (0..count)
+            .map(|_| loop {
+                let asset = AssetBase::random(&mut rng);
+                if used.insert(asset) {
+                    break asset;
+                }
+            })
+            .collect()
     }
 
-    /// Builds a BTreeMap of asset states from an array of (asset_desc, supply) tuples.
+    /// Builds a BTreeMap of asset states from an array of (asset, supply) tuples.
     ///
     /// # Arguments
     ///
     /// * `data` - An array of tuples where each tuple contains:
-    ///   - `asset_desc`: A byte slice representing the asset description
+    ///   - `asset`: The AssetBase
     ///   - `supply`: The supply amount for the asset
     ///
     /// # Returns
     ///
     /// A `BTreeMap<AssetBase, AssetRecord>` containing the asset records.
-    fn build_state(data: &[(&[u8], u64)]) -> BTreeMap<AssetBase, AssetRecord> {
+    fn build_state(data: &[(AssetBase, u64)]) -> BTreeMap<AssetBase, AssetRecord> {
         use crate::keys::{FullViewingKey, Scope, SpendingKey};
-        use rand::rngs::OsRng;
 
         let mut rng = OsRng;
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
         let recipient = fvk.address_at(0u32, Scope::External);
 
         data.iter()
-            .map(|(desc, supply)| {
-                let (asset, _) = get_burn_tuple(
-                    &compute_asset_desc_hash(&NonEmpty::from_slice(desc).unwrap()),
-                    0,
-                );
-
-                // Create reference note with proper rho
+            .map(|(asset, supply)| {
                 let reference_note = Note::new(
                     recipient,
                     NoteValue::from_raw(0),
-                    asset,
+                    *asset,
                     crate::note::Rho::zero(),
                     &mut rng,
                 );
@@ -171,29 +166,9 @@ mod tests {
                     is_finalized: true,
                     reference_note,
                 };
-                (asset, record)
+                (*asset, record)
             })
             .collect()
-    }
-
-    /// Creates a mock state with predefined asset records
-    fn create_mock_state() -> BTreeMap<AssetBase, AssetRecord> {
-        let mock_data = [
-            // (asset_desc, supply)
-            (b"Asset 1".as_ref(), 100),
-            (b"Asset 2".as_ref(), 50),
-            (b"Asset 3".as_ref(), 200),
-        ];
-
-        build_state(&mock_data)
-    }
-
-    /// Helper function to validate bundle burn with the default mock state.
-    fn validate_with_mock_state(
-        burn: impl IntoIterator<Item = (AssetBase, NoteValue)>,
-    ) -> Result<BTreeMap<AssetBase, AssetRecord>, BurnError> {
-        let mock_state = create_mock_state();
-        validate_bundle_burn(burn, |asset| mock_state.get(asset).cloned())
     }
 
     /// Strips reference notes, keeping only amounts (reference notes contain
@@ -209,30 +184,22 @@ mod tests {
 
     #[test]
     fn validate_bundle_burn_success() {
+        let assets = generate_unique_assets(3);
+
+        // Create initial state
+        let mock_state = build_state(&[(assets[0], 100), (assets[1], 50), (assets[2], 200)]);
+
         let bundle_burn = vec![
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
-                10,
-            ),
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 2").unwrap()),
-                20,
-            ),
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 3").unwrap()),
-                10,
-            ),
+            (assets[0], NoteValue::from_raw(10)),
+            (assets[1], NoteValue::from_raw(20)),
+            (assets[2], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_with_mock_state(bundle_burn);
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
 
         assert!(result.is_ok());
 
-        let expected_state = build_state(&[
-            (&b"Asset 1".as_ref(), 90),
-            (&b"Asset 2".as_ref(), 30),
-            (&b"Asset 3".as_ref(), 190),
-        ]);
+        let expected_state = build_state(&[(assets[0], 90), (assets[1], 30), (assets[2], 190)]);
 
         assert_eq!(
             strip_reference_notes(&result.unwrap()),
@@ -242,99 +209,105 @@ mod tests {
 
     #[test]
     fn validate_bundle_burn_duplicate_asset() {
+        let assets = generate_unique_assets(2);
+
+        let mock_state = build_state(&[(assets[0], 100), (assets[1], 200)]);
+
         let bundle_burn = vec![
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
-                10,
-            ),
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
-                20,
-            ),
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 3").unwrap()),
-                10,
-            ),
+            (assets[0], NoteValue::from_raw(10)),
+            (assets[0], NoteValue::from_raw(20)),
+            (assets[1], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_with_mock_state(bundle_burn);
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::DuplicateAsset));
     }
 
     #[test]
     fn validate_bundle_burn_native_asset() {
+        let assets = generate_unique_assets(2);
+
+        let mock_state = build_state(&[(assets[0], 100), (assets[1], 200)]);
+
         let bundle_burn = vec![
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
-                10,
-            ),
+            (assets[0], NoteValue::from_raw(10)),
             (AssetBase::native(), NoteValue::from_raw(20)),
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 3").unwrap()),
-                10,
-            ),
+            (assets[1], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_with_mock_state(bundle_burn);
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::NativeAsset));
     }
 
     #[test]
     fn validate_bundle_burn_zero_value() {
+        let assets = generate_unique_assets(3);
+
+        let mock_state = build_state(&[(assets[0], 100), (assets[1], 50), (assets[2], 200)]);
+
         let bundle_burn = vec![
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
-                10,
-            ),
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 2").unwrap()),
-                0,
-            ),
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 3").unwrap()),
-                10,
-            ),
+            (assets[0], NoteValue::from_raw(10)),
+            (assets[1], NoteValue::from_raw(0)),
+            (assets[2], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_with_mock_state(bundle_burn);
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::ZeroAmount));
     }
 
     #[test]
-    fn validate_bundle_burn_asset_not_found() {
+    fn validate_bundle_burn_invalid_amount() {
+        let assets = generate_unique_assets(3);
+
+        let mock_state = build_state(&[
+            (assets[0], u64::MAX),
+            (assets[1], u64::MAX),
+            (assets[2], u64::MAX),
+        ]);
+
         let bundle_burn = vec![
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
-                10,
-            ),
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Unknown Asset").unwrap()),
-                20,
-            ),
+            (assets[0], NoteValue::from_raw(10)),
+            (assets[1], NoteValue::from_raw(1u64 << 63)),
+            (assets[2], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_with_mock_state(bundle_burn);
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
+
+        assert_eq!(result, Err(BurnError::InvalidAmount));
+    }
+
+    #[test]
+    fn validate_bundle_burn_asset_not_found() {
+        let assets = generate_unique_assets(3);
+
+        // Only add first asset to state
+        let mock_state = build_state(&[(assets[0], 100)]);
+
+        let bundle_burn = vec![
+            (assets[0], NoteValue::from_raw(10)),
+            (assets[1], NoteValue::from_raw(20)), // Not in state
+        ];
+
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::AssetNotFoundInState));
     }
 
     #[test]
     fn validate_bundle_burn_insufficient_supply() {
+        let assets = generate_unique_assets(2);
+
+        let mock_state = build_state(&[(assets[0], 100), (assets[1], 50)]);
+
         let bundle_burn = vec![
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 1").unwrap()),
-                10,
-            ),
-            get_burn_tuple(
-                &compute_asset_desc_hash(&NonEmpty::from_slice(b"Asset 2").unwrap()),
-                100, // Asset 2 only has 50
-            ),
+            (assets[0], NoteValue::from_raw(10)),
+            (assets[1], NoteValue::from_raw(100)), // Only has 50
         ];
 
-        let result = validate_with_mock_state(bundle_burn);
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::InsufficientSupply));
     }
