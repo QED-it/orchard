@@ -145,19 +145,16 @@ mod tests {
     ///
     /// A `BTreeMap<AssetBase, AssetRecord>` containing the asset records.
     fn build_state(data: &[(AssetBase, u64)]) -> BTreeMap<AssetBase, AssetRecord> {
-        use crate::keys::{FullViewingKey, Scope, SpendingKey};
+        use crate::constants::reference_keys::ReferenceKeys;
 
         let mut rng = OsRng;
-        let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
-        let recipient = fvk.address_at(0u32, Scope::External);
 
         data.iter()
             .map(|(asset, supply)| {
-                let reference_note = Note::new(
-                    recipient,
-                    NoteValue::from_raw(0),
+                let reference_note = Note::new_issue_note(
+                    ReferenceKeys::recipient(),
+                    NoteValue::zero(),
                     *asset,
-                    crate::note::Rho::zero(),
                     &mut rng,
                 );
 
