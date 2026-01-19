@@ -1192,7 +1192,7 @@ impl InProgressSignatures for PartiallyAuthorized {
 
 /// A heisen[`Signature`] for a particular [`Action`].
 ///
-/// [`Signature`]: VerSpendAuthSig
+/// [`Signature`]: OrchardSpendAuthSig
 #[derive(Debug)]
 pub enum MaybeSigned {
     /// The information needed to sign this [`Action`].
@@ -1289,13 +1289,13 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, PartiallyAuth
         )
     }
 
-    /// Appends externally computed versioned signatures.
+    /// Appends externally computed signatures.
     ///
-    /// Each versioned signature will be applied to the one input for which it is valid. An error
-    /// will be returned if the versioned signature is not valid for any inputs, or if it is valid
+    /// Each signature will be applied to the one input for which it is valid. An error
+    /// will be returned if the signature is not valid for any inputs, or if it is valid
     /// for more than one input.
     ///
-    /// [`Signature`]: VerSpendAuthSig
+    /// [`Signature`]: OrchardSpendAuthSig
     pub fn append_signatures(self, signatures: &[OrchardSpendAuthSig]) -> Result<Self, BuildError> {
         signatures.iter().try_fold(self, Self::append_signature)
     }
