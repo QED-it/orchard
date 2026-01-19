@@ -1,11 +1,13 @@
+#![cfg(feature = "circuit")]
+
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use orchard::{
     builder::{Builder, BundleType},
     bundle::{Authorized, Flags},
     circuit::{ProvingKey, VerifyingKey},
+    flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
-    orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     primitives::{OrchardDomain, OrchardPrimitives},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
@@ -16,8 +18,8 @@ use rand::SeedableRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
 
-pub fn verify_bundle<P: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, i64, P>,
+pub fn verify_bundle<Pr: OrchardPrimitives>(
+    bundle: &Bundle<Authorized, i64, Pr>,
     vk: &VerifyingKey,
     verify_proof: bool,
 ) {
@@ -29,7 +31,7 @@ pub fn verify_bundle<P: OrchardPrimitives>(
     for action in bundle.actions() {
         assert_eq!(
             action.authorization().version(),
-            &P::default_sighash_version()
+            &Pr::default_sighash_version()
         );
         assert_eq!(
             action.rk().verify(&sighash, action.authorization().sig()),
@@ -73,8 +75,8 @@ trait BundleOrchardFlavor: OrchardFlavor {
 }
 
 impl BundleOrchardFlavor for OrchardVanilla {
-    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT_VANILLA;
-    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED_WITHOUT_ZSA;
+    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT;
+    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED;
 }
 
 impl BundleOrchardFlavor for OrchardZSA {
@@ -108,7 +110,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
             builder.add_output(None, recipient, note_value, AssetBase::native(), [0u8; 512]),
             Ok(())
         );
-        let (unauthorized, bundle_meta) = builder.build(&mut rng).unwrap();
+        let (unauthorized, bundle_meta) = builder.build(&mut rng).unwrap().unwrap();
 
         assert_eq!(
             unauthorized
@@ -154,9 +156,9 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
 
         let mut builder = Builder::new(
             BundleType::Transactional {
-                // Intentionally testing with SPENDS_DISABLED_WITHOUT_ZSA as SPENDS_DISABLED_WITH_ZSA is already
+                // Intentionally testing with SPENDS_DISABLED as SPENDS_DISABLED_WITH_ZSA is already
                 // tested above (for OrchardZSA case). Both should work.
-                flags: Flags::SPENDS_DISABLED_WITHOUT_ZSA,
+                flags: Flags::SPENDS_DISABLED,
                 bundle_required: false,
             },
             anchor,
@@ -181,7 +183,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
             ),
             Ok(())
         );
-        let (unauthorized, _) = builder.build(&mut rng).unwrap();
+        let (unauthorized, _) = builder.build(&mut rng).unwrap().unwrap();
         let sighash = unauthorized.commitment().into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
         (

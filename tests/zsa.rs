@@ -1,20 +1,22 @@
+#![cfg(all(feature = "zsa-issuance", feature = "circuit"))]
+
 mod builder;
 
 use crate::builder::verify_bundle;
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use nonempty::NonEmpty;
 use orchard::{
-    builder::{Builder, BundleType},
-    bundle::Authorized,
+    builder::{BuildError, Builder, BundleType},
+    bundle::{burn_validation::BurnError, Authorized},
     circuit::{ProvingKey, VerifyingKey},
+    flavor::OrchardZSA,
     issuance::{
+        auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
         compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo,
         Signed,
     },
-    issuance_auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
-    note::{AssetBase, ExtractedNoteCommitment, Nullifier},
-    orchard_flavor::OrchardZSA,
+    note::{AssetBase, AssetId, ExtractedNoteCommitment, Nullifier},
     primitives::OrchardDomain,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
@@ -26,9 +28,9 @@ use std::collections::HashSet;
 use zcash_note_encryption::try_note_decryption;
 
 #[derive(Debug)]
-struct Keychain {
-    pk: ProvingKey,
-    vk: VerifyingKey,
+struct Keychain<'a> {
+    pk: &'a ProvingKey,
+    vk: &'a VerifyingKey,
     sk: SpendingKey,
     fvk: FullViewingKey,
     isk: IssueAuthKey<ZSASchnorr>,
@@ -36,9 +38,9 @@ struct Keychain {
     recipient: Address,
 }
 
-impl Keychain {
+impl Keychain<'_> {
     fn pk(&self) -> &ProvingKey {
-        &self.pk
+        self.pk
     }
     fn sk(&self) -> &SpendingKey {
         &self.sk
@@ -54,7 +56,7 @@ impl Keychain {
     }
 }
 
-fn prepare_keys(pk: ProvingKey, vk: VerifyingKey, seed: u8) -> Keychain {
+fn prepare_keys<'a>(pk: &'a ProvingKey, vk: &'a VerifyingKey, seed: u8) -> Keychain<'a> {
     let sk = SpendingKey::from_bytes([seed; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
@@ -76,8 +78,9 @@ fn sign_issue_bundle(
     awaiting_nullifier_bundle: IssueBundle<AwaitingNullifier>,
     isk: &IssueAuthKey<ZSASchnorr>,
     first_nullifier: &Nullifier,
+    rng: OsRng,
 ) -> IssueBundle<Signed> {
-    let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier);
+    let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier, rng);
     let sighash = awaiting_sighash_bundle.commitment().into();
     let prepared_bundle = awaiting_sighash_bundle.prepare(sighash);
     prepared_bundle.sign(isk).unwrap()
@@ -89,7 +92,7 @@ fn build_and_sign_bundle(
     pk: &ProvingKey,
     sk: &SpendingKey,
 ) -> Bundle<Authorized, i64, OrchardZSA> {
-    let unauthorized = builder.build(&mut rng).unwrap().0;
+    let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
     let sighash = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
     proven
@@ -172,7 +175,8 @@ fn issue_zsa_notes(
         )
         .is_ok());
 
-    let issue_bundle = sign_issue_bundle(awaiting_nullifier_bundle, keys.isk(), first_nullifier);
+    let issue_bundle =
+        sign_issue_bundle(awaiting_nullifier_bundle, keys.isk(), first_nullifier, rng);
 
     // Take notes from first action
     let notes = issue_bundle.get_all_notes();
@@ -182,7 +186,7 @@ fn issue_zsa_notes(
 
     verify_reference_note(
         reference_note,
-        AssetBase::derive(&keys.ik().clone(), &asset_desc_hash),
+        AssetBase::custom(&AssetId::new_v0(keys.ik(), &asset_desc_hash)),
     );
 
     assert!(verify_issue_bundle(
@@ -214,7 +218,7 @@ fn create_native_note(keys: &Keychain) -> Note {
             ),
             Ok(())
         );
-        let unauthorized = builder.build(&mut rng).unwrap().0;
+        let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
         let sighash = unauthorized.commitment().into();
         let proven = unauthorized.create_proof(keys.pk(), &mut rng).unwrap();
         proven.apply_signatures(rng, sighash, &[]).unwrap()
@@ -287,7 +291,7 @@ fn build_and_verify_bundle(
     };
 
     // Verify the shielded bundle, currently without the proof.
-    verify_bundle(&shielded_bundle, &keys.vk, true);
+    verify_bundle(&shielded_bundle, keys.vk, true);
     assert_eq!(shielded_bundle.actions().len(), expected_num_actions);
     assert!(verify_unique_spent_nullifiers(&shielded_bundle));
     Ok(())
@@ -324,9 +328,9 @@ fn zsa_issue_and_transfer() {
     let pk = ProvingKey::build::<OrchardZSA>();
     let vk = VerifyingKey::build::<OrchardZSA>();
 
-    let keys = prepare_keys(pk.clone(), vk.clone(), 5);
-    let keys2 = prepare_keys(pk.clone(), vk.clone(), 10);
-    let keys3 = prepare_keys(pk, vk, 15);
+    let keys = prepare_keys(&pk, &vk, 5);
+    let keys2 = prepare_keys(&pk, &vk, 10);
+    let keys3 = prepare_keys(&pk, &vk, 15);
 
     let native_note = create_native_note(&keys);
 
@@ -598,7 +602,7 @@ fn zsa_issue_and_transfer() {
     );
     match result {
         Ok(_) => panic!("Test should fail"),
-        Err(error) => assert_eq!(error, "Burning is only possible for non-native assets"),
+        Err(error) => assert_eq!(error, BuildError::Burn(BurnError::NativeAsset).to_string()),
     }
 
     // 12. Try to burn zero value - should fail
@@ -616,6 +620,6 @@ fn zsa_issue_and_transfer() {
     );
     match result {
         Ok(_) => panic!("Test should fail"),
-        Err(error) => assert_eq!(error, "Burning is not possible for zero values"),
+        Err(error) => assert_eq!(error, BuildError::Burn(BurnError::ZeroAmount).to_string()),
     }
 }
