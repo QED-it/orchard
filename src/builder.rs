@@ -1197,7 +1197,7 @@ impl InProgressSignatures for PartiallyAuthorized {
 pub enum MaybeSigned {
     /// The information needed to sign this [`Action`].
     SigningMetadata(SigningParts),
-    /// The versioned signature for this [`Action`].
+    /// The signature for this [`Action`].
     Signature(OrchardSpendAuthSig),
 }
 
@@ -1222,7 +1222,7 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, Unauthorized>
         self.map_authorization(
             &mut rng,
             |rng, _, SigningMetadata { dummy_ask, parts }| {
-                // We can create versioned signatures for dummy spends immediately.
+                // We can create signatures for dummy spends immediately.
                 dummy_ask
                     .map(|ask| {
                         OrchardSpendAuthSig::new(
@@ -1271,7 +1271,7 @@ impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, Pr> {
 impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, PartiallyAuthorized>, V, Pr> {
     /// Signs this bundle with the given [`SpendAuthorizingKey`].
     ///
-    /// This will apply versioned signatures for all notes controlled by this spending key.
+    /// This will apply signatures for all notes controlled by this spending key.
     pub fn sign<R: RngCore + CryptoRng>(self, mut rng: R, ask: &SpendAuthorizingKey) -> Self {
         let expected_ak = ask.into();
         self.map_authorization(

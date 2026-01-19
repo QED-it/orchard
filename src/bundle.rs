@@ -539,7 +539,7 @@ impl Authorized {
         &self.proof
     }
 
-    /// Return the versioned binding signature.
+    /// Return the binding signature.
     pub fn binding_signature(&self) -> &OrchardBindingSig {
         &self.binding_signature
     }

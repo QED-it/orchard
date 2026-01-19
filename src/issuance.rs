@@ -300,7 +300,7 @@ impl Signed {
     pub fn new(signature: BIP340IssueAuthSig) -> Self {
         Signed { signature }
     }
-    /// Returns the versioned signature for this authorization.
+    /// Returns the signature for this authorization.
     pub fn signature(&self) -> &BIP340IssueAuthSig {
         &self.signature
     }
