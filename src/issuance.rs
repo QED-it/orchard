@@ -645,14 +645,14 @@ impl IssueBundle<Signed> {
     }
 }
 
-/// Validates an [`IssueBundle`] without signature verification.
+/// Checks an [`IssueBundle`] without signature verification.
 ///
 /// Performs the same validation as [`verify_issue_bundle`] except skips the signature check.
 /// Use when signatures are already known to be valid (e.g., verifying historical blocks
 /// from a trusted checkpoint).
 ///
 /// See [`verify_issue_bundle`] for full documentation of validation rules and errors.
-pub fn verify_trusted_issue_bundle(
+pub fn check_issue_bundle_without_sighash(
     bundle: &IssueBundle<Signed>,
     mut get_global_records: impl FnMut(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
@@ -765,7 +765,7 @@ pub fn verify_issue_bundle(
         .verify(&sighash, bundle.authorization().signature().sig())
         .map_err(|_| InvalidIssueBundleSig)?;
 
-    verify_trusted_issue_bundle(bundle, get_global_records, first_nullifier)
+    check_issue_bundle_without_sighash(bundle, get_global_records, first_nullifier)
 }
 
 // FIXME: move it and add tests ...
