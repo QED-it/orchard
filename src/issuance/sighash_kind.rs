@@ -7,10 +7,10 @@ use crate::issuance::auth::{IssueAuthSig, IssueAuthSigScheme, ZSASchnorr};
 /// This is used to implement [sighash versioning] for issuance transactions.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum IssueSighashKind {
-    /// The "default" sighash that commits to all effecting data of the transaction.
+    /// The "default" sighash that commits to all effecting data of the transaction, as defined in
+    /// [ZIP-246: Digests for the Version 6 Transaction Format][sighashversioning]
     ///
-    /// - [ZIP 244](https://zips.z.cash/zip-0244#s-4-orchard-digest)
-    /// - [ZIP 246](https://zips.z.cash/zip-0246#s-4-orchard-digest)
+    /// [sighashversioning]: https://zips.z.cash/zip-0246#sighash-versioning
     AllEffecting,
 }
 

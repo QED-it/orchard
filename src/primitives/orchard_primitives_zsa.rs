@@ -135,9 +135,7 @@ impl OrchardPrimitives for OrchardZSA {
         agh.update(bundle.authorization().proof().as_ref());
         let mut sash = hasher(ZCASH_ORCHARD_SPEND_AUTH_SIGS_HASH_PERSONALIZATION);
         for action in bundle.actions().iter() {
-            let sighash_kind = action.authorization().sighash_kind();
-            assert_eq!(sighash_kind, &OrchardSighashKind::AllEffecting);
-            let sighash_info = sighash_info_for_kind(sighash_kind);
+            let sighash_info = sighash_info_for_kind(action.authorization().sighash_kind());
             sash.update(&get_compact_size(sighash_info.len()));
             sash.update(sighash_info);
             sash.update(&<[u8; 64]>::from(action.authorization().sig()));
@@ -145,9 +143,8 @@ impl OrchardPrimitives for OrchardZSA {
         agh.update(sash.finalize().as_bytes());
         h.update(agh.finalize().as_bytes());
 
-        let sighash_kind = bundle.authorization().binding_signature().sighash_kind();
-        assert_eq!(sighash_kind, &OrchardSighashKind::AllEffecting);
-        let sighash_info = sighash_info_for_kind(sighash_kind);
+        let sighash_info =
+            sighash_info_for_kind(bundle.authorization().binding_signature().sighash_kind());
         h.update(&get_compact_size(sighash_info.len()));
         h.update(sighash_info);
         h.update(&<[u8; 64]>::from(
