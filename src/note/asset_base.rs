@@ -4,7 +4,7 @@ use group::{Group, GroupEncoding};
 use pasta_curves::{arithmetic::CurveExt, pallas};
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
-use crate::constants::fixed_bases::{NATIVE_ASSET_BASE_V_BYTES, VALUE_COMMITMENT_PERSONALIZATION};
+use crate::constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, ZATOSHI_ASSET_BASE_V_BYTES};
 
 #[cfg(test)]
 use rand_core::CryptoRngCore;
@@ -141,7 +141,7 @@ impl AssetBase {
     pub fn native() -> Self {
         AssetBase(pallas::Point::hash_to_curve(
             VALUE_COMMITMENT_PERSONALIZATION,
-        )(&NATIVE_ASSET_BASE_V_BYTES))
+        )(&ZATOSHI_ASSET_BASE_V_BYTES))
     }
 
     /// The base point used in value commitments.
