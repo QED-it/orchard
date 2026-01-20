@@ -542,8 +542,8 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary native note
-        pub fn arb_native_note()(
+        /// Generate an arbitrary zatoshi note
+        pub fn arb_zatoshi_note()(
             recipient in arb_address(),
             value in arb_note_value(),
             rho in arb_nullifier().prop_map(Rho::from_nf_old),

@@ -21,7 +21,7 @@ pub enum BurnError {
     InvalidAmount,
 }
 
-/// Validates burn for a bundle by ensuring each asset is unique, non-native, fit in u63 and has a
+/// Validates burn for a bundle by ensuring each asset is unique, non-zatoshi, fit in u63 and has a
 /// non-zero value.
 ///
 /// Each burn element is represented as a tuple of `AssetBase` and `NoteValue` (value for the burn).
@@ -128,7 +128,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_bundle_burn_native_asset() {
+    fn validate_bundle_burn_zatoshi_asset() {
         let mut rng = OsRng;
         let mut used = BTreeSet::new();
 

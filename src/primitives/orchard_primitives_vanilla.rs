@@ -130,7 +130,7 @@ mod tests {
             OutgoingViewingKey, PreparedIncomingViewingKey,
         },
         note::{
-            testing::arb_native_note, AssetBase, ExtractedNoteCommitment, Note, Nullifier,
+            testing::arb_zatoshi_note, AssetBase, ExtractedNoteCommitment, Note, Nullifier,
             RandomSeed, Rho, TransmittedNoteCiphertext,
         },
         primitives::{
@@ -149,7 +149,7 @@ mod tests {
     proptest! {
         #[test]
         fn encoding_roundtrip(
-            note in arb_native_note(),
+            note in arb_zatoshi_note(),
         ) {
             let memo = &crate::test_vectors::note_encryption_vanilla::TEST_VECTORS[0].memo;
             let rho = note.rho();

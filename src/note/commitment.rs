@@ -36,7 +36,7 @@ impl NoteCommitment {
 }
 
 impl NoteCommitment {
-    /// $NoteCommit^{Orchard}$ when the asset is native,
+    /// $NoteCommit^{Orchard}$ when the asset is zatoshi,
     /// and $NoteCommit^{OrchardZSA}$ otherwise.
     ///
     /// $NoteCommit^{Orchard}$ is defined in
