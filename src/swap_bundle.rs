@@ -46,7 +46,7 @@ impl<V> SwapBundle<V> {
     }
 }
 
-impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
+impl<V: Copy + Into<i64> + core::ops::Add<Output = V>> SwapBundle<V> {
     /// Constructs a `SwapBundle` from its action groups and respective binding signature keys.
     /// Keys should go in the same order as the action groups.
     pub fn new<R: RngCore + CryptoRng>(
@@ -56,7 +56,11 @@ impl<V: Copy + Into<i64> + std::iter::Sum> SwapBundle<V> {
     ) -> Self {
         assert_eq!(action_groups.len(), bsks.len());
         // Evaluate the swap value balance by summing the value balance of each action group.
-        let value_balance = action_groups.iter().map(|a| *a.value_balance()).sum();
+        let value_balance = action_groups
+            .iter()
+            .map(|a| *a.value_balance())
+            .reduce(|acc, v| acc + v)
+            .expect("action_groups must not be empty");
         // Evaluate the swap bsk by summing the bsk of each action group.
         let bsk = bsks
             .into_iter()

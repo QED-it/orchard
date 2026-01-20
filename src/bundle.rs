@@ -606,6 +606,7 @@ impl<V, P: OrchardPrimitives> Bundle<Authorized, V, P> {
     }
 
     /// Verifies the proof for this bundle.
+    #[cfg(feature = "circuit")]
     pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
         self.authorization()
             .proof()

@@ -41,6 +41,7 @@ use {
     },
     nonempty::NonEmpty,
 };
+#[cfg(feature = "circuit")]
 use crate::orchard_flavor::OrchardZSA;
 use crate::primitives::redpallas::SigningKey;
 
