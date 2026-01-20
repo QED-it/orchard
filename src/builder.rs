@@ -692,7 +692,7 @@ impl Builder {
         use alloc::collections::btree_map::Entry;
 
         if asset.is_zatoshi().into() {
-            return Err(BuildError::Burn(BurnError::NativeAsset));
+            return Err(BuildError::Burn(BurnError::ZatoshiAsset));
         }
 
         if value.inner() == 0 {

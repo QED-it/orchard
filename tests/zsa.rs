@@ -602,7 +602,7 @@ fn zsa_issue_and_transfer() {
     );
     match result {
         Ok(_) => panic!("Test should fail"),
-        Err(error) => assert_eq!(error, BuildError::Burn(BurnError::NativeAsset).to_string()),
+        Err(error) => assert_eq!(error, BuildError::Burn(BurnError::ZatoshiAsset).to_string()),
     }
 
     // 12. Try to burn zero value - should fail
