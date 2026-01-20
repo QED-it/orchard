@@ -612,14 +612,14 @@ impl OrchardCircuit for OrchardVanilla {
     /// For OrchardVanilla circuits, `build_additional_zsa_witnesses` returns `Value::unknown()`.
     ///
     /// # Panics
-    /// Panics if the asset is not a native asset or if `split_flag` is true.
+    /// Panics if the asset is not zatoshi or if `split_flag` is true.
     fn build_additional_zsa_witnesses(
         _: pallas::Base,
         asset: AssetBase,
         split_flag: bool,
     ) -> Value<AdditionalZsaWitnesses> {
-        if !(bool::from(asset.is_native())) {
-            panic!("asset must be native asset in OrchardVanilla circuit");
+        if !(bool::from(asset.is_zatoshi())) {
+            panic!("asset must be zatoshi in OrchardVanilla circuit");
         }
         if split_flag {
             panic!("split_flag must be false in OrchardVanilla circuit");

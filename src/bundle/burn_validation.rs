@@ -41,7 +41,7 @@ pub fn validate_bundle_burn(burn: &[(AssetBase, NoteValue)]) -> Result<(), BurnE
     let mut burn_set = BTreeSet::new();
 
     for (asset, value) in burn {
-        if asset.is_native().into() {
+        if asset.is_zatoshi().into() {
             return Err(BurnError::NativeAsset);
         }
         if value.inner() == 0 {

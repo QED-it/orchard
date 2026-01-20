@@ -149,8 +149,8 @@ impl AssetBase {
         self.0
     }
 
-    /// Whether this note represents a native or ZSA asset.
-    pub fn is_native(&self) -> Choice {
+    /// Whether this note represents zatoshi or ZSA asset.
+    pub fn is_zatoshi(&self) -> Choice {
         self.0.ct_eq(&Self::zatoshi().0)
     }
 

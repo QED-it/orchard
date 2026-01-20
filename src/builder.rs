@@ -691,7 +691,7 @@ impl Builder {
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
         use alloc::collections::btree_map::Entry;
 
-        if asset.is_native().into() {
+        if asset.is_zatoshi().into() {
             return Err(BuildError::Burn(BurnError::NativeAsset));
         }
 
@@ -739,12 +739,12 @@ impl Builder {
         let value_balance = self
             .spends
             .iter()
-            .filter(|spend| spend.note.asset().is_native().into())
+            .filter(|spend| spend.note.asset().is_zatoshi().into())
             .map(|spend| spend.note.value() - NoteValue::zero())
             .chain(
                 self.outputs
                     .iter()
-                    .filter(|output| output.asset.is_native().into())
+                    .filter(|output| output.asset.is_zatoshi().into())
                     .map(|output| NoteValue::zero() - output.value),
             )
             .try_fold(ValueSum::zero(), |acc, note_value| acc + note_value)
@@ -856,7 +856,7 @@ fn pad_spend(
     asset: AssetBase,
     mut rng: impl RngCore,
 ) -> Result<SpendInfo, BuildError> {
-    if asset.is_native().into() {
+    if asset.is_zatoshi().into() {
         // For native asset, extends with dummy notes
         Ok(SpendInfo::dummy(AssetBase::zatoshi(), &mut rng))
     } else {
@@ -1053,7 +1053,7 @@ fn build_bundle<B, R: RngCore>(
     // Determine the value balance for this bundle, ensuring it is valid.
     let native_value_balance = pre_actions
         .iter()
-        .filter(|action| action.spend.note.asset().is_native().into())
+        .filter(|action| action.spend.note.asset().is_zatoshi().into())
         .try_fold(ValueSum::zero(), |acc, action| acc + action.value_sum())
         .ok_or(OverflowError)?;
 

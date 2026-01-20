@@ -118,7 +118,7 @@ where
         layouter,
         column,
         asset.map(|asset| {
-            if bool::from(asset.is_native()) {
+            if bool::from(asset.is_zatoshi()) {
                 pallas::Base::one()
             } else {
                 pallas::Base::zero()

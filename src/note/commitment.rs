@@ -84,7 +84,7 @@ impl NoteCommitment {
         // Select the desired commitment in constant-time
         let commit = commit_with_zsa_domain.and_then(|zsa_commit| {
             commit_with_zec_domain.map(|zec_commit| {
-                pallas::Point::conditional_select(&zsa_commit, &zec_commit, asset.is_native())
+                pallas::Point::conditional_select(&zsa_commit, &zec_commit, asset.is_zatoshi())
             })
         });
 
