@@ -134,7 +134,7 @@ mod tests {
 
         let bundle_burn = vec![
             burn_tuple_unique(&mut rng, &mut used, 10),
-            (AssetBase::native(), NoteValue::from_raw(20)),
+            (AssetBase::zatoshi(), NoteValue::from_raw(20)),
             burn_tuple_unique(&mut rng, &mut used, 10),
         ];
 

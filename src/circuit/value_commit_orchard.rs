@@ -355,7 +355,7 @@ mod tests {
         let mut rng = OsRng;
         let mut circuits = vec![];
         let mut instances = vec![];
-        let native_asset = AssetBase::native();
+        let native_asset = AssetBase::zatoshi();
         let random_asset = AssetBase::random(&mut rng);
         for split_flag in [false, true] {
             for asset in [native_asset, random_asset] {

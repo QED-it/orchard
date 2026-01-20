@@ -553,7 +553,7 @@ mod tests {
         let native_values_with_asset: Vec<(ValueSum, ValueCommitTrapdoor, AssetBase)> =
             native_values
                 .iter()
-                .map(|(value_sum, trapdoor)| (*value_sum, trapdoor.clone(), AssetBase::native()))
+                .map(|(value_sum, trapdoor)| (*value_sum, trapdoor.clone(), AssetBase::zatoshi()))
                 .collect();
 
         let values = [&native_values_with_asset, arb_values, arb_values_to_burn].concat();
@@ -571,7 +571,7 @@ mod tests {
             - ValueCommitment::derive(
                 native_value_balance,
                 ValueCommitTrapdoor::zero(),
-                AssetBase::native(),
+                AssetBase::zatoshi(),
             )
             - arb_values_to_burn
                 .iter()

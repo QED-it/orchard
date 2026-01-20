@@ -649,7 +649,7 @@ mod tests {
     };
 
     fn generate_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit<OrchardVanilla>, Instance) {
-        let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
+        let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::zatoshi());
 
         let sender_address = spent_note.recipient();
         let nk = *fvk.nk();
@@ -660,12 +660,12 @@ mod tests {
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
 
-        let (_, _, output_note) = Note::dummy(&mut rng, Some(rho), AssetBase::native());
+        let (_, _, output_note) = Note::dummy(&mut rng, Some(rho), AssetBase::zatoshi());
         let cmx = output_note.commitment().into();
 
         let value = spent_note.value() - output_note.value();
         let rcv = ValueCommitTrapdoor::random(&mut rng);
-        let cv_net = ValueCommitment::derive(value, rcv.clone(), AssetBase::native());
+        let cv_net = ValueCommitment::derive(value, rcv.clone(), AssetBase::zatoshi());
 
         let path = MerklePath::dummy(&mut rng);
         let anchor = path.root(spent_note.commitment().into());

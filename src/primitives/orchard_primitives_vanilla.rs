@@ -44,7 +44,7 @@ impl OrchardPrimitives for OrchardVanilla {
     }
 
     fn extract_asset(_plaintext: &Self::CompactNotePlaintextBytes) -> Option<AssetBase> {
-        Some(AssetBase::native())
+        Some(AssetBase::zatoshi())
     }
 
     /// Evaluate `orchard_digest` for the bundle as defined in
@@ -222,7 +222,7 @@ mod tests {
 
             let recipient = Address::from_parts(d, pk_d);
 
-            let asset = AssetBase::native();
+            let asset = AssetBase::zatoshi();
 
             let note = Note::from_parts(recipient, value, asset, rho, rseed).unwrap();
             assert_eq!(ExtractedNoteCommitment::from(note.commitment()), cmx);

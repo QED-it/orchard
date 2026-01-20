@@ -3216,7 +3216,7 @@ mod tests {
 
         // Test different values of `ak`, `nk`
         let mut circuits = vec![];
-        for asset in [random_asset, AssetBase::native()] {
+        for asset in [random_asset, AssetBase::zatoshi()] {
             // `gd_x` = -1, `pkd_x` = -1 (these have to be x-coordinates of curve points)
             // `rho` = 0, `psi` = 0
             circuits.push(MyCircuit {

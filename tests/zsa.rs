@@ -213,7 +213,7 @@ fn create_native_note(keys: &Keychain) -> Note {
                 None,
                 keys.recipient,
                 NoteValue::from_raw(100),
-                AssetBase::native(),
+                AssetBase::zatoshi(),
                 [0u8; 512]
             ),
             Ok(())
@@ -469,7 +469,7 @@ fn zsa_issue_and_transfer() {
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(100),
-                asset: AssetBase::native(),
+                asset: AssetBase::zatoshi(),
                 recipient: keys2.recipient,
             },
         ],
@@ -491,17 +491,17 @@ fn zsa_issue_and_transfer() {
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(native_spend.note.value().inner() - delta_1 - delta_2),
-                asset: AssetBase::native(),
+                asset: AssetBase::zatoshi(),
                 recipient: keys.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_1),
-                asset: AssetBase::native(),
+                asset: AssetBase::zatoshi(),
                 recipient: keys2.recipient,
             },
             TestOutputInfo {
                 value: NoteValue::from_raw(delta_2),
-                asset: AssetBase::native(),
+                asset: AssetBase::zatoshi(),
                 recipient: keys3.recipient,
             },
         ],
@@ -591,11 +591,11 @@ fn zsa_issue_and_transfer() {
     )
     .unwrap();
 
-    // 11. Try to burn native asset - should fail
+    // 11. Try to burn zatoshi asset - should fail
     let result = build_and_verify_bundle(
         vec![&native_spend],
         vec![],
-        vec![(AssetBase::native(), native_spend.note.value())],
+        vec![(AssetBase::zatoshi(), native_spend.note.value())],
         anchor,
         2,
         &keys,

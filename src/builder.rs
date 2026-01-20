@@ -345,7 +345,7 @@ impl SpendInfo {
 
     fn into_pczt(self, rng: impl RngCore) -> crate::pczt::Spend {
         assert!(!self.split_flag);
-        assert_eq!(self.note.asset(), AssetBase::native());
+        assert_eq!(self.note.asset(), AssetBase::zatoshi());
 
         let (nf_old, _, alpha, rk) = self.build(rng);
 
@@ -438,7 +438,7 @@ impl OutputInfo {
         nf_old: Nullifier,
         rng: impl RngCore,
     ) -> crate::pczt::Output {
-        assert_eq!(self.asset, AssetBase::native());
+        assert_eq!(self.asset, AssetBase::zatoshi());
 
         let (note, cmx, encrypted_note) = self.build::<OrchardVanilla>(cv_net, nf_old, rng);
 
@@ -858,7 +858,7 @@ fn pad_spend(
 ) -> Result<SpendInfo, BuildError> {
     if asset.is_native().into() {
         // For native asset, extends with dummy notes
-        Ok(SpendInfo::dummy(AssetBase::native(), &mut rng))
+        Ok(SpendInfo::dummy(AssetBase::zatoshi(), &mut rng))
     } else {
         // For ZSA asset, extends with split_notes.
         // If SpendInfo is none, return an error (no split note are available for this asset)
@@ -1017,8 +1017,8 @@ fn build_bundle<B, R: RngCore>(
         indexed_spends_outputs.extend(
             iter::repeat_with(|| {
                 (
-                    (SpendInfo::dummy(AssetBase::native(), &mut rng), None),
-                    (OutputInfo::dummy(&mut rng, AssetBase::native()), None),
+                    (SpendInfo::dummy(AssetBase::zatoshi(), &mut rng), None),
+                    (OutputInfo::dummy(&mut rng, AssetBase::zatoshi()), None),
                 )
             })
             .take(num_actions.saturating_sub(indexed_spends_outputs.len())),
@@ -1490,7 +1490,7 @@ pub mod testing {
                     arb_address().prop_flat_map(move |a| {
                         arb_positive_note_value(MAX_NOTE_VALUE / n_outputs as u64)
                             .prop_map(move |v| {
-                                (a,v, AssetBase::native())
+                                (a,v, AssetBase::zatoshi())
                             })
                     }),
                     n_outputs as usize,
@@ -1572,7 +1572,7 @@ mod tests {
                 None,
                 recipient,
                 NoteValue::from_raw(5000),
-                AssetBase::native(),
+                AssetBase::zatoshi(),
                 [0u8; 512],
             )
             .unwrap();

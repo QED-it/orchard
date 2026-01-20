@@ -103,7 +103,7 @@ impl OrchardCircuit for OrchardZSA {
 
             let one = Expression::Constant(pallas::Base::one());
 
-            let native_asset = AssetBase::native()
+            let native_asset = AssetBase::zatoshi()
                 .cv_base()
                 .to_affine()
                 .coordinates()
@@ -791,7 +791,7 @@ impl OrchardCircuit for OrchardZSA {
                     || {
                         asset_value.map(|asset| {
                             let asset_x = *asset.cv_base().to_affine().coordinates().unwrap().x();
-                            let native_asset_x = *AssetBase::native()
+                            let native_asset_x = *AssetBase::zatoshi()
                                 .cv_base()
                                 .to_affine()
                                 .coordinates()
@@ -815,7 +815,7 @@ impl OrchardCircuit for OrchardZSA {
                     || {
                         asset_value.map(|asset| {
                             let asset_y = *asset.cv_base().to_affine().coordinates().unwrap().y();
-                            let native_asset_y = *AssetBase::native()
+                            let native_asset_y = *AssetBase::zatoshi()
                                 .cv_base()
                                 .to_affine()
                                 .coordinates()
@@ -892,7 +892,7 @@ mod tests {
     };
 
     fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit<OrchardZSA>, Instance) {
-        let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::native());
+        let (_, fvk, spent_note) = Note::dummy(&mut rng, None, AssetBase::zatoshi());
 
         let sender_address = spent_note.recipient();
         let nk = *fvk.nk();
@@ -903,12 +903,12 @@ mod tests {
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
 
-        let (_, _, output_note) = Note::dummy(&mut rng, Some(rho), AssetBase::native());
+        let (_, _, output_note) = Note::dummy(&mut rng, Some(rho), AssetBase::zatoshi());
         let cmx = output_note.commitment().into();
 
         let value = spent_note.value() - output_note.value();
         let rcv = ValueCommitTrapdoor::random(&mut rng);
-        let cv_net = ValueCommitment::derive(value, rcv.clone(), AssetBase::native());
+        let cv_net = ValueCommitment::derive(value, rcv.clone(), AssetBase::zatoshi());
 
         let path = MerklePath::dummy(&mut rng);
         let anchor = path.root(spent_note.commitment().into());
@@ -1165,7 +1165,7 @@ mod tests {
 
         // Create asset
         let asset_base = if is_native_asset {
-            AssetBase::native()
+            AssetBase::zatoshi()
         } else {
             AssetBase::random(&mut rng)
         };

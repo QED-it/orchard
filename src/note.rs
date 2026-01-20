@@ -552,7 +552,7 @@ pub mod testing {
             Note {
                 recipient,
                 value,
-                asset: AssetBase::native(),
+                asset: AssetBase::zatoshi(),
                 rho: Some(rho),
                 rseed,
                 rseed_split_note: CtOption::new(rseed, 0u8.into())

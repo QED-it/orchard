@@ -475,7 +475,7 @@ pub(crate) fn derive_bvk_raw<'a>(
         - ValueCommitment::derive(
             value_balance,
             ValueCommitTrapdoor::zero(),
-            AssetBase::native(),
+            AssetBase::zatoshi(),
         )
         - burn
             .iter()
