@@ -23,19 +23,20 @@ use memuse::DynamicUsage;
 use crate::{
     action::Action,
     address::Address,
-    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
+    bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data, hash_action_group},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note},
-    orchard_sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
     primitives::redpallas::{self, Binding},
-    primitives::{OrchardDomain, OrchardPrimitives},
     tree::Anchor,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
 };
+use crate::orchard_flavor::OrchardZSA;
 
 #[cfg(feature = "circuit")]
 use crate::circuit::{Instance, VerifyingKey};
+use crate::orchard_sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig};
+use crate::primitives::{OrchardDomain, OrchardPrimitives};
 
 #[cfg(feature = "circuit")]
 impl<A, P: OrchardPrimitives> Action<A, P> {
@@ -75,12 +76,18 @@ pub struct Flags {
     /// If `false`,  all notes within [`Action`]s in the transaction's [`Bundle`] are
     /// guaranteed to be notes with native asset.
     zsa_enabled: bool,
+    /// Flag denoting whether Asset Swaps are enabled.
+    ///
+    /// If `false`, [`Bundle`] is guaranteed to contain only one ['ActionGroup'].
+    swaps_enabled: bool,
 }
 
 const FLAG_SPENDS_ENABLED: u8 = 0b0000_0001;
 const FLAG_OUTPUTS_ENABLED: u8 = 0b0000_0010;
 const FLAG_ZSA_ENABLED: u8 = 0b0000_0100;
-const FLAGS_EXPECTED_UNSET: u8 = !(FLAG_SPENDS_ENABLED | FLAG_OUTPUTS_ENABLED | FLAG_ZSA_ENABLED);
+const FLAG_SWAPS_ENABLED: u8 = 0b0000_1000;
+const FLAGS_EXPECTED_UNSET: u8 =
+    !(FLAG_SPENDS_ENABLED | FLAG_OUTPUTS_ENABLED | FLAG_ZSA_ENABLED | FLAG_SWAPS_ENABLED);
 
 impl Flags {
     /// Construct a set of flags from its constituent parts
@@ -88,40 +95,54 @@ impl Flags {
         spends_enabled: bool,
         outputs_enabled: bool,
         zsa_enabled: bool,
+        swaps_enabled: bool,
     ) -> Self {
         Flags {
             spends_enabled,
             outputs_enabled,
             zsa_enabled,
+            swaps_enabled,
         }
     }
 
-    /// The flag set with both spends and outputs enabled and ZSA disabled.
+    /// The flag set with both spends and outputs enabled. ZSA and swaps are disabled.
     pub const ENABLED_WITHOUT_ZSA: Flags = Flags {
         spends_enabled: true,
         outputs_enabled: true,
         zsa_enabled: false,
+        swaps_enabled: false,
     };
 
-    /// The flags set with spends, outputs and ZSA enabled.
+    /// The flags set with spends, outputs and ZSA enabled. Swaps are disabled.
     pub const ENABLED_WITH_ZSA: Flags = Flags {
         spends_enabled: true,
         outputs_enabled: true,
         zsa_enabled: true,
+        swaps_enabled: false,
     };
 
-    /// The flag set with spends and ZSA disabled.
+    /// The flags set with spends, outputs, ZSA and swaps enabled.
+    pub const ENABLED_WITH_SWAPS: Flags = Flags {
+        spends_enabled: true,
+        outputs_enabled: true,
+        zsa_enabled: true,
+        swaps_enabled: true,
+    };
+
+    /// The flag set with spends, ZSA and swaps disabled.
     pub const SPENDS_DISABLED_WITHOUT_ZSA: Flags = Flags {
         spends_enabled: false,
         outputs_enabled: true,
         zsa_enabled: false,
+        swaps_enabled: false,
     };
 
-    /// The flag set with spends disabled and ZSA enabled.
+    /// The flag set with spends disabled and ZSA enabled. Swaps are disabled.
     pub const SPENDS_DISABLED_WITH_ZSA: Flags = Flags {
         spends_enabled: false,
         outputs_enabled: true,
         zsa_enabled: true,
+        swaps_enabled: false,
     };
 
     /// The flag set with outputs disabled and ZSA disabled.
@@ -129,6 +150,7 @@ impl Flags {
         spends_enabled: true,
         outputs_enabled: false,
         zsa_enabled: false,
+        swaps_enabled: false,
     };
 
     /// Flag denoting whether Orchard spends are enabled in the transaction.
@@ -172,6 +194,9 @@ impl Flags {
         if self.zsa_enabled {
             value |= FLAG_ZSA_ENABLED;
         }
+        if self.swaps_enabled {
+            value |= FLAG_SWAPS_ENABLED;
+        }
         value
     }
 
@@ -188,6 +213,7 @@ impl Flags {
                 spends_enabled: value & FLAG_SPENDS_ENABLED != 0,
                 outputs_enabled: value & FLAG_OUTPUTS_ENABLED != 0,
                 zsa_enabled: value & FLAG_ZSA_ENABLED != 0,
+                swaps_enabled: value & FLAG_SWAPS_ENABLED != 0,
             })
         } else {
             None
@@ -199,6 +225,9 @@ impl Flags {
 pub trait Authorization: fmt::Debug {
     /// The authorization type of an Orchard action.
     type SpendAuth: fmt::Debug + Clone;
+
+    /// Return the proof component of the authorizing data.
+    fn proof(&self) -> Option<&Proof>;
 }
 
 /// A bundle of actions to be applied to the ledger.
@@ -253,6 +282,7 @@ impl<A: Authorization, V, P: OrchardPrimitives> Bundle<A, V, P> {
         value_balance: V,
         burn: Vec<(AssetBase, NoteValue)>,
         anchor: Anchor,
+        expiry_height: u32,
         authorization: A,
     ) -> Self {
         Bundle {
@@ -261,8 +291,7 @@ impl<A: Authorization, V, P: OrchardPrimitives> Bundle<A, V, P> {
             value_balance,
             burn,
             anchor,
-            // For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
-            expiry_height: 0,
+            expiry_height,
             authorization,
         }
     }
@@ -516,6 +545,19 @@ pub struct EffectsOnly;
 
 impl Authorization for EffectsOnly {
     type SpendAuth = ();
+
+    /// Return the proof component of the authorizing data.
+    fn proof(&self) -> Option<&Proof> {
+        None
+    }
+}
+
+impl<A: Authorization, V: Copy + Into<i64>> Bundle<A, V, OrchardZSA> {
+    /// Computes a commitment to the effects of this bundle,
+    /// assuming that the bundle represents an action group inside a swap bundle.
+    pub fn action_group_commitment(&self) -> BundleCommitment {
+        BundleCommitment(hash_action_group(self))
+    }
 }
 
 /// Authorizing data for a bundle of actions, ready to be committed to the ledger.
@@ -527,6 +569,11 @@ pub struct Authorized {
 
 impl Authorization for Authorized {
     type SpendAuth = VerSpendAuthSig;
+
+    /// Return the proof component of the authorizing data.
+    fn proof(&self) -> Option<&Proof> {
+        Some(&self.proof)
+    }
 }
 
 impl Authorized {
@@ -536,11 +583,6 @@ impl Authorized {
             proof,
             binding_signature,
         }
-    }
-
-    /// Return the proof component of the authorizing data.
-    pub fn proof(&self) -> &Proof {
-        &self.proof
     }
 
     /// Return the versioned binding signature.
@@ -568,6 +610,7 @@ impl<V, P: OrchardPrimitives> Bundle<Authorized, V, P> {
     pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
         self.authorization()
             .proof()
+            .unwrap()
             .verify(vk, &self.to_instances())
     }
 }
@@ -719,8 +762,8 @@ pub mod testing {
 
         prop_compose! {
             /// Create an arbitrary set of flags.
-            pub fn arb_flags()(spends_enabled in prop::bool::ANY, outputs_enabled in prop::bool::ANY, zsa_enabled in prop::bool::ANY) -> Flags {
-                Flags::from_parts(spends_enabled, outputs_enabled, zsa_enabled)
+            pub fn arb_flags()(spends_enabled in prop::bool::ANY, outputs_enabled in prop::bool::ANY, zsa_enabled in prop::bool::ANY, swaps_enabled in prop::bool::ANY) -> Flags {
+                Flags::from_parts(spends_enabled, outputs_enabled, zsa_enabled, swaps_enabled)
             }
         }
 
@@ -755,6 +798,7 @@ pub mod testing {
                     balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
                     burn,
                     anchor,
+                    0,
                     super::EffectsOnly,
                 )
             }
@@ -787,6 +831,7 @@ pub mod testing {
                     balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
                     burn,
                     anchor,
+                    0,
                     Authorized {
                         proof: Proof::new(fake_proof),
                         binding_signature: VerBindingSig::new(P::default_sighash_version(), sk.sign(rng, &fake_sighash)),

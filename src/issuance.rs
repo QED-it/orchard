@@ -857,10 +857,8 @@ mod tests {
     use alloc::collections::BTreeMap;
     use alloc::string::{String, ToString};
     use alloc::vec::Vec;
-    use group::{Group, GroupEncoding};
     use incrementalmerkletree::{Marking, Retention};
     use nonempty::NonEmpty;
-    use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
     use shardtree::store::memory::MemoryShardStore;
@@ -960,12 +958,6 @@ mod tests {
             asset,
             IssueAction::from_parts(note1_asset_desc_hash, vec![note1, note2], finalize),
         )
-    }
-
-    /// This function computes the identity point on the Pallas curve and returns an Asset Base with that value.
-    fn identity_point() -> AssetBase {
-        let identity_point = (Point::generator() * -Scalar::one()) + Point::generator();
-        AssetBase::from_bytes(&identity_point.to_bytes()).unwrap()
     }
 
     #[test]

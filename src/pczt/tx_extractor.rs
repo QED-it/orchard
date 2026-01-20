@@ -96,6 +96,7 @@ impl super::Bundle {
                 value_balance,
                 vec![], //No burn in PCZT V1
                 self.anchor,
+                0, // No expiry height in PCZT V1
                 authorization,
             ))
         } else {
@@ -126,6 +127,10 @@ pub struct Unbound {
 
 impl Authorization for Unbound {
     type SpendAuth = redpallas::Signature<SpendAuth>;
+
+    fn proof(&self) -> Option<&Proof> {
+        Some(&self.proof)
+    }
 }
 
 impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
