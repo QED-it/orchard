@@ -3,7 +3,6 @@
 use crate::{
     bundle::commitments::hash_swap_bundle,
     bundle::{derive_bvk, Authorization, Bundle, BundleCommitment},
-    circuit::VerifyingKey,
     orchard_flavor::OrchardZSA,
     primitives::redpallas::{self, Binding},
     value::ValueCommitTrapdoor,
@@ -15,6 +14,9 @@ use k256::elliptic_curve::rand_core::{CryptoRng, RngCore};
 use nonempty::NonEmpty;
 use crate::orchard_sighash_versioning::{VerBindingSig, VerSpendAuthSig};
 use crate::primitives::OrchardPrimitives;
+
+#[cfg(feature = "circuit")]
+use crate::circuit::VerifyingKey;
 
 /// A swap bundle to be applied to the ledger.
 #[derive(Debug, Clone)]
@@ -104,6 +106,7 @@ impl ActionGroupAuthorized {
     }
 }
 
+#[cfg(feature = "circuit")]
 impl<V, D: OrchardPrimitives> Bundle<ActionGroupAuthorized, V, D> {
     /// Verifies the proof for this bundle.
     pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {

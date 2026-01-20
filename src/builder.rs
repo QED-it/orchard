@@ -826,6 +826,7 @@ impl Builder {
     ///
     /// The returned action group will have no proof or signatures; these can be applied with
     /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
+    #[cfg(feature = "circuit")]
     pub fn build_action_group<V: TryFrom<i64>>(
         self,
         rng: impl RngCore,
