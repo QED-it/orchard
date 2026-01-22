@@ -1,5 +1,7 @@
 //! Structs related to bundles of Orchard actions.
 
+use alloc::vec::Vec;
+
 pub mod burn_validation;
 pub mod commitments;
 
@@ -8,7 +10,6 @@ mod batch;
 #[cfg(feature = "circuit")]
 pub use batch::BatchValidator;
 
-use alloc::vec::Vec;
 use core::fmt;
 
 use blake2b_simd::Hash as Blake2bHash;
