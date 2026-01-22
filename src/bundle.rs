@@ -460,7 +460,7 @@ pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, Pr: 'a + OrchardPrimit
 ) -> redpallas::VerificationKey<Binding> {
     derive_bvk_raw(
         actions.into_iter().map(|a| a.cv_net()),
-        ValueSum::from_raw(value_balance.into()),
+        ValueSum::from_raw_inner(value_balance.into()),
         burn,
     )
 }
