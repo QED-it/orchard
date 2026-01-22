@@ -120,6 +120,18 @@ impl NoteValue {
     pub(crate) fn to_le_bits(self) -> BitArray<[u8; 8], Lsb0> {
         BitArray::<_, Lsb0>::new(self.0.to_le_bytes())
     }
+
+    /// Adds two `NoteValue`s.
+    ///
+    /// This helper performs checked addition over `NoteValue`s and returns `None` on overflow.
+    /// It is required by the issuance flow to aggregate per-asset issuance amounts before
+    /// validating and applying supply changes to the global state.
+    ///
+    /// This function is intended for use only by the issuance logic
+    /// (`IssueAction::verify` and `verify_issue_bundle`).
+    pub(crate) fn add(self, rhs: Self) -> Option<Self> {
+        self.0.checked_add(rhs.0).map(NoteValue)
+    }
 }
 
 #[cfg(feature = "circuit")]
@@ -140,14 +152,6 @@ impl Sub for NoteValue {
             .filter(|v| VALUE_SUM_RANGE.contains(v))
             .map(ValueSum)
             .expect("u64 - u64 result is always in VALUE_SUM_RANGE")
-    }
-}
-
-impl Add for NoteValue {
-    type Output = Option<NoteValue>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        self.0.checked_add(rhs.0).map(NoteValue)
     }
 }
 
