@@ -1,7 +1,5 @@
 //! Structs related to bundles of Orchard actions.
 
-use alloc::vec::Vec;
-
 pub mod burn_validation;
 pub mod commitments;
 
@@ -10,6 +8,7 @@ mod batch;
 #[cfg(feature = "circuit")]
 pub use batch::BatchValidator;
 
+use alloc::vec::Vec;
 use core::fmt;
 
 use blake2b_simd::Hash as Blake2bHash;
@@ -553,7 +552,7 @@ impl<V, Pr: OrchardPrimitives> Bundle<Authorized, V, Pr> {
     /// for a given [`OrchardSighashKind`].
     pub fn authorizing_commitment(
         &self,
-        sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> &'static [u8],
+        sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
     ) -> BundleAuthorizingCommitment {
         BundleAuthorizingCommitment(hash_bundle_auth_data(self, sighash_info_for_kind))
     }

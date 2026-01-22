@@ -638,7 +638,7 @@ impl IssueBundle<Signed> {
     /// for a given [`IssueSighashKind`].
     pub fn authorizing_commitment(
         &self,
-        sighash_info_for_kind: impl Fn(&IssueSighashKind) -> &'static [u8],
+        sighash_info_for_kind: impl Fn(&IssueSighashKind) -> Vec<u8>,
     ) -> IssueBundleAuthorizingCommitment {
         IssueBundleAuthorizingCommitment(hash_issue_bundle_auth_data(self, sighash_info_for_kind))
     }
