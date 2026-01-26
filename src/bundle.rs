@@ -12,7 +12,6 @@ pub use batch::BatchValidator;
 
 use core::fmt;
 
-use alloc::collections::BTreeMap;
 use blake2b_simd::Hash as Blake2bHash;
 use nonempty::NonEmpty;
 use zcash_note_encryption::{try_note_decryption, try_output_recovery_with_ovk};
@@ -28,7 +27,7 @@ use crate::{
     note::{AssetBase, Note},
     primitives::redpallas::{self, Binding},
     primitives::{OrchardDomain, OrchardPrimitives},
-    sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
+    sighash_kind::{OrchardBindingSig, OrchardSighashKind, OrchardSpendAuthSig},
     tree::Anchor,
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Proof,
@@ -73,7 +72,7 @@ pub struct Flags {
     /// Flag denoting whether ZSA functionality is enabled in the transaction.
     ///
     /// If `false`,  all notes within [`Action`]s in the transaction's [`Bundle`] are
-    /// guaranteed to be notes with native asset. If `true`, `Action`s may use any asset.
+    /// guaranteed to be notes with zatoshi asset. If `true`, `Action`s may use any asset.
     ///
     /// This field was introduced with the ZSA feature; older Orchard versions did not
     /// include it. Because halo2_proofs zero-extends instance values, old proofs are interpreted
@@ -156,7 +155,7 @@ impl Flags {
     /// Flag denoting whether ZSA functionality is enabled in the transaction.
     ///
     /// If `false`, all notes within [`Action`]s in the transaction's [`Bundle`] are
-    /// guaranteed to be notes with native asset. If `true`, `Action`s may use any asset.
+    /// guaranteed to be notes with zatoshi asset. If `true`, `Action`s may use any asset.
     pub fn zsa_enabled(&self) -> bool {
         self.zsa_enabled
     }
@@ -461,7 +460,7 @@ pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>, Pr: 'a + OrchardPrimit
 ) -> redpallas::VerificationKey<Binding> {
     derive_bvk_raw(
         actions.into_iter().map(|a| a.cv_net()),
-        ValueSum::from_raw(value_balance.into()),
+        ValueSum::from_raw_inner(value_balance.into()),
         burn,
     )
 }
@@ -476,7 +475,7 @@ pub(crate) fn derive_bvk_raw<'a>(
         - ValueCommitment::derive(
             value_balance,
             ValueCommitTrapdoor::zero(),
-            AssetBase::native(),
+            AssetBase::zatoshi(),
         )
         - burn
             .iter()
@@ -519,16 +518,16 @@ impl Authorization for EffectsOnly {
 #[derive(Debug, Clone)]
 pub struct Authorized {
     proof: Proof,
-    binding_signature: VerBindingSig,
+    binding_signature: OrchardBindingSig,
 }
 
 impl Authorization for Authorized {
-    type SpendAuth = VerSpendAuthSig;
+    type SpendAuth = OrchardSpendAuthSig;
 }
 
 impl Authorized {
     /// Constructs the authorizing data for a bundle of actions from its constituent parts.
-    pub fn from_parts(proof: Proof, binding_signature: VerBindingSig) -> Self {
+    pub fn from_parts(proof: Proof, binding_signature: OrchardBindingSig) -> Self {
         Authorized {
             proof,
             binding_signature,
@@ -540,8 +539,8 @@ impl Authorized {
         &self.proof
     }
 
-    /// Return the versioned binding signature.
-    pub fn binding_signature(&self) -> &VerBindingSig {
+    /// Return the binding signature.
+    pub fn binding_signature(&self) -> &OrchardBindingSig {
         &self.binding_signature
     }
 }
@@ -550,14 +549,13 @@ impl<V, Pr: OrchardPrimitives> Bundle<Authorized, V, Pr> {
     /// Computes a commitment to the authorizing data within for this bundle.
     ///
     /// This together with `Bundle::commitment` bind the entire bundle.
-    /// The `sighash_version_map` provides the mapping from each
-    /// `OrchardSighashVersion` to the corresponding `SighashInfo`
-    /// encoding.
+    /// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
+    /// for a given [`OrchardSighashKind`].
     pub fn authorizing_commitment(
         &self,
-        sighash_version_map: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
+        sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
     ) -> BundleAuthorizingCommitment {
-        BundleAuthorizingCommitment(hash_bundle_auth_data(self, sighash_version_map))
+        BundleAuthorizingCommitment(hash_bundle_auth_data(self, sighash_info_for_kind))
     }
 
     /// Verifies the proof for this bundle.
@@ -633,7 +631,7 @@ pub mod testing {
             AssetBase,
         },
         primitives::{redpallas::testing::arb_binding_signing_key, OrchardPrimitives},
-        sighash_versioning::{VerBindingSig, VerSpendAuthSig},
+        sighash_kind::{OrchardBindingSig, OrchardSighashKind, OrchardSpendAuthSig},
         value::{
             testing::{arb_note_value, arb_note_value_bounded},
             NoteValue, ValueSum, MAX_NOTE_VALUE,
@@ -688,7 +686,7 @@ pub mod testing {
         pub fn arb_action_n(
             n_actions: usize,
             flags: Flags,
-        ) -> impl Strategy<Value = (ValueSum, Action<VerSpendAuthSig, Pr>)> {
+        ) -> impl Strategy<Value = (ValueSum, Action<OrchardSpendAuthSig, Pr>)> {
             let spend_value_gen = if flags.spends_enabled {
                 Strategy::boxed(arb_note_value_bounded(MAX_NOTE_VALUE / n_actions as u64))
             } else {
@@ -795,7 +793,7 @@ pub mod testing {
                     anchor,
                     Authorized {
                         proof: Proof::new(fake_proof),
-                        binding_signature: VerBindingSig::new(Pr::default_sighash_version(), sk.sign(rng, &fake_sighash)),
+                        binding_signature: OrchardBindingSig::new(OrchardSighashKind::AllEffecting, sk.sign(rng, &fake_sighash)),
                     },
                 )
             }

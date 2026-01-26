@@ -9,6 +9,7 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
     primitives::{OrchardDomain, OrchardPrimitives},
+    sighash_kind::OrchardSighashKind,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, Bundle, Note,
@@ -30,8 +31,8 @@ pub fn verify_bundle<Pr: OrchardPrimitives>(
     let bvk = bundle.binding_validating_key();
     for action in bundle.actions() {
         assert_eq!(
-            action.authorization().version(),
-            &Pr::default_sighash_version()
+            action.authorization().sighash_kind(),
+            &OrchardSighashKind::AllEffecting,
         );
         assert_eq!(
             action.rk().verify(&sighash, action.authorization().sig()),
@@ -107,7 +108,13 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
         );
         let note_value = NoteValue::from_raw(5000);
         assert_eq!(
-            builder.add_output(None, recipient, note_value, AssetBase::native(), [0u8; 512]),
+            builder.add_output(
+                None,
+                recipient,
+                note_value,
+                AssetBase::zatoshi(),
+                [0u8; 512]
+            ),
             Ok(())
         );
         let (unauthorized, bundle_meta) = builder.build(&mut rng).unwrap().unwrap();
@@ -178,7 +185,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
                 None,
                 recipient,
                 NoteValue::from_raw(5000),
-                AssetBase::native(),
+                AssetBase::zatoshi(),
                 [0u8; 512]
             ),
             Ok(())
