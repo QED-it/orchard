@@ -20,7 +20,6 @@ use crate::{
         SpendingKey,
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
-    orchard_flavor::OrchardVanilla,
     orchard_sighash_versioning::{VerBindingSig, VerSpendAuthSig},
     primitives::redpallas::{self, Binding, SpendAuth},
     primitives::{OrchardDomain, OrchardPrimitives},
@@ -351,9 +350,6 @@ impl SpendInfo {
     }
 
     fn into_pczt(self, rng: impl RngCore) -> crate::pczt::Spend {
-        assert!(!self.split_flag);
-        assert_eq!(self.note.asset(), AssetBase::native());
-
         let (nf_old, _, alpha, rk) = self.build(rng);
 
         crate::pczt::Spend {
@@ -362,11 +358,14 @@ impl SpendInfo {
             spend_auth_sig: None,
             recipient: Some(self.note.recipient()),
             value: Some(self.note.value()),
+            asset: Some(self.note.asset()),
             rho: Some(self.note.rho()),
             rseed: Some(*self.note.rseed()),
+            rseed_split_note: self.note.rseed_split_note().into(),
             fvk: Some(self.fvk),
             witness: Some(self.merkle_path),
             alpha: Some(alpha),
+            split_flag: Some(self.split_flag),
             zip32_derivation: None,
             dummy_sk: self.dummy_sk,
             proprietary: BTreeMap::new(),
@@ -439,19 +438,17 @@ impl OutputInfo {
         (note, cmx, encrypted_note)
     }
 
-    fn into_pczt(
+    fn into_pczt<P: OrchardPrimitives>(
         self,
         cv_net: &ValueCommitment,
         nf_old: Nullifier,
         rng: impl RngCore,
     ) -> crate::pczt::Output {
-        assert_eq!(self.asset, AssetBase::native());
-
-        let (note, cmx, encrypted_note) = self.build::<OrchardVanilla>(cv_net, nf_old, rng);
+        let (note, cmx, encrypted_note) = self.build::<P>(cv_net, nf_old, rng);
 
         crate::pczt::Output {
             cmx,
-            encrypted_note,
+            encrypted_note: encrypted_note.into(),
             recipient: Some(self.recipient),
             value: Some(self.value),
             rseed: Some(*note.rseed()),
@@ -536,7 +533,7 @@ impl ActionInfo {
         )
     }
 
-    fn build_for_pczt(self, mut rng: impl RngCore) -> crate::pczt::Action {
+    fn build_for_pczt<P: OrchardPrimitives>(self, mut rng: impl RngCore) -> crate::pczt::Action {
         assert_eq!(
             self.spend.note.asset(),
             self.output.asset,
@@ -546,7 +543,9 @@ impl ActionInfo {
         let cv_net = ValueCommitment::derive(v_net, self.rcv, self.spend.note.asset());
 
         let spend = self.spend.into_pczt(&mut rng);
-        let output = self.output.into_pczt(&cv_net, spend.nullifier, &mut rng);
+        let output = self
+            .output
+            .into_pczt::<P>(&cv_net, spend.nullifier, &mut rng);
 
         crate::pczt::Action {
             cv_net,
@@ -777,7 +776,7 @@ impl Builder {
 
     /// Builds a bundle containing the given spent notes and outputs along with their
     /// metadata, for inclusion in a PCZT.
-    pub fn build_for_pczt(
+    pub fn build_for_pczt<P: OrchardPrimitives>(
         self,
         rng: impl RngCore,
     ) -> Result<(crate::pczt::Bundle, BundleMetadata), BuildError> {
@@ -788,11 +787,11 @@ impl Builder {
             self.spends,
             self.outputs,
             self.burn,
-            |pre_actions, flags, value_sum, _burn_vec, bundle_meta, mut rng| {
+            |pre_actions, flags, value_sum, burn_vec, bundle_meta, mut rng| {
                 // Create the actions.
                 let actions = pre_actions
                     .into_iter()
-                    .map(|a| a.build_for_pczt(&mut rng))
+                    .map(|a| a.build_for_pczt::<P>(&mut rng))
                     .collect::<Vec<_>>();
 
                 Ok((
@@ -801,6 +800,8 @@ impl Builder {
                         flags,
                         value_sum,
                         anchor: self.anchor,
+                        burn: burn_vec,
+                        expiry_height: 0,
                         zkproof: None,
                         bsk: None,
                     },

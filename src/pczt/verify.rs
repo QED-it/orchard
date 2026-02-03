@@ -1,7 +1,7 @@
 use crate::{
     keys::{FullViewingKey, SpendValidatingKey},
-    note::{AssetBase, ExtractedNoteCommitment, Rho},
-    value::ValueCommitment,
+    note::{ExtractedNoteCommitment, Rho},
+    value::{NoteValue, ValueCommitment},
     Note,
 };
 
@@ -13,11 +13,24 @@ impl super::Action {
     /// - `output.value`
     /// - `rcv`
     pub fn verify_cv_net(&self) -> Result<(), VerifyError> {
-        let spend_value = self.spend().value.ok_or(VerifyError::MissingValue)?;
+        let spend_value = match self
+            .spend()
+            .split_flag
+            .ok_or(VerifyError::MissingSplitFlag)?
+        {
+            true => NoteValue::zero(),
+            false => self.spend().value.ok_or(VerifyError::MissingValue)?,
+        };
+
+        self.spend().value.ok_or(VerifyError::MissingValue)?;
         let output_value = self.output().value.ok_or(VerifyError::MissingValue)?;
         let rcv = self.rcv.ok_or(VerifyError::MissingValueCommitTrapdoor)?;
 
-        let cv_net = ValueCommitment::derive(spend_value - output_value, rcv, AssetBase::native());
+        let cv_net = ValueCommitment::derive(
+            spend_value - output_value,
+            rcv,
+            self.spend.asset.ok_or(VerifyError::MissingAsset)?,
+        );
         if cv_net.to_bytes() == self.cv_net.to_bytes() {
             Ok(())
         } else {
@@ -63,15 +76,19 @@ impl super::Spend {
     ) -> Result<(), VerifyError> {
         let fvk = self.fvk_for_validation(expected_fvk)?;
 
-        let note = Note::from_parts(
+        let mut note = Note::from_parts(
             self.recipient.ok_or(VerifyError::MissingRecipient)?,
             self.value.ok_or(VerifyError::MissingValue)?,
-            AssetBase::native(),
+            self.asset.ok_or(VerifyError::MissingAsset)?,
             self.rho.ok_or(VerifyError::MissingRho)?,
             self.rseed.ok_or(VerifyError::MissingRandomSeed)?,
         )
         .into_option()
         .ok_or(VerifyError::InvalidSpendNote)?;
+
+        if let Some(rseed) = self.rseed_split_note {
+            note.set_rseed_split_note(rseed);
+        }
 
         // We need both the note and the FVK to verify the nullifier; we have everything
         // needed to also verify that the correct FVK was provided (the nullifier check
@@ -125,7 +142,7 @@ impl super::Output {
         let note = Note::from_parts(
             self.recipient.ok_or(VerifyError::MissingRecipient)?,
             self.value.ok_or(VerifyError::MissingValue)?,
-            AssetBase::native(),
+            spend.asset.ok_or(VerifyError::MissingAsset)?,
             Rho::from_nf_old(spend.nullifier),
             self.rseed.ok_or(VerifyError::MissingRandomSeed)?,
         )
@@ -169,6 +186,10 @@ pub enum VerifyError {
     MissingSpendAuthRandomizer,
     /// Verification requires all `value` fields to be set.
     MissingValue,
+    /// Verification requires `asset` to be set.
+    MissingAsset,
+    /// Verification requires `split_flag` to be set.
+    MissingSplitFlag,
     /// `cv_net` verification requires `rcv` to be set.
     MissingValueCommitTrapdoor,
     /// The provided `fvk` does not own the spent note.
