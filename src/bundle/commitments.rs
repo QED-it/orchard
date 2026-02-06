@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(
             sighash.to_hex().as_str(),
             // Bundle hash for Orchard (vanilla) generated using
-            // Zcash/Orchard commit: 4ac248d0 (v0.11.0)
+            // Zcash/Orchard commit: 9d89b504
             "0ac1e319f6761a8561b7bd3fc0907a5c73ed5590a6c210c4d39ffae1d5741875"
         );
     }
@@ -216,7 +216,7 @@ mod tests {
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
             // Bundle hash for Orchard (vanilla) generated using
-            // Zcash/Orchard commit: 4ac248d0 (v0.11.0)
+            // Zcash/Orchard commit: 9d89b504
             "5f3bcf759cddf19170ec47a882a470b5767d66c95fc72ffc360f31324474a06b"
         );
     }
