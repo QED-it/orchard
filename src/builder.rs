@@ -969,7 +969,51 @@ fn build_bundle<B, R: RngCore>(
         // as we can estimate the vector size beforehand.
         let mut indexed_spends_outputs = Vec::with_capacity(num_actions);
 
-        let spends_outputs_by_asset = partition_by_asset(&spends, &outputs);
+        let mut spends_outputs_by_asset = partition_by_asset(&spends, &outputs);
+
+        // To ensure backward compatibility, if
+        // - both spends and outputs are empty, or
+        // - only zatoshi assets are present and there are not enough spends or outputs,
+        // we add dummy spends and outputs until the minimum number of actions is reached.
+        // Dummy spends and outputs are added before shuffling.
+        {
+            if num_actions > 0 {
+                if spends_outputs_by_asset.is_empty() {
+                    spends_outputs_by_asset.insert(
+                        AssetBase::zatoshi(),
+                        (
+                            vec![(SpendInfo::dummy(AssetBase::zatoshi(), &mut rng), None)],
+                            vec![],
+                        ),
+                    );
+                }
+                if spends_outputs_by_asset.len() == 1 {
+                    // All spends and outputs have the same asset.
+                    if let Some((spends, outputs)) =
+                        spends_outputs_by_asset.get_mut(&AssetBase::zatoshi())
+                    {
+                        // This asset is the zatoshi asset.
+                        // So, we have to add dummy spends and outputs until the minimum number of actions is reached.
+                        let pad_spends = num_actions.saturating_sub(spends.len());
+                        let pad_outputs = num_actions.saturating_sub(outputs.len());
+
+                        spends.extend(
+                            iter::repeat_with(|| {
+                                (SpendInfo::dummy(AssetBase::zatoshi(), &mut rng), None)
+                            })
+                            .take(pad_spends),
+                        );
+                        outputs.extend(
+                            iter::repeat_with(|| {
+                                (OutputInfo::dummy(&mut rng, AssetBase::zatoshi()), None)
+                            })
+                            .take(pad_outputs),
+                        );
+                    }
+                }
+            }
+        }
+        let asset_count = spends_outputs_by_asset.len();
 
         indexed_spends_outputs.extend(spends_outputs_by_asset.into_iter().flat_map(
             |(asset, (spends, outputs))| {
@@ -1021,7 +1065,9 @@ fn build_bundle<B, R: RngCore>(
 
         // We shuffled the spends and outputs within each `AssetBase` above; now we
         // shuffle the actions to achieve a similar property across `AssetBase`s.
-        indexed_spends_outputs.shuffle(&mut rng);
+        if asset_count > 1 {
+            indexed_spends_outputs.shuffle(&mut rng);
+        }
 
         let mut bundle_meta = BundleMetadata::new(num_requested_spends, num_requested_outputs);
         let pre_actions = indexed_spends_outputs
