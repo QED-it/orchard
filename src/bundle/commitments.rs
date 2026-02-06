@@ -229,3 +229,71 @@ pub fn hash_bundle_auth_empty(
     )
     .finalize())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        builder::{Builder, BundleType, UnauthorizedBundle},
+        bundle::{
+            commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
+            Authorized, Bundle,
+        },
+        circuit::ProvingKey,
+        keys::{FullViewingKey, Scope, SpendingKey},
+        value::NoteValue,
+        Anchor,
+    };
+    use rand::{rngs::StdRng, SeedableRng};
+
+    fn generate_bundle(bundle_type: BundleType) -> UnauthorizedBundle<i64> {
+        let rng = StdRng::seed_from_u64(5);
+
+        let sk = SpendingKey::from_bytes([7; 32]).unwrap();
+        let recipient = FullViewingKey::from(&sk).address_at(0u32, Scope::External);
+
+        let mut builder = Builder::new(bundle_type, Anchor::from_bytes([0; 32]).unwrap());
+        builder
+            .add_output(None, recipient, NoteValue::from_raw(10), [0u8; 512])
+            .unwrap();
+
+        builder
+            .add_output(None, recipient, NoteValue::from_raw(20), [0u8; 512])
+            .unwrap();
+
+        builder.build::<i64>(rng).unwrap().unwrap().0
+    }
+
+    /// Verify that the hash for an Orchard Vanilla bundle matches a fixed reference value
+    /// to ensure consistency.
+    #[test]
+    fn test_hash_bundle_txid_data_for_orchard_vanilla() {
+        let bundle = generate_bundle(BundleType::DEFAULT);
+        let sighash = hash_bundle_txid_data(&bundle);
+        assert_eq!(
+            sighash.to_hex().as_str(),
+            "0ac1e319f6761a8561b7bd3fc0907a5c73ed5590a6c210c4d39ffae1d5741875"
+        );
+    }
+
+    fn generate_auth_bundle(bundle_type: BundleType) -> Bundle<Authorized, i64> {
+        let mut rng = StdRng::seed_from_u64(6);
+        let pk = ProvingKey::build();
+        let bundle = generate_bundle(bundle_type)
+            .create_proof(&pk, &mut rng)
+            .unwrap();
+        let sighash = bundle.commitment().into();
+        bundle.prepare(rng, sighash).finalize().unwrap()
+    }
+
+    /// Verify that the authorizing data commitment for an Orchard Vanilla bundle matches a fixed
+    /// reference value to ensure consistency.
+    #[test]
+    fn test_hash_bundle_auth_data_for_orchard_vanilla() {
+        let bundle = generate_auth_bundle(BundleType::DEFAULT);
+        let orchard_auth_digest = hash_bundle_auth_data(&bundle);
+        assert_eq!(
+            orchard_auth_digest.to_hex().as_str(),
+            "5f3bcf759cddf19170ec47a882a470b5767d66c95fc72ffc360f31324474a06b"
+        );
+    }
+}
