@@ -971,47 +971,24 @@ fn build_bundle<B, R: RngCore>(
 
         let mut spends_outputs_by_asset = partition_by_asset(&spends, &outputs);
 
-        // To ensure backward compatibility, if
-        // - both spends and outputs are empty, or
-        // - only zatoshi assets are present and there are not enough spends or outputs,
-        // we add dummy spends and outputs until the minimum number of actions is reached.
-        // Dummy spends and outputs are added before shuffling.
+        // For zatoshi-only bundles, pad spends and outputs to num_actions
+        // before per-asset processing, so that dummies are created before the shuffle —
+        // matching vanilla Orchard RNG consumption order.
+        if spends_outputs_by_asset
+            .keys()
+            .all(|asset| asset == &AssetBase::zatoshi())
         {
-            if num_actions > 0 {
-                if spends_outputs_by_asset.is_empty() {
-                    spends_outputs_by_asset.insert(
-                        AssetBase::zatoshi(),
-                        (
-                            vec![(SpendInfo::dummy(AssetBase::zatoshi(), &mut rng), None)],
-                            vec![],
-                        ),
-                    );
-                }
-                if spends_outputs_by_asset.len() == 1 {
-                    // All spends and outputs have the same asset.
-                    if let Some((spends, outputs)) =
-                        spends_outputs_by_asset.get_mut(&AssetBase::zatoshi())
-                    {
-                        // This asset is the zatoshi asset.
-                        // So, we have to add dummy spends and outputs until the minimum number of actions is reached.
-                        let pad_spends = num_actions.saturating_sub(spends.len());
-                        let pad_outputs = num_actions.saturating_sub(outputs.len());
-
-                        spends.extend(
-                            iter::repeat_with(|| {
-                                (SpendInfo::dummy(AssetBase::zatoshi(), &mut rng), None)
-                            })
-                            .take(pad_spends),
-                        );
-                        outputs.extend(
-                            iter::repeat_with(|| {
-                                (OutputInfo::dummy(&mut rng, AssetBase::zatoshi()), None)
-                            })
-                            .take(pad_outputs),
-                        );
-                    }
-                }
-            }
+            let (asset_spends, asset_outputs) = spends_outputs_by_asset
+                .entry(AssetBase::zatoshi())
+                .or_insert_with(|| (vec![], vec![]));
+            asset_spends.extend(
+                iter::repeat_with(|| (SpendInfo::dummy(AssetBase::zatoshi(), &mut rng), None))
+                    .take(num_actions.saturating_sub(asset_spends.len())),
+            );
+            asset_outputs.extend(
+                iter::repeat_with(|| (OutputInfo::dummy(&mut rng, AssetBase::zatoshi()), None))
+                    .take(num_actions.saturating_sub(asset_outputs.len())),
+            );
         }
         let asset_count = spends_outputs_by_asset.len();
 
@@ -1053,6 +1030,9 @@ fn build_bundle<B, R: RngCore>(
             },
         ));
 
+        // Pad total actions to num_actions.
+        // This covers the edge case of a single non-zatoshi asset with fewer than
+        // MIN_ACTIONS spends/outputs (e.g. a bundle that only burns a custom asset).
         indexed_spends_outputs.extend(
             iter::repeat_with(|| {
                 (
