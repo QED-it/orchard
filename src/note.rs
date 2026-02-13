@@ -307,7 +307,6 @@ impl Note {
     pub(crate) fn dummy(
         rng: &mut impl RngCore,
         rho: Option<Rho>,
-        asset: AssetBase,
     ) -> (SpendingKey, FullViewingKey, Self) {
         let sk = SpendingKey::random(rng);
         let fvk: FullViewingKey = (&sk).into();
@@ -316,7 +315,7 @@ impl Note {
         let note = Note::new(
             recipient,
             NoteValue::zero(),
-            asset,
+            AssetBase::zatoshi(),
             rho.unwrap_or_else(|| Rho::from_nf_old(Nullifier::dummy(rng))),
             rng,
         );
@@ -419,7 +418,7 @@ impl Note {
     /// Panics if `self.asset().is_zatoshi()`.
     ///
     /// [Split Input note]: https://zips.z.cash/zip-0226#split-notes
-    pub fn create_split_note(self, rng: &mut impl RngCore) -> Self {
+    pub(crate) fn create_split_note(self, rng: &mut impl RngCore) -> Self {
         assert!(bool::from(!self.asset().is_zatoshi()));
         Note {
             rseed_split_note: CtOption::new(RandomSeed::random(rng, &self.rho()), 1u8.into()),

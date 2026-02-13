@@ -12,7 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run tests
-        run: cargo test --verbose
+        env:
+          # Disable LTO in CI to avoid very slow/hanging release test builds on macOS (rustc/LLVM).
+          CARGO_PROFILE_RELEASE_LTO: "off"
+        run: cargo test --verbose --release
       - name: Verify working directory is clean
         run: git diff --exit-code
 
@@ -76,6 +79,9 @@ jobs:
       - name: Add target
         working-directory: ./ci-build
         run: rustup target add ${{ matrix.target }}
+      - name: Pin unicode-ident to version compatible with rustc 1.70
+        working-directory: ./ci-build
+        run: cargo update -p unicode-ident --precise 1.0.22
       - name: Build no_std for target
         working-directory: ./ci-build
         run: cargo build --verbose --target ${{ matrix.target }}
