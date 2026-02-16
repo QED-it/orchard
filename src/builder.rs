@@ -251,18 +251,13 @@ impl SpendInfo {
     /// This constructor is public to enable creation of custom builders.
     /// If you are not creating a custom builder, use [`Builder::add_spend`] instead.
     ///
-    /// Creates a `SpendInfo` from note, full viewing key owning the note, merkle path witness of
-    /// the note, and split flag.
+    /// Creates a `SpendInfo` from note, full viewing key owning the note,
+    /// and merkle path witness of the note.
     ///
     /// Returns `None` if the `fvk` does not own the `note`.
     ///
     /// [`Builder::add_spend`]: Builder::add_spend
-    pub fn new(
-        fvk: FullViewingKey,
-        note: Note,
-        merkle_path: MerklePath,
-        split_flag: bool,
-    ) -> Option<Self> {
+    pub fn new(fvk: FullViewingKey, note: Note, merkle_path: MerklePath) -> Option<Self> {
         let scope = fvk.scope_for_address(&note.recipient())?;
         Some(SpendInfo {
             dummy_sk: None,
@@ -270,15 +265,15 @@ impl SpendInfo {
             scope,
             note,
             merkle_path,
-            split_flag,
+            split_flag: false,
         })
     }
 
     /// Defined in [Zcash Protocol Spec § 4.8.3: Dummy Notes (Orchard)][orcharddummynotes].
     ///
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
-    fn dummy(asset: AssetBase, rng: &mut impl RngCore) -> Self {
-        let (sk, fvk, note) = Note::dummy(rng, None, asset);
+    fn dummy(rng: &mut impl RngCore) -> Self {
+        let (sk, fvk, note) = Note::dummy(rng, None);
         let merkle_path = MerklePath::dummy(rng);
 
         SpendInfo {
@@ -655,7 +650,7 @@ impl Builder {
             return Err(SpendError::SpendsDisabled);
         }
 
-        let spend = SpendInfo::new(fvk, note, merkle_path, false).ok_or(SpendError::FvkMismatch)?;
+        let spend = SpendInfo::new(fvk, note, merkle_path).ok_or(SpendError::FvkMismatch)?;
 
         // Consistency check: all anchors must be equal.
         if !spend.has_matching_anchor(&self.anchor) {
@@ -858,7 +853,7 @@ fn pad_spend(
 ) -> Result<SpendInfo, BuildError> {
     if asset.is_zatoshi().into() {
         // For zatoshi asset, extends with dummy notes
-        Ok(SpendInfo::dummy(AssetBase::zatoshi(), &mut rng))
+        Ok(SpendInfo::dummy(&mut rng))
     } else {
         // For ZSA asset, extends with split_notes.
         // If SpendInfo is none, return an error (no split note are available for this asset)
@@ -974,7 +969,28 @@ fn build_bundle<B, R: RngCore>(
         // as we can estimate the vector size beforehand.
         let mut indexed_spends_outputs = Vec::with_capacity(num_actions);
 
-        let spends_outputs_by_asset = partition_by_asset(&spends, &outputs);
+        let mut spends_outputs_by_asset = partition_by_asset(&spends, &outputs);
+
+        // For zatoshi-only bundles, pad spends and outputs to num_actions
+        // before per-asset processing, so that dummies are created before the shuffle —
+        // matching vanilla Orchard RNG consumption order.
+        if spends_outputs_by_asset
+            .keys()
+            .all(|asset| asset == &AssetBase::zatoshi())
+        {
+            let (asset_spends, asset_outputs) = spends_outputs_by_asset
+                .entry(AssetBase::zatoshi())
+                .or_insert_with(|| (vec![], vec![]));
+            asset_spends.extend(
+                iter::repeat_with(|| (SpendInfo::dummy(&mut rng), None))
+                    .take(num_actions.saturating_sub(asset_spends.len())),
+            );
+            asset_outputs.extend(
+                iter::repeat_with(|| (OutputInfo::dummy(&mut rng, AssetBase::zatoshi()), None))
+                    .take(num_actions.saturating_sub(asset_outputs.len())),
+            );
+        }
+        let asset_count = spends_outputs_by_asset.len();
 
         indexed_spends_outputs.extend(spends_outputs_by_asset.into_iter().flat_map(
             |(asset, (spends, outputs))| {
@@ -1014,10 +1030,13 @@ fn build_bundle<B, R: RngCore>(
             },
         ));
 
+        // Pad total actions to num_actions.
+        // This covers the edge case of a single non-zatoshi asset with fewer than
+        // MIN_ACTIONS spends/outputs (e.g. a bundle that only burns a custom asset).
         indexed_spends_outputs.extend(
             iter::repeat_with(|| {
                 (
-                    (SpendInfo::dummy(AssetBase::zatoshi(), &mut rng), None),
+                    (SpendInfo::dummy(&mut rng), None),
                     (OutputInfo::dummy(&mut rng, AssetBase::zatoshi()), None),
                 )
             })
@@ -1026,7 +1045,9 @@ fn build_bundle<B, R: RngCore>(
 
         // We shuffled the spends and outputs within each `AssetBase` above; now we
         // shuffle the actions to achieve a similar property across `AssetBase`s.
-        indexed_spends_outputs.shuffle(&mut rng);
+        if asset_count > 1 {
+            indexed_spends_outputs.shuffle(&mut rng);
+        }
 
         let mut bundle_meta = BundleMetadata::new(num_requested_spends, num_requested_outputs);
         let pre_actions = indexed_spends_outputs
@@ -1600,5 +1621,10 @@ mod tests {
     #[test]
     fn shielding_bundle_zsa() {
         shielding_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA)
+    }
+
+    #[test]
+    fn shielding_bundle_zsa_with_vanilla_flags() {
+        shielding_bundle::<OrchardZSA>(BundleType::DEFAULT)
     }
 }

@@ -2,10 +2,18 @@
 //!
 //! The module provides a function `validate_bundle_burn` that can be used to validate the burn values for the bundle.
 //!
-use alloc::collections::BTreeMap;
 use core::fmt;
 
+#[cfg(feature = "zsa-issuance")]
+use alloc::collections::BTreeMap;
+
+#[cfg(feature = "zsa-issuance")]
 use crate::{issuance::AssetRecord, note::AssetBase, value::NoteValue};
+
+/// Maximum burn value.
+/// Burns must fit in both u64 and i64 for value balance calculations.
+#[cfg(feature = "zsa-issuance")]
+pub const MAX_BURN_VALUE: u64 = (1u64 << 63) - 1;
 
 /// Possible errors that can occur during bundle burn validation.
 #[derive(Debug)]
@@ -23,6 +31,23 @@ pub enum BurnError {
     AssetNotFoundInState,
     /// Insufficient supply for burn
     InsufficientSupply,
+}
+
+impl fmt::Display for BurnError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BurnError::DuplicateAsset => write!(f, "Encountered a duplicate asset to burn."),
+            BurnError::ZatoshiAsset => write!(f, "Cannot burn a zatoshi asset."),
+            BurnError::ZeroAmount => {
+                write!(f, "Cannot burn an asset with a zero value.")
+            }
+            BurnError::InvalidAmount => {
+                write!(f, "Burn amount must fit in u63.")
+            }
+            BurnError::AssetNotFoundInState => write!(f, "Asset not found in state."),
+            BurnError::InsufficientSupply => write!(f, "Insufficient supply for burn"),
+        }
+    }
 }
 
 /// Validates burn operations for a bundle and computes the resulting asset states.
@@ -53,6 +78,7 @@ pub enum BurnError {
 /// * Any asset in the `burn` vector is not unique (`BurnError::DuplicateAsset`).
 /// * Any asset is not found in the current state (`BurnError::AssetNotFoundInState`).
 /// * Any asset has insufficient supply for the burn amount (`BurnError::InsufficientSupply`).
+#[cfg(feature = "zsa-issuance")]
 pub fn validate_bundle_burn(
     burn: impl IntoIterator<Item = (AssetBase, NoteValue)>,
     mut get_current_record: impl FnMut(&AssetBase) -> Option<AssetRecord>,
@@ -68,7 +94,7 @@ pub fn validate_bundle_burn(
         if burn_amount_raw == 0 {
             return Err(BurnError::ZeroAmount);
         }
-        if burn_amount_raw >= (1u64 << 63) {
+        if burn_amount_raw >= MAX_BURN_VALUE {
             return Err(BurnError::InvalidAmount);
         }
 
@@ -93,23 +119,7 @@ pub fn validate_bundle_burn(
     Ok(new_records)
 }
 
-impl fmt::Display for BurnError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            BurnError::DuplicateAsset => write!(f, "Encountered a duplicate asset to burn."),
-            BurnError::ZatoshiAsset => write!(f, "Cannot burn a zatoshi asset."),
-            BurnError::ZeroAmount => {
-                write!(f, "Cannot burn an asset with a zero value.")
-            }
-            BurnError::InvalidAmount => {
-                write!(f, "Burn amount must fit in u63.")
-            }
-            BurnError::AssetNotFoundInState => write!(f, "Asset not found in state."),
-            BurnError::InsufficientSupply => write!(f, "Insufficient supply for burn"),
-        }
-    }
-}
-
+#[cfg(feature = "zsa-issuance")]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,7 +277,7 @@ mod tests {
 
         let bundle_burn = vec![
             (assets[0], NoteValue::from_raw(10)),
-            (assets[1], NoteValue::from_raw(1u64 << 63)),
+            (assets[1], NoteValue::from_raw(MAX_BURN_VALUE + 1)),
             (assets[2], NoteValue::from_raw(10)),
         ];
 
