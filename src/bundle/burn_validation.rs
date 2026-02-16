@@ -94,7 +94,7 @@ pub fn validate_bundle_burn(
         if burn_amount_raw == 0 {
             return Err(BurnError::ZeroAmount);
         }
-        if burn_amount_raw >= MAX_BURN_VALUE {
+        if burn_amount_raw > MAX_BURN_VALUE {
             return Err(BurnError::InvalidAmount);
         }
 
