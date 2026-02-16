@@ -66,8 +66,6 @@ core2 = { version = "0.3", default-features = false, features = ["alloc"] }
 image = { version = "0.24", optional = true }
 plotters = { version = "0.3.0", optional = true }
 
-syn = "< 2.0.115" # 2.0.115 requires MSRV 1.71
-
 [dev-dependencies]
 criterion = "0.4" # 0.5 depends on clap 4 which has MSRV 1.70
 halo2_gadgets = { version = "0.4", features = ["test-dependencies"] }
