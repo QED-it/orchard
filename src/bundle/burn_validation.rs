@@ -27,34 +27,38 @@ pub enum BurnError {
     ZeroAmount,
     /// Burn amount does not fit in u63.
     InvalidAmount,
-    /// Asset not found in state
+    /// Asset not found in global issuance state.
     AssetNotFoundInState,
-    /// Insufficient supply for burn
+    /// Insufficient supply for burn.
     InsufficientSupply,
 }
 
 impl fmt::Display for BurnError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            BurnError::DuplicateAsset => write!(f, "Encountered a duplicate asset to burn."),
-            BurnError::ZatoshiAsset => write!(f, "Cannot burn a zatoshi asset."),
+            BurnError::DuplicateAsset => write!(f, "Encountered a duplicate asset to burn"),
+            BurnError::ZatoshiAsset => write!(f, "Cannot burn a zatoshi asset"),
             BurnError::ZeroAmount => {
-                write!(f, "Cannot burn an asset with a zero value.")
+                write!(f, "Cannot burn an asset with a zero value")
             }
             BurnError::InvalidAmount => {
-                write!(f, "Burn amount must fit in u63.")
+                write!(f, "Burn amount must fit in u63")
             }
-            BurnError::AssetNotFoundInState => write!(f, "Asset not found in state."),
+            BurnError::AssetNotFoundInState => {
+                write!(f, "Asset not found in global issuance state")
+            }
             BurnError::InsufficientSupply => write!(f, "Insufficient supply for burn"),
         }
     }
 }
 
-/// Validates burn operations for a bundle and computes the resulting asset states.
+/// Validates burn operations for a bundle and returns updated issuance records for the affected assets.
+///
+/// These issuance records correspond to entries in the “global issuance state” defined in ZIP-0227.
 ///
 /// This function validates burn operations by:
 /// - Ensuring each asset is unique, non-zatoshi, fits in u63, and has a non-zero burn value
-/// - Verifying that each asset exists in the current state
+/// - Verifying that each asset exists in the global issuance state
 /// - Checking that there is sufficient supply to burn
 /// - Computing the new asset records after burning
 ///
@@ -67,7 +71,7 @@ impl fmt::Display for BurnError {
 ///
 /// # Returns
 ///
-/// Returns a `BTreeMap<AssetBase, AssetRecord>` containing the new asset records after burning.
+/// A `BTreeMap<AssetBase, AssetRecord>` containing updated records for affected assets only.
 ///
 /// # Errors
 ///
@@ -76,7 +80,7 @@ impl fmt::Display for BurnError {
 /// * Any asset in the `burn` vector has a zero value (`BurnError::ZeroAmount`).
 /// * Any burn amount in the `burn` vector is out of the u63 range (`BurnError::InvalidAmount`).
 /// * Any asset in the `burn` vector is not unique (`BurnError::DuplicateAsset`).
-/// * Any asset is not found in the current state (`BurnError::AssetNotFoundInState`).
+/// * Any asset is not found in the global issuance state (`BurnError::AssetNotFoundInState`).
 /// * Any asset has insufficient supply for the burn amount (`BurnError::InsufficientSupply`).
 #[cfg(feature = "zsa-issuance")]
 pub fn validate_bundle_burn(
@@ -98,6 +102,10 @@ pub fn validate_bundle_burn(
             return Err(BurnError::InvalidAmount);
         }
 
+        if new_records.contains_key(&asset) {
+            return Err(BurnError::DuplicateAsset);
+        }
+
         let current_record = get_current_record(&asset).ok_or(BurnError::AssetNotFoundInState)?;
 
         let current_amount_raw = current_record.amount.inner();
@@ -111,9 +119,7 @@ pub fn validate_bundle_burn(
             reference_note: current_record.reference_note,
         };
 
-        if new_records.insert(asset, new_record).is_some() {
-            return Err(BurnError::DuplicateAsset);
-        }
+        new_records.insert(asset, new_record);
     }
 
     Ok(new_records)
@@ -143,24 +149,28 @@ mod tests {
             .collect()
     }
 
-    /// Builds a BTreeMap of asset states from an array of (asset, supply) tuples.
+    /// Test helper struct describing an issued supply for an asset.
+    struct AssetSupply {
+        asset: AssetBase,
+        supply: u64,
+    }
+
+    impl AssetSupply {
+        fn new(asset: AssetBase, supply: u64) -> Self {
+            Self { asset, supply }
+        }
+    }
+
+    /// Builds mock global issuance records used by burn validation tests.
     ///
-    /// # Arguments
-    ///
-    /// * `data` - An array of tuples where each tuple contains:
-    ///   - `asset`: The AssetBase
-    ///   - `supply`: The supply amount for the asset
-    ///
-    /// # Returns
-    ///
-    /// A `BTreeMap<AssetBase, AssetRecord>` containing the asset records.
-    fn build_state(data: &[(AssetBase, u64)]) -> BTreeMap<AssetBase, AssetRecord> {
+    /// Each asset gets a finalized `AssetRecord` with a reference note and the given supply.
+    fn mock_issuance_records(data: &[AssetSupply]) -> BTreeMap<AssetBase, AssetRecord> {
         use crate::constants::reference_keys::ReferenceKeys;
 
         let mut rng = OsRng;
 
         data.iter()
-            .map(|(asset, supply)| {
+            .map(|AssetSupply { asset, supply }| {
                 let reference_note = Note::new_issue_note(
                     ReferenceKeys::recipient(),
                     NoteValue::zero(),
@@ -178,9 +188,9 @@ mod tests {
             .collect()
     }
 
-    /// Strips reference notes, keeping only amounts (reference notes contain
+    /// Removes reference notes, keeping only amounts (reference notes contain
     /// randomness and can't be compared directly).
-    fn strip_reference_notes(
+    fn remove_reference_notes(
         records: &BTreeMap<AssetBase, AssetRecord>,
     ) -> BTreeMap<AssetBase, NoteValue> {
         records
@@ -193,8 +203,12 @@ mod tests {
     fn validate_bundle_burn_success() {
         let assets = generate_unique_assets(3);
 
-        // Create initial state
-        let mock_state = build_state(&[(assets[0], 100), (assets[1], 50), (assets[2], 200)]);
+        // Create initial mock records (mock global issuance state)
+        let mock_records = mock_issuance_records(&[
+            AssetSupply::new(assets[0], 100),
+            AssetSupply::new(assets[1], 50),
+            AssetSupply::new(assets[2], 200),
+        ]);
 
         let bundle_burn = vec![
             (assets[0], NoteValue::from_raw(10)),
@@ -202,15 +216,19 @@ mod tests {
             (assets[2], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
 
         assert!(result.is_ok());
 
-        let expected_state = build_state(&[(assets[0], 90), (assets[1], 30), (assets[2], 190)]);
+        let expected_records = mock_issuance_records(&[
+            AssetSupply::new(assets[0], 90),
+            AssetSupply::new(assets[1], 30),
+            AssetSupply::new(assets[2], 190),
+        ]);
 
         assert_eq!(
-            strip_reference_notes(&result.unwrap()),
-            strip_reference_notes(&expected_state)
+            remove_reference_notes(&result.unwrap()),
+            remove_reference_notes(&expected_records)
         );
     }
 
@@ -218,7 +236,10 @@ mod tests {
     fn validate_bundle_burn_duplicate_asset() {
         let assets = generate_unique_assets(2);
 
-        let mock_state = build_state(&[(assets[0], 100), (assets[1], 200)]);
+        let mock_records = mock_issuance_records(&[
+            AssetSupply::new(assets[0], 100),
+            AssetSupply::new(assets[1], 200),
+        ]);
 
         let bundle_burn = vec![
             (assets[0], NoteValue::from_raw(10)),
@@ -226,7 +247,7 @@ mod tests {
             (assets[1], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::DuplicateAsset));
     }
@@ -235,7 +256,10 @@ mod tests {
     fn validate_bundle_burn_zatoshi_asset() {
         let assets = generate_unique_assets(2);
 
-        let mock_state = build_state(&[(assets[0], 100), (assets[1], 200)]);
+        let mock_records = mock_issuance_records(&[
+            AssetSupply::new(assets[0], 100),
+            AssetSupply::new(assets[1], 200),
+        ]);
 
         let bundle_burn = vec![
             (assets[0], NoteValue::from_raw(10)),
@@ -243,7 +267,7 @@ mod tests {
             (assets[1], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::ZatoshiAsset));
     }
@@ -252,7 +276,11 @@ mod tests {
     fn validate_bundle_burn_zero_value() {
         let assets = generate_unique_assets(3);
 
-        let mock_state = build_state(&[(assets[0], 100), (assets[1], 50), (assets[2], 200)]);
+        let mock_records = mock_issuance_records(&[
+            AssetSupply::new(assets[0], 100),
+            AssetSupply::new(assets[1], 50),
+            AssetSupply::new(assets[2], 200),
+        ]);
 
         let bundle_burn = vec![
             (assets[0], NoteValue::from_raw(10)),
@@ -260,7 +288,7 @@ mod tests {
             (assets[2], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::ZeroAmount));
     }
@@ -269,10 +297,10 @@ mod tests {
     fn validate_bundle_burn_invalid_amount() {
         let assets = generate_unique_assets(3);
 
-        let mock_state = build_state(&[
-            (assets[0], u64::MAX),
-            (assets[1], u64::MAX),
-            (assets[2], u64::MAX),
+        let mock_records = mock_issuance_records(&[
+            AssetSupply::new(assets[0], u64::MAX),
+            AssetSupply::new(assets[1], u64::MAX),
+            AssetSupply::new(assets[2], u64::MAX),
         ]);
 
         let bundle_burn = vec![
@@ -281,7 +309,7 @@ mod tests {
             (assets[2], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::InvalidAmount));
     }
@@ -290,15 +318,15 @@ mod tests {
     fn validate_bundle_burn_asset_not_found() {
         let assets = generate_unique_assets(3);
 
-        // Only add first asset to state
-        let mock_state = build_state(&[(assets[0], 100)]);
+        // Only add first asset to the mock records (mock global issuance state)
+        let mock_records = mock_issuance_records(&[AssetSupply::new(assets[0], 100)]);
 
         let bundle_burn = vec![
             (assets[0], NoteValue::from_raw(10)),
-            (assets[1], NoteValue::from_raw(20)), // Not in state
+            (assets[1], NoteValue::from_raw(20)), // Not in the global issuance state
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::AssetNotFoundInState));
     }
@@ -307,14 +335,17 @@ mod tests {
     fn validate_bundle_burn_insufficient_supply() {
         let assets = generate_unique_assets(2);
 
-        let mock_state = build_state(&[(assets[0], 100), (assets[1], 50)]);
+        let mock_records = mock_issuance_records(&[
+            AssetSupply::new(assets[0], 100),
+            AssetSupply::new(assets[1], 50),
+        ]);
 
         let bundle_burn = vec![
             (assets[0], NoteValue::from_raw(10)),
             (assets[1], NoteValue::from_raw(100)), // Only has 50
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_state.get(asset).cloned());
+        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
 
         assert_eq!(result, Err(BurnError::InsufficientSupply));
     }

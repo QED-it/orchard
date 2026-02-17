@@ -768,8 +768,6 @@ fn is_reference_note(note: &Note) -> bool {
     note.value() == NoteValue::zero() && note.recipient() == ReferenceKeys::recipient()
 }
 
-// FIXME: move it and add tests ...
-
 /// Represents aggregated information about an asset, including its supply, finalization status,
 /// and reference note.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
