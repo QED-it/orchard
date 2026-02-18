@@ -1101,13 +1101,10 @@ mod tests {
 
         let hash = asset_desc_hash(b"Asset 1");
         let asset = AssetBase::custom(&AssetId::new_v0(&ik, &hash));
-        let wrong_asset =
-            AssetBase::custom(&AssetId::new_v0(&ik, &asset_desc_hash(b"Asset 2")));
+        let wrong_asset = AssetBase::custom(&AssetId::new_v0(&ik, &asset_desc_hash(b"Asset 2")));
 
-        let note1 =
-            Note::new_issue_note(recipient, NoteValue::from_raw(10), asset, &mut rng);
-        let note2 =
-            Note::new_issue_note(recipient, NoteValue::from_raw(20), wrong_asset, &mut rng);
+        let note1 = Note::new_issue_note(recipient, NoteValue::from_raw(10), asset, &mut rng);
+        let note2 = Note::new_issue_note(recipient, NoteValue::from_raw(20), wrong_asset, &mut rng);
 
         let action = IssueAction::from_parts(hash, vec![note1, note2], false);
         assert_eq!(action.verify(&ik), Err(IssueBundleIkMismatchAssetBase));
@@ -1523,8 +1520,10 @@ mod tests {
         let mut rng = OsRng;
         let (signed, _) = new_signed_bundle(&params, b"already final", 5);
 
-        let final_type =
-            AssetBase::custom(&AssetId::new_v0(&params.ik, &asset_desc_hash(b"already final")));
+        let final_type = AssetBase::custom(&AssetId::new_v0(
+            &params.ik,
+            &asset_desc_hash(b"already final"),
+        ));
 
         let issued_assets = [(
             final_type,
@@ -1652,10 +1651,7 @@ mod tests {
         let note = Note::new(
             params.recipient,
             NoteValue::from_raw(55),
-            AssetBase::custom(&AssetId::new_v0(
-                &incorrect_ik,
-                &asset_desc_hash(b"Asset"),
-            )),
+            AssetBase::custom(&AssetId::new_v0(&incorrect_ik, &asset_desc_hash(b"Asset"))),
             rho_for_issuance_note(&params.first_nullifier, 0, 0),
             &mut rng,
         );
@@ -1770,10 +1766,7 @@ mod tests {
 
         // Setup note and merkle tree
         let mut rng = OsRng;
-        let asset1 = AssetBase::custom(&AssetId::new_v0(
-            &ik,
-            &asset_desc_hash(b"zsa_asset1"),
-        ));
+        let asset1 = AssetBase::custom(&AssetId::new_v0(&ik, &asset_desc_hash(b"zsa_asset1")));
         let note1 = Note::new(
             recipient,
             NoteValue::from_raw(10),
