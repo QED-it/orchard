@@ -1296,7 +1296,6 @@ mod tests {
             params.rng,
         );
 
-        // Add "bad" note
         let note = Note::new_issue_note(
             params.recipient,
             NoteValue::from_raw(5),
@@ -1519,7 +1518,6 @@ mod tests {
 
     #[test]
     fn issue_bundle_verify_fail_bad_signature() {
-        // we want to inject "bad" signatures for test purposes.
         impl IssueBundle<Signed> {
             pub fn set_authorization(&mut self, authorization: Signed) {
                 self.authorization = authorization;
@@ -1581,7 +1579,6 @@ mod tests {
         let mut rng = OsRng;
         let (mut signed, _) = new_signed_bundle(&params, b"Asset description", 5);
 
-        // Add "bad" note
         let note = Note::new(
             params.recipient,
             NoteValue::from_raw(5),
@@ -1611,7 +1608,6 @@ mod tests {
         let incorrect_isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
         let incorrect_ik = IssueValidatingKey::from(&incorrect_isk);
 
-        // Add "bad" note
         let note = Note::new(
             params.recipient,
             NoteValue::from_raw(55),
