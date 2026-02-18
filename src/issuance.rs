@@ -29,10 +29,9 @@ use crate::{
 
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IncorrectRhoDerivation,
-    InvalidIssueAuthKey, InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashKind,
-    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
-    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashKind, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+    IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 pub mod auth;
@@ -813,10 +812,6 @@ pub enum Error {
     /// It cannot be first issuance because we have already some notes for this asset.
     CannotBeFirstIssuance,
 
-    /// Signing errors:
-    /// Invalid issuance authorizing key.
-    InvalidIssueAuthKey,
-
     /// Verification errors:
     /// Invalid issuance validating key.
     InvalidIssueValidatingKey,
@@ -866,9 +861,6 @@ impl fmt::Display for Error {
                     "it cannot be first issuance because we have already some notes for this asset."
                 )
             }
-            InvalidIssueAuthKey => {
-                write!(f, "invalid issuance authorizing key")
-            }
             InvalidIssueValidatingKey => {
                 write!(f, "invalid issuance validating key")
             }
@@ -904,8 +896,10 @@ impl fmt::Display for Error {
 mod tests {
     use crate::{
         issuance::Error::{
-            IncorrectRhoDerivation, InvalidIssueBundleSig, IssueActionNotFound,
-            IssueActionPreviouslyFinalizedAssetBase, IssueBundleIkMismatchAssetBase,
+            CannotBeFirstIssuance, IncorrectRhoDerivation, InvalidIssueBundleSig,
+            InvalidIssueValidatingKey, IssueActionNotFound,
+            IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+            IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
         },
         issuance::{
             auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
@@ -1712,6 +1706,151 @@ mod tests {
 
         // Should panic
         asset_desc_hash(&asset_desc);
+    }
+
+    // First issuance (global state returns None) requires a reference note.
+    #[test]
+    fn issue_bundle_verify_fail_missing_reference_note() {
+        let params = setup_params();
+        let hash = asset_desc_hash(b"no ref note");
+
+        let (bundle, _) = IssueBundle::new(
+            params.ik.clone(),
+            hash,
+            Some(IssueInfo {
+                recipient: params.recipient,
+                value: NoteValue::from_raw(5),
+            }),
+            false, // no reference note
+            params.rng,
+        );
+        let signed = sign_bundle(bundle, &params);
+
+        assert_eq!(
+            verify_issue_bundle(&signed, params.sighash, |_| None, &params.first_nullifier)
+                .unwrap_err(),
+            MissingReferenceNoteOnFirstIssuance
+        );
+    }
+
+    // Subsequent issuance accumulates supply onto existing non-finalized record.
+    #[test]
+    fn issue_bundle_verify_subsequent_issuance() {
+        let params = setup_params();
+        let hash = asset_desc_hash(b"subsequent");
+        let asset = AssetBase::custom(&AssetId::new_v0(&params.ik, &hash));
+
+        let (bundle, _) = IssueBundle::new(
+            params.ik.clone(),
+            hash,
+            Some(IssueInfo {
+                recipient: params.recipient,
+                value: NoteValue::from_raw(10),
+            }),
+            false, // not first issuance
+            params.rng,
+        );
+        let signed = sign_bundle(bundle, &params);
+
+        let mut rng = OsRng;
+        let ref_note = Note::new_issue_note(params.recipient, NoteValue::zero(), asset, &mut rng);
+        let existing = AssetRecord::new(NoteValue::from_raw(100), false, ref_note);
+
+        let issued_assets = verify_issue_bundle(
+            &signed,
+            params.sighash,
+            |a| if *a == asset { Some(existing) } else { None },
+            &params.first_nullifier,
+        )
+        .unwrap();
+
+        assert_eq!(issued_assets[&asset].amount, NoteValue::from_raw(110));
+        assert!(!issued_assets[&asset].is_finalized);
+    }
+
+    // Accumulating onto a record whose balance is already u64::MAX overflows.
+    #[test]
+    fn issue_bundle_verify_fail_value_overflow() {
+        let params = setup_params();
+        let hash = asset_desc_hash(b"overflow");
+        let asset = AssetBase::custom(&AssetId::new_v0(&params.ik, &hash));
+
+        let (bundle, _) = IssueBundle::new(
+            params.ik.clone(),
+            hash,
+            Some(IssueInfo {
+                recipient: params.recipient,
+                value: NoteValue::from_raw(1),
+            }),
+            false,
+            params.rng,
+        );
+        let signed = sign_bundle(bundle, &params);
+
+        let mut rng = OsRng;
+        let ref_note = Note::new_issue_note(params.recipient, NoteValue::zero(), asset, &mut rng);
+        let existing = AssetRecord::new(NoteValue::from_raw(u64::MAX), false, ref_note);
+
+        assert_eq!(
+            verify_issue_bundle(
+                &signed,
+                params.sighash,
+                |a| if *a == asset { Some(existing) } else { None },
+                &params.first_nullifier,
+            )
+            .unwrap_err(),
+            ValueOverflow
+        );
+    }
+
+    #[test]
+    fn action_verify_fail_empty_notes_not_finalized() {
+        let (ik, _, _) = setup_issue_action(10, 20, b"Asset", false);
+        let action = IssueAction::from_parts(asset_desc_hash(b"empty"), vec![], false);
+        assert_eq!(
+            action.verify(&ik).unwrap_err(),
+            IssueActionWithoutNoteNotFinalized
+        );
+    }
+
+    #[test]
+    fn add_recipient_fail_first_issuance_on_existing() {
+        let TestParams {
+            rng, ik, recipient, ..
+        } = setup_params();
+        let hash = asset_desc_hash(b"dup");
+
+        let (mut bundle, _) = IssueBundle::new(
+            ik,
+            hash,
+            Some(IssueInfo {
+                recipient,
+                value: NoteValue::from_raw(5),
+            }),
+            true,
+            rng,
+        );
+
+        assert_eq!(
+            bundle
+                .add_recipient(hash, recipient, NoteValue::from_raw(10), true, rng)
+                .unwrap_err(),
+            CannotBeFirstIssuance
+        );
+    }
+
+    #[test]
+    fn issue_validating_key_decode_fail() {
+        // Wrong algorithm byte
+        assert_eq!(
+            IssueValidatingKey::<ZSASchnorr>::decode(&[0x01; 33]).unwrap_err(),
+            InvalidIssueValidatingKey
+        );
+        // Empty input
+        assert_eq!(
+            IssueValidatingKey::<ZSASchnorr>::decode(&[]).unwrap_err(),
+            InvalidIssueValidatingKey
+        );
     }
 
     #[test]
