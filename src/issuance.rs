@@ -903,7 +903,7 @@ mod tests {
         },
         issuance::{
             auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
-            compute_asset_desc_hash, is_reference_note,
+            compute_asset_desc_hash, create_reference_note, is_reference_note,
             sighash_kind::{BIP340IssueAuthSig, IssueSighashKind},
             verify_issue_bundle, AssetRecord, AwaitingNullifier, IssuanceFlags, IssueAction,
             IssueBundle, IssueInfo, Signed,
@@ -1753,7 +1753,7 @@ mod tests {
         let signed = sign_bundle(bundle, &params);
 
         let mut rng = OsRng;
-        let ref_note = Note::new_issue_note(params.recipient, NoteValue::zero(), asset, &mut rng);
+        let ref_note = create_reference_note(asset, &mut rng);
         let existing = AssetRecord::new(NoteValue::from_raw(100), false, ref_note);
 
         let issued_assets = verify_issue_bundle(
@@ -1788,7 +1788,7 @@ mod tests {
         let signed = sign_bundle(bundle, &params);
 
         let mut rng = OsRng;
-        let ref_note = Note::new_issue_note(params.recipient, NoteValue::zero(), asset, &mut rng);
+        let ref_note = create_reference_note(asset, &mut rng);
         let existing = AssetRecord::new(NoteValue::from_raw(u64::MAX), false, ref_note);
 
         assert_eq!(
