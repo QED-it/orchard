@@ -922,9 +922,7 @@ mod tests {
     use alloc::collections::BTreeMap;
     use alloc::string::{String, ToString};
     use alloc::vec::Vec;
-    use group::{Group, GroupEncoding};
     use nonempty::NonEmpty;
-    use pasta_curves::pallas::{Point, Scalar};
     use rand::rngs::OsRng;
     use rand::RngCore;
 
@@ -1054,40 +1052,17 @@ mod tests {
         )
     }
 
-    /// This function computes the identity point on the Pallas curve and returns an Asset Base with that value.
-    fn identity_point() -> AssetBase {
-        let identity_point = (Point::generator() * -Scalar::one()) + Point::generator();
-        AssetBase::from_bytes(&identity_point.to_bytes()).unwrap()
-    }
-
     #[test]
     fn action_verify_valid() {
-        let (ik, test_asset, action) = setup_issue_action(10, 20, b"Asset 1", false);
+        for finalize in [false, true] {
+            let (ik, test_asset, action) = setup_issue_action(10, 20, b"Asset 1", finalize);
 
-        let result = action.verify(&ik);
+            let (asset, amount) = action.verify(&ik).unwrap();
 
-        assert!(result.is_ok());
-
-        let (asset, amount) = result.unwrap();
-
-        assert_eq!(asset, test_asset);
-        assert_eq!(amount, NoteValue::from_raw(30));
-        assert!(!action.is_finalized());
-    }
-
-    #[test]
-    fn action_verify_finalized() {
-        let (ik, test_asset, action) = setup_issue_action(10, 20, b"Asset 1", true);
-
-        let result = action.verify(&ik);
-
-        assert!(result.is_ok());
-
-        let (asset, amount) = result.unwrap();
-
-        assert_eq!(asset, test_asset);
-        assert_eq!(amount, NoteValue::from_raw(30));
-        assert!(action.is_finalized());
+            assert_eq!(asset, test_asset);
+            assert_eq!(amount, NoteValue::from_raw(30));
+            assert_eq!(action.is_finalized(), finalize);
+        }
     }
 
     #[test]
