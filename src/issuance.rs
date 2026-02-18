@@ -576,6 +576,7 @@ fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
     )
 }
 
+/// Test-only helper for creating Orchard reference notes (used by Zebra tests)
 #[cfg(all(feature = "temporary-zebra", feature = "test-dependencies"))]
 pub fn create_test_reference_note(asset: AssetBase, rng: impl RngCore) -> Note {
     create_reference_note(asset, rng)
