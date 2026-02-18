@@ -567,7 +567,6 @@ impl IssueBundle<AwaitingSighash> {
     }
 }
 
-#[cfg_attr(all(feature = "temporary-zebra", feature = "test-dependencies"), pub)]
 fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
     Note::new_issue_note(
         ReferenceKeys::recipient(),
@@ -575,6 +574,11 @@ fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
         asset,
         &mut rng,
     )
+}
+
+#[cfg(all(feature = "temporary-zebra", feature = "test-dependencies"))]
+pub fn create_test_reference_note(asset: AssetBase, rng: impl RngCore) -> Note {
+    create_reference_note(asset, rng)
 }
 
 impl IssueBundle<Prepared> {
