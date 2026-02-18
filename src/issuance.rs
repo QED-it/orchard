@@ -1499,12 +1499,7 @@ mod tests {
             AssetRecord::new(
                 NoteValue::from_raw(20),
                 true,
-                Note::new_issue_note(
-                    params.recipient,
-                    NoteValue::from_raw(10),
-                    final_type,
-                    &mut rng,
-                ),
+                create_reference_note(final_type, &mut rng),
             ),
         )]
         .into_iter()
