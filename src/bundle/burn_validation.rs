@@ -16,8 +16,7 @@ use crate::{issuance::AssetRecord, note::AssetBase, value::NoteValue};
 pub const MAX_BURN_VALUE: u64 = (1u64 << 63) - 1;
 
 /// Possible errors that can occur during bundle burn validation.
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BurnError {
     /// Encountered a duplicate asset to burn.
     DuplicateAsset,
