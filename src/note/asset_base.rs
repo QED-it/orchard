@@ -59,7 +59,7 @@ impl<'a> AssetId<'a> {
         }
     }
 
-    /// Derives the Asset Digest for the given ZSA asset.
+    /// Derives the Asset Digest for this ZSA asset.
     ///
     /// Defined in [ZIP-227: Issuance of Zcash Shielded Assets][assetdigest].
     ///
