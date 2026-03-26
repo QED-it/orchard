@@ -18,11 +18,12 @@ use core::fmt;
 use core::fmt::Debug;
 use group::Group;
 use nonempty::NonEmpty;
+use pasta_curves::pallas;
 use rand::RngCore;
 
 use crate::{
     bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
-    note::{rho_for_issuance_note, AssetBase, AssetId, Nullifier},
+    note::{rho_for_issuance_note, AssetBase, AssetId, ExtractedNoteCommitment, Nullifier},
     value::NoteValue,
     Address, Note,
 };
@@ -637,8 +638,8 @@ impl IssueBundle<Signed> {
     /// Returns the note commitments for all notes in this bundle, in action order.
     ///
     /// This allows downstream code to consume note commitments directly as
-    /// `pallas::Base` values, avoiding byte round-trips when recomputing
-    /// issuance-related commitments.
+    /// `use pasta_curves::pallas::Base` values, avoiding byte round-trips when
+    /// recomputing issuance-related commitments.
     pub fn note_commitments(&self) -> impl Iterator<Item = pallas::Base> + '_ {
         self.actions().iter().flat_map(|action| {
             action
