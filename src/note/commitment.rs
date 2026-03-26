@@ -120,6 +120,7 @@ impl From<NoteCommitment> for ExtractedNoteCommitment {
 }
 
 impl ExtractedNoteCommitment {
+    /// Returns the extracted note commitment as a `pallas::Base` value.
     pub fn inner(&self) -> pallas::Base {
         self.0
     }

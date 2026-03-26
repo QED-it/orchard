@@ -633,6 +633,20 @@ impl IssueBundle<Signed> {
     ) -> IssueBundleAuthorizingCommitment {
         IssueBundleAuthorizingCommitment(hash_issue_bundle_auth_data(self, sighash_info_for_kind))
     }
+
+    /// Returns the note commitments for all notes in this bundle, in action order.
+    ///
+    /// This allows downstream code to consume note commitments directly as
+    /// `pallas::Base` values, avoiding byte round-trips when recomputing
+    /// issuance-related commitments.
+    pub fn note_commitments(&self) -> impl Iterator<Item = pallas::Base> + '_ {
+        self.actions().iter().flat_map(|action| {
+            action
+                .notes()
+                .iter()
+                .map(|note| ExtractedNoteCommitment::from(note.commitment()).inner())
+        })
+    }
 }
 
 /// Checks an [`IssueBundle`] without signature verification.
