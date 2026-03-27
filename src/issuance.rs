@@ -637,9 +637,8 @@ impl IssueBundle<Signed> {
 
     /// Returns the note commitments for all notes in this bundle, in action order.
     ///
-    /// This allows downstream code to consume note commitments directly as
-    /// `use pasta_curves::pallas::Base` values, avoiding byte round-trips when
-    /// recomputing issuance-related commitments.
+    /// This exposes the commitments directly as `pasta_curves::pallas::Base`
+    /// values for external crates, avoiding extra byte conversions.
     pub fn note_commitments(&self) -> impl Iterator<Item = pallas::Base> + '_ {
         self.actions().iter().flat_map(|action| {
             action
