@@ -921,10 +921,11 @@ mod tests {
         value::NoteValue,
         Address, Note,
     };
-    use alloc::collections::BTreeMap;
+    use alloc::collections::{BTreeMap, BTreeSet};
     use alloc::string::{String, ToString};
     use alloc::vec::Vec;
     use nonempty::NonEmpty;
+    use pasta_curves::pallas;
     use rand::rngs::OsRng;
     use rand::RngCore;
 
@@ -1470,6 +1471,14 @@ mod tests {
                 reference_note3
             ))
         );
+
+        // Verify note_commitments() returns non-zero, unique pallas::Base values
+        let mut unique_commitments = BTreeSet::new();
+        for commitment in signed.note_commitments() {
+            assert_ne!(commitment, pallas::Base::zero());
+            assert!(unique_commitments.insert(commitment));
+        }
+        assert_eq!(unique_commitments.len(), 7);
     }
 
     #[test]
