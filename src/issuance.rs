@@ -1472,7 +1472,8 @@ mod tests {
             ))
         );
 
-        // Verify note_commitments() returns non-zero, unique pallas::Base values
+        // Verify note_commitments() returns a correct number of non-zero,
+        // unique pallas::Base values
         let mut unique_commitments = BTreeSet::new();
         for commitment in signed.note_commitments() {
             assert_ne!(commitment, pallas::Base::zero());
