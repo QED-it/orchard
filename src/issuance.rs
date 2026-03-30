@@ -2017,6 +2017,20 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn issue_bundle_note_commitments_empty_bundle() {
+        let params = setup_params();
+        let (bundle, _) = IssueBundle::new(
+            params.ik.clone(),
+            asset_desc_hash(b"asset1"),
+            None, // no notes, finalize-only
+            false,
+            params.rng,
+        );
+        let signed = sign_bundle(bundle, &params);
+        assert_eq!(signed.note_commitments().count(), 0);
+    }
 }
 
 /// Generators for property testing.
