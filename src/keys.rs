@@ -2,7 +2,7 @@
 
 use alloc::vec::Vec;
 use core::fmt::Debug;
-use core2::io::{self, Read, Write};
+use corez::io::{self, Read, Write};
 
 use aes::Aes256;
 use blake2b_simd::{Hash as Blake2bHash, Params};
