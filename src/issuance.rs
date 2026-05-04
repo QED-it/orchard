@@ -1569,15 +1569,15 @@ mod tests {
         );
     }
 
+    impl IssueBundle<Signed> {
+        /// We want to inject "bad" signatures for test purposes.
+        pub fn set_authorization(&mut self, authorization: Signed) {
+            self.authorization = authorization;
+        }
+    }
+
     #[test]
     fn issue_bundle_verify_fail_bad_signature() {
-        // we want to inject "bad" signatures for test purposes.
-        impl IssueBundle<Signed> {
-            pub fn set_authorization(&mut self, authorization: Signed) {
-                self.authorization = authorization;
-            }
-        }
-
         let TestParams {
             mut rng,
             isk,
