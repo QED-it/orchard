@@ -3,6 +3,13 @@
 
 Requires Rust 1.71+.
 
+## Project Status
+
+**This is a functional prototype with support for ZSA Swaps.**
+It is not ready for production use.
+ZSA Swaps are a work-in-progress, and the protocol is not finalized.
+It is intended for testing and development purposes only, and should not be used in a production environment.
+
 ## Documentation
 
 - [The Orchard Book](https://zcash.github.io/orchard/)
