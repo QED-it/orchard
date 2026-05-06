@@ -611,6 +611,10 @@ impl IssueBundle<Prepared> {
     pub fn sign(self, isk: &IssueAuthKey<ZSASchnorr>) -> Result<IssueBundle<Signed>, Error> {
         let expected_ik = IssueValidatingKey::from(isk);
 
+        if expected_ik != self.ik {
+            return Err(InvalidIssueValidatingKey);
+        }
+
         // Make sure the `expected_ik` matches the `asset` for all notes.
         self.actions.iter().try_for_each(|action| {
             action.verify(&expected_ik)?;
@@ -1323,7 +1327,7 @@ mod tests {
             .sign(&wrong_isk)
             .expect_err("should not be able to sign");
 
-        assert_eq!(err, IssueBundleIkMismatchAssetBase);
+        assert_eq!(err, InvalidIssueValidatingKey);
     }
 
     #[test]
