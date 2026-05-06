@@ -123,7 +123,8 @@ mod tests {
             }),
             true,
             &mut rng,
-        );
+        )
+        .unwrap();
 
         let another_asset = bundle
             .add_recipient(

@@ -29,10 +29,11 @@ use crate::{
 };
 
 use Error::{
-    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IncorrectRhoDerivation,
-    InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashKind, IssueActionNotFound,
-    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, CannotFinalizeOnFirstIssuance,
+    IncorrectRhoDerivation, InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashKind,
+    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
+    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
+    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 pub mod auth;
@@ -404,24 +405,40 @@ impl<T: IssueAuth> IssueBundle<T> {
 impl IssueBundle<AwaitingNullifier> {
     /// Constructs a new `IssueBundle`.
     ///
-    /// If issue_info is None, the new `IssueBundle` will contain one `IssueAction` without notes
-    /// and with `finalize` set to true.
-    /// Otherwise, the new `IssueBundle` will contain one `IssueAction` with one note created from
-    /// issue_info values and with `finalize` set to false. In this created note, rho will be
-    /// set to `None` and a temporary rseed will be sampled. The rho and rseed values will be
-    /// updated later by calling the `update_rho` method.
+    /// # Returns
     ///
-    /// If `first_issuance` is true, the `IssueBundle` will contain a reference note for the asset
-    /// defined by (`asset_desc_hash`, `ik`). The reference note will also have a rho value set to
-    /// `None` and a temporary rseed value. The rho and rseed values of this reference note will be
-    /// updated later by calling the `update_rho` method.
+    /// Returns the newly constructed `IssueBundle` and its corresponding `AssetBase`.
+    ///
+    /// The bundle contains a single `IssueAction`:
+    /// - if `issue_info` is `Some`, the action contains one issue note created from
+    ///   `issue_info`, with `finalize` set to `false`;
+    /// - if `issue_info` is `None`, the action contains no issue note, with `finalize`
+    ///   set to `true`.
+    ///
+    /// When `first_issuance` is `true`, a reference note for the asset defined by
+    /// (`asset_desc_hash`, `ik`) is also added.
+    ///
+    /// Created notes have `rho` set to `None` and use a temporary sampled `rseed`.
+    /// Their final `rho` and `rseed` values are set later by calling `update_rho`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `first_issuance` is `true` and `issue_info` is `None`,
+    /// since this would create a new asset and immediately finalize it without
+    /// creating any issue note for it.
     pub fn new(
         ik: IssueValidatingKey<ZSASchnorr>,
         asset_desc_hash: [u8; 32],
         issue_info: Option<IssueInfo>,
         first_issuance: bool,
         mut rng: impl RngCore,
-    ) -> (IssueBundle<AwaitingNullifier>, AssetBase) {
+    ) -> Result<(IssueBundle<AwaitingNullifier>, AssetBase), Error> {
+        // A first issuance cannot be finalized immediately, otherwise no issue note (except the
+        //reference note) can ever be created for this asset.
+        if first_issuance && issue_info.is_none() {
+            return Err(CannotFinalizeOnFirstIssuance);
+        }
+
         let asset = AssetBase::custom(&AssetId::new_v0(&ik, &asset_desc_hash));
 
         let mut notes = vec![];
@@ -449,14 +466,14 @@ impl IssueBundle<AwaitingNullifier> {
             }
         };
 
-        (
+        Ok((
             IssueBundle {
                 ik,
                 actions: NonEmpty::new(action),
                 authorization: AwaitingNullifier,
             },
             asset,
-        )
+        ))
     }
 
     /// Add a new note to the `IssueBundle`.
@@ -825,6 +842,9 @@ pub enum Error {
     AssetBaseCannotBeIdentityPoint,
     /// It cannot be first issuance because we have already some notes for this asset.
     CannotBeFirstIssuance,
+    /// A first issuance cannot be finalized immediately because no issue note would ever exist
+    /// for this asset.
+    CannotFinalizeOnFirstIssuance,
 
     /// Verification errors:
     /// Invalid issuance validating key.
@@ -875,6 +895,13 @@ impl fmt::Display for Error {
                     "it cannot be first issuance because we have already some notes for this asset."
                 )
             }
+            CannotFinalizeOnFirstIssuance => {
+                write!(
+                    f,
+                    "a first issuance cannot be finalized immediately because no issue note would
+                    ever exist for this asset."
+                )
+            }
             InvalidIssueValidatingKey => {
                 write!(f, "invalid issuance validating key")
             }
@@ -910,8 +937,8 @@ impl fmt::Display for Error {
 mod tests {
     use crate::{
         issuance::Error::{
-            CannotBeFirstIssuance, IncorrectRhoDerivation, InvalidIssueBundleSig,
-            InvalidIssueValidatingKey, IssueActionNotFound,
+            CannotBeFirstIssuance, CannotFinalizeOnFirstIssuance, IncorrectRhoDerivation,
+            InvalidIssueBundleSig, InvalidIssueValidatingKey, IssueActionNotFound,
             IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
             IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
         },
@@ -1028,7 +1055,8 @@ mod tests {
             }),
             true,
             params.rng,
-        );
+        )
+        .unwrap();
         (sign_bundle(bundle, params), asset)
     }
 
@@ -1124,7 +1152,8 @@ mod tests {
             }),
             true,
             rng,
-        );
+        )
+        .unwrap();
 
         let another_asset = bundle
             .add_recipient(
@@ -1214,7 +1243,8 @@ mod tests {
             }),
             true,
             rng,
-        );
+        )
+        .unwrap();
 
         bundle
             .finalize_action(&nft_asset_desc_hash)
@@ -1250,7 +1280,8 @@ mod tests {
             }),
             true,
             rng,
-        );
+        )
+        .unwrap();
 
         let prepared = bundle.update_rho(&first_nullifier, rng).prepare(sighash);
         assert_eq!(prepared.authorization().sighash, sighash);
@@ -1281,7 +1312,8 @@ mod tests {
             }),
             true,
             params.rng,
-        );
+        )
+        .unwrap();
 
         let wrong_isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
 
@@ -1309,7 +1341,8 @@ mod tests {
             }),
             true,
             params.rng,
-        );
+        )
+        .unwrap();
 
         let note = Note::new_issue_note(
             params.recipient,
@@ -1364,7 +1397,8 @@ mod tests {
             }),
             true,
             params.rng,
-        );
+        )
+        .unwrap();
 
         bundle.finalize_action(&hash).unwrap();
 
@@ -1405,7 +1439,8 @@ mod tests {
             }),
             true,
             params.rng,
-        );
+        )
+        .unwrap();
 
         bundle
             .add_recipient(
@@ -1581,7 +1616,8 @@ mod tests {
             }),
             true,
             params.rng,
-        );
+        )
+        .unwrap();
 
         // Sign with zeroed sighash, then verify with the random one
         let signed = bundle
@@ -1690,7 +1726,8 @@ mod tests {
             }),
             true,
             rng,
-        );
+        )
+        .unwrap();
 
         // NOTE: Equality between two IssueActions can only be tested once `rho` is initialized.
         // This call is required for the final `assert_eq!`.
@@ -1738,7 +1775,8 @@ mod tests {
             }),
             false, // no reference note
             params.rng,
-        );
+        )
+        .unwrap();
         let signed = sign_bundle(bundle, &params);
 
         assert_eq!(
@@ -1764,7 +1802,8 @@ mod tests {
             }),
             false, // not first issuance
             params.rng,
-        );
+        )
+        .unwrap();
         let signed = sign_bundle(bundle, &params);
 
         let mut rng = OsRng;
@@ -1799,7 +1838,8 @@ mod tests {
             }),
             false,
             params.rng,
-        );
+        )
+        .unwrap();
         let signed = sign_bundle(bundle, &params);
 
         let mut rng = OsRng;
@@ -1844,7 +1884,8 @@ mod tests {
             }),
             true,
             rng,
-        );
+        )
+        .unwrap();
 
         assert_eq!(
             bundle
@@ -1956,7 +1997,8 @@ mod tests {
             }),
             true,
             rng,
-        );
+        )
+        .unwrap();
 
         let another_asset = bundle
             .add_recipient(
@@ -2033,9 +2075,26 @@ mod tests {
             None, // no notes, finalize-only
             false,
             params.rng,
-        );
+        )
+        .unwrap();
         let signed = sign_bundle(bundle, &params);
         assert_eq!(signed.note_commitments().count(), 0);
+    }
+
+    #[test]
+    fn cannot_finalize_a_first_issuance_immediately() {
+        let params = setup_params();
+        assert_eq!(
+            IssueBundle::new(
+                params.ik.clone(),
+                asset_desc_hash(b"asset1"),
+                None, // no notes, finalize-only
+                true,
+                params.rng,
+            )
+            .unwrap_err(),
+            CannotFinalizeOnFirstIssuance
+        );
     }
 }
 
