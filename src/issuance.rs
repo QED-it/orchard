@@ -553,6 +553,9 @@ impl IssueBundle<AwaitingNullifier> {
     /// Compute the correct rho value for each note in the bundle according to
     /// [ZIP-227: Issuance of Zcash Shielded Assets][zip227].
     ///
+    /// This also updates each note's `rseed` by resampling it until a valid
+    /// commitment is produced.
+    ///
     /// [zip227]: https://zips.z.cash/zip-0227
     pub fn update_rho(
         self,
