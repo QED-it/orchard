@@ -529,22 +529,25 @@ impl IssueBundle<AwaitingNullifier> {
         Ok(asset)
     }
 
-    /// Finalizes a given `IssueAction`
-    pub fn finalize_action(&mut self, asset_desc_hash: &[u8; 32]) -> Result<(), Error> {
-        match self
+    /// Finalizes issuance for the asset identified by (`asset_desc_hash`, `self.ik`).
+    ///
+    /// If an `IssueAction` already exists for this asset, its finalize flag is set.
+    /// Otherwise, a new finalize-only `IssueAction` is created.
+    pub fn finalize_action(&mut self, asset_desc_hash: &[u8; 32]) {
+        let issue_action = self
             .actions
             .iter_mut()
-            .find(|issue_action| issue_action.asset_desc_hash.eq(asset_desc_hash))
-        {
-            Some(issue_action) => {
-                issue_action.flags = IssuanceFlags::from_parts(true);
-            }
-            None => {
-                return Err(IssueActionNotFound);
-            }
-        }
+            .find(|issue_action| issue_action.asset_desc_hash.eq(asset_desc_hash));
 
-        Ok(())
+        if let Some(issue_action) = issue_action {
+            issue_action.flags = IssuanceFlags::from_parts(true);
+        } else {
+            self.actions.push(IssueAction {
+                asset_desc_hash: *asset_desc_hash,
+                notes: vec![],
+                flags: IssuanceFlags::from_parts(true),
+            });
+        }
     }
 
     /// Compute the correct rho value for each note in the bundle according to
@@ -938,7 +941,7 @@ mod tests {
     use crate::{
         issuance::Error::{
             CannotBeFirstIssuance, CannotFinalizeOnFirstIssuance, IncorrectRhoDerivation,
-            InvalidIssueBundleSig, InvalidIssueValidatingKey, IssueActionNotFound,
+            InvalidIssueBundleSig, InvalidIssueValidatingKey,
             IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
             IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
         },
@@ -1246,16 +1249,10 @@ mod tests {
         )
         .unwrap();
 
-        bundle
-            .finalize_action(&nft_asset_desc_hash)
-            .expect("Should finalize properly");
+        bundle.finalize_action(&nft_asset_desc_hash);
 
-        assert_eq!(
-            bundle
-                .finalize_action(&another_nft_asset_desc_hash)
-                .unwrap_err(),
-            IssueActionNotFound
-        );
+        // Finalize an asset that does not yet exist in the IssueBundle.
+        bundle.finalize_action(&another_nft_asset_desc_hash);
     }
 
     #[test]
@@ -1400,7 +1397,7 @@ mod tests {
         )
         .unwrap();
 
-        bundle.finalize_action(&hash).unwrap();
+        bundle.finalize_action(&hash);
 
         let signed = sign_bundle(bundle, &params);
 
@@ -1452,7 +1449,7 @@ mod tests {
             )
             .unwrap();
 
-        bundle.finalize_action(&asset1_desc_hash).unwrap();
+        bundle.finalize_action(&asset1_desc_hash);
 
         bundle
             .add_recipient(
@@ -1464,7 +1461,7 @@ mod tests {
             )
             .unwrap();
 
-        bundle.finalize_action(&asset2_desc_hash).unwrap();
+        bundle.finalize_action(&asset2_desc_hash);
 
         bundle
             .add_recipient(

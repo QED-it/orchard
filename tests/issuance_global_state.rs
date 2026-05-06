@@ -145,7 +145,7 @@ fn build_issue_bundle(params: &TestParams, data: &[IssueTestNote]) -> IssueBundl
     .unwrap();
 
     if is_finalized {
-        bundle.finalize_action(&asset_desc_hash).unwrap();
+        bundle.finalize_action(&asset_desc_hash);
     }
 
     for IssueTestNote {
@@ -167,7 +167,7 @@ fn build_issue_bundle(params: &TestParams, data: &[IssueTestNote]) -> IssueBundl
             .unwrap();
 
         if is_finalized {
-            bundle.finalize_action(&asset_desc_hash).unwrap();
+            bundle.finalize_action(&asset_desc_hash);
         }
     }
 
