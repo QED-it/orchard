@@ -668,11 +668,12 @@ impl IssueBundle<Signed> {
         IssueBundleAuthorizingCommitment(hash_issue_bundle_auth_data(self, sighash_info_for_kind))
     }
 
-    /// Returns the note commitments for all notes in this bundle, in action order.
+    /// Returns the x-coordinates (`cmx`) of the note commitments for all notes
+    /// in this bundle, in action order.
     ///
     /// This exposes the commitments directly as `pasta_curves::pallas::Base`
     /// values for external crates, avoiding extra byte conversions.
-    pub fn note_commitments(&self) -> impl Iterator<Item = pallas::Base> + '_ {
+    pub fn note_cmxs(&self) -> impl Iterator<Item = pallas::Base> + '_ {
         self.actions().iter().flat_map(|action| {
             action
                 .notes()
@@ -1530,7 +1531,7 @@ mod tests {
         // Verify note_commitments() returns a correct number of non-zero,
         // unique pallas::Base values
         let mut unique_commitments = BTreeSet::new();
-        for commitment in signed.note_commitments() {
+        for commitment in signed.note_cmxs() {
             assert_ne!(commitment, pallas::Base::zero());
             assert!(unique_commitments.insert(commitment));
         }
@@ -2092,7 +2093,7 @@ mod tests {
         )
         .unwrap();
         let signed = sign_bundle(bundle, &params);
-        assert_eq!(signed.note_commitments().count(), 0);
+        assert_eq!(signed.note_cmxs().count(), 0);
     }
 
     #[test]
