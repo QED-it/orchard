@@ -408,10 +408,13 @@ impl IssueBundle<AwaitingNullifier> {
     /// and with `finalize` set to true.
     /// Otherwise, the new `IssueBundle` will contain one `IssueAction` with one note created from
     /// issue_info values and with `finalize` set to false. In this created note, rho will be
-    /// set to zero. The rho value will be updated later by calling the `update_rho` method.
+    /// set to `None` and a temporary rseed will be sampled. The rho and rseed values will be
+    /// updated later by calling the `update_rho` method.
     ///
     /// If `first_issuance` is true, the `IssueBundle` will contain a reference note for the asset
-    /// defined by (`asset_desc_hash`, `ik`).
+    /// defined by (`asset_desc_hash`, `ik`). The reference note will also have a rho value set to
+    /// `None` and a temporary rseed value. The rho and rseed values of this reference note will be
+    /// updated later by calling the `update_rho` method.
     pub fn new(
         ik: IssueValidatingKey<ZSASchnorr>,
         asset_desc_hash: [u8; 32],
@@ -458,9 +461,12 @@ impl IssueBundle<AwaitingNullifier> {
 
     /// Add a new note to the `IssueBundle`.
     ///
-    /// Rho is set to zero. The rho value will be updated later by calling the `update_rho` method.
+    /// Rho is set to None and a temporary rseed is sampled. The rho and rseed values will be
+    /// updated later by calling the `update_rho` method.
     /// If `first_issuance` is true, we will also add a reference note for the asset defined by
-    /// (`asset_desc_hash`, `ik`).
+    /// (`asset_desc_hash`, `ik`).  The reference note will also have a rho value set to
+    /// `None` and a temporary rseed value. The rho and rseed values of this reference note will be
+    /// updated later by calling the `update_rho` method.
     pub fn add_recipient(
         &mut self,
         asset_desc_hash: [u8; 32],
