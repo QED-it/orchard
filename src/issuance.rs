@@ -30,10 +30,10 @@ use crate::{
 
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, CannotFinalizeOnFirstIssuance,
-    IncorrectRhoDerivation, InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashKind,
-    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
-    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    DuplicateIssueActionForAssetBase, IncorrectRhoDerivation, InvalidIssueBundleSig,
+    InvalidIssueValidatingKey, InvalidSighashKind, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+    IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 pub mod auth;
@@ -708,14 +708,14 @@ pub fn check_issue_bundle_without_sighash(
 
             let (asset, amount) = action.verify(bundle.ik())?;
 
+            if new_records.contains_key(&asset) {
+                return Err(DuplicateIssueActionForAssetBase);
+            }
+
             let is_finalized = action.is_finalized();
             let ref_note = action.get_reference_note();
 
-            let new_asset_record = match new_records
-                .get(&asset)
-                .cloned()
-                .or_else(|| get_global_records(&asset))
-            {
+            let new_asset_record = match get_global_records(&asset) {
                 // The first issuance of the asset
                 None => AssetRecord::new(
                     amount,
@@ -785,6 +785,8 @@ pub fn check_issue_bundle_without_sighash(
 ///   issuance of a new asset.
 /// * `IncorrectRhoDerivation`: If the `rho` value of any issuance note is not correctly derived
 ///   from the `first_nullifier`.
+/// * `DuplicateIssueActionForAssetBase`:If the bundle contains multiple `IssueAction`s for
+///   the same asset.
 /// * **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
 ///   propagated
 pub fn verify_issue_bundle(
@@ -867,6 +869,8 @@ pub enum Error {
     IssueActionPreviouslyFinalizedAssetBase,
     /// The rho value of an issuance note is not correctly derived from the first nullifier.
     IncorrectRhoDerivation,
+    /// The bundle contains multiple `IssueAction`s for the same asset.
+    DuplicateIssueActionForAssetBase,
 
     /// Overflow error occurred while calculating the value of the asset
     ValueOverflow,
@@ -926,6 +930,12 @@ impl fmt::Display for Error {
             }
             IncorrectRhoDerivation => {
                 write!(f, "incorrect rho value")
+            }
+            DuplicateIssueActionForAssetBase => {
+                write!(
+                    f,
+                    "the bundle contains multiple `IssueAction`s for the same asset"
+                )
             }
             ValueOverflow => {
                 write!(
