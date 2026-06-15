@@ -41,9 +41,6 @@ use core::fmt::{self, Debug};
 use core::iter::Sum;
 use core::ops::{Add, RangeInclusive, Sub};
 
-#[cfg(feature = "std")]
-use std::ops::Neg;
-
 use bitvec::{array::BitArray, order::Lsb0};
 use ff::{Field, PrimeField};
 use group::{Curve, Group, GroupEncoding};
@@ -74,18 +71,29 @@ pub const MAX_NOTE_VALUE: u64 = u64::MAX;
 pub const VALUE_SUM_RANGE: RangeInclusive<i128> =
     -(MAX_NOTE_VALUE as i128)..=MAX_NOTE_VALUE as i128;
 
-/// A value operation overflowed.
+/// A type for balance violations in amount addition and subtraction
+/// (overflow and underflow of allowed ranges).
 #[derive(Debug)]
-pub struct OverflowError;
+#[non_exhaustive]
+pub enum BalanceError {
+    /// Two values were added or subtracted, and the result overflowed the valid range for
+    /// the value.
+    ///
+    /// Normally this range is [`VALUE_SUM_RANGE`], but when interacting with value
+    /// balances it may be `i64`.
+    Overflow,
+}
 
-impl fmt::Display for OverflowError {
+impl fmt::Display for BalanceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Orchard value operation overflowed")
+        match self {
+            Self::Overflow => write!(f, "Orchard value operation overflowed"),
+        }
     }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for OverflowError {}
+impl std::error::Error for BalanceError {}
 
 /// The non-negative value of an individual Orchard note.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -123,6 +131,18 @@ impl NoteValue {
     pub(crate) fn to_le_bits(self) -> BitArray<[u8; 8], Lsb0> {
         BitArray::<_, Lsb0>::new(self.0.to_le_bytes())
     }
+
+    /// Adds two `NoteValue`s.
+    ///
+    /// This helper performs checked addition over `NoteValue`s and returns `None` on overflow.
+    /// It is required by the issuance flow to aggregate per-asset issuance amounts before
+    /// validating and applying supply changes to the global state.
+    ///
+    /// This function is intended for use only by the issuance logic
+    /// (`IssueAction::verify` and `verify_issue_bundle`).
+    pub(crate) fn add(self, rhs: Self) -> Option<Self> {
+        self.0.checked_add(rhs.0).map(NoteValue)
+    }
 }
 
 #[cfg(feature = "circuit")]
@@ -132,16 +152,9 @@ impl From<&NoteValue> for Assigned<pallas::Base> {
     }
 }
 
-impl From<NoteValue> for i128 {
-    fn from(value: NoteValue) -> Self {
-        value.0 as i128
-    }
-}
-
 impl Sub for NoteValue {
     type Output = ValueSum;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, rhs: Self) -> Self::Output {
         let a = self.0 as i128;
         let b = rhs.0 as i128;
@@ -149,14 +162,6 @@ impl Sub for NoteValue {
             .filter(|v| VALUE_SUM_RANGE.contains(v))
             .map(ValueSum)
             .expect("u64 - u64 result is always in VALUE_SUM_RANGE")
-    }
-}
-
-impl Add for NoteValue {
-    type Output = Option<NoteValue>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        self.0.checked_add(rhs.0).map(NoteValue)
     }
 }
 
@@ -185,8 +190,19 @@ impl ValueSum {
     /// in `Bundle::binding_validating_key`, where we are converting from the user-defined
     /// `valueBalance` type that enforces any additional constraints on the value's valid
     /// range.
-    pub(crate) fn from_raw(value: i64) -> Self {
+    pub(crate) fn from_raw_inner(value: i64) -> Self {
         ValueSum(value as i128)
+    }
+
+    /// Creates a value sum from a raw i64 (which is always in range for this type).
+    ///
+    /// This function needs to be public because Zebra constructs `ValueCommitment`s using
+    /// `ValueCommitment::derive`, which takes a `ValueSum` as input. In order to avoid duplicating
+    /// the `ValueSum` construction logic between Zebra and Orchard, Zebra must be able to create a
+    /// `ValueSum` directly.
+    #[cfg(feature = "temporary-zebra")]
+    pub fn from_raw(value: i64) -> Self {
+        Self::from_raw_inner(value)
     }
 
     /// Constructs a value sum from its magnitude and sign.
@@ -218,74 +234,48 @@ impl ValueSum {
         )
     }
 
-    pub(crate) fn into<V: TryFrom<i64>>(self) -> Result<V, BuildError> {
+    pub(crate) fn into_value_balance<V: TryFrom<i64>>(self) -> Result<V, BuildError> {
         i64::try_from(self)
             .map_err(BuildError::ValueSum)
-            .and_then(|i| V::try_from(i).map_err(|_| BuildError::ValueSum(OverflowError)))
+            .and_then(|i| V::try_from(i).map_err(|_| BuildError::ValueSum(BalanceError::Overflow)))
     }
 }
 
-impl<T: Into<i128>> Add<T> for ValueSum {
+impl Add for ValueSum {
     type Output = Option<ValueSum>;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
-    fn add(self, rhs: T) -> Self::Output {
+    fn add(self, rhs: Self) -> Self::Output {
         self.0
-            .checked_add(rhs.into())
+            .checked_add(rhs.0)
             .filter(|v| VALUE_SUM_RANGE.contains(v))
             .map(ValueSum)
     }
 }
 
-#[cfg(feature = "std")]
-impl Neg for ValueSum {
-    type Output = Option<ValueSum>;
-
-    #[allow(clippy::suspicious_arithmetic_impl)]
-    fn neg(self) -> Self::Output {
-        self.0
-            .checked_neg()
-            .filter(|v| VALUE_SUM_RANGE.contains(v))
-            .map(ValueSum)
-    }
-}
-
-impl<'a> Sum<&'a ValueSum> for Result<ValueSum, OverflowError> {
+impl<'a> Sum<&'a ValueSum> for Result<ValueSum, BalanceError> {
     fn sum<I: Iterator<Item = &'a ValueSum>>(mut iter: I) -> Self {
         iter.try_fold(ValueSum(0), |acc, v| acc + *v)
-            .ok_or(OverflowError)
+            .ok_or(BalanceError::Overflow)
     }
 }
 
-impl Sum<ValueSum> for Result<ValueSum, OverflowError> {
+impl Sum<ValueSum> for Result<ValueSum, BalanceError> {
     fn sum<I: Iterator<Item = ValueSum>>(mut iter: I) -> Self {
         iter.try_fold(ValueSum(0), |acc, v| acc + v)
-            .ok_or(OverflowError)
+            .ok_or(BalanceError::Overflow)
     }
 }
 
 impl TryFrom<ValueSum> for i64 {
-    type Error = OverflowError;
+    type Error = BalanceError;
 
     fn try_from(v: ValueSum) -> Result<i64, Self::Error> {
-        i64::try_from(v.0).map_err(|_| OverflowError)
-    }
-}
-
-impl From<ValueSum> for i128 {
-    fn from(value: ValueSum) -> Self {
-        value.0
-    }
-}
-
-impl From<NoteValue> for ValueSum {
-    fn from(value: NoteValue) -> Self {
-        Self(value.into())
+        i64::try_from(v.0).map_err(|_| BalanceError::Overflow)
     }
 }
 
 /// The blinding factor for a [`ValueCommitment`].
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ValueCommitTrapdoor(pallas::Scalar);
 
 impl ValueCommitTrapdoor {
@@ -406,6 +396,7 @@ impl ValueCommitment {
     #[allow(non_snake_case)]
     pub fn derive(value: ValueSum, rcv: ValueCommitTrapdoor, asset: AssetBase) -> Self {
         let hasher = pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION);
+        let V = asset.cv_base();
         let R = hasher(&VALUE_COMMITMENT_R_BYTES);
         let abs_value = u64::try_from(value.0.abs()).expect("value must be in valid range");
 
@@ -415,9 +406,7 @@ impl ValueCommitment {
             pallas::Scalar::from(abs_value)
         };
 
-        let V_zsa = asset.cv_base();
-
-        ValueCommitment(V_zsa * value + R * rcv.0)
+        ValueCommitment(V * value + R * rcv.0)
     }
 
     pub(crate) fn into_bvk(self) -> redpallas::VerificationKey<Binding> {
@@ -526,37 +515,77 @@ mod tests {
 
     use super::{
         testing::{arb_note_value_bounded, arb_trapdoor, arb_value_sum_bounded},
-        OverflowError, ValueCommitTrapdoor, ValueCommitment, ValueSum, MAX_NOTE_VALUE,
+        ValueCommitTrapdoor, ValueCommitment, ValueSum, MAX_NOTE_VALUE,
     };
-    use crate::{note::asset_base::testing::arb_asset_base, note::AssetBase, primitives::redpallas};
+    use crate::{
+        note::asset_base::testing::arb_asset_base, note::AssetBase, primitives::redpallas,
+        value::NoteValue,
+    };
+
+    fn negate_value_sum(value: ValueSum) -> ValueSum {
+        use crate::value::Sign;
+
+        let (magnitude, sign) = value.magnitude_sign();
+        let neg_sign = match sign {
+            Sign::Positive => Sign::Negative,
+            Sign::Negative => Sign::Positive,
+        };
+        ValueSum::from_magnitude_sign(magnitude, neg_sign)
+    }
+
+    fn arb_asset_values_balanced_per_asset(
+        bound: NoteValue,
+        n_assets: usize,
+    ) -> impl Strategy<Value = Vec<(ValueSum, ValueCommitTrapdoor, AssetBase)>> {
+        (
+            prop::collection::vec(arb_asset_base(), n_assets),
+            prop::collection::vec(arb_value_sum_bounded(bound), n_assets * 4),
+            prop::collection::vec(arb_trapdoor(), n_assets * 5),
+        )
+            .prop_map(move |(assets, vals, traps)| {
+                let mut traps = traps.into_iter();
+                let mut out = Vec::with_capacity(n_assets * 5);
+
+                for (asset, four_values) in assets.into_iter().zip(vals.chunks_exact(4)) {
+                    let sum = four_values
+                        .iter()
+                        .cloned()
+                        .sum::<Result<ValueSum, _>>()
+                        .expect("we generate values that won't overflow");
+
+                    let fifth = negate_value_sum(sum);
+
+                    // Four random entries
+                    for value in four_values.iter().cloned() {
+                        out.push((value, traps.next().expect("enough trapdoors"), asset));
+                    }
+
+                    // One balancing entry so that the per-asset balance is zero
+                    out.push((fifth, traps.next().expect("enough trapdoors"), asset));
+                }
+
+                out
+            })
+    }
 
     fn check_binding_signature(
-        native_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
+        zatoshi_values: &[(ValueSum, ValueCommitTrapdoor)],
         arb_values: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
-        neg_trapdoors: &[ValueCommitTrapdoor],
         arb_values_to_burn: &[(ValueSum, ValueCommitTrapdoor, AssetBase)],
     ) {
-        // for each arb value, create a negative value with a different trapdoor
-        let neg_arb_values: Vec<_> = arb_values
+        let zatoshi_value_balance = zatoshi_values
             .iter()
-            .cloned()
-            .zip(neg_trapdoors.iter().cloned())
-            .map(|((value, _, asset), rcv)| ((-value).unwrap(), rcv, asset))
-            .collect();
-
-        let native_value_balance = native_values
-            .iter()
-            .map(|(value, _, _)| value)
-            .sum::<Result<ValueSum, OverflowError>>()
+            .map(|(value, _)| value)
+            .sum::<Result<ValueSum, _>>()
             .expect("we generate values that won't overflow");
 
-        let values = [
-            native_values,
-            arb_values,
-            &neg_arb_values,
-            arb_values_to_burn,
-        ]
-        .concat();
+        let zatoshi_values_with_asset: Vec<(ValueSum, ValueCommitTrapdoor, AssetBase)> =
+            zatoshi_values
+                .iter()
+                .map(|(value_sum, trapdoor)| (*value_sum, trapdoor.clone(), AssetBase::zatoshi()))
+                .collect();
+
+        let values = [&zatoshi_values_with_asset, arb_values, arb_values_to_burn].concat();
 
         let bsk = values
             .iter()
@@ -569,9 +598,9 @@ mod tests {
             .map(|(value, rcv, asset)| ValueCommitment::derive(value, rcv, asset))
             .sum::<ValueCommitment>()
             - ValueCommitment::derive(
-                native_value_balance,
+                zatoshi_value_balance,
                 ValueCommitTrapdoor::zero(),
-                AssetBase::native(),
+                AssetBase::zatoshi(),
             )
             - arb_values_to_burn
                 .iter()
@@ -586,26 +615,29 @@ mod tests {
 
     proptest! {
         #[test]
-        fn bsk_consistent_with_bvk_native_with_zsa_transfer_and_burning(
-            native_values in (1usize..10).prop_flat_map(|n_values|
+        fn bsk_consistent_with_bvk_with_zsa_transfer_and_burning(
+            zatoshi_values in (1usize..10).prop_flat_map(|n_values|
                 arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), Just(AssetBase::native())), n_values)
+                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor()), n_values)
                 )
             ),
-            (asset_values, neg_trapdoors) in (1usize..10).prop_flat_map(|n_values|
-                (arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64).prop_flat_map(move |bound|
-                    prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_base()), n_values)
-                ), prop::collection::vec(arb_trapdoor(), n_values))
+            // An Orchard ZSA transaction is valid only if the balance of each custom asset is zero.
+            // Accordingly, for each custom asset we generate 5 random ValueSum values (possibly negative)
+            // that sum to zero.
+            asset_values in (1usize..10).prop_flat_map(|n_assets|
+                arb_note_value_bounded(MAX_NOTE_VALUE / (n_assets as u64 * 5)).prop_flat_map(move |bound|
+                    arb_asset_values_balanced_per_asset(bound, n_assets)
+                )
             ),
             burn_values in (1usize..10).prop_flat_map(|n_values|
                 arb_note_value_bounded(MAX_NOTE_VALUE / n_values as u64)
                 .prop_flat_map(move |bound| prop::collection::vec((arb_value_sum_bounded(bound), arb_trapdoor(), arb_asset_base()), n_values))
             )
         ) {
-            check_binding_signature(&native_values, &[], &[], &[]);
-            check_binding_signature(&native_values, &[], &[], &burn_values);
-            check_binding_signature(&native_values, &asset_values, &neg_trapdoors, &[]);
-            check_binding_signature(&native_values, &asset_values, &neg_trapdoors, &burn_values);
+            check_binding_signature(&zatoshi_values, &[], &[]);
+            check_binding_signature(&zatoshi_values, &[], &burn_values);
+            check_binding_signature(&zatoshi_values, &asset_values, &[]);
+            check_binding_signature(&zatoshi_values, &asset_values, &burn_values);
         }
     }
 }
