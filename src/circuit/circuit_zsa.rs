@@ -9,9 +9,7 @@ use group::Curve;
 use pasta_curves::{arithmetic::CurveAffine, pallas};
 
 use halo2_gadgets::{
-    ecc::{
-        chip::EccChip, CircuitVersion, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar,
-    },
+    ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
     poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
     sinsemilla::{
         chip::SinsemillaChip,
@@ -331,10 +329,6 @@ impl OrchardCircuit for OrchardZSA {
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
-        if circuit.circuit_version.halo2_version() == CircuitVersion::InsecureUnanchoredBase {
-            return Err(plonk::Error::Synthesis);
-        }
-
         // Load the Sinsemilla generator lookup table used by the whole circuit.
         SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
@@ -343,7 +337,7 @@ impl OrchardCircuit for OrchardZSA {
             unpack(circuit.additional_zsa_witnesses.clone());
 
         // Construct the ECC chip.
-        let ecc_chip = config.ecc_chip(circuit.circuit_version.halo2_version());
+        let ecc_chip = config.ecc_chip(circuit.ecc_base.halo2_version());
 
         // Witness private inputs that are used across multiple checks.
         let (psi_nf, psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset) = {
@@ -638,7 +632,7 @@ impl OrchardCircuit for OrchardZSA {
                     "g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)"
                 }),
                 config.sinsemilla_chip_1(),
-                config.ecc_chip(circuit.circuit_version.halo2_version()),
+                config.ecc_chip(circuit.ecc_base.halo2_version()),
                 config.note_commit_chip_old(),
                 g_d_old.inner(),
                 pk_d_old.inner(),
@@ -706,7 +700,7 @@ impl OrchardCircuit for OrchardZSA {
                     "g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)"
                 }),
                 config.sinsemilla_chip_2(),
-                config.ecc_chip(circuit.circuit_version.halo2_version()),
+                config.ecc_chip(circuit.ecc_base.halo2_version()),
                 config.note_commit_chip_new(),
                 g_d_new.inner(),
                 pk_d_new.inner(),
@@ -886,8 +880,8 @@ mod tests {
         builder::SpendInfo,
         bundle::Flags,
         circuit::{
-            AdditionalZsaWitnesses, Circuit, Instance, OrchardCircuitVersion, Proof, ProvingKey,
-            VerifyingKey, Witnesses, K,
+            AdditionalZsaWitnesses, Circuit, EccBase, Instance, Proof, ProvingKey, VerifyingKey,
+            Witnesses, K,
         },
         flavor::OrchardZSA,
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
@@ -924,7 +918,7 @@ mod tests {
         (
             Circuit {
                 witnesses: Witnesses {
-                    circuit_version: OrchardCircuitVersion::FixedPostNu6_2,
+                    ecc_base: EccBase::Anchored,
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),
                     g_d_old: Value::known(sender_address.g_d()),
@@ -1096,7 +1090,7 @@ mod tests {
                 let mut rng = OsRng;
 
                 let (circuit, instance) = generate_dummy_circuit_instance(OsRng);
-                let instances = &[instance.clone()];
+                let instances = core::slice::from_ref(&instance);
 
                 let pk = ProvingKey::build::<OrchardZSA>();
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
@@ -1134,10 +1128,7 @@ mod tests {
             .unwrap();
 
         let circuit = Circuit::<OrchardZSA> {
-            witnesses: Witnesses {
-                circuit_version: OrchardCircuitVersion::FixedPostNu6_2,
-                ..Default::default()
-            },
+            witnesses: Witnesses::default(),
             phantom: core::marker::PhantomData,
         };
         halo2_proofs::dev::CircuitLayout::default()
@@ -1173,7 +1164,6 @@ mod tests {
     fn generate_circuit_instance<R: CryptoRngCore>(
         is_zatoshi_asset: bool,
         split_flag: bool,
-        orchard_circuit_version: OrchardCircuitVersion,
         mut rng: R,
     ) -> (Circuit<OrchardZSA>, Instance) {
         // We cannot create a split note with a zatoshi asset.
@@ -1264,7 +1254,6 @@ mod tests {
                     output_note,
                     alpha,
                     rcv,
-                    orchard_circuit_version,
                 ),
                 phantom: core::marker::PhantomData,
             },
@@ -1299,12 +1288,8 @@ mod tests {
         let mut rng = OsRng;
 
         for (is_zatoshi_asset, split_flag) in [(true, false), (false, true), (false, false)] {
-            let (circuit, instance) = generate_circuit_instance(
-                is_zatoshi_asset,
-                split_flag,
-                OrchardCircuitVersion::FixedPostNu6_2,
-                &mut rng,
-            );
+            let (circuit, instance) =
+                generate_circuit_instance(is_zatoshi_asset, split_flag, &mut rng);
 
             let should_pass = !(matches!((is_zatoshi_asset, split_flag), (true, true)));
 
@@ -1342,7 +1327,7 @@ mod tests {
             // The proof should fail
             let circuit_wrong_cm_old = Circuit {
                 witnesses: Witnesses {
-                    circuit_version: circuit.witnesses.circuit_version,
+                    ecc_base: circuit.witnesses.ecc_base,
                     path: circuit.witnesses.path,
                     pos: circuit.witnesses.pos,
                     g_d_old: circuit.witnesses.g_d_old,
@@ -1402,7 +1387,7 @@ mod tests {
             if !split_flag {
                 let circuit_wrong_psi_nf = Circuit {
                     witnesses: Witnesses {
-                        circuit_version: circuit.witnesses.circuit_version,
+                        ecc_base: circuit.witnesses.ecc_base,
                         path: circuit.witnesses.path,
                         pos: circuit.witnesses.pos,
                         g_d_old: circuit.witnesses.g_d_old,
@@ -1453,18 +1438,5 @@ mod tests {
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_enable_zsa, false);
             }
         }
-    }
-
-    #[test]
-    fn cannot_create_insecure_zsa_proof() {
-        let mut rng = OsRng;
-        let (circuit, instance) = generate_circuit_instance(
-            true,
-            false,
-            OrchardCircuitVersion::InsecurePreNu6_2,
-            &mut rng,
-        );
-        let pk = ProvingKey::build::<OrchardZSA>();
-        assert!(Proof::create(&pk, &[circuit], &[instance], &mut rng).is_err());
     }
 }

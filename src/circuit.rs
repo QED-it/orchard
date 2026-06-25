@@ -26,6 +26,7 @@ use crate::{
     constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, MERKLE_DEPTH_ORCHARD,
     },
+    flavor::{OrchardVanilla, OrchardZSA},
     keys::{
         CommitIvkRandomness, DiversifiedTransmissionKey, NullifierDerivingKey, SpendValidatingKey,
     },
@@ -148,48 +149,66 @@ impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
     }
 }
 
-/// Selects which version of the Orchard Action circuit to build.
+/// Selects which Orchard Action circuit to build.
 ///
-/// The two versions produce different verifying keys: the fixed circuit anchors the
-/// variable-base scalar-multiplication base (see `halo2_gadgets`), the pre-NU6.2 one does
-/// not. [`FixedPostNu6_2`] is used for all proving and current verification;
-/// [`InsecurePreNu6_2`] reconstructs the historical (NU5..NU6.2) verifying key solely to
-/// verify proofs produced before NU6.2.
+/// This is the single runtime selector for the circuit: it picks both the protocol flavor
+/// (Vanilla vs. ZSA) and, for Vanilla, the variable-base scalar-multiplication base. It is
+/// consumed at the key-building boundary ([`ProvingKey::build_for_kind`],
+/// [`VerifyingKey::build_for_kind`]), which dispatches to the corresponding compile-time
+/// flavor type ([`OrchardVanilla`]/[`OrchardZSA`]); everything downstream stays typed.
 ///
-/// This is a runtime value rather than a type parameter: it is carried in [`Circuit`] and
-/// chosen when building a [`ProvingKey`] or [`VerifyingKey`], so the circuit version can be
-/// threaded dynamically (e.g. across an FFI boundary).
+/// [`InsecurePreNu6_2`] reconstructs the historical (NU5..NU6.2) Vanilla verifying key solely
+/// to verify proofs produced before NU6.2; it is never used for proving (proving is always
+/// anchored). The illegal "ZSA on the unanchored base" combination is simply not a variant of
+/// this enum.
 ///
-/// [`FixedPostNu6_2`]: OrchardCircuitVersion::FixedPostNu6_2
+/// [`OrchardVanilla`]: crate::flavor::OrchardVanilla
+/// [`OrchardZSA`]: crate::flavor::OrchardZSA
 /// [`InsecurePreNu6_2`]: OrchardCircuitVersion::InsecurePreNu6_2
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum OrchardCircuitVersion {
-    /// The insecure pre-NU6.2 circuit, in which the variable-base scalar-multiplication base
-    /// is not anchored to the real base. For reconstructing the historical (NU5..NU6.2)
+    /// The insecure pre-NU6.2 Vanilla circuit, in which the variable-base scalar-multiplication
+    /// base is not anchored to the real base. For reconstructing the historical (NU5..NU6.2)
     /// verifying key only — never for proving or current verification.
     InsecurePreNu6_2,
-    /// The fixed circuit, active from NU6.2 onward. Used for all proving and current
-    /// verification.
+    /// The fixed Vanilla circuit, active from NU6.2 onward. Used for all Vanilla proving and
+    /// current verification.
     #[default]
     FixedPostNu6_2,
+    /// The OrchardZSA circuit (always anchored).
+    Zsa,
 }
 
-impl OrchardCircuitVersion {
+/// Which variable-base scalar-multiplication base the Action circuit is synthesized against.
+///
+/// All proving and current verification use [`EccBase::Anchored`]. [`EccBase::Unanchored`]
+/// reconstructs the historical (NU5..NU6.2) Vanilla circuit and is set only by
+/// [`VerifyingKey::build_legacy_vanilla`]; it never reaches a proving path.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum EccBase {
+    /// The fixed (NU6.2-onward) base, anchored to the real base.
+    #[default]
+    Anchored,
+    /// The historical pre-NU6.2 base, not anchored to the real base. Verify-only.
+    Unanchored,
+}
+
+impl EccBase {
     /// The corresponding `halo2_gadgets` variable-base scalar-mul circuit version.
     fn halo2_version(self) -> CircuitVersion {
         match self {
-            OrchardCircuitVersion::InsecurePreNu6_2 => CircuitVersion::InsecureUnanchoredBase,
-            OrchardCircuitVersion::FixedPostNu6_2 => CircuitVersion::AnchoredBase,
+            EccBase::Unanchored => CircuitVersion::InsecureUnanchoredBase,
+            EccBase::Anchored => CircuitVersion::AnchoredBase,
         }
     }
 }
 
 /// The Orchard Action circuit.
 ///
-/// The `circuit_version` field selects which circuit to build; it defaults to
-/// [`OrchardCircuitVersion::FixedPostNu6_2`], so a default `Circuit` is the current (fixed)
-/// circuit. [`OrchardCircuitVersion::InsecurePreNu6_2`] exists only to rebuild the historical
-/// verifying key.
+/// The protocol flavor is the compile-time type parameter `C`. The witnesses carry an
+/// [`EccBase`] selecting the variable-base scalar-multiplication base; it defaults to
+/// [`EccBase::Anchored`] (the current circuit), and is only set to [`EccBase::Unanchored`] by
+/// [`VerifyingKey::build_legacy_vanilla`] to rebuild the historical verifying key.
 #[derive(Clone, Debug, Default)]
 pub struct Circuit<C: OrchardCircuit> {
     pub(crate) witnesses: Witnesses,
@@ -240,7 +259,7 @@ pub struct Witnesses {
     // The ZSA-specific witnesses.
     // For OrchardVanilla circuits, this field should be initialized to `Value::unknown()`.
     pub(crate) additional_zsa_witnesses: Value<AdditionalZsaWitnesses>,
-    pub(crate) circuit_version: OrchardCircuitVersion,
+    pub(crate) ecc_base: EccBase,
 }
 
 impl Witnesses {
@@ -266,35 +285,8 @@ impl Witnesses {
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
     ) -> Option<Self> {
-        Self::from_action_context_for_version::<C>(
-            spend,
-            output_note,
-            alpha,
-            rcv,
-            OrchardCircuitVersion::FixedPostNu6_2,
-        )
-    }
-
-    /// Like [`Witnesses::from_action_context`], but builds the circuit for the given
-    /// `circuit_version`. Only [`OrchardCircuitVersion::FixedPostNu6_2`] should be used for
-    /// proving; [`OrchardCircuitVersion::InsecurePreNu6_2`] exists to reconstruct historical
-    /// proofs (e.g. for testing that pre-NU6.2 proofs still verify).
-    pub fn from_action_context_for_version<C: OrchardCircuit>(
-        spend: SpendInfo,
-        output_note: Note,
-        alpha: pallas::Scalar,
-        rcv: ValueCommitTrapdoor,
-        circuit_version: OrchardCircuitVersion,
-    ) -> Option<Self> {
-        (Rho::from_nf_old(spend.note.nullifier(&spend.fvk)) == output_note.rho()).then(|| {
-            Self::from_action_context_unchecked::<C>(
-                spend,
-                output_note,
-                alpha,
-                rcv,
-                circuit_version,
-            )
-        })
+        (Rho::from_nf_old(spend.note.nullifier(&spend.fvk)) == output_note.rho())
+            .then(|| Self::from_action_context_unchecked::<C>(spend, output_note, alpha, rcv))
     }
 
     pub(crate) fn from_action_context_unchecked<C: OrchardCircuit>(
@@ -302,7 +294,6 @@ impl Witnesses {
         output_note: Note,
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
-        circuit_version: OrchardCircuitVersion,
     ) -> Self {
         let sender_address = spend.note.recipient();
         let rho_old = spend.note.rho();
@@ -340,16 +331,17 @@ impl Witnesses {
             rcv: Value::known(rcv),
 
             additional_zsa_witnesses,
-            circuit_version,
+            ecc_base: EccBase::Anchored,
         }
     }
 }
 
 /// The verifying key for the Orchard Action circuit.
 ///
-/// Build with [`VerifyingKey::build`] for the current (fixed) circuit, or
-/// [`VerifyingKey::build_for_version`] to reconstruct the historical verifying key. The key
-/// verifies only proofs created for the same circuit version.
+/// Build with [`VerifyingKey::build`] for the current (fixed) circuit of a given flavor, with
+/// [`VerifyingKey::build_for_kind`] to select the circuit at runtime, or with
+/// [`VerifyingKey::build_legacy_vanilla`] to reconstruct the historical (pre-NU6.2) Vanilla
+/// verifying key. Each key verifies only proofs created for the same circuit.
 ///
 /// In the current type system, this could be a verifying key for either
 /// the original Orchard Action circuit, or the OrchardZSA circuit.
@@ -360,17 +352,33 @@ pub struct VerifyingKey {
 }
 
 impl VerifyingKey {
-    /// Builds the verifying key for the current (fixed, NU6.2-onward) circuit.
+    /// Builds the verifying key for the current (fixed, NU6.2-onward) circuit of flavor `C`.
     pub fn build<C: OrchardCircuit>() -> Self {
-        Self::build_for_version::<C>(OrchardCircuitVersion::FixedPostNu6_2)
+        Self::build_inner::<C>(EccBase::Anchored)
     }
 
-    /// Builds the verifying key for the given circuit version.
-    pub fn build_for_version<C: OrchardCircuit>(circuit_version: OrchardCircuitVersion) -> Self {
+    /// Builds the verifying key for the circuit selected by `kind` (runtime dispatch over the
+    /// flavor and base).
+    pub fn build_for_kind(kind: OrchardCircuitVersion) -> Self {
+        match kind {
+            OrchardCircuitVersion::Zsa => Self::build::<OrchardZSA>(),
+            OrchardCircuitVersion::FixedPostNu6_2 => Self::build::<OrchardVanilla>(),
+            OrchardCircuitVersion::InsecurePreNu6_2 => Self::build_legacy_vanilla(),
+        }
+    }
+
+    /// Reconstructs the historical (NU5..NU6.2) Vanilla verifying key, built against the
+    /// unanchored base. Verify-only: it exists solely to verify proofs produced before NU6.2,
+    /// and must never be used for proving.
+    pub fn build_legacy_vanilla() -> Self {
+        Self::build_inner::<OrchardVanilla>(EccBase::Unanchored)
+    }
+
+    fn build_inner<C: OrchardCircuit>(ecc_base: EccBase) -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
         let circuit = Circuit::<C> {
             witnesses: Witnesses {
-                circuit_version,
+                ecc_base,
                 ..Default::default()
             },
             phantom: PhantomData,
@@ -384,8 +392,10 @@ impl VerifyingKey {
 
 /// The proving key for the Orchard Action circuit.
 ///
-/// Build with [`ProvingKey::build`] for the current (fixed) circuit. The resulting proofs
-/// verify only under a [`VerifyingKey`] for the same circuit version.
+/// Build with [`ProvingKey::build`] for a given flavor, or [`ProvingKey::build_for_kind`] to
+/// select the flavor at runtime. Proving is always anchored (NU6.2-onward); there is no
+/// insecure proving key. The resulting proofs verify only under a [`VerifyingKey`] for the
+/// same circuit.
 ///
 /// In the current type system, this could be a proving key for either
 /// the original Orchard Action circuit, or the OrchardZSA circuit.
@@ -393,43 +403,34 @@ impl VerifyingKey {
 pub struct ProvingKey {
     params: halo2_proofs::poly::commitment::Params<vesta::Affine>,
     pk: plonk::ProvingKey<vesta::Affine>,
-    circuit_version: OrchardCircuitVersion,
 }
 
 impl ProvingKey {
-    /// Builds the proving key for the current (fixed, NU6.2-onward) circuit.
+    /// Builds the proving key for the (fixed, NU6.2-onward) circuit of flavor `C`.
     pub fn build<C: OrchardCircuit>() -> Self {
-        Self::build_for_version::<C>(OrchardCircuitVersion::FixedPostNu6_2)
-    }
-
-    /// Builds the proving key for the given circuit version.
-    ///
-    /// Only [`OrchardCircuitVersion::FixedPostNu6_2`] should be used to prove transactions for
-    /// the network; [`OrchardCircuitVersion::InsecurePreNu6_2`] exists only to reproduce
-    /// historical proofs (e.g. for testing that pre-NU6.2 proofs still verify).
-    pub fn build_for_version<C: OrchardCircuit>(circuit_version: OrchardCircuitVersion) -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
         let circuit = Circuit::<C> {
-            witnesses: Witnesses {
-                circuit_version,
-                ..Default::default()
-            },
+            witnesses: Witnesses::default(),
             phantom: PhantomData,
         };
 
         let vk = plonk::keygen_vk(&params, &circuit).unwrap();
         let pk = plonk::keygen_pk(&params, vk, &circuit).unwrap();
 
-        ProvingKey {
-            params,
-            pk,
-            circuit_version,
-        }
+        ProvingKey { params, pk }
     }
 
-    /// The circuit version this proving key produces proofs for.
-    pub fn circuit_version(&self) -> OrchardCircuitVersion {
-        self.circuit_version
+    /// Builds the proving key for the flavor selected by `kind` (runtime dispatch).
+    ///
+    /// Proving is always anchored, so the anchored/unanchored distinction in `kind` is
+    /// irrelevant here: both Vanilla variants build the (fixed) Vanilla proving key.
+    pub fn build_for_kind(kind: OrchardCircuitVersion) -> Self {
+        match kind {
+            OrchardCircuitVersion::Zsa => Self::build::<OrchardZSA>(),
+            OrchardCircuitVersion::FixedPostNu6_2 | OrchardCircuitVersion::InsecurePreNu6_2 => {
+                Self::build::<OrchardVanilla>()
+            }
+        }
     }
 }
 
@@ -575,13 +576,6 @@ impl Proof {
         instances: &[Instance],
         mut rng: impl RngCore,
     ) -> Result<Self, plonk::Error> {
-        if circuits
-            .iter()
-            .any(|c| c.witnesses.circuit_version != pk.circuit_version)
-        {
-            return Err(plonk::Error::Synthesis);
-        }
-
         let instances: Vec<_> = instances.iter().map(|i| i.to_halo2_instance()).collect();
         let instances: Vec<Vec<_>> = instances
             .iter()
