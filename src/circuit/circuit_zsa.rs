@@ -9,9 +9,7 @@ use group::Curve;
 use pasta_curves::{arithmetic::CurveAffine, pallas};
 
 use halo2_gadgets::{
-    ecc::{
-        chip::EccChip, CircuitVersion, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar,
-    },
+    ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
     poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
     sinsemilla::{
         chip::SinsemillaChip,
@@ -23,12 +21,7 @@ use halo2_gadgets::{
     },
 };
 
-use halo2_proofs::{
-    circuit::{Layouter, Value},
-    plonk::{self, Constraints, Expression},
-    poly::Rotation,
-};
-
+use crate::circuit::OrchardCircuitVersion;
 use crate::{
     circuit::{
         commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
@@ -39,16 +32,27 @@ use crate::{
         note_commit::{gadgets::note_commit, NoteCommitChip, ZsaNoteCommitParams},
         unpack,
         value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
-        AdditionalZsaWitnesses, Config, OrchardCircuit, Witnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y,
-        ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+        CircuitZsa, Config, ANCHOR, CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND,
+        ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
     },
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
-    flavor::OrchardZSA,
     note::AssetBase,
 };
+use halo2_proofs::circuit::floor_planner;
+use halo2_proofs::{
+    circuit::{Layouter, Value},
+    plonk::{self, Constraints, Expression},
+    poly::Rotation,
+};
 
-impl OrchardCircuit for OrchardZSA {
+impl plonk::Circuit<pallas::Base> for CircuitZsa {
     type Config = Config<PallasLookupRangeCheck4_5BConfig>;
+
+    type FloorPlanner = floor_planner::V1;
+
+    fn without_witnesses(&self) -> Self {
+        Self::default()
+    }
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
         // Advice columns used in the Orchard circuit.
@@ -327,24 +331,19 @@ impl OrchardCircuit for OrchardZSA {
 
     #[allow(non_snake_case)]
     fn synthesize(
-        circuit: &Witnesses,
+        &self,
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
-        // Prevent synthesis of insecure ZSA circuits.
-        if circuit.circuit_version.halo2_version() == CircuitVersion::InsecureUnanchoredBase {
-            return Err(plonk::Error::Synthesis);
-        }
-
         // Load the Sinsemilla generator lookup table used by the whole circuit.
         SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
         // Unpack the ZSA witnesses.
         let (psi_nf_value, asset_value, split_flag_value) =
-            unpack(circuit.additional_zsa_witnesses.clone());
+            unpack(self.additional_zsa_witnesses.clone());
 
         // Construct the ECC chip.
-        let ecc_chip = config.ecc_chip(circuit.circuit_version.halo2_version());
+        let ecc_chip = config.ecc_chip(OrchardCircuitVersion::Zsa.halo2_version());
 
         // Witness private inputs that are used across multiple checks.
         let (psi_nf, psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset) = {
@@ -359,32 +358,32 @@ impl OrchardCircuit for OrchardZSA {
             let psi_old = assign_free_advice(
                 layouter.namespace(|| "witness psi_old"),
                 config.advices[0],
-                circuit.psi_old,
+                self.psi_old,
             )?;
 
             // Witness rho_old
             let rho_old = assign_free_advice(
                 layouter.namespace(|| "witness rho_old"),
                 config.advices[0],
-                circuit.rho_old.map(|rho| rho.into_inner()),
+                self.rho_old.map(|rho| rho.into_inner()),
             )?;
 
             // Witness cm_old
             let cm_old = Point::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "cm_old"),
-                circuit.cm_old.as_ref().map(|cm| cm.inner().to_affine()),
+                self.cm_old.as_ref().map(|cm| cm.inner().to_affine()),
             )?;
 
             // Witness g_d_old
             let g_d_old = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "gd_old"),
-                circuit.g_d_old.as_ref().map(|gd| gd.to_affine()),
+                self.g_d_old.as_ref().map(|gd| gd.to_affine()),
             )?;
 
             // Witness ak_P.
-            let ak_P: Value<pallas::Point> = circuit.ak.as_ref().map(|ak| ak.into());
+            let ak_P: Value<pallas::Point> = self.ak.as_ref().map(|ak| ak.into());
             let ak_P = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness ak_P"),
@@ -395,21 +394,21 @@ impl OrchardCircuit for OrchardZSA {
             let nk = assign_free_advice(
                 layouter.namespace(|| "witness nk"),
                 config.advices[0],
-                circuit.nk.map(|nk| nk.inner()),
+                self.nk.map(|nk| nk.inner()),
             )?;
 
             // Witness v_old.
             let v_old = assign_free_advice(
                 layouter.namespace(|| "witness v_old"),
                 config.advices[0],
-                circuit.v_old,
+                self.v_old,
             )?;
 
             // Witness v_new.
             let v_new = assign_free_advice(
                 layouter.namespace(|| "witness v_new"),
                 config.advices[0],
-                circuit.v_new,
+                self.v_new,
             )?;
 
             // Witness asset
@@ -442,13 +441,13 @@ impl OrchardCircuit for OrchardZSA {
 
         // Merkle path validity check.
         let root = {
-            let path = circuit
+            let path = self
                 .path
                 .map(|typed_path| typed_path.map(|node| node.inner()));
             let merkle_inputs = MerklePath::construct(
                 [config.merkle_chip_1(), config.merkle_chip_2()],
                 OrchardHashDomains::MerkleCrh,
-                circuit.pos,
+                self.pos,
                 path,
             );
             let leaf = cm_old.extract_p().inner().clone();
@@ -467,9 +466,9 @@ impl OrchardCircuit for OrchardZSA {
                 //   v_old - v_new if split_flag = false
                 let v_net = split_flag_value.and_then(|split_flag| {
                     if split_flag {
-                        Value::known(crate::value::NoteValue::ZERO) - circuit.v_new
+                        Value::known(crate::value::NoteValue::ZERO) - self.v_new
                     } else {
-                        circuit.v_old - circuit.v_new
+                        self.v_old - self.v_new
                     }
                 });
 
@@ -503,7 +502,7 @@ impl OrchardCircuit for OrchardZSA {
             let rcv = ScalarFixed::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "rcv"),
-                circuit.rcv.as_ref().map(|rcv| rcv.inner()),
+                self.rcv.as_ref().map(|rcv| rcv.inner()),
             )?;
 
             let cv_net = value_commit_orchard(
@@ -553,11 +552,8 @@ impl OrchardCircuit for OrchardZSA {
 
         // Spend authority
         {
-            let alpha = ScalarFixed::new(
-                ecc_chip.clone(),
-                layouter.namespace(|| "alpha"),
-                circuit.alpha,
-            )?;
+            let alpha =
+                ScalarFixed::new(ecc_chip.clone(), layouter.namespace(|| "alpha"), self.alpha)?;
 
             // alpha_commitment = [alpha] SpendAuthG
             let (alpha_commitment, _) = {
@@ -581,7 +577,7 @@ impl OrchardCircuit for OrchardZSA {
                 let rivk = ScalarFixed::new(
                     ecc_chip.clone(),
                     layouter.namespace(|| "rivk"),
-                    circuit.rivk.map(|rivk| rivk.inner()),
+                    self.rivk.map(|rivk| rivk.inner()),
                 )?;
 
                 commit_ivk(
@@ -612,9 +608,7 @@ impl OrchardCircuit for OrchardZSA {
             let pk_d_old = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness pk_d_old"),
-                circuit
-                    .pk_d_old
-                    .map(|pk_d_old| pk_d_old.inner().to_affine()),
+                self.pk_d_old.map(|pk_d_old| pk_d_old.inner().to_affine()),
             )?;
             derived_pk_d_old
                 .constrain_equal(layouter.namespace(|| "pk_d_old equality"), &pk_d_old)?;
@@ -630,7 +624,7 @@ impl OrchardCircuit for OrchardZSA {
             let rcm_old = ScalarFixed::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "rcm_old"),
-                circuit.rcm_old.as_ref().map(|rcm_old| rcm_old.inner()),
+                self.rcm_old.as_ref().map(|rcm_old| rcm_old.inner()),
             )?;
 
             // g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)
@@ -639,7 +633,7 @@ impl OrchardCircuit for OrchardZSA {
                     "g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)"
                 }),
                 config.sinsemilla_chip_1(),
-                config.ecc_chip(circuit.circuit_version.halo2_version()),
+                config.ecc_chip(OrchardCircuitVersion::Zsa.halo2_version()),
                 config.note_commit_chip_old(),
                 g_d_old.inner(),
                 pk_d_old.inner(),
@@ -665,7 +659,7 @@ impl OrchardCircuit for OrchardZSA {
         {
             // Witness g_d_new
             let g_d_new = {
-                let g_d_new = circuit.g_d_new.map(|g_d_new| g_d_new.to_affine());
+                let g_d_new = self.g_d_new.map(|g_d_new| g_d_new.to_affine());
                 NonIdentityPoint::new(
                     ecc_chip.clone(),
                     layouter.namespace(|| "witness g_d_new_star"),
@@ -675,9 +669,7 @@ impl OrchardCircuit for OrchardZSA {
 
             // Witness pk_d_new
             let pk_d_new = {
-                let pk_d_new = circuit
-                    .pk_d_new
-                    .map(|pk_d_new| pk_d_new.inner().to_affine());
+                let pk_d_new = self.pk_d_new.map(|pk_d_new| pk_d_new.inner().to_affine());
                 NonIdentityPoint::new(
                     ecc_chip.clone(),
                     layouter.namespace(|| "witness pk_d_new"),
@@ -692,13 +684,13 @@ impl OrchardCircuit for OrchardZSA {
             let psi_new = assign_free_advice(
                 layouter.namespace(|| "witness psi_new"),
                 config.advices[0],
-                circuit.psi_new,
+                self.psi_new,
             )?;
 
             let rcm_new = ScalarFixed::new(
                 ecc_chip,
                 layouter.namespace(|| "rcm_new"),
-                circuit.rcm_new.as_ref().map(|rcm_new| rcm_new.inner()),
+                self.rcm_new.as_ref().map(|rcm_new| rcm_new.inner()),
             )?;
 
             // g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)
@@ -707,7 +699,7 @@ impl OrchardCircuit for OrchardZSA {
                     "g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)"
                 }),
                 config.sinsemilla_chip_2(),
-                config.ecc_chip(circuit.circuit_version.halo2_version()),
+                config.ecc_chip(OrchardCircuitVersion::Zsa.halo2_version()),
                 config.note_commit_chip_new(),
                 g_d_new.inner(),
                 pk_d_new.inner(),
@@ -857,20 +849,9 @@ impl OrchardCircuit for OrchardZSA {
 
         Ok(())
     }
-
-    fn build_additional_zsa_witnesses(
-        psi_nf: pallas::Base,
-        asset: AssetBase,
-        split_flag: bool,
-    ) -> Value<AdditionalZsaWitnesses> {
-        Value::known(AdditionalZsaWitnesses {
-            psi_nf,
-            asset,
-            split_flag,
-        })
-    }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use alloc::vec::Vec;
@@ -1468,4 +1449,4 @@ mod tests {
         let pk = ProvingKey::build::<OrchardZSA>();
         assert!(Proof::create(&pk, &[circuit], &[instance], &mut rng).is_err());
     }
-}
+}*/

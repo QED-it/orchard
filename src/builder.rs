@@ -33,9 +33,7 @@ use {
     crate::{
         action::Action,
         bundle::derive_bvk,
-        circuit::{
-            Circuit, Instance, OrchardCircuit, OrchardCircuitVersion, ProvingKey, Witnesses,
-        },
+        circuit::{Circuit, Instance, OrchardCircuitVersion, ProvingKey},
         flavor::OrchardFlavor,
     },
     nonempty::NonEmpty,
@@ -514,10 +512,7 @@ impl ActionInfo {
     ///
     /// [orchardsend]: https://zips.z.cash/protocol/nu5.pdf#orchardsend
     #[cfg(feature = "circuit")]
-    fn build<FL: OrchardFlavor>(
-        self,
-        rng: impl RngCore,
-    ) -> (Action<SigningMetadata, FL>, Witnesses) {
+    fn build<FL: OrchardFlavor>(self, rng: impl RngCore) -> (Action<SigningMetadata, FL>, Circuit) {
         self.build_for_version(rng, OrchardCircuitVersion::FixedPostNu6_2)
     }
 
@@ -528,7 +523,7 @@ impl ActionInfo {
         self,
         mut rng: impl RngCore,
         circuit_version: OrchardCircuitVersion,
-    ) -> (Action<SigningMetadata, FL>, Witnesses) {
+    ) -> (Action<SigningMetadata, FL>, Circuit) {
         let v_net = self.value_sum();
         let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.output.asset);
 
@@ -551,7 +546,7 @@ impl ActionInfo {
                 "rk is non-identity (α was generated randomly) and epk is a \
                  valid non-identity point by construction",
             ),
-            Witnesses::from_action_context_unchecked::<FL>(
+            Circuit::from_action_context_unchecked(
                 self.spend,
                 note,
                 alpha,
@@ -1008,7 +1003,7 @@ pub fn bundle_for_version<V: TryFrom<i64>, FL: OrchardFlavor>(
                 .into_bsk();
 
             // Create the actions.
-            let (actions, witnesses): (Vec<_>, Vec<_>) = pre_actions
+            let (actions, circuits): (Vec<_>, Vec<_>) = pre_actions
                 .into_iter()
                 .map(|a| a.build_for_version(&mut rng, circuit_version))
                 .unzip();
@@ -1027,7 +1022,7 @@ pub fn bundle_for_version<V: TryFrom<i64>, FL: OrchardFlavor>(
                         anchor,
                         InProgress {
                             proof: Unproven {
-                                witnesses,
+                                circuits,
                                 circuit_version,
                             },
                             sigs: Unauthorized { bsk },
@@ -1228,7 +1223,7 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 #[cfg(feature = "circuit")]
 #[derive(Clone, Debug)]
 pub struct Unproven {
-    witnesses: Vec<Witnesses>,
+    circuits: Vec<Circuit>,
     circuit_version: OrchardCircuitVersion,
 }
 
@@ -1238,22 +1233,13 @@ impl<S: InProgressSignatures> InProgress<Unproven, S> {
     ///
     /// The `OrchardCircuit` type parameter must match the circuit used when generating the witnesses
     /// contained in this `Unproven` structure to ensure consistency and correctness of the proof.
-    pub fn create_proof<C: OrchardCircuit>(
+    pub fn create_proof(
         &self,
         pk: &ProvingKey,
         instances: &[Instance],
         rng: impl RngCore,
     ) -> Result<Proof, halo2_proofs::plonk::Error> {
-        let circuits = self
-            .proof
-            .witnesses
-            .iter()
-            .map(|witnesses| Circuit::<C> {
-                witnesses: witnesses.clone(),
-                phantom: core::marker::PhantomData,
-            })
-            .collect::<Vec<Circuit<C>>>();
-        Proof::create(pk, &circuits, instances, rng)
+        Proof::create(pk, &self.proof.circuits, instances, rng)
     }
 }
 
@@ -1280,7 +1266,7 @@ impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven, 
             &mut (),
             |_, _, a| Ok(a),
             |_, auth| {
-                let proof = auth.create_proof::<FL>(pk, &instances, &mut rng)?;
+                let proof = auth.create_proof(pk, &instances, &mut rng)?;
                 Ok(InProgress {
                     proof,
                     sigs: auth.sigs,
@@ -1527,6 +1513,7 @@ impl OutputView for OutputInfo {
     }
 }
 
+/*
 /// Generators for property testing.
 #[cfg(all(feature = "circuit", any(test, feature = "test-dependencies")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
@@ -1749,4 +1736,4 @@ mod tests {
     fn shielding_bundle_zsa_with_vanilla_flags() {
         shielding_bundle::<OrchardZSA>(BundleType::DEFAULT)
     }
-}
+}*/

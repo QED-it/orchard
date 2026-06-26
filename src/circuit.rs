@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 
 use group::{Curve, GroupEncoding};
 use halo2_proofs::{
-    circuit::{floor_planner, Layouter, Value},
+    circuit::Value,
     plonk::{
         self, Advice, BatchVerifier, Column, Instance as InstanceColumn, Selector, SingleVerifier,
     },
@@ -15,7 +15,6 @@ use halo2_proofs::{
 };
 use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
 use rand::RngCore;
-use std::marker::PhantomData;
 
 use crate::{
     builder::SpendInfo,
@@ -101,53 +100,6 @@ pub struct Config<Lookup: PallasLookupRangeCheck> {
     new_note_commit_config: NoteCommitConfig<Lookup>,
 }
 
-/// The `OrchardCircuit` trait defines an interface for different implementations of the PLONK circuit
-/// for the different Orchard protocol flavors (Vanilla and ZSA). It serves as a bridge between
-/// plonk::Circuit interfaces and specific requirements of the Orchard protocol's variations.
-pub trait OrchardCircuit: Sized + Default {
-    /// Substitution for Config type of plonk::Circuit trait
-    type Config: Clone;
-
-    /// Wrapper for configure function of plonk::Circuit trait
-    fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config;
-
-    /// Wrapper for configure function of plonk::Circuit trait
-    fn synthesize(
-        circuit: &Witnesses,
-        config: Self::Config,
-        layouter: impl Layouter<pallas::Base>,
-    ) -> Result<(), plonk::Error>;
-
-    /// Builds the ZSA-specific witnesses for the circuit.
-    /// For OrchardVanilla circuits, it should return `Value::unknown()`.
-    fn build_additional_zsa_witnesses(
-        psi_nf: pallas::Base,
-        asset: AssetBase,
-        split_flag: bool,
-    ) -> Value<AdditionalZsaWitnesses>;
-}
-
-impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
-    type Config = C::Config;
-    type FloorPlanner = floor_planner::V1;
-
-    fn without_witnesses(&self) -> Self {
-        Self::default()
-    }
-
-    fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
-        C::configure(meta)
-    }
-
-    fn synthesize(
-        &self,
-        config: Self::Config,
-        layouter: impl Layouter<pallas::Base>,
-    ) -> Result<(), plonk::Error> {
-        C::synthesize(&self.witnesses, config, layouter)
-    }
-}
-
 /// Selects which version of the Orchard Action circuit to build.
 ///
 /// The two versions produce different verifying keys: the fixed circuit anchors the
@@ -172,6 +124,8 @@ pub enum OrchardCircuitVersion {
     /// verification.
     #[default]
     FixedPostNu6_2,
+    /// The ZSA circuit.
+    Zsa,
 }
 
 impl OrchardCircuitVersion {
@@ -179,7 +133,9 @@ impl OrchardCircuitVersion {
     fn halo2_version(self) -> CircuitVersion {
         match self {
             OrchardCircuitVersion::InsecurePreNu6_2 => CircuitVersion::InsecureUnanchoredBase,
-            OrchardCircuitVersion::FixedPostNu6_2 => CircuitVersion::AnchoredBase,
+            OrchardCircuitVersion::FixedPostNu6_2 | OrchardCircuitVersion::Zsa => {
+                CircuitVersion::AnchoredBase
+            }
         }
     }
 }
@@ -190,10 +146,16 @@ impl OrchardCircuitVersion {
 /// [`OrchardCircuitVersion::FixedPostNu6_2`], so a default `Circuit` is the current (fixed)
 /// circuit. [`OrchardCircuitVersion::InsecurePreNu6_2`] exists only to rebuild the historical
 /// verifying key.
-#[derive(Clone, Debug, Default)]
-pub struct Circuit<C: OrchardCircuit> {
-    pub(crate) witnesses: Witnesses,
-    pub(crate) phantom: core::marker::PhantomData<C>,
+#[derive(Clone, Debug)]
+pub enum Circuit {
+    OrchardVanilla(CircuitVanilla),
+    OrchardZSA(CircuitZsa),
+}
+
+impl Default for Circuit {
+    fn default() -> Self {
+        Circuit::OrchardVanilla(CircuitVanilla::default())
+    }
 }
 
 /// The ZSA-specific witnesses.
@@ -214,9 +176,35 @@ fn unpack(
     )
 }
 
-/// The Orchard Action witnesses
+/// The OrchardVanilla Action circuit
 #[derive(Clone, Debug, Default)]
-pub struct Witnesses {
+pub struct CircuitVanilla {
+    pub(crate) path: Value<[MerkleHashOrchard; MERKLE_DEPTH_ORCHARD]>,
+    pub(crate) pos: Value<u32>,
+    pub(crate) g_d_old: Value<NonIdentityPallasPoint>,
+    pub(crate) pk_d_old: Value<DiversifiedTransmissionKey>,
+    pub(crate) v_old: Value<NoteValue>,
+    pub(crate) rho_old: Value<Rho>,
+    pub(crate) psi_old: Value<pallas::Base>,
+    pub(crate) rcm_old: Value<NoteCommitTrapdoor>,
+    pub(crate) cm_old: Value<NoteCommitment>,
+    pub(crate) alpha: Value<pallas::Scalar>,
+    pub(crate) ak: Value<SpendValidatingKey>,
+    pub(crate) nk: Value<NullifierDerivingKey>,
+    pub(crate) rivk: Value<CommitIvkRandomness>,
+    pub(crate) g_d_new: Value<NonIdentityPallasPoint>,
+    pub(crate) pk_d_new: Value<DiversifiedTransmissionKey>,
+    pub(crate) v_new: Value<NoteValue>,
+    pub(crate) psi_new: Value<pallas::Base>,
+    pub(crate) rcm_new: Value<NoteCommitTrapdoor>,
+    pub(crate) rcv: Value<ValueCommitTrapdoor>,
+
+    pub(crate) circuit_version: OrchardCircuitVersion,
+}
+
+/// The OrchardZSA Action circuit
+#[derive(Clone, Debug, Default)]
+pub struct CircuitZsa {
     pub(crate) path: Value<[MerkleHashOrchard; MERKLE_DEPTH_ORCHARD]>,
     pub(crate) pos: Value<u32>,
     pub(crate) g_d_old: Value<NonIdentityPallasPoint>,
@@ -240,10 +228,9 @@ pub struct Witnesses {
     // The ZSA-specific witnesses.
     // For OrchardVanilla circuits, this field should be initialized to `Value::unknown()`.
     pub(crate) additional_zsa_witnesses: Value<AdditionalZsaWitnesses>,
-    pub(crate) circuit_version: OrchardCircuitVersion,
 }
 
-impl Witnesses {
+impl Circuit {
     /// This constructor is public to enable creation of custom builders.
     /// If you are not creating a custom builder, use [`Builder`] to compose
     /// and authorize a transaction.
@@ -260,13 +247,13 @@ impl Witnesses {
     ///
     /// [`SpendInfo`]: crate::builder::SpendInfo
     /// [`Builder`]: crate::builder::Builder
-    pub fn from_action_context<C: OrchardCircuit>(
+    pub fn from_action_context(
         spend: SpendInfo,
         output_note: Note,
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
     ) -> Option<Self> {
-        Self::from_action_context_for_version::<C>(
+        Self::from_action_context_for_version(
             spend,
             output_note,
             alpha,
@@ -279,7 +266,7 @@ impl Witnesses {
     /// `circuit_version`. Only [`OrchardCircuitVersion::FixedPostNu6_2`] should be used for
     /// proving; [`OrchardCircuitVersion::InsecurePreNu6_2`] exists to reconstruct historical
     /// proofs (e.g. for testing that pre-NU6.2 proofs still verify).
-    pub fn from_action_context_for_version<C: OrchardCircuit>(
+    pub fn from_action_context_for_version(
         spend: SpendInfo,
         output_note: Note,
         alpha: pallas::Scalar,
@@ -287,23 +274,48 @@ impl Witnesses {
         circuit_version: OrchardCircuitVersion,
     ) -> Option<Self> {
         (Rho::from_nf_old(spend.note.nullifier(&spend.fvk)) == output_note.rho()).then(|| {
-            Self::from_action_context_unchecked::<C>(
-                spend,
-                output_note,
-                alpha,
-                rcv,
-                circuit_version,
-            )
+            Self::from_action_context_unchecked(spend, output_note, alpha, rcv, circuit_version)
         })
     }
 
-    pub(crate) fn from_action_context_unchecked<C: OrchardCircuit>(
+    pub(crate) fn from_action_context_unchecked(
         spend: SpendInfo,
         output_note: Note,
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
         circuit_version: OrchardCircuitVersion,
     ) -> Self {
+        match circuit_version {
+            OrchardCircuitVersion::Zsa => Self::from_action_context_unchecked_zsa(
+                spend,
+                output_note,
+                alpha,
+                rcv,
+                circuit_version,
+            ),
+            OrchardCircuitVersion::FixedPostNu6_2 | OrchardCircuitVersion::InsecurePreNu6_2 => {
+                Self::from_action_context_unchecked_vanilla(
+                    spend,
+                    output_note,
+                    alpha,
+                    rcv,
+                    circuit_version,
+                )
+            }
+        }
+    }
+
+    pub(crate) fn from_action_context_unchecked_zsa(
+        spend: SpendInfo,
+        output_note: Note,
+        alpha: pallas::Scalar,
+        rcv: ValueCommitTrapdoor,
+        circuit_version: OrchardCircuitVersion,
+    ) -> Self {
+        if circuit_version != OrchardCircuitVersion::Zsa {
+            panic!("Cannot call from_action_context_unchecked_zsa from a non-zsa circuit");
+        }
+
         let sender_address = spend.note.recipient();
         let rho_old = spend.note.rho();
         let psi_old = spend.note.rseed().psi(&rho_old);
@@ -315,10 +327,13 @@ impl Witnesses {
 
         let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
         let psi_nf = nf_rseed.psi(&rho_old);
-        let additional_zsa_witnesses =
-            C::build_additional_zsa_witnesses(psi_nf, spend.note.asset(), spend.split_flag);
+        let additional_zsa_witnesses = Value::known(AdditionalZsaWitnesses {
+            psi_nf,
+            asset: spend.note.asset(),
+            split_flag: spend.split_flag,
+        });
 
-        Witnesses {
+        Circuit::OrchardZSA(CircuitZsa {
             path: Value::known(spend.merkle_path.auth_path()),
             pos: Value::known(spend.merkle_path.position()),
             g_d_old: Value::known(sender_address.g_d()),
@@ -340,7 +355,71 @@ impl Witnesses {
             rcv: Value::known(rcv),
 
             additional_zsa_witnesses,
+        })
+    }
+
+    pub(crate) fn from_action_context_unchecked_vanilla(
+        spend: SpendInfo,
+        output_note: Note,
+        alpha: pallas::Scalar,
+        rcv: ValueCommitTrapdoor,
+        circuit_version: OrchardCircuitVersion,
+    ) -> Self {
+        if circuit_version == OrchardCircuitVersion::Zsa {
+            panic!("Cannot call action_context_unchecked_vanilla from a zsa circuit");
+        }
+        if !(bool::from(spend.note.asset().is_zatoshi())) {
+            panic!("asset must be zatoshi in OrchardVanilla circuit");
+        }
+        if spend.split_flag {
+            panic!("split_flag must be false in OrchardVanilla circuit");
+        }
+
+        let sender_address = spend.note.recipient();
+        let rho_old = spend.note.rho();
+        let psi_old = spend.note.rseed().psi(&rho_old);
+        let rcm_old = spend.note.rseed().rcm(&rho_old);
+
+        let rho_new = output_note.rho();
+        let psi_new = output_note.rseed().psi(&rho_new);
+        let rcm_new = output_note.rseed().rcm(&rho_new);
+
+        Circuit::OrchardVanilla(CircuitVanilla {
+            path: Value::known(spend.merkle_path.auth_path()),
+            pos: Value::known(spend.merkle_path.position()),
+            g_d_old: Value::known(sender_address.g_d()),
+            pk_d_old: Value::known(*sender_address.pk_d()),
+            v_old: Value::known(spend.note.value()),
+            rho_old: Value::known(rho_old),
+            psi_old: Value::known(psi_old),
+            rcm_old: Value::known(rcm_old),
+            cm_old: Value::known(spend.note.commitment()),
+            alpha: Value::known(alpha),
+            ak: Value::known(spend.fvk.clone().into()),
+            nk: Value::known(*spend.fvk.nk()),
+            rivk: Value::known(spend.fvk.rivk(spend.scope)),
+            g_d_new: Value::known(output_note.recipient().g_d()),
+            pk_d_new: Value::known(*output_note.recipient().pk_d()),
+            v_new: Value::known(output_note.value()),
+            psi_new: Value::known(psi_new),
+            rcm_new: Value::known(rcm_new),
+            rcv: Value::known(rcv),
+
             circuit_version,
+        })
+    }
+
+    pub(crate) fn to_zsa_circuit(self) -> CircuitZsa {
+        match self {
+            Circuit::OrchardVanilla(_) => panic!("Must be a ZSA circuit"),
+            Circuit::OrchardZSA(circuit_zsa) => circuit_zsa,
+        }
+    }
+
+    pub(crate) fn to_vanilla_circuit(self) -> CircuitVanilla {
+        match self {
+            Circuit::OrchardVanilla(circuit_vanilla) => circuit_vanilla,
+            Circuit::OrchardZSA(_) => panic!("Must be a Vanilla circuit"),
         }
     }
 }
@@ -360,24 +439,29 @@ pub struct VerifyingKey {
 }
 
 impl VerifyingKey {
-    /// Builds the verifying key for the current (fixed, NU6.2-onward) circuit.
+    /*/// Builds the verifying key for the current (fixed, NU6.2-onward) circuit.
     pub fn build<C: OrchardCircuit>() -> Self {
         Self::build_for_version::<C>(OrchardCircuitVersion::FixedPostNu6_2)
-    }
+    }*/
 
     /// Builds the verifying key for the given circuit version.
-    pub fn build_for_version<C: OrchardCircuit>(circuit_version: OrchardCircuitVersion) -> Self {
+    pub fn build_for_version(circuit_version: OrchardCircuitVersion) -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
-        let circuit = Circuit::<C> {
-            witnesses: Witnesses {
-                circuit_version,
-                ..Default::default()
-            },
-            phantom: PhantomData,
+        let vk: plonk::VerifyingKey<vesta::Affine> = match circuit_version {
+            OrchardCircuitVersion::Zsa => {
+                let circuit_zsa = CircuitZsa {
+                    ..Default::default()
+                };
+                plonk::keygen_vk(&params, &circuit_zsa).unwrap()
+            }
+            OrchardCircuitVersion::InsecurePreNu6_2 | OrchardCircuitVersion::FixedPostNu6_2 => {
+                let circuit_vanilla = CircuitVanilla {
+                    circuit_version,
+                    ..Default::default()
+                };
+                plonk::keygen_vk(&params, &circuit_vanilla).unwrap()
+            }
         };
-
-        let vk = plonk::keygen_vk(&params, &circuit).unwrap();
-
         VerifyingKey { params, vk }
     }
 }
@@ -397,28 +481,35 @@ pub struct ProvingKey {
 }
 
 impl ProvingKey {
-    /// Builds the proving key for the current (fixed, NU6.2-onward) circuit.
+    /*/// Builds the proving key for the current (fixed, NU6.2-onward) circuit.
     pub fn build<C: OrchardCircuit>() -> Self {
         Self::build_for_version::<C>(OrchardCircuitVersion::FixedPostNu6_2)
-    }
+    }*/
 
     /// Builds the proving key for the given circuit version.
     ///
     /// Only [`OrchardCircuitVersion::FixedPostNu6_2`] should be used to prove transactions for
     /// the network; [`OrchardCircuitVersion::InsecurePreNu6_2`] exists only to reproduce
     /// historical proofs (e.g. for testing that pre-NU6.2 proofs still verify).
-    pub fn build_for_version<C: OrchardCircuit>(circuit_version: OrchardCircuitVersion) -> Self {
+    pub fn build_for_version(circuit_version: OrchardCircuitVersion) -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
-        let circuit = Circuit::<C> {
-            witnesses: Witnesses {
-                circuit_version,
-                ..Default::default()
-            },
-            phantom: PhantomData,
+        let pk = match circuit_version {
+            OrchardCircuitVersion::Zsa => {
+                let circuit_zsa = CircuitZsa {
+                    ..Default::default()
+                };
+                let vk = plonk::keygen_vk(&params, &circuit_zsa).unwrap();
+                plonk::keygen_pk(&params, vk, &circuit_zsa).unwrap()
+            }
+            OrchardCircuitVersion::InsecurePreNu6_2 | OrchardCircuitVersion::FixedPostNu6_2 => {
+                let circuit_vanilla = CircuitVanilla {
+                    circuit_version,
+                    ..Default::default()
+                };
+                let vk = plonk::keygen_vk(&params, &circuit_vanilla).unwrap();
+                plonk::keygen_pk(&params, vk, &circuit_vanilla).unwrap()
+            }
         };
-
-        let vk = plonk::keygen_vk(&params, &circuit).unwrap();
-        let pk = plonk::keygen_pk(&params, vk, &circuit).unwrap();
 
         ProvingKey {
             params,
@@ -569,18 +660,18 @@ impl Proof {
     /// The resulting proof verifies only under a [`VerifyingKey`] for the same circuit version
     /// (see [`OrchardCircuitVersion`]). Returns an error if any circuit's version does not match
     /// `pk`'s version, since `pk` could not produce a valid proof for it.
-    pub fn create<C: OrchardCircuit>(
+    pub fn create(
         pk: &ProvingKey,
-        circuits: &[Circuit<C>],
+        circuits: &[Circuit],
         instances: &[Instance],
         mut rng: impl RngCore,
     ) -> Result<Self, plonk::Error> {
-        if circuits
+        /*if circuits
             .iter()
             .any(|c| c.witnesses.circuit_version != pk.circuit_version)
         {
             return Err(plonk::Error::Synthesis);
-        }
+        }*/
 
         let instances: Vec<_> = instances.iter().map(|i| i.to_halo2_instance()).collect();
         let instances: Vec<Vec<_>> = instances
@@ -590,14 +681,36 @@ impl Proof {
         let instances: Vec<_> = instances.iter().map(|i| &i[..]).collect();
 
         let mut transcript = Blake2bWrite::<_, vesta::Affine, _>::init(vec![]);
-        plonk::create_proof(
-            &pk.params,
-            &pk.pk,
-            circuits,
-            &instances,
-            &mut rng,
-            &mut transcript,
-        )?;
+        match pk.circuit_version {
+            OrchardCircuitVersion::Zsa => {
+                let zsa_circuits = circuits
+                    .iter()
+                    .map(|circuit| circuit.to_zsa_circuit())
+                    .collect::<Vec<_>>();
+                plonk::create_proof(
+                    &pk.params,
+                    &pk.pk,
+                    &zsa_circuits,
+                    &instances,
+                    &mut rng,
+                    &mut transcript,
+                )?;
+            }
+            OrchardCircuitVersion::InsecurePreNu6_2 | OrchardCircuitVersion::FixedPostNu6_2 => {
+                let vanilla_circuits = circuits
+                    .iter()
+                    .map(|circuit| circuit.to_vanilla_circuit())
+                    .collect::<Vec<_>>();
+                plonk::create_proof(
+                    &pk.params,
+                    &pk.pk,
+                    &vanilla_circuits,
+                    &instances,
+                    &mut rng,
+                    &mut transcript,
+                )?;
+            }
+        }
         Ok(Proof(transcript.finalize()))
     }
 
