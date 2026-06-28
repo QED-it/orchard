@@ -21,7 +21,7 @@ use utils::OrchardFlavorBench;
 
 fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let rng = OsRng;
-    let pk = ProvingKey::build::<FL>();
+    let pk = ProvingKey::build_for_version(FL::circuit_version());
 
     let fvk = FullViewingKey::from(&SpendingKey::from_bytes([7; 32]).unwrap());
     let valid_ivk = fvk.to_ivk(Scope::External);

@@ -88,8 +88,8 @@ impl BundleOrchardFlavor for OrchardZSA {
 
 fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     let mut rng = StdRng::seed_from_u64(1u64);
-    let pk = ProvingKey::build::<FL>();
-    let vk = VerifyingKey::build::<FL>();
+    let pk = ProvingKey::build_for_version(FL::circuit_version());
+    let vk = VerifyingKey::build_for_version(FL::circuit_version());
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -256,10 +256,10 @@ fn bundle_chain_zsa() {
 fn builder_builds_for_insecure_circuit_version() {
     let mut rng = OsRng;
     let insecure_pk =
-        ProvingKey::build_for_version::<OrchardVanilla>(OrchardCircuitVersion::InsecurePreNu6_2);
+        ProvingKey::build_for_version(OrchardCircuitVersion::InsecurePreNu6_2);
     let insecure_vk =
-        VerifyingKey::build_for_version::<OrchardVanilla>(OrchardCircuitVersion::InsecurePreNu6_2);
-    let fixed_vk = VerifyingKey::build::<OrchardVanilla>();
+        VerifyingKey::build_for_version(OrchardCircuitVersion::InsecurePreNu6_2);
+    let fixed_vk = VerifyingKey::build_for_version(OrchardCircuitVersion::FixedPostNu6_2);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);

@@ -27,8 +27,8 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let sk = SpendingKey::from_bytes([7; 32]).unwrap();
     let recipient = FullViewingKey::from(&sk).address_at(0u32, Scope::External);
 
-    let vk = VerifyingKey::build::<FL>();
-    let pk = ProvingKey::build::<FL>();
+    let vk = VerifyingKey::build_for_version(FL::circuit_version());
+    let pk = ProvingKey::build_for_version(FL::circuit_version());
 
     let create_bundle = |num_recipients| {
         let mut builder = Builder::new(
@@ -68,7 +68,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 b.iter(|| {
                     bundle
                         .authorization()
-                        .create_proof::<FL>(&pk, &instances, rng)
+                        .create_proof(&pk, &instances, rng)
                         .unwrap()
                 });
             });

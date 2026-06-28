@@ -148,7 +148,9 @@ impl OrchardCircuitVersion {
 /// verifying key.
 #[derive(Clone, Debug)]
 pub enum Circuit {
+    /// The standard Orchard (Vanilla) Action circuit.
     OrchardVanilla(CircuitVanilla),
+    /// The ZSA Orchard Action circuit.
     OrchardZSA(CircuitZsa),
 }
 
@@ -409,16 +411,16 @@ impl Circuit {
         })
     }
 
-    pub(crate) fn to_zsa_circuit(self) -> CircuitZsa {
+    pub(crate) fn to_zsa_circuit(&self) -> CircuitZsa {
         match self {
             Circuit::OrchardVanilla(_) => panic!("Must be a ZSA circuit"),
-            Circuit::OrchardZSA(circuit_zsa) => circuit_zsa,
+            Circuit::OrchardZSA(circuit_zsa) => circuit_zsa.clone(),
         }
     }
 
-    pub(crate) fn to_vanilla_circuit(self) -> CircuitVanilla {
+    pub(crate) fn to_vanilla_circuit(&self) -> CircuitVanilla {
         match self {
-            Circuit::OrchardVanilla(circuit_vanilla) => circuit_vanilla,
+            Circuit::OrchardVanilla(circuit_vanilla) => circuit_vanilla.clone(),
             Circuit::OrchardZSA(_) => panic!("Must be a Vanilla circuit"),
         }
     }

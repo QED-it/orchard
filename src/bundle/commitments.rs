@@ -194,7 +194,7 @@ mod tests {
         bundle_type: BundleType,
     ) -> Bundle<Authorized, i64, FL> {
         let mut rng = StdRng::seed_from_u64(6);
-        let pk = ProvingKey::build::<FL>();
+        let pk = ProvingKey::build_for_version(FL::circuit_version());
         let bundle = generate_bundle(bundle_type)
             .create_proof(&pk, &mut rng)
             .unwrap();

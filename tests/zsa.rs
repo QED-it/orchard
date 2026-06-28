@@ -8,7 +8,7 @@ use nonempty::NonEmpty;
 use orchard::{
     builder::{BuildError, Builder, BundleType},
     bundle::{burn_validation::BurnError, Authorized},
-    circuit::{ProvingKey, VerifyingKey},
+    circuit::{OrchardCircuitVersion, ProvingKey, VerifyingKey},
     flavor::OrchardZSA,
     issuance::{
         auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
@@ -322,8 +322,8 @@ fn verify_reference_note(note: &Note, asset: AssetBase) {
 fn zsa_issue_and_transfer() {
     // --------------------------- Setup -----------------------------------------
 
-    let pk = ProvingKey::build::<OrchardZSA>();
-    let vk = VerifyingKey::build::<OrchardZSA>();
+    let pk = ProvingKey::build_for_version(OrchardCircuitVersion::Zsa);
+    let vk = VerifyingKey::build_for_version(OrchardCircuitVersion::Zsa);
 
     let keys = prepare_keys(&pk, &vk, 5);
     let keys2 = prepare_keys(&pk, &vk, 10);

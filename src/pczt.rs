@@ -341,9 +341,9 @@ mod tests {
 
     use crate::{
         builder::{Builder, BundleType},
-        circuit::ProvingKey,
+        circuit::{OrchardCircuitVersion, ProvingKey},
         constants::MERKLE_DEPTH_ORCHARD,
-        flavor::OrchardVanilla,
+
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
         pczt::{ProverError, TxExtractorError, Zip32Derivation},
@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn shielding_bundle() {
-        let pk = ProvingKey::build::<OrchardVanilla>();
+        let pk = ProvingKey::build_for_version(OrchardCircuitVersion::FixedPostNu6_2);
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -429,7 +429,7 @@ mod tests {
 
     #[test]
     fn shielded_bundle() {
-        let pk = ProvingKey::build::<OrchardVanilla>();
+        let pk = ProvingKey::build_for_version(OrchardCircuitVersion::FixedPostNu6_2);
         let mut rng = OsRng;
 
         // Pretend we derived the spending key via ZIP 32.
@@ -550,7 +550,7 @@ mod tests {
 
     #[test]
     fn create_proof_rejects_identity_rk() {
-        let pk = ProvingKey::build::<OrchardVanilla>();
+        let pk = ProvingKey::build_for_version(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -564,7 +564,7 @@ mod tests {
 
     #[test]
     fn extract_rejects_identity_rk() {
-        let pk = ProvingKey::build::<OrchardVanilla>();
+        let pk = ProvingKey::build_for_version(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -583,7 +583,7 @@ mod tests {
 
     #[test]
     fn extract_rejects_non_canonical_proof() {
-        let pk = ProvingKey::build::<OrchardVanilla>();
+        let pk = ProvingKey::build_for_version(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
