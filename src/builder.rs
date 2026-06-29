@@ -503,19 +503,6 @@ impl ActionInfo {
         spent_value - self.output.value
     }
 
-    /// Builds the action.
-    ///
-    /// Defined in [Zcash Protocol Spec § 4.7.3: Sending Notes (Orchard)][orchardsend].
-    ///
-    /// The circuit version defaults to [`OrchardCircuitVersion::FixedPostNu6_2`],
-    /// which should be used for all new proofs.
-    ///
-    /// [orchardsend]: https://zips.z.cash/protocol/nu5.pdf#orchardsend
-    #[cfg(feature = "circuit")]
-    fn build<FL: OrchardFlavor>(self, rng: impl RngCore) -> (Action<SigningMetadata, FL>, Circuit) {
-        self.build_for_version(rng, OrchardCircuitVersion::FixedPostNu6_2)
-    }
-
     /// Builds the action for a given circuit version. This must be consistent
     /// between actions in a bundle.
     #[cfg(feature = "circuit")]
