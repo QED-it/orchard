@@ -86,10 +86,12 @@ impl BundleOrchardFlavor for OrchardZSA {
     const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED_WITH_ZSA;
 }
 
-fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
+fn bundle_chain<FL: BundleOrchardFlavor>(
+    orchard_circuit_version: OrchardCircuitVersion,
+) -> ([u8; 32], [u8; 32]) {
     let mut rng = StdRng::seed_from_u64(1u64);
-    let pk = ProvingKey::build_for_version(FL::circuit_version());
-    let vk = VerifyingKey::build_for_version(FL::circuit_version());
+    let pk = ProvingKey::build_for_version(orchard_circuit_version);
+    let vk = VerifyingKey::build_for_version(orchard_circuit_version);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -209,7 +211,8 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
 
 #[test]
 fn bundle_chain_vanilla() {
-    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardVanilla>();
+    let (orchard_digest_1, orchard_digest_2) =
+        bundle_chain::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
     assert_eq!(
         orchard_digest_1,
         // Locks the `orchard_digest` for OrchardVanilla
@@ -230,7 +233,8 @@ fn bundle_chain_vanilla() {
 
 #[test]
 fn bundle_chain_zsa() {
-    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardZSA>();
+    let (orchard_digest_1, orchard_digest_2) =
+        bundle_chain::<OrchardZSA>(OrchardCircuitVersion::Zsa);
     assert_eq!(
         orchard_digest_1,
         // Locks the `orchard_digest` for OrchardZSA
@@ -255,10 +259,8 @@ fn bundle_chain_zsa() {
 #[test]
 fn builder_builds_for_insecure_circuit_version() {
     let mut rng = OsRng;
-    let insecure_pk =
-        ProvingKey::build_for_version(OrchardCircuitVersion::InsecurePreNu6_2);
-    let insecure_vk =
-        VerifyingKey::build_for_version(OrchardCircuitVersion::InsecurePreNu6_2);
+    let insecure_pk = ProvingKey::build_for_version(OrchardCircuitVersion::InsecurePreNu6_2);
+    let insecure_vk = VerifyingKey::build_for_version(OrchardCircuitVersion::InsecurePreNu6_2);
     let fixed_vk = VerifyingKey::build_for_version(OrchardCircuitVersion::FixedPostNu6_2);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();

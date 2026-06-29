@@ -116,7 +116,7 @@ mod tests {
             commitments::{get_compact_size, hash_bundle_auth_data, hash_bundle_txid_data},
             Authorized, Bundle,
         },
-        circuit::ProvingKey,
+        circuit::{OrchardCircuitVersion, ProvingKey},
         flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
@@ -192,9 +192,10 @@ mod tests {
 
     fn generate_auth_bundle<FL: OrchardFlavor>(
         bundle_type: BundleType,
+        orchard_circuit_version: OrchardCircuitVersion,
     ) -> Bundle<Authorized, i64, FL> {
         let mut rng = StdRng::seed_from_u64(6);
-        let pk = ProvingKey::build_for_version(FL::circuit_version());
+        let pk = ProvingKey::build_for_version(orchard_circuit_version);
         let bundle = generate_bundle(bundle_type)
             .create_proof(&pk, &mut rng)
             .unwrap();
@@ -211,7 +212,10 @@ mod tests {
     /// is now treated as the expected output for this implementation.
     #[test]
     fn test_hash_bundle_auth_data_for_orchard_vanilla() {
-        let bundle = generate_auth_bundle::<OrchardVanilla>(BundleType::DEFAULT);
+        let bundle = generate_auth_bundle::<OrchardVanilla>(
+            BundleType::DEFAULT,
+            OrchardCircuitVersion::FixedPostNu6_2,
+        );
         let orchard_auth_digest = hash_bundle_auth_data(&bundle, test_sighash_info_for_kind);
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
@@ -230,7 +234,8 @@ mod tests {
     /// is now treated as the expected output for this implementation.
     #[test]
     fn test_hash_bundle_auth_data_for_orchard_zsa() {
-        let bundle = generate_auth_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA);
+        let bundle =
+            generate_auth_bundle::<OrchardZSA>(BundleType::DEFAULT_ZSA, OrchardCircuitVersion::Zsa);
         let orchard_auth_digest = hash_bundle_auth_data(&bundle, test_sighash_info_for_kind);
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
