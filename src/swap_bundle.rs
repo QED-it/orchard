@@ -1,8 +1,8 @@
 //! Structs related to swap bundles.
 
 use crate::{
-    bundle::commitments::hash_swap_bundle,
-    bundle::{derive_bvk, Authorization, Bundle, BundleCommitment},
+    bundle::commitments::{hash_swap_bundle, hash_swap_bundle_auth_data},
+    bundle::{derive_bvk, Authorization, Bundle, BundleAuthorizingCommitment, BundleCommitment},
     flavor::OrchardZSA,
     primitives::redpallas::{self, Binding},
     value::ValueCommitTrapdoor,
@@ -145,6 +145,22 @@ impl<V: Copy + Into<i64>> SwapBundle<V> {
         BundleCommitment(hash_swap_bundle(
             self.action_groups.iter().collect(),
             self.value_balance,
+        ))
+    }
+
+    /// Computes a commitment to the authorizing data within this swap bundle.
+    ///
+    /// This together with [`SwapBundle::commitment`] bind the entire swap bundle.
+    /// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
+    /// for a given [`OrchardSighashKind`].
+    pub fn authorizing_commitment(
+        &self,
+        sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
+    ) -> BundleAuthorizingCommitment {
+        BundleAuthorizingCommitment(hash_swap_bundle_auth_data(
+            self.action_groups.iter().collect(),
+            &self.binding_signature,
+            sighash_info_for_kind,
         ))
     }
 

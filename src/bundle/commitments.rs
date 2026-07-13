@@ -7,7 +7,8 @@ use crate::{
     bundle::{Authorization, Authorized, Bundle},
     flavor::OrchardZSA,
     primitives::OrchardPrimitives,
-    sighash_kind::OrchardSighashKind,
+    sighash_kind::{OrchardBindingSig, OrchardSighashKind},
+    swap_bundle::ActionGroupAuthorized,
 };
 
 #[cfg(feature = "zsa-issuance")]
@@ -144,6 +145,30 @@ pub(crate) fn hash_swap_bundle<A: Authorization, V: Copy + Into<i64>>(
     }
 
     h.update(&value_balance.into().to_le_bytes());
+    h.finalize()
+}
+
+/// Construct the `orchard_auth_digest` for a swap bundle, as defined in [ZIP-246][zip246].
+///
+/// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
+/// for a given [`OrchardSighashKind`].
+///
+/// [zip246]: https://zips.z.cash/zip-0246
+pub(crate) fn hash_swap_bundle_auth_data<V: Copy + Into<i64>>(
+    action_groups: Vec<&Bundle<ActionGroupAuthorized, V, OrchardZSA>>, //TODO: can use SwapBundle here instead
+    binding_signature: &OrchardBindingSig,
+    sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
+) -> Blake2bHash {
+    let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
+
+    for action_group in action_groups {
+        h.update(hash_action_group(action_group).as_bytes());
+    }
+
+    let sighash_info = sighash_info_for_kind(binding_signature.sighash_kind());
+    h.update(&get_compact_size(sighash_info.len()));
+    h.update(sighash_info.as_slice());
+    h.update(&<[u8; 64]>::from(binding_signature.sig()));
     h.finalize()
 }
 
