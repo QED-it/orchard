@@ -13,7 +13,7 @@ use orchard::{
     swap_bundle::{ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
-    Anchor, Bundle, Note,
+    Anchor, ActionGroup, Note,
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -21,7 +21,7 @@ use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
 
 pub fn verify_bundle<Pr: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, i64, Pr>,
+    bundle: &ActionGroup<Authorized, i64, Pr>,
     vk: &VerifyingKey,
     verify_proof: bool,
 ) {
@@ -68,7 +68,7 @@ pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>
 // - verify the proof
 // - verify the signature on each action
 pub fn verify_action_group(
-    action_group_bundle: &Bundle<ActionGroupAuthorized, i64, OrchardZSA>,
+    action_group_bundle: &ActionGroup<ActionGroupAuthorized, i64, OrchardZSA>,
     vk: &VerifyingKey,
 ) {
     assert!(matches!(action_group_bundle.verify_proof(vk), Ok(())));
@@ -134,7 +134,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     let recipient = fvk.address_at(0u32, Scope::External);
 
     // Create a shielding bundle.
-    let (shielding_bundle, orchard_digest_1): (Bundle<_, i64, FL>, [u8; 32]) = {
+    let (shielding_bundle, orchard_digest_1): (ActionGroup<_, i64, FL>, [u8; 32]) = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -214,7 +214,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     }
 
     // Create a shielded bundle spending the previous output.
-    let (shielded_bundle, orchard_digest_2): (Bundle<_, i64, FL>, [u8; 32]) = {
+    let (shielded_bundle, orchard_digest_2): (ActionGroup<_, i64, FL>, [u8; 32]) = {
         let (merkle_path, anchor) = build_merkle_path(&note);
 
         let mut builder = Builder::new(FL::DEFAULT_BUNDLE_TYPE, anchor);

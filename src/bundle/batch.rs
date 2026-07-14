@@ -5,7 +5,7 @@ use pasta_curves::vesta;
 use rand::{CryptoRng, RngCore};
 use tracing::debug;
 
-use super::{Authorized, Bundle};
+use super::{Authorized, ActionGroup};
 use crate::{
     circuit::VerifyingKey,
     primitives::{
@@ -42,7 +42,7 @@ impl BatchValidator {
     /// Adds the proof and RedPallas signatures from the given bundle to the validator.
     pub fn add_bundle<V: Copy + Into<i64>, Pr: OrchardPrimitives>(
         &mut self,
-        bundle: &Bundle<Authorized, V, Pr>,
+        bundle: &ActionGroup<Authorized, V, Pr>,
         sighash: [u8; 32],
     ) {
         for action in bundle.actions().iter() {

@@ -49,7 +49,7 @@ pub use tx_extractor::{TxExtractorError, Unbound};
 /// This struct is for representing Orchard in a partially-created transaction. If you
 /// have a fully-created transaction, use [the regular `Bundle` struct].
 ///
-/// [the regular `Bundle` struct]: crate::Bundle
+/// [the regular `Bundle` struct]: crate::ActionGroup
 #[derive(Debug, Getters)]
 #[getset(get = "pub")]
 pub struct Bundle {

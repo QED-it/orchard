@@ -31,8 +31,8 @@
 //! from a `u64`) and `valueBalanceOrchard` (which can be represented as an `i64`).
 //!
 //! [`Action`]: crate::action::Action
-//! [`Bundle`]: crate::bundle::Bundle
-//! [`Bundle::value_balance`]: crate::bundle::Bundle::value_balance
+//! [`Bundle`]: crate::bundle::ActionGroup
+//! [`Bundle::value_balance`]: crate::bundle::ActionGroup::value_balance
 //! [`Builder::value_balance`]: crate::builder::Builder::value_balance
 //! [`Builder::add_output`]: crate::builder::Builder::add_output
 //! [Rust documentation]: https://doc.rust-lang.org/stable/std/primitive.i64.html

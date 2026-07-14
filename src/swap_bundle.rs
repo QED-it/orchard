@@ -2,7 +2,7 @@
 
 use crate::{
     bundle::commitments::{hash_swap_bundle, hash_swap_bundle_auth_data},
-    bundle::{derive_bvk, Authorization, Bundle, BundleAuthorizingCommitment, BundleCommitment},
+    bundle::{derive_bvk, Authorization, ActionGroup, BundleAuthorizingCommitment, BundleCommitment},
     flavor::OrchardZSA,
     primitives::redpallas::{self, Binding},
     value::ValueCommitTrapdoor,
@@ -22,7 +22,7 @@ use crate::circuit::VerifyingKey;
 #[derive(Debug, Clone)]
 pub struct SwapBundle<V> {
     /// The list of action groups that make up this swap bundle.
-    action_groups: Vec<Bundle<ActionGroupAuthorized, V, OrchardZSA>>,
+    action_groups: Vec<ActionGroup<ActionGroupAuthorized, V, OrchardZSA>>,
     /// The net value moved out of this swap.
     ///
     /// This is the sum of Orchard spends minus the sum of Orchard outputs.
@@ -34,7 +34,7 @@ pub struct SwapBundle<V> {
 impl<V> SwapBundle<V> {
     /// Constructs a `SwapBundle` from its constituent parts.
     pub fn from_parts(
-        action_groups: Vec<Bundle<ActionGroupAuthorized, V, OrchardZSA>>,
+        action_groups: Vec<ActionGroup<ActionGroupAuthorized, V, OrchardZSA>>,
         value_balance: V,
         binding_signature: OrchardBindingSig,
     ) -> Self {
@@ -51,7 +51,7 @@ impl<V: Copy + Into<i64> + core::ops::Add<Output = V>> SwapBundle<V> {
     /// Keys should go in the same order as the action groups.
     pub fn new<R: RngCore + CryptoRng>(
         rng: R,
-        action_groups: Vec<Bundle<ActionGroupAuthorized, V, OrchardZSA>>,
+        action_groups: Vec<ActionGroup<ActionGroupAuthorized, V, OrchardZSA>>,
         bsks: Vec<redpallas::SigningKey<Binding>>,
     ) -> Self {
         assert_eq!(action_groups.len(), bsks.len());
@@ -109,7 +109,7 @@ impl ActionGroupAuthorized {
 }
 
 #[cfg(feature = "circuit")]
-impl<V, D: OrchardPrimitives> Bundle<ActionGroupAuthorized, V, D> {
+impl<V, D: OrchardPrimitives> ActionGroup<ActionGroupAuthorized, V, D> {
     /// Verifies the proof for this bundle.
     pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
         self.authorization()
@@ -121,7 +121,7 @@ impl<V, D: OrchardPrimitives> Bundle<ActionGroupAuthorized, V, D> {
 
 impl<V> SwapBundle<V> {
     /// Returns the list of action groups that make up this swap bundle.
-    pub fn action_groups(&self) -> &Vec<Bundle<ActionGroupAuthorized, V, OrchardZSA>> {
+    pub fn action_groups(&self) -> &Vec<ActionGroup<ActionGroupAuthorized, V, OrchardZSA>> {
         &self.action_groups
     }
 

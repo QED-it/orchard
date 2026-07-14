@@ -7,7 +7,7 @@ use orchard::{
     note::AssetBase,
     primitives::{CompactAction, OrchardDomain},
     value::NoteValue,
-    Anchor, Bundle,
+    Anchor, ActionGroup,
 };
 use rand::rngs::OsRng;
 use zcash_note_encryption::{batch, try_compact_note_decryption, try_note_decryption};
@@ -74,7 +74,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 [0; 512],
             )
             .unwrap();
-        let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().unwrap().0;
+        let bundle: ActionGroup<_, i64, FL> = builder.build(rng).unwrap().unwrap().0;
         bundle
             .create_proof(&pk, rng)
             .unwrap()

@@ -336,7 +336,7 @@ impl Instance {
     /// pipelines for many proofs, where you don't want to pass around the full bundle.
     /// Use [`Bundle::verify_proof`] instead if you have the full bundle.
     ///
-    /// [`Bundle::verify_proof`]: crate::Bundle::verify_proof
+    /// [`Bundle::verify_proof`]: crate::ActionGroup::verify_proof
     pub fn from_parts(
         anchor: Anchor,
         cv_net: ValueCommitment,

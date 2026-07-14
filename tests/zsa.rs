@@ -20,7 +20,7 @@ use orchard::{
     swap_bundle::{ActionGroupAuthorized, SwapBundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
-    Address, Anchor, Bundle, Note,
+    Address, Anchor, ActionGroup, Note,
 };
 use rand::rngs::OsRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
@@ -93,7 +93,7 @@ fn build_and_sign_bundle(
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
-) -> Bundle<Authorized, i64, OrchardZSA> {
+) -> ActionGroup<Authorized, i64, OrchardZSA> {
     let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
     let sighash = unauthorized.commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
@@ -109,7 +109,7 @@ fn build_and_sign_action_group(
     pk: &ProvingKey,
     sk: &SpendingKey,
 ) -> (
-    Bundle<ActionGroupAuthorized, i64, OrchardZSA>,
+    ActionGroup<ActionGroupAuthorized, i64, OrchardZSA>,
     SigningKey<Binding>,
 ) {
     let unauthorized = builder
@@ -232,7 +232,7 @@ fn issue_zsa_notes(
 fn create_zatoshi_note(keys: &Keychain) -> Note {
     let mut rng = OsRng;
 
-    let shielding_bundle: Bundle<_, i64, OrchardZSA> = {
+    let shielding_bundle: ActionGroup<_, i64, OrchardZSA> = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -291,7 +291,7 @@ fn build_and_verify_bundle(
     keys: &Keychain,
 ) -> Result<(), String> {
     let rng = OsRng;
-    let shielded_bundle: Bundle<_, i64, OrchardZSA> = {
+    let shielded_bundle: ActionGroup<_, i64, OrchardZSA> = {
         let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
 
         spends
@@ -337,7 +337,7 @@ fn build_and_verify_action_group(
     keys: &Keychain,
 ) -> Result<
     (
-        Bundle<ActionGroupAuthorized, i64, OrchardZSA>,
+        ActionGroup<ActionGroupAuthorized, i64, OrchardZSA>,
         SigningKey<Binding>,
     ),
     String,
@@ -378,7 +378,7 @@ fn build_and_verify_action_group(
     Ok((shielded_action_group, bsk))
 }
 
-fn verify_unique_spent_nullifiers<A: Authorization>(bundle: &Bundle<A, i64, OrchardZSA>) -> bool {
+fn verify_unique_spent_nullifiers<A: Authorization>(bundle: &ActionGroup<A, i64, OrchardZSA>) -> bool {
     let mut seen = HashSet::new();
     bundle
         .actions()

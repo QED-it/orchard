@@ -1873,7 +1873,7 @@ mod tests {
             keys::SpendAuthorizingKey,
             note::ExtractedNoteCommitment,
             tree::{MerkleHashOrchard, MerklePath},
-            Anchor, Bundle,
+            Anchor, ActionGroup,
         };
 
         use incrementalmerkletree::{Marking, Retention};
@@ -1935,7 +1935,7 @@ mod tests {
         let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
         let sighash = unauthorized.commitment().into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
-        let authorized: Bundle<_, i64, OrchardZSA> = proven
+        let authorized: ActionGroup<_, i64, OrchardZSA> = proven
             .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
             .unwrap();
 

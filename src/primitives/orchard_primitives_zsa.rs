@@ -25,7 +25,7 @@ use crate::{
         },
     },
     sighash_kind::OrchardSighashKind,
-    Bundle,
+    ActionGroup,
 };
 
 impl OrchardPrimitives for OrchardZSA {
@@ -59,7 +59,7 @@ impl OrchardPrimitives for OrchardZSA {
     ///
     /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
-        bundle: &Bundle<A, V, OrchardZSA>,
+        bundle: &ActionGroup<A, V, OrchardZSA>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
         let agh = hash_action_group(bundle);
@@ -76,7 +76,7 @@ impl OrchardPrimitives for OrchardZSA {
     ///
     /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_auth_data<V>(
-        bundle: &Bundle<Authorized, V, OrchardZSA>,
+        bundle: &ActionGroup<Authorized, V, OrchardZSA>,
         sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);

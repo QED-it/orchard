@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::{
-    bundle::{Authorization, Authorized, Bundle},
+    bundle::{Authorization, Authorized, ActionGroup},
     flavor::OrchardZSA,
     primitives::OrchardPrimitives,
     sighash_kind::{OrchardBindingSig, OrchardSighashKind},
@@ -58,7 +58,7 @@ pub(crate) fn hash_bundle_txid_data<
     V: Copy + Into<i64>,
     Pr: OrchardPrimitives,
 >(
-    bundle: &Bundle<A, V, Pr>,
+    bundle: &ActionGroup<A, V, Pr>,
 ) -> Blake2bHash {
     Pr::hash_bundle_txid_data(bundle)
 }
@@ -76,7 +76,7 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 ///
 /// [zip228]: https://zips.z.cash/zip-0228
 pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
-    action_group: &Bundle<A, V, OrchardZSA>,
+    action_group: &ActionGroup<A, V, OrchardZSA>,
 ) -> Blake2bHash {
     let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION);
 
@@ -135,7 +135,7 @@ pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
 ///
 /// [zip228]: https://zips.z.cash/zip-0228
 pub(crate) fn hash_swap_bundle<A: Authorization, V: Copy + Into<i64>>(
-    action_groups: Vec<&Bundle<A, V, OrchardZSA>>,
+    action_groups: Vec<&ActionGroup<A, V, OrchardZSA>>,
     value_balance: V,
 ) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
@@ -154,8 +154,8 @@ pub(crate) fn hash_swap_bundle<A: Authorization, V: Copy + Into<i64>>(
 /// for a given [`OrchardSighashKind`].
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
-pub(crate) fn hash_swap_bundle_auth_data<V: Copy + Into<i64>>(
-    action_groups: Vec<&Bundle<ActionGroupAuthorized, V, OrchardZSA>>, //TODO: can use SwapBundle here instead
+pub(crate) fn hash_swap_bundle_auth_data<V>(
+    action_groups: Vec<&ActionGroup<ActionGroupAuthorized, V, OrchardZSA>>, //TODO: can use SwapBundle here instead
     binding_signature: &OrchardBindingSig,
     sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
 ) -> Blake2bHash {
@@ -197,7 +197,7 @@ pub(crate) fn hash_swap_bundle_auth_data<V: Copy + Into<i64>>(
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_bundle_auth_data<V, Pr: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, V, Pr>,
+    bundle: &ActionGroup<Authorized, V, Pr>,
     sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
 ) -> Blake2bHash {
     Pr::hash_bundle_auth_data(bundle, sighash_info_for_kind)
@@ -232,7 +232,7 @@ mod tests {
         builder::{Builder, BundleType, UnauthorizedBundle},
         bundle::{
             commitments::{get_compact_size, hash_bundle_auth_data, hash_bundle_txid_data},
-            Authorized, Bundle,
+            Authorized, ActionGroup,
         },
         circuit::ProvingKey,
         flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
@@ -310,7 +310,7 @@ mod tests {
 
     fn generate_auth_bundle<FL: OrchardFlavor>(
         bundle_type: BundleType,
-    ) -> Bundle<Authorized, i64, FL> {
+    ) -> ActionGroup<Authorized, i64, FL> {
         let mut rng = StdRng::seed_from_u64(6);
         let pk = ProvingKey::build::<FL>();
         let bundle = generate_bundle(bundle_type)

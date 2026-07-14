@@ -51,14 +51,14 @@ mod test_vectors;
 
 pub use action::Action;
 pub use address::Address;
-pub use bundle::Bundle;
+pub use bundle::ActionGroup;
 pub use constants::MERKLE_DEPTH_ORCHARD as NOTE_COMMITMENT_TREE_DEPTH;
 pub use note::Note;
 pub use tree::Anchor;
 
 /// A proof of the validity of an Orchard [`Bundle`].
 ///
-/// [`Bundle`]: crate::bundle::Bundle
+/// [`Bundle`]: crate::bundle::ActionGroup
 #[derive(Clone)]
 pub struct Proof(Vec<u8>);
 

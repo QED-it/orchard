@@ -12,7 +12,7 @@ use zcash_note_encryption::NoteEncryption;
 
 use crate::{
     address::Address,
-    bundle::{burn_validation::BurnError, Authorization, Authorized, Bundle, Flags},
+    bundle::{burn_validation::BurnError, Authorization, Authorized, ActionGroup, Flags},
     constants::reference_keys::ReferenceKeys,
     flavor::OrchardVanilla,
     keys::{
@@ -574,7 +574,7 @@ impl ActionInfo {
 ///
 /// This is returned by [`Builder::build`].
 #[cfg(feature = "circuit")]
-pub type UnauthorizedBundle<V, P> = Bundle<InProgress<Unproven, Unauthorized>, V, P>;
+pub type UnauthorizedBundle<V, P> = ActionGroup<InProgress<Unproven, Unauthorized>, V, P>;
 
 /// Metadata about a bundle created by [`bundle`] or [`Builder::build`] that is not
 /// necessarily recoverable from the bundle itself.
@@ -596,7 +596,7 @@ impl BundleMetadata {
         }
     }
 
-    /// Returns the metadata for a [`Bundle`] that contains only dummy actions, if any.
+    /// Returns the metadata for a [`ActionGroup`] that contains only dummy actions, if any.
     pub fn empty() -> Self {
         Self::new(0, 0)
     }
@@ -630,7 +630,7 @@ impl BundleMetadata {
 #[cfg(feature = "circuit")]
 pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, BundleMetadata);
 
-/// A builder for constructing an Orchard [`Bundle`] by specifying notes to spend, outputs to
+/// A builder for constructing an Orchard [`ActionGroup`] by specifying notes to spend, outputs to
 /// receive, and assets to burn.
 ///
 /// This builder provides a structured way to incrementally assemble the components of a bundle.
@@ -810,7 +810,7 @@ impl Builder {
     /// Builds a bundle containing the given spent notes and outputs.
     ///
     /// The returned bundle will have no proof or signatures; these can be applied with
-    /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
+    /// [`ActionGroup::create_proof`] and [`ActionGroup::apply_signatures`] respectively.
     #[cfg(feature = "circuit")]
     pub fn build<V: TryFrom<i64>, FL: OrchardFlavor>(
         self,
@@ -832,7 +832,7 @@ impl Builder {
     /// Builds an action group containing the given spent and output notes.
     ///
     /// The returned action group will have no proof or signatures; these can be applied with
-    /// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
+    /// [`ActionGroup::create_proof`] and [`ActionGroup::apply_signatures`] respectively.
     #[cfg(feature = "circuit")]
     pub fn build_action_group<V: TryFrom<i64>>(
         self,
@@ -954,7 +954,7 @@ fn pad_spend(
 /// Builds a bundle containing the given spent notes and outputs.
 ///
 /// The returned bundle will have no proof or signatures; these can be applied with
-/// [`Bundle::create_proof`] and [`Bundle::apply_signatures`] respectively.
+/// [`ActionGroup::create_proof`] and [`ActionGroup::apply_signatures`] respectively.
 #[allow(clippy::type_complexity)]
 #[allow(clippy::too_many_arguments)]
 #[cfg(feature = "circuit")]
@@ -1005,7 +1005,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
 
             Ok(NonEmpty::from_vec(actions).map(|actions| {
                 (
-                    Bundle::from_parts(
+                    ActionGroup::from_parts(
                         actions,
                         flags,
                         result_value_balance,
@@ -1235,7 +1235,7 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 
 /// Marker for a bundle without a proof.
 ///
-/// This struct contains the private data needed to create a [`Proof`] for a [`Bundle`].
+/// This struct contains the private data needed to create a [`Proof`] for a [`ActionGroup`].
 #[cfg(feature = "circuit")]
 #[derive(Clone, Debug)]
 pub struct Unproven {
@@ -1268,13 +1268,13 @@ impl<S: InProgressSignatures> InProgress<Unproven, S> {
 }
 
 #[cfg(feature = "circuit")]
-impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven, S>, V, FL> {
+impl<S: InProgressSignatures, V, FL: OrchardFlavor> ActionGroup<InProgress<Unproven, S>, V, FL> {
     /// Creates the proof for this bundle.
     pub fn create_proof(
         self,
         pk: &ProvingKey,
         mut rng: impl RngCore,
-    ) -> Result<Bundle<InProgress<Proof, S>, V, FL>, BuildError> {
+    ) -> Result<ActionGroup<InProgress<Proof, S>, V, FL>, BuildError> {
         let instances: Vec<_> = self
             .actions()
             .iter()
@@ -1320,8 +1320,8 @@ pub struct SigningMetadata {
     /// If this action is spending a dummy note, this field holds that note's spend
     /// authorizing key.
     ///
-    /// These keys are used automatically in [`Bundle<Unauthorized, _, _>::prepare`] or
-    /// [`Bundle<Unauthorized, _, _>::apply_signatures`] to sign dummy spends.
+    /// These keys are used automatically in [`ActionGroup<Unauthorized, _, _>::prepare`] or
+    /// [`ActionGroup<Unauthorized, _, _>::apply_signatures`] to sign dummy spends.
     dummy_ask: Option<SpendAuthorizingKey>,
     parts: SigningParts,
 }
@@ -1368,7 +1368,7 @@ impl MaybeSigned {
     }
 }
 
-impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, Unauthorized>, V, Pr> {
+impl<P: fmt::Debug, V, Pr: OrchardPrimitives> ActionGroup<InProgress<P, Unauthorized>, V, Pr> {
     /// Loads the sighash into this bundle, preparing it for signing.
     ///
     /// This API ensures that all signatures are created over the same sighash.
@@ -1376,7 +1376,7 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, Unauthorized>
         self,
         mut rng: R,
         sighash: [u8; 32],
-    ) -> Bundle<InProgress<P, PartiallyAuthorized>, V, Pr> {
+    ) -> ActionGroup<InProgress<P, PartiallyAuthorized>, V, Pr> {
         self.map_authorization(
             &mut rng,
             |rng, _, SigningMetadata { dummy_ask, parts }| {
@@ -1406,7 +1406,9 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, Unauthorized>
     }
 }
 
-impl<Proof: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, Pr> {
+impl<Proof: fmt::Debug, V, Pr: OrchardPrimitives>
+    ActionGroup<InProgress<Proof, Unauthorized>, V, Pr>
+{
     /// Loads the action_group_digest into this action group, preparing it for signing.
     ///
     /// This API ensures that all signatures are created over the same action_group_digest.
@@ -1414,7 +1416,7 @@ impl<Proof: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unaut
         self,
         mut rng: R,
         action_group_digest: [u8; 32],
-    ) -> Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, Pr> {
+    ) -> ActionGroup<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, Pr> {
         let reference_ask = SpendAuthorizingKey::from(&ReferenceKeys::sk());
         let reference_ak: SpendValidatingKey = (&reference_ask).into();
         self.map_authorization(
@@ -1450,17 +1452,17 @@ impl<Proof: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unaut
     }
 }
 
-impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, Pr> {
+impl<V, Pr: OrchardPrimitives> ActionGroup<InProgress<Proof, Unauthorized>, V, Pr> {
     /// Applies signatures to this bundle, in order to authorize it.
     ///
-    /// This is a helper method that wraps [`Bundle::prepare`], [`Bundle::sign`], and
-    /// [`Bundle::finalize`].
+    /// This is a helper method that wraps [`ActionGroup::prepare`], [`ActionGroup::sign`], and
+    /// [`ActionGroup::finalize`].
     pub fn apply_signatures<R: RngCore + CryptoRng>(
         self,
         mut rng: R,
         sighash: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
-    ) -> Result<Bundle<Authorized, V, Pr>, BuildError> {
+    ) -> Result<ActionGroup<Authorized, V, Pr>, BuildError> {
         signing_keys
             .iter()
             .fold(self.prepare(&mut rng, sighash), |partial, ask| {
@@ -1476,7 +1478,13 @@ impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, Pr> {
         mut rng: R,
         action_group_digest: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
-    ) -> Result<(Bundle<ActionGroupAuthorized, V, Pr>, SigningKey<Binding>), BuildError> {
+    ) -> Result<
+        (
+            ActionGroup<ActionGroupAuthorized, V, Pr>,
+            SigningKey<Binding>,
+        ),
+        BuildError,
+    > {
         signing_keys
             .iter()
             .fold(
@@ -1488,7 +1496,7 @@ impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, Pr> {
 }
 
 impl<Proof: fmt::Debug, V, Pr: OrchardPrimitives>
-    Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, Pr>
+    ActionGroup<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, Pr>
 {
     /// Signs this action group with the given [`SpendAuthorizingKey`].
     ///
@@ -1512,7 +1520,9 @@ impl<Proof: fmt::Debug, V, Pr: OrchardPrimitives>
     }
 }
 
-impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, PartiallyAuthorized>, V, Pr> {
+impl<P: fmt::Debug, V, Pr: OrchardPrimitives>
+    ActionGroup<InProgress<P, PartiallyAuthorized>, V, Pr>
+{
     /// Signs this bundle with the given [`SpendAuthorizingKey`].
     ///
     /// This will apply signatures for all notes controlled by this spending key.
@@ -1577,11 +1587,11 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, PartiallyAuth
     }
 }
 
-impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, PartiallyAuthorized>, V, Pr> {
+impl<V, Pr: OrchardPrimitives> ActionGroup<InProgress<Proof, PartiallyAuthorized>, V, Pr> {
     /// Finalizes this bundle, enabling it to be included in a transaction.
     ///
     /// Returns an error if any signatures are missing.
-    pub fn finalize(self) -> Result<Bundle<Authorized, V, Pr>, BuildError> {
+    pub fn finalize(self) -> Result<ActionGroup<Authorized, V, Pr>, BuildError> {
         self.try_map_authorization(
             &mut (),
             |_, _, maybe| maybe.finalize(),
@@ -1595,14 +1605,22 @@ impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, PartiallyAuthorized>, V,
     }
 }
 
-impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, Pr> {
+impl<V, Pr: OrchardPrimitives>
+    ActionGroup<InProgress<Proof, ActionGroupPartiallyAuthorized>, V, Pr>
+{
     /// Finalizes this action group.
     ///
     /// Returns an error if any signatures are missing.
     #[allow(clippy::type_complexity)]
     pub fn finalize(
         self,
-    ) -> Result<(Bundle<ActionGroupAuthorized, V, Pr>, SigningKey<Binding>), BuildError> {
+    ) -> Result<
+        (
+            ActionGroup<ActionGroupAuthorized, V, Pr>,
+            SigningKey<Binding>,
+        ),
+        BuildError,
+    > {
         let bsk = self.authorization().sigs.bsk.clone();
         self.try_map_authorization(
             &mut (),
@@ -1661,7 +1679,7 @@ pub mod testing {
 
     use crate::{
         address::testing::arb_address,
-        bundle::{Authorized, Bundle},
+        bundle::{Authorized, ActionGroup},
         circuit::ProvingKey,
         flavor::OrchardFlavor,
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
@@ -1695,7 +1713,7 @@ pub mod testing {
         /// Create a bundle from the set of arbitrary bundle inputs.
         fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>, FL: OrchardFlavor>(
             mut self,
-        ) -> Bundle<Authorized, V, FL> {
+        ) -> ActionGroup<Authorized, V, FL> {
             let fvk = FullViewingKey::from(&self.sk);
             let mut builder = Builder::new(BundleType::DEFAULT_ZSA, self.anchor);
 
@@ -1787,7 +1805,7 @@ pub mod testing {
 
         /// Produce an arbitrary valid Orchard bundle using a random spending key.
         pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
-        ) -> impl Strategy<Value = Bundle<Authorized, V, FL>> {
+        ) -> impl Strategy<Value = ActionGroup<Authorized, V, FL>> {
             arb_spending_key()
                 .prop_flat_map(BuilderArb::<FL>::arb_bundle_inputs)
                 .prop_map(|inputs| inputs.into_bundle::<V, FL>())
@@ -1796,7 +1814,7 @@ pub mod testing {
         /// Produce an arbitrary valid Orchard bundle using a specified spending key.
         pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
             k: SpendingKey,
-        ) -> impl Strategy<Value = Bundle<Authorized, V, FL>> {
+        ) -> impl Strategy<Value = ActionGroup<Authorized, V, FL>> {
             BuilderArb::<FL>::arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V, FL>())
         }
     }
@@ -1809,7 +1827,7 @@ mod tests {
     use super::Builder;
     use crate::{
         builder::BundleType,
-        bundle::{Authorized, Bundle},
+        bundle::{Authorized, ActionGroup},
         circuit::ProvingKey,
         constants::MERKLE_DEPTH_ORCHARD,
         flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
@@ -1841,7 +1859,7 @@ mod tests {
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, -5000);
 
-        let bundle: Bundle<Authorized, i64, FL> = builder
+        let bundle: ActionGroup<Authorized, i64, FL> = builder
             .build(&mut rng)
             .unwrap()
             .unwrap()

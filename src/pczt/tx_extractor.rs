@@ -17,10 +17,10 @@ impl super::Bundle {
     ///
     /// This is used by the Signer role to produce the transaction sighash.
     ///
-    /// [regular `Bundle`]: crate::Bundle
+    /// [regular `Bundle`]: crate::ActionGroup
     pub fn extract_effects<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::Bundle<EffectsOnly, V, OrchardVanilla>>, TxExtractorError> {
+    ) -> Result<Option<crate::ActionGroup<EffectsOnly, V, OrchardVanilla>>, TxExtractorError> {
         self.to_tx_data(|_| Ok(()), |_| Ok(EffectsOnly))
     }
 
@@ -28,10 +28,10 @@ impl super::Bundle {
     ///
     /// This is used by the Transaction Extractor role to produce the final transaction.
     ///
-    /// [regular `Bundle`]: crate::Bundle
+    /// [regular `Bundle`]: crate::ActionGroup
     pub fn extract<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::Bundle<Unbound, V, OrchardVanilla>>, TxExtractorError> {
+    ) -> Result<Option<crate::ActionGroup<Unbound, V, OrchardVanilla>>, TxExtractorError> {
         self.to_tx_data(
             |action| {
                 action
@@ -60,7 +60,7 @@ impl super::Bundle {
         &self,
         action_auth: F,
         bundle_auth: G,
-    ) -> Result<Option<crate::Bundle<A, V, OrchardVanilla>>, E>
+    ) -> Result<Option<crate::ActionGroup<A, V, OrchardVanilla>>, E>
     where
         A: Authorization,
         E: From<TxExtractorError>,
@@ -93,7 +93,7 @@ impl super::Bundle {
 
             let authorization = bundle_auth(self)?;
 
-            Some(crate::Bundle::from_parts(
+            Some(crate::ActionGroup::from_parts(
                 actions,
                 self.flags,
                 value_balance,
@@ -161,7 +161,7 @@ impl Authorization for Unbound {
     }
 }
 
-impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
+impl<V> crate::ActionGroup<Unbound, V, OrchardVanilla> {
     /// Verifies the given sighash with every `spend_auth_sig`, and then binds the bundle.
     ///
     /// Returns `None` if the given sighash does not validate against every `spend_auth_sig`.
@@ -169,7 +169,7 @@ impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
         self,
         sighash: [u8; 32],
         rng: R,
-    ) -> Option<crate::Bundle<Authorized, V, OrchardVanilla>> {
+    ) -> Option<crate::ActionGroup<Authorized, V, OrchardVanilla>> {
         if self
             .actions()
             .iter()
