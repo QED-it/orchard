@@ -162,7 +162,19 @@ pub(crate) fn hash_swap_bundle_auth_data<V: Copy + Into<i64>>(
     let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
 
     for action_group in action_groups {
-        h.update(hash_action_group(action_group).as_bytes());
+        let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION);
+        agh.update(action_group.authorization().proof().unwrap().as_ref());
+
+        let mut sash = hasher(ZCASH_ORCHARD_SPEND_AUTH_SIGS_HASH_PERSONALIZATION);
+        for action in action_group.actions().iter() {
+            let sighash_info = sighash_info_for_kind(action.authorization().sighash_kind());
+            sash.update(&get_compact_size(sighash_info.len()));
+            sash.update(sighash_info.as_slice());
+            sash.update(&<[u8; 64]>::from(action.authorization().sig()));
+        }
+        agh.update(sash.finalize().as_bytes());
+
+        h.update(agh.finalize().as_bytes());
     }
 
     let sighash_info = sighash_info_for_kind(binding_signature.sighash_kind());
