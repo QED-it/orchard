@@ -16,8 +16,11 @@ use crate::{
         DiversifiedTransmissionKey, Diversifier, EphemeralPublicKey, EphemeralSecretKey,
         OutgoingViewingKey, PreparedEphemeralPublicKey, PreparedIncomingViewingKey, SharedSecret,
     },
-    note::{ExtractedNoteCommitment, Note, RandomSeed, Rho},
-    primitives::{orchard_domain::OrchardDomain, orchard_primitives::OrchardPrimitives},
+    note::{ExtractedNoteCommitment, Note, NoteVersion, RandomSeed, Rho},
+    primitives::{
+        orchard_domain::{DomainPolicy, OrchardDomain},
+        orchard_primitives::OrchardPrimitives,
+    },
     value::{NoteValue, ValueCommitment},
 };
 
@@ -80,18 +83,19 @@ pub(super) fn prf_ock_orchard(
 
 /// Parses the note plaintext (excluding the memo) and extracts the note and address if valid.
 /// Domain-specific requirements:
-/// - If the note version is 3, the `plaintext` must contain a valid encoding of a ZSA asset type.
+/// - The plaintext lead byte must be valid for this flavor under the expected note
+///   version (see [`OrchardPrimitives::parse_note_version`]).
+/// - For the ZSA flavor, the `plaintext` must contain a valid encoding of a ZSA asset type.
 pub(super) fn parse_note_plaintext_without_memo<Pr: OrchardPrimitives, F>(
     rho: Rho,
     plaintext: &Pr::CompactNotePlaintextBytes,
+    expected_note_version: NoteVersion,
     get_validated_pk_d: F,
 ) -> Option<(Note, Address)>
 where
     F: FnOnce(&Diversifier) -> Option<DiversifiedTransmissionKey>,
 {
-    if !Pr::is_valid_note_plaintext_lead_byte(plaintext.as_ref()) {
-        return None;
-    }
+    let note_version = Pr::parse_note_version(expected_note_version, plaintext.as_ref())?;
 
     // The unwraps below are guaranteed to succeed
     let diversifier = Diversifier::from_bytes(
@@ -116,7 +120,14 @@ where
     let pk_d = get_validated_pk_d(&diversifier)?;
     let recipient = Address::from_parts(diversifier, pk_d);
     let asset = Pr::extract_asset(plaintext)?;
-    let note = Option::from(Note::from_parts(recipient, value, asset, rho, rseed))?;
+    let note = Option::from(Note::from_parts(
+        recipient,
+        value,
+        asset,
+        rho,
+        rseed,
+        note_version,
+    ))?;
 
     Some((note, recipient))
 }
@@ -137,7 +148,7 @@ pub(super) fn build_base_note_plaintext_bytes<const NOTE_PLAINTEXT_SIZE: usize>(
     np
 }
 
-impl<Pr: OrchardPrimitives> Domain for OrchardDomain<Pr> {
+impl<Pr: OrchardPrimitives, P: DomainPolicy> Domain for OrchardDomain<Pr, P> {
     type EphemeralSecretKey = EphemeralSecretKey;
     type EphemeralPublicKey = EphemeralPublicKey;
     type PreparedEphemeralPublicKey = PreparedEphemeralPublicKey;
@@ -235,9 +246,12 @@ impl<Pr: OrchardPrimitives> Domain for OrchardDomain<Pr> {
         ivk: &Self::IncomingViewingKey,
         plaintext: &Pr::CompactNotePlaintextBytes,
     ) -> Option<(Self::Note, Self::Recipient)> {
-        parse_note_plaintext_without_memo::<Pr, _>(self.rho, plaintext, |diversifier| {
-            Some(DiversifiedTransmissionKey::derive(ivk, diversifier))
-        })
+        parse_note_plaintext_without_memo::<Pr, _>(
+            self.rho,
+            plaintext,
+            self.policy().expected_note_version(),
+            |diversifier| Some(DiversifiedTransmissionKey::derive(ivk, diversifier)),
+        )
     }
 
     fn parse_note_plaintext_without_memo_ovk(
@@ -245,7 +259,12 @@ impl<Pr: OrchardPrimitives> Domain for OrchardDomain<Pr> {
         pk_d: &Self::DiversifiedTransmissionKey,
         plaintext: &Pr::CompactNotePlaintextBytes,
     ) -> Option<(Self::Note, Self::Recipient)> {
-        parse_note_plaintext_without_memo::<Pr, _>(self.rho, plaintext, |_| Some(*pk_d))
+        parse_note_plaintext_without_memo::<Pr, _>(
+            self.rho,
+            plaintext,
+            self.policy().expected_note_version(),
+            |_| Some(*pk_d),
+        )
     }
 
     fn split_plaintext_at_memo(
@@ -269,17 +288,23 @@ impl<Pr: OrchardPrimitives> Domain for OrchardDomain<Pr> {
     }
 }
 
-impl<Pr: OrchardPrimitives> BatchDomain for OrchardDomain<Pr> {
+impl<Pr: OrchardPrimitives, P: DomainPolicy> BatchDomain for OrchardDomain<Pr, P> {
     fn batch_kdf<'a>(
         items: impl Iterator<Item = (Option<Self::SharedSecret>, &'a EphemeralKeyBytes)>,
     ) -> Vec<Option<Self::SymmetricKey>> {
-        let (shared_secrets, ephemeral_keys): (Vec<_>, Vec<_>) = items.unzip();
-
-        SharedSecret::batch_to_affine(shared_secrets)
-            .zip(ephemeral_keys)
-            .map(|(secret, ephemeral_key)| {
-                secret.map(|dhsecret| SharedSecret::kdf_orchard_inner(dhsecret, ephemeral_key))
-            })
-            .collect()
+        batch_kdf(items)
     }
+}
+
+fn batch_kdf<'a>(
+    items: impl Iterator<Item = (Option<SharedSecret>, &'a EphemeralKeyBytes)>,
+) -> Vec<Option<Hash>> {
+    let (shared_secrets, ephemeral_keys): (Vec<_>, Vec<_>) = items.unzip();
+
+    SharedSecret::batch_to_affine(shared_secrets)
+        .zip(ephemeral_keys)
+        .map(|(secret, ephemeral_key)| {
+            secret.map(|dhsecret| SharedSecret::kdf_orchard_inner(dhsecret, ephemeral_key))
+        })
+        .collect()
 }

@@ -336,6 +336,13 @@ impl OrchardCircuit for OrchardZSA {
             return Err(plonk::Error::Synthesis);
         }
 
+        // The OrchardZSA circuit is defined on the post-NU6.2 fixed circuit version only:
+        // it does not implement the post-NU6.3 cross-address restriction (its instance
+        // row 9 carries `enableZSA` instead of `disableCrossAddress`).
+        if circuit.circuit_version.supports_cross_address_restriction() {
+            return Err(plonk::Error::Synthesis);
+        }
+
         // Load the Sinsemilla generator lookup table used by the whole circuit.
         SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
@@ -892,14 +899,17 @@ mod tests {
         },
         flavor::OrchardZSA,
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
-        note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
+        note::{
+            commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, NoteVersion,
+            Nullifier, Rho,
+        },
         primitives::redpallas::VerificationKey,
         tree::MerklePath,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
     fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit<OrchardZSA>, Instance) {
-        let (_, fvk, spent_note) = Note::dummy(&mut rng, None);
+        let (_, fvk, spent_note) = Note::dummy(&mut rng, None, NoteVersion::V2);
 
         let sender_address = spent_note.recipient();
         let nk = *fvk.nk();
@@ -910,7 +920,7 @@ mod tests {
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
 
-        let (_, _, output_note) = Note::dummy(&mut rng, Some(rho));
+        let (_, _, output_note) = Note::dummy(&mut rng, Some(rho), NoteVersion::V2);
         let cmx = output_note.commitment().into();
 
         let value = spent_note.value() - output_note.value();
@@ -933,7 +943,7 @@ mod tests {
                     v_old: Value::known(spent_note.value()),
                     rho_old: Value::known(spent_note.rho()),
                     psi_old: Value::known(psi_old),
-                    rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
+                    rcm_old: Value::known(spent_note.rseed().rcm_v2(&spent_note.rho())),
                     cm_old: Value::known(spent_note.commitment()),
                     alpha: Value::known(alpha),
                     ak: Value::known(ak),
@@ -943,7 +953,7 @@ mod tests {
                     pk_d_new: Value::known(*output_note.recipient().pk_d()),
                     v_new: Value::known(output_note.value()),
                     psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
-                    rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
+                    rcm_new: Value::known(output_note.rseed().rcm_v2(&output_note.rho())),
                     rcv: Value::known(rcv),
 
                     additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
@@ -963,6 +973,7 @@ mod tests {
                 enable_spend: true,
                 enable_output: true,
                 enable_zsa: false,
+                cross_address_disabled: false,
             },
         )
     }
@@ -1008,7 +1019,7 @@ mod tests {
         let enable_spend = read_bool(&mut r);
         let enable_output = read_bool(&mut r);
         let enable_zsa = read_bool(&mut r);
-        let flags = Flags::from_parts(enable_spend, enable_output, enable_zsa);
+        let flags = Flags::from_parts(enable_spend, enable_output, true, enable_zsa);
         let instance = Instance::from_parts(anchor, cv_net, nf_old, rk, cmx, flags)
             .expect("test vectors were generated with non-identity rk");
         let mut proof_bytes = vec![];
@@ -1026,7 +1037,7 @@ mod tests {
             .map(|()| generate_dummy_circuit_instance(&mut rng))
             .unzip();
 
-        let vk = VerifyingKey::build::<OrchardZSA>();
+        let vk = VerifyingKey::build::<OrchardZSA>(OrchardCircuitVersion::FixedPostNu6_2);
 
         // Test that the pinned verification key (representing the circuit) is as expected.
         // Set ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF to regenerate it (and the proof below).
@@ -1082,7 +1093,7 @@ mod tests {
             );
         }
 
-        let pk = ProvingKey::build::<OrchardZSA>();
+        let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::FixedPostNu6_2);
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(&vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
@@ -1090,7 +1101,7 @@ mod tests {
 
     #[test]
     fn serialized_proof_test_case() {
-        let vk = VerifyingKey::build::<OrchardZSA>();
+        let vk = VerifyingKey::build::<OrchardZSA>(OrchardCircuitVersion::FixedPostNu6_2);
 
         if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
             let create_proof = || -> std::io::Result<()> {
@@ -1099,7 +1110,7 @@ mod tests {
                 let (circuit, instance) = generate_dummy_circuit_instance(OsRng);
                 let instances = &[instance.clone()];
 
-                let pk = ProvingKey::build::<OrchardZSA>();
+                let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::FixedPostNu6_2);
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
@@ -1134,13 +1145,7 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = Circuit::<OrchardZSA> {
-            witnesses: Witnesses {
-                circuit_version: OrchardCircuitVersion::FixedPostNu6_2,
-                ..Default::default()
-            },
-            phantom: core::marker::PhantomData,
-        };
+        let circuit = Circuit::<OrchardZSA>::empty(OrchardCircuitVersion::FixedPostNu6_2);
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)
             .view_height(0..(1 << 11))
@@ -1199,6 +1204,7 @@ mod tests {
                 NoteValue::from_raw(40),
                 asset_base,
                 rho,
+                NoteVersion::V2,
                 &mut rng,
             );
             let spent_note = if split_flag {
@@ -1238,7 +1244,14 @@ mod tests {
             let fvk: FullViewingKey = (&sk).into();
             let sender_address = fvk.address_at(0u32, Scope::External);
 
-            Note::new(sender_address, output_value, asset_base, rho, &mut rng)
+            Note::new(
+                sender_address,
+                output_value,
+                asset_base,
+                rho,
+                NoteVersion::V2,
+                &mut rng,
+            )
         };
 
         let cmx = output_note.commitment().into();
@@ -1278,6 +1291,7 @@ mod tests {
                 enable_spend: true,
                 enable_output: true,
                 enable_zsa: true,
+                cross_address_disabled: false,
             },
         )
     }
@@ -1322,6 +1336,7 @@ mod tests {
                 enable_spend: instance.enable_spend,
                 enable_output: instance.enable_output,
                 enable_zsa: instance.enable_zsa,
+                cross_address_disabled: instance.cross_address_disabled,
             };
             check_proof_of_orchard_circuit(&circuit, &instance_wrong_cv_net, false);
 
@@ -1336,6 +1351,7 @@ mod tests {
                 enable_spend: instance.enable_spend,
                 enable_output: instance.enable_output,
                 enable_zsa: instance.enable_zsa,
+                cross_address_disabled: instance.cross_address_disabled,
             };
             check_proof_of_orchard_circuit(&circuit, &instance_wrong_rk, false);
 
@@ -1381,6 +1397,7 @@ mod tests {
                 enable_spend: instance.enable_spend,
                 enable_output: instance.enable_output,
                 enable_zsa: instance.enable_zsa,
+                cross_address_disabled: instance.cross_address_disabled,
             };
             check_proof_of_orchard_circuit(&circuit, &instance_wrong_cmx_pub, false);
 
@@ -1395,6 +1412,7 @@ mod tests {
                 enable_spend: instance.enable_spend,
                 enable_output: instance.enable_output,
                 enable_zsa: instance.enable_zsa,
+                cross_address_disabled: instance.cross_address_disabled,
             };
             check_proof_of_orchard_circuit(&circuit, &instance_wrong_nf_old_pub, false);
 
@@ -1450,6 +1468,7 @@ mod tests {
                     enable_spend: instance.enable_spend,
                     enable_output: instance.enable_output,
                     enable_zsa: false,
+                    cross_address_disabled: false,
                 };
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_enable_zsa, false);
             }
@@ -1465,7 +1484,7 @@ mod tests {
             OrchardCircuitVersion::InsecurePreNu6_2,
             &mut rng,
         );
-        let pk = ProvingKey::build::<OrchardZSA>();
+        let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::FixedPostNu6_2);
         assert!(Proof::create(&pk, &[circuit], &[instance], &mut rng).is_err());
     }
 }

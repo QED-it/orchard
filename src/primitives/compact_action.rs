@@ -10,9 +10,14 @@ use crate::{
     note::{ExtractedNoteCommitment, Nullifier, Rho},
 };
 
-use super::{orchard_domain::OrchardDomain, orchard_primitives::OrchardPrimitives};
+use super::{
+    orchard_domain::{DomainPolicy, OrchardDomain},
+    orchard_primitives::OrchardPrimitives,
+};
 
-impl<A, Pr: OrchardPrimitives> ShieldedOutput<OrchardDomain<Pr>> for Action<A, Pr> {
+impl<A, Pr: OrchardPrimitives, P: DomainPolicy> ShieldedOutput<OrchardDomain<Pr, P>>
+    for Action<A, Pr>
+{
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.encrypted_note().epk_bytes)
     }
@@ -37,7 +42,7 @@ impl<A, Pr: OrchardPrimitives> ShieldedOutput<OrchardDomain<Pr>> for Action<A, P
     }
 }
 
-impl ShieldedOutput<OrchardDomain<OrchardVanilla>> for crate::pczt::Action {
+impl<P: DomainPolicy> ShieldedOutput<OrchardDomain<OrchardVanilla, P>> for crate::pczt::Action {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.output().encrypted_note().epk_bytes)
     }
@@ -82,21 +87,25 @@ impl<Pr: OrchardPrimitives> fmt::Debug for CompactAction<Pr> {
     }
 }
 
-impl<A, Pr: OrchardPrimitives> From<&Action<A, Pr>> for CompactAction<Pr>
-where
-    Action<A, Pr>: ShieldedOutput<OrchardDomain<Pr>>,
-{
+impl<A, Pr: OrchardPrimitives> From<&Action<A, Pr>> for CompactAction<Pr> {
     fn from(action: &Action<A, Pr>) -> Self {
+        // Accesses the fields directly: the `ShieldedOutput` methods are now
+        // implemented for every domain policy, so method calls would be ambiguous.
         CompactAction {
             nullifier: *action.nullifier(),
             cmx: *action.cmx(),
-            ephemeral_key: action.ephemeral_key(),
-            enc_ciphertext: action.enc_ciphertext_compact(),
+            ephemeral_key: EphemeralKeyBytes(action.encrypted_note().epk_bytes),
+            enc_ciphertext: Pr::CompactNoteCiphertextBytes::from_slice(
+                &action.encrypted_note().enc_ciphertext.as_ref()[..Pr::COMPACT_NOTE_SIZE],
+            )
+            .expect("Pr::CompactNoteCiphertextBytes should have size Pr::COMPACT_NOTE_SIZE"),
         }
     }
 }
 
-impl<Pr: OrchardPrimitives> ShieldedOutput<OrchardDomain<Pr>> for CompactAction<Pr> {
+impl<Pr: OrchardPrimitives, P: DomainPolicy> ShieldedOutput<OrchardDomain<Pr, P>>
+    for CompactAction<Pr>
+{
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.ephemeral_key.0)
     }
@@ -160,7 +169,7 @@ pub mod testing {
     use crate::{
         address::Address,
         keys::OutgoingViewingKey,
-        note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, RandomSeed, Rho},
+        note::{AssetBase, ExtractedNoteCommitment, Note, NoteVersion, Nullifier, RandomSeed, Rho},
         primitives::zcash_note_encryption_domain::MEMO_SIZE,
         value::NoteValue,
     };
@@ -188,7 +197,15 @@ pub mod testing {
                 }
             }
         };
-        let note = Note::from_parts(recipient, value, AssetBase::zatoshi(), rho, rseed).unwrap();
+        let note = Note::from_parts(
+            recipient,
+            value,
+            AssetBase::zatoshi(),
+            rho,
+            rseed,
+            NoteVersion::V2,
+        )
+        .unwrap();
         let encryptor = NoteEncryption::<OrchardDomain<Pr>>::new(ovk, note, [0u8; MEMO_SIZE]);
         let cmx = ExtractedNoteCommitment::from(note.commitment());
         let ephemeral_key = OrchardDomain::<Pr>::epk_bytes(encryptor.epk());

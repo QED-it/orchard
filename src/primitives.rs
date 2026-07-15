@@ -18,9 +18,14 @@ pub mod redpallas;
 mod zcash_note_encryption_domain;
 
 pub use {
-    compact_action::CompactAction, orchard_domain::OrchardDomain,
+    compact_action::CompactAction,
+    orchard_domain::{
+        DomainVersion, IronwoodDomain, IronwoodVersion, OrchardDomain, OrchardVersion,
+    },
     orchard_primitives::OrchardPrimitives,
 };
+
+pub(crate) use orchard_domain::BundleDomain;
 
 #[cfg(feature = "test-dependencies")]
 pub use compact_action::testing::fake_compact_action;

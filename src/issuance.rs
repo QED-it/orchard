@@ -912,7 +912,7 @@ mod tests {
             IssueBundle, IssueInfo, Signed,
         },
         keys::{FullViewingKey, Scope, SpendingKey},
-        note::{rho_for_issuance_note, AssetBase, AssetId, Nullifier, Rho},
+        note::{rho_for_issuance_note, AssetBase, AssetId, NoteVersion, Nullifier, Rho},
         value::NoteValue,
         Address, Note,
     };
@@ -1600,6 +1600,7 @@ mod tests {
                 &asset_desc_hash(b"zsa_asset"),
             )),
             rho_for_issuance_note(&params.first_nullifier, 0, 2),
+            NoteVersion::V2,
             &mut rng,
         );
 
@@ -1626,6 +1627,7 @@ mod tests {
             NoteValue::from_raw(55),
             AssetBase::custom(&AssetId::new_v0(&incorrect_ik, &asset_desc_hash(b"Asset"))),
             rho_for_issuance_note(&params.first_nullifier, 0, 0),
+            NoteVersion::V2,
             &mut rng,
         );
 
@@ -1641,7 +1643,7 @@ mod tests {
     #[test]
     fn finalize_flag_serialization() {
         let mut rng = OsRng;
-        let (_, _, note) = Note::dummy(&mut rng, None);
+        let (_, _, note) = Note::dummy(&mut rng, None, NoteVersion::V2);
 
         let asset_desc_hash = asset_desc_hash(b"Asset description");
 
@@ -1875,7 +1877,9 @@ mod tests {
         use shardtree::ShardTree;
 
         // Setup keys
-        let pk = ProvingKey::build::<OrchardZSA>();
+        let pk = ProvingKey::build::<OrchardZSA>(
+            crate::bundle::BundleVersion::zsa_v3().circuit_version(),
+        );
         let sk = SpendingKey::from_bytes([1; 32]).unwrap();
         let fvk = FullViewingKey::from(&sk);
         let recipient = fvk.address_at(0u32, Scope::External);
@@ -1890,6 +1894,7 @@ mod tests {
             NoteValue::from_raw(10),
             asset1,
             Rho::from_nf_old(Nullifier::dummy(&mut rng)),
+            NoteVersion::V2,
             &mut rng,
         );
         // Build the merkle tree with only note1
@@ -1918,7 +1923,14 @@ mod tests {
         };
 
         // Create a transfer bundle
-        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
+        let bundle_version = crate::bundle::BundleVersion::zsa_v3();
+        let mut builder = Builder::new(
+            BundleType::DEFAULT,
+            bundle_version,
+            bundle_version.default_flags(),
+            anchor,
+        )
+        .unwrap();
         builder.add_spend(fvk, note1, merkle_path).unwrap();
         builder
             .add_output(None, recipient, NoteValue::from_raw(5), asset1, [0u8; 512])
@@ -1926,8 +1938,15 @@ mod tests {
         builder
             .add_output(None, recipient, NoteValue::from_raw(5), asset1, [0u8; 512])
             .unwrap();
-        let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
-        let sighash = unauthorized.commitment().into();
+        let unauthorized = builder
+            .build::<i64, OrchardZSA>(&mut rng)
+            .unwrap()
+            .unwrap()
+            .0;
+        let sighash = unauthorized
+            .commitment(crate::bundle::TxVersion::V6)
+            .unwrap()
+            .into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
         let authorized: Bundle<_, i64, OrchardZSA> = proven
             .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])

@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use orchard::{
-    builder::Builder,
+    builder::{Builder, BundleType},
     circuit::ProvingKey,
     flavor::{OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
@@ -21,7 +21,8 @@ use utils::OrchardFlavorBench;
 
 fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let rng = OsRng;
-    let pk = ProvingKey::build::<FL>();
+    let bundle_version = FL::DEFAULT_BUNDLE_VERSION;
+    let pk = ProvingKey::build::<FL>(bundle_version.circuit_version());
 
     let fvk = FullViewingKey::from(&SpendingKey::from_bytes([7; 32]).unwrap());
     let valid_ivk = fvk.to_ivk(Scope::External);
@@ -51,9 +52,12 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
 
     let bundle = {
         let mut builder = Builder::new(
-            FL::DEFAULT_BUNDLE_TYPE,
+            BundleType::DEFAULT,
+            bundle_version,
+            bundle_version.default_flags(),
             Anchor::from_bytes([0; 32]).unwrap(),
-        );
+        )
+        .unwrap();
         // The builder pads to two actions, and shuffles their order. Add two recipients
         // so the first action is always decryptable.
         builder
@@ -83,7 +87,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     };
     let action = bundle.actions().first();
 
-    let domain = OrchardDomain::for_action(action);
+    let domain = OrchardDomain::<FL>::for_action(action);
 
     let compact = {
         let mut group = FL::benchmark_group(c, "note-decryption");
@@ -124,12 +128,12 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
         let ivks = 2;
         let valid_ivks = vec![valid_ivk; ivks];
         let actions: Vec<_> = (0..100)
-            .map(|_| (OrchardDomain::for_action(action), action.clone()))
+            .map(|_| (OrchardDomain::<FL>::for_action(action), action.clone()))
             .collect();
         let compact: Vec<_> = (0..100)
             .map(|_| {
                 (
-                    OrchardDomain::for_action(action),
+                    OrchardDomain::<FL>::for_action(action),
                     CompactAction::from(action),
                 )
             })

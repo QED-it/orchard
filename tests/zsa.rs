@@ -7,7 +7,7 @@ use incrementalmerkletree::{Hashable, Marking, Retention};
 use nonempty::NonEmpty;
 use orchard::{
     builder::{BuildError, Builder, BundleType},
-    bundle::{burn_validation::BurnError, Authorized},
+    bundle::{burn_validation::BurnError, Authorized, BundleVersion, Flags, TxVersion},
     circuit::{ProvingKey, VerifyingKey},
     flavor::OrchardZSA,
     issuance::{
@@ -92,8 +92,12 @@ fn build_and_sign_bundle(
     pk: &ProvingKey,
     sk: &SpendingKey,
 ) -> Bundle<Authorized, i64, OrchardZSA> {
-    let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
-    let sighash = unauthorized.commitment().into();
+    let unauthorized = builder
+        .build::<i64, OrchardZSA>(&mut rng)
+        .unwrap()
+        .unwrap()
+        .0;
+    let sighash = unauthorized.commitment(TxVersion::V6).unwrap().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
     proven
         .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(sk)])
@@ -207,7 +211,13 @@ fn create_zatoshi_note(keys: &Keychain) -> Note {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
-        let mut builder = Builder::new(BundleType::Coinbase, anchor);
+        let mut builder = Builder::new(
+            BundleType::Coinbase,
+            BundleVersion::zsa_v3(),
+            Flags::SPENDS_DISABLED_WITH_ZSA,
+            anchor,
+        )
+        .unwrap();
         assert_eq!(
             builder.add_output(
                 None,
@@ -218,8 +228,12 @@ fn create_zatoshi_note(keys: &Keychain) -> Note {
             ),
             Ok(())
         );
-        let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
-        let sighash = unauthorized.commitment().into();
+        let unauthorized = builder
+            .build::<i64, OrchardZSA>(&mut rng)
+            .unwrap()
+            .unwrap()
+            .0;
+        let sighash = unauthorized.commitment(TxVersion::V6).unwrap().into();
         let proven = unauthorized.create_proof(keys.pk(), &mut rng).unwrap();
         proven.apply_signatures(rng, sighash, &[]).unwrap()
     };
@@ -228,7 +242,7 @@ fn create_zatoshi_note(keys: &Keychain) -> Note {
         .actions()
         .iter()
         .find_map(|action| {
-            let domain = OrchardDomain::for_action(action);
+            let domain = OrchardDomain::<OrchardZSA>::for_action(action);
             try_note_decryption(&domain, &PreparedIncomingViewingKey::new(&ivk), action)
         })
         .unwrap();
@@ -263,7 +277,13 @@ fn build_and_verify_bundle(
 ) -> Result<(), String> {
     let rng = OsRng;
     let shielded_bundle: Bundle<_, i64, OrchardZSA> = {
-        let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
+        let mut builder = Builder::new(
+            BundleType::DEFAULT,
+            BundleVersion::zsa_v3(),
+            BundleVersion::zsa_v3().default_flags(),
+            anchor,
+        )
+        .unwrap();
 
         spends
             .iter()
@@ -291,7 +311,7 @@ fn build_and_verify_bundle(
     };
 
     // Verify the shielded bundle, currently without the proof.
-    verify_bundle(&shielded_bundle, keys.vk, true);
+    verify_bundle(&shielded_bundle, keys.vk, TxVersion::V6, true);
     assert_eq!(shielded_bundle.actions().len(), expected_num_actions);
     assert!(verify_unique_spent_nullifiers(&shielded_bundle));
     Ok(())
@@ -322,8 +342,8 @@ fn verify_reference_note(note: &Note, asset: AssetBase) {
 fn zsa_issue_and_transfer() {
     // --------------------------- Setup -----------------------------------------
 
-    let pk = ProvingKey::build::<OrchardZSA>();
-    let vk = VerifyingKey::build::<OrchardZSA>();
+    let pk = ProvingKey::build::<OrchardZSA>(BundleVersion::zsa_v3().circuit_version());
+    let vk = VerifyingKey::build::<OrchardZSA>(BundleVersion::zsa_v3().circuit_version());
 
     let keys = prepare_keys(&pk, &vk, 5);
     let keys2 = prepare_keys(&pk, &vk, 10);
