@@ -1430,14 +1430,46 @@ mod tests {
         }
     }
 
+    /// Generates a circuit and instance whose output note is addressed to an expanded
+    /// receiver distinct from the spent note's.
     fn generate_circuit_instance<R: CryptoRngCore>(
         is_zatoshi_asset: bool,
         split_flag: bool,
         orchard_circuit_version: OrchardCircuitVersion,
+        rng: R,
+    ) -> (Circuit<OrchardZSA>, Instance) {
+        generate_circuit_instance_inner(
+            is_zatoshi_asset,
+            split_flag,
+            orchard_circuit_version,
+            false,
+            rng,
+        )
+    }
+
+    /// Generates a circuit and instance whose output note is addressed to the spent
+    /// note's expanded receiver, as the cross-address restriction requires.
+    fn generate_self_transfer_circuit_instance<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        orchard_circuit_version: OrchardCircuitVersion,
+        rng: R,
+    ) -> (Circuit<OrchardZSA>, Instance) {
+        generate_circuit_instance_inner(is_zatoshi_asset, false, orchard_circuit_version, true, rng)
+    }
+
+    fn generate_circuit_instance_inner<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        split_flag: bool,
+        orchard_circuit_version: OrchardCircuitVersion,
+        output_matches_spend: bool,
         mut rng: R,
     ) -> (Circuit<OrchardZSA>, Instance) {
         // We cannot create a split note with a zatoshi asset.
         assert!(!(is_zatoshi_asset && split_flag));
+        // `split_flag` and `cross_address_disabled` cannot both be enabled at the
+        // same time. A split note's output is forced to a negative net value, which
+        // is not a meaningful self-transfer.
+        assert!(!(output_matches_spend && split_flag));
 
         // Create asset
         let asset_base = if is_zatoshi_asset {
@@ -1494,12 +1526,21 @@ mod tests {
         let rk = ak.randomize(&alpha);
 
         let output_note = {
-            let sk = SpendingKey::random(&mut rng);
-            let fvk: FullViewingKey = (&sk).into();
-            let sender_address = fvk.address_at(0u32, Scope::External);
+            let output_address = if output_matches_spend {
+                spent_note.recipient()
+            } else {
+                loop {
+                    let sk = SpendingKey::random(&mut rng);
+                    let fvk: FullViewingKey = (&sk).into();
+                    let addr = fvk.address_at(0u32, Scope::External);
+                    if addr != spent_note.recipient() {
+                        break addr;
+                    }
+                }
+            };
 
             Note::new(
-                sender_address,
+                output_address,
                 output_value,
                 asset_base,
                 rho,
@@ -1740,5 +1781,39 @@ mod tests {
         );
         let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
         assert!(Proof::create(&pk, &[circuit], &[instance], &mut rng).is_err());
+    }
+
+    #[test]
+    fn zsa_cross_address_restriction_is_conditional() {
+        // An unrestricted cross-address statement is satisfiable...
+        let (circuit, mut instance) =
+            generate_circuit_instance(false, false, OrchardCircuitVersion::ZSA, OsRng);
+        check_proof_of_orchard_circuit(&circuit, &instance, true);
+
+        // ...but setting `disableCrossAddress` makes it unsatisfiable...
+        instance.cross_address_disabled = true;
+        check_proof_of_orchard_circuit(&circuit, &instance, false);
+
+        // ...while a restricted self-transfer statement is satisfiable.
+        let (circuit, mut instance) =
+            generate_self_transfer_circuit_instance(false, OrchardCircuitVersion::ZSA, OsRng);
+        instance.cross_address_disabled = true;
+        check_proof_of_orchard_circuit(&circuit, &instance, true);
+    }
+
+    #[test]
+    fn zsa_restricted_statement_proves_and_verifies() {
+        let mut rng = OsRng;
+        let (circuit, mut instance) =
+            generate_self_transfer_circuit_instance(false, OrchardCircuitVersion::ZSA, &mut rng);
+        instance.cross_address_disabled = true;
+
+        let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
+        let vk = VerifyingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
+
+        let instances = &[instance.clone()];
+
+        let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
+        assert!(proof.verify(&vk, instances).is_ok());
     }
 }

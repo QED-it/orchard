@@ -1052,6 +1052,7 @@ mod tests {
         assert!(!OrchardCircuitVersion::InsecurePreNu6_2.supports_cross_address_restriction());
         assert!(!OrchardCircuitVersion::FixedPostNu6_2.supports_cross_address_restriction());
         assert!(OrchardCircuitVersion::PostNu6_3.supports_cross_address_restriction());
+        assert!(OrchardCircuitVersion::ZSA.supports_cross_address_restriction());
     }
 
     #[test]
