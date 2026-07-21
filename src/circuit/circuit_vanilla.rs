@@ -30,9 +30,9 @@ use crate::{
         gadget::{add_chip::AddChip, assign_free_advice},
         note_commit::{gadgets::note_commit, NoteCommitChip},
         value_commit_orchard::gadgets::value_commit_orchard,
-        AdditionalZsaWitnesses, Config, OrchardCircuit, OrchardCircuitVersion, Witnesses, ANCHOR,
-        CMX, CV_NET_X, CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X,
-        RK_Y,
+        AdditionalZsaWitnesses, AddressPoints, Config, OrchardCircuit, OrchardCircuitVersion,
+        Witnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT,
+        ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
     },
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
     flavor::OrchardVanilla,
@@ -272,16 +272,6 @@ impl OrchardCircuit for OrchardVanilla {
     }
 }
 
-/// Cells carrying the addresses of an action's spent and newly created notes, returned
-/// from the shared synthesis logic so that circuit versions can impose additional
-/// constraints on them.
-struct AddressPoints {
-    g_d_old: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases>>,
-    pk_d_old: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases>>,
-    g_d_new: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases>>,
-    pk_d_new: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases>>,
-}
-
 impl Witnesses {
     /// Synthesizes the Orchard Action checks common to every circuit version,
     /// parameterized by `self.circuit_version`, returning the cells carrying the old
@@ -292,7 +282,7 @@ impl Witnesses {
         &self,
         config: &Config<PallasLookupRangeCheckConfig>,
         layouter: &mut impl Layouter<pallas::Base>,
-    ) -> Result<AddressPoints, plonk::Error> {
+    ) -> Result<AddressPoints<PallasLookupRangeCheckConfig>, plonk::Error> {
         // Load the Sinsemilla generator lookup table used by the whole circuit.
         SinsemillaChip::load(config.sinsemilla_config_1.clone(), layouter)?;
 
@@ -708,7 +698,7 @@ impl Witnesses {
     fn synthesize_cross_address_checks(
         config: &Config<PallasLookupRangeCheckConfig>,
         layouter: &mut impl Layouter<pallas::Base>,
-        addrs: &AddressPoints,
+        addrs: &AddressPoints<PallasLookupRangeCheckConfig>,
     ) -> Result<(), plonk::Error> {
         let AddressPoints {
             g_d_old,

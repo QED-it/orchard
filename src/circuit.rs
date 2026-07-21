@@ -40,7 +40,10 @@ use crate::{
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
 };
 use halo2_gadgets::{
-    ecc::{chip::EccConfig, CircuitVersion},
+    ecc::{
+        chip::{EccChip, EccConfig},
+        CircuitVersion, NonIdentityPoint,
+    },
     poseidon::Pow5Config as PoseidonConfig,
     sinsemilla::{chip::SinsemillaConfig, merkle::chip::MerkleConfig},
     utilities::lookup_range_check::PallasLookupRangeCheck,
@@ -737,6 +740,16 @@ impl Proof {
 
         batch.add_proof(instances, self.0.clone());
     }
+}
+
+/// Cells carrying the addresses of an action's spent and newly created notes, returned
+/// from the shared synthesis logic so that circuit versions can impose additional
+/// constraints on them.
+struct AddressPoints<Lookup: PallasLookupRangeCheck> {
+    g_d_old: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
+    pk_d_old: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
+    g_d_new: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
+    pk_d_new: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
 }
 
 #[cfg(test)]
