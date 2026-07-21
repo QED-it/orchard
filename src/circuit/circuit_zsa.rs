@@ -1163,12 +1163,12 @@ mod tests {
                     K,
                     &circuits[0],
                 );
-            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5120);
-            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7392);
+            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5472);
+            assert_eq!(usize::from(circuit_cost.proof_size(2)), 8032);
             // The constants in `Proof::expected_proof_size` must track the circuit's actual
             // proof size; this guards them against drift if the circuit ever changes.
-            assert_eq!(Proof::expected_proof_size::<OrchardZSA>(1), 5120);
-            assert_eq!(Proof::expected_proof_size::<OrchardZSA>(2), 7392);
+            assert_eq!(Proof::expected_proof_size::<OrchardZSA>(1), 5472);
+            assert_eq!(Proof::expected_proof_size::<OrchardZSA>(2), 8032);
             assert_eq!(
                 Proof::expected_proof_size::<OrchardZSA>(instances.len()),
                 usize::from(circuit_cost.proof_size(instances.len())),
@@ -1229,7 +1229,7 @@ mod tests {
             let test_case_bytes = include_bytes!("../circuit_data/circuit_proof_test_case_zsa.bin");
             read_test_case(&test_case_bytes[..]).expect("proof must be valid")
         };
-        assert_eq!(proof.0.len(), 5120);
+        assert_eq!(proof.0.len(), 5472);
 
         assert!(proof.verify(&vk, &[instance]).is_ok());
     }

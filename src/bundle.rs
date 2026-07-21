@@ -1643,8 +1643,8 @@ pub(crate) mod tests {
     #[test]
     fn expected_proof_size_matches_known_values_zsa() {
         // The canonical proof sizes for one and two actions, fixed by the action circuit.
-        assert_eq!(Proof::expected_proof_size::<OrchardZSA>(1), 5120);
-        assert_eq!(Proof::expected_proof_size::<OrchardZSA>(2), 7392);
+        assert_eq!(Proof::expected_proof_size::<OrchardZSA>(1), 5472);
+        assert_eq!(Proof::expected_proof_size::<OrchardZSA>(2), 8032);
 
         // The size is affine in the number of actions: each action contributes a fixed amount.
         let per_action = Proof::expected_proof_size::<OrchardZSA>(2)

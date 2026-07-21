@@ -23,8 +23,8 @@ use crate::{
 
 impl OrchardPrimitives for OrchardZSA {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_ZSA;
-    const BASE_PROOF_SIZE: usize = 2848;
-    const PER_ACTION_PROOF_SIZE: usize = 2272;
+    const BASE_PROOF_SIZE: usize = 2912;
+    const PER_ACTION_PROOF_SIZE: usize = 2560;
 
     type NotePlaintextBytes = NoteBytesData<{ Self::NOTE_PLAINTEXT_SIZE }>;
     type NoteCiphertextBytes = NoteBytesData<{ Self::ENC_CIPHERTEXT_SIZE }>;
