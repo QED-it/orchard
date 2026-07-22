@@ -76,10 +76,11 @@ impl OrchardCircuit for OrchardZSA {
         // Constrain v_old = 0 or enable_spends = 1
         // Constrain v_new = 0 or enable_outputs = 1
         // Constrain is_zatoshi_asset to be boolean
-        // Constraint if is_zatoshi_asset = 1 then asset = zatoshi_asset else asset != zatoshi_asset
-        // Constraint if split_flag = 0 then psi_old = psi_nf
-        // Constraint if split_flag = 1, then is_zatoshi_asset = 0
-        // Constraint if enable_zsa = 0, then is_zatoshi_asset = 1
+        // Constrain if is_zatoshi_asset = 1 then asset = zatoshi_asset else asset != zatoshi_asset
+        // Constrain if split_flag = 0 then psi_old = psi_nf
+        // Constrain if split_flag = 1, then is_zatoshi_asset = 0
+        // Constrain if enable_zsa = 0, then is_zatoshi_asset = 1
+        // Constrain if disable_cross_address = 1, then split_flag = 0
         //
         // [circuitstatement]: https://zips.z.cash/zip-0226#circuit-statement
         let q_orchard = meta.selector();
@@ -119,6 +120,7 @@ impl OrchardCircuit for OrchardZSA {
             let psi_nf = meta.query_advice(advices[5], Rotation::next());
 
             let enable_zsa = meta.query_advice(advices[6], Rotation::next());
+            let disable_cross_address = meta.query_advice(advices[7], Rotation::next());
 
             Constraints::with_selector(
                 q_orchard,
@@ -175,11 +177,18 @@ impl OrchardCircuit for OrchardZSA {
                     ),
                     (
                         "(split_flag = 1) => (is_zatoshi_asset = 0)",
-                        split_flag * is_zatoshi_asset.clone(),
+                        split_flag.clone() * is_zatoshi_asset.clone(),
                     ),
                     (
                         "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
                         (one.clone() - enable_zsa) * (one - is_zatoshi_asset),
+                    ),
+                    // `split_flag` and `cross_address_disabled` cannot both be enabled at the
+                    // same time. A split note's output is forced to a negative net value, which
+                    // is not a meaningful self-transfer.
+                    (
+                        "(disable_cross_address = 1) => (split_flag = 0)",
+                        split_flag * disable_cross_address,
                     ),
                 ],
             )
@@ -856,6 +865,14 @@ impl OrchardCircuit for OrchardZSA {
                     1,
                 )?;
 
+                region.assign_advice_from_instance(
+                    || "disable_cross_address",
+                    config.primary,
+                    DISABLE_CROSS_ADDRESS,
+                    config.advices[7],
+                    1,
+                )?;
+
                 config.q_orchard.enable(&mut region, 0)
             },
         )?;
@@ -918,6 +935,7 @@ impl OrchardCircuit for OrchardZSA {
 /// psi_old          <- 0 (constant)
 /// psi_nf           <- 0 (constant)
 /// enable_zsa       <- 1 (constant)
+/// disable_cross_address <- disableCrossAddress
 /// ```
 ///
 /// With this layout, the gate constraints become:
@@ -947,6 +965,8 @@ impl OrchardCircuit for OrchardZSA {
 ///     -> 0 * 1 = 0
 /// (1 - enable_zsa) * (1 - is_zatoshi_asset) = 0
 ///     -> (1 - 1) * (1 - 1) = 0
+/// disable_cross_address * split_flag = 0
+///     -> disableCrossAddress * 0 = 0
 /// ```
 ///
 /// The second line is the actual cross-address check. Any nonzero
@@ -1115,6 +1135,13 @@ fn synthesize_cross_address_checks(
                     config.advices[6],
                     offset,
                     pallas::Base::one(),
+                )?;
+
+                cross_address_disabled.copy_advice(
+                    || "disable_cross_address <- disableCrossAddress",
+                    &mut region,
+                    config.advices[7],
+                    offset,
                 )?;
 
                 offset += 1;
