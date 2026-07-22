@@ -195,6 +195,7 @@ impl OrchardCircuitVersion {
     /// not be asked to attest to — the restriction.
     ///
     /// [`PostNu6_3`]: OrchardCircuitVersion::PostNu6_3
+    /// [`ZSA`]: OrchardCircuitVersion::ZSA
     pub fn supports_cross_address_restriction(self) -> bool {
         match self {
             OrchardCircuitVersion::InsecurePreNu6_2 | OrchardCircuitVersion::FixedPostNu6_2 => {
