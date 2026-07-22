@@ -136,6 +136,7 @@ impl<C: OrchardCircuit> plonk::Circuit<pallas::Base> for Circuit<C> {
 /// [`FixedPostNu6_2`]: OrchardCircuitVersion::FixedPostNu6_2
 /// [`InsecurePreNu6_2`]: OrchardCircuitVersion::InsecurePreNu6_2
 /// [`PostNu6_3`]: OrchardCircuitVersion::PostNu6_3
+/// [`ZSA`]: OrchardCircuitVersion::ZSA
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OrchardCircuitVersion {
     /// The insecure pre-NU6.2 circuit, in which the variable-base scalar-multiplication base
@@ -156,17 +157,18 @@ impl OrchardCircuitVersion {
     /// Whether this circuit version enforces the `disableCrossAddress` public input.
     ///
     /// Statements with `disableCrossAddress = 1` can be proven and verified only with
-    /// keys for a circuit version that constrains the flag. [`PostNu6_3`] constrains it;
-    /// older circuit versions leave it unconstrained, so they cannot enforce — and must
-    /// not be asked to attest to — the restriction.
+    /// keys for a circuit version that constrains the flag. [`PostNu6_3`] and [`ZSA`]
+    /// constrain it; older circuit versions leave it unconstrained, so they cannot
+    /// enforce — and must not be asked to attest to — the restriction.
     ///
     /// [`PostNu6_3`]: OrchardCircuitVersion::PostNu6_3
+    /// [`ZSA`]: OrchardCircuitVersion::ZSA
     pub fn supports_cross_address_restriction(self) -> bool {
         match self {
-            OrchardCircuitVersion::InsecurePreNu6_2
-            | OrchardCircuitVersion::FixedPostNu6_2
-            | OrchardCircuitVersion::ZSA => false,
-            OrchardCircuitVersion::PostNu6_3 => true,
+            OrchardCircuitVersion::InsecurePreNu6_2 | OrchardCircuitVersion::FixedPostNu6_2 => {
+                false
+            }
+            OrchardCircuitVersion::PostNu6_3 | OrchardCircuitVersion::ZSA => true,
         }
     }
 
