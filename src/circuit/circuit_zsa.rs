@@ -73,8 +73,8 @@ impl OrchardCircuit for OrchardZSA {
         // Constrain split_flag to be boolean
         // Constrain v_old * (1 - split_flag) - v_new = magnitude * sign
         // Constrain (v_old = 0 and is_zatoshi_asset = 1) or (calculated root = anchor)
-        // Constrain v_old = 0 or enable_spends = 1
-        // Constrain v_new = 0 or enable_outputs = 1
+        // Constrain v_old = 0 or enable_spend = 1
+        // Constrain v_new = 0 or enable_output = 1
         // Constrain is_zatoshi_asset to be boolean
         // Constrain if is_zatoshi_asset = 1 then asset = zatoshi_asset else asset != zatoshi_asset
         // Constrain if split_flag = 0 then psi_old = psi_nf
@@ -94,8 +94,8 @@ impl OrchardCircuit for OrchardZSA {
             let root = meta.query_advice(advices[4], Rotation::cur());
             let anchor = meta.query_advice(advices[5], Rotation::cur());
 
-            let enable_spends = meta.query_advice(advices[6], Rotation::cur());
-            let enable_outputs = meta.query_advice(advices[7], Rotation::cur());
+            let enable_spend = meta.query_advice(advices[6], Rotation::cur());
+            let enable_output = meta.query_advice(advices[7], Rotation::cur());
 
             let split_flag = meta.query_advice(advices[8], Rotation::cur());
 
@@ -141,12 +141,12 @@ impl OrchardCircuit for OrchardZSA {
                         (v_old.clone() + one.clone() - is_zatoshi_asset.clone()) * (root - anchor),
                     ),
                     (
-                        "v_old = 0 or enable_spends = 1",
-                        v_old * (one.clone() - enable_spends),
+                        "v_old = 0 or enable_spend = 1",
+                        v_old * (one.clone() - enable_spend),
                     ),
                     (
-                        "v_new = 0 or enable_outputs = 1",
-                        v_new * (one.clone() - enable_outputs),
+                        "v_new = 0 or enable_output = 1",
+                        v_new * (one.clone() - enable_output),
                     ),
                     (
                         "bool_check is_zatoshi_asset",
@@ -771,7 +771,7 @@ impl OrchardCircuit for OrchardZSA {
                 )?;
 
                 region.assign_advice_from_instance(
-                    || "enable spends",
+                    || "enable spend",
                     config.primary,
                     ENABLE_SPEND,
                     config.advices[6],
@@ -779,7 +779,7 @@ impl OrchardCircuit for OrchardZSA {
                 )?;
 
                 region.assign_advice_from_instance(
-                    || "enable outputs",
+                    || "enable output",
                     config.primary,
                     ENABLE_OUTPUT,
                     config.advices[7],
