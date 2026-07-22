@@ -48,7 +48,8 @@ use crate::{
         unpack,
         value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
         AdditionalZsaWitnesses, OrchardCircuit, OrchardCircuitVersion, Witnesses, ANCHOR, CMX,
-        CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+        CV_NET_X, CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD,
+        RK_X, RK_Y,
     },
     constants::{
         OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
@@ -62,6 +63,7 @@ use crate::{
 pub struct ConfigZSA {
     primary: Column<InstanceColumn>,
     q_orchard: Selector,
+    q_cross_address: Selector,
     advices: [Column<Advice>; 10],
     add_config: AddConfig,
     ecc_config: EccConfig<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>,
@@ -309,6 +311,50 @@ impl OrchardCircuit for OrchardZSA {
             )
         });
 
+        let q_cross_address = meta.selector();
+        meta.create_gate("Cross-address checks", |meta| {
+            let q_cross_address = meta.query_selector(q_cross_address);
+
+            let disable_cross_address = meta.query_advice(advices[0], Rotation::cur());
+            let split_flag = meta.query_advice(advices[1], Rotation::cur());
+
+            let g_d_old_x = meta.query_advice(advices[2], Rotation::cur());
+            let g_d_old_y = meta.query_advice(advices[3], Rotation::cur());
+            let pk_d_old_x = meta.query_advice(advices[4], Rotation::cur());
+            let pk_d_old_y = meta.query_advice(advices[5], Rotation::cur());
+
+            let g_d_new_x = meta.query_advice(advices[6], Rotation::cur());
+            let g_d_new_y = meta.query_advice(advices[7], Rotation::cur());
+            let pk_d_new_x = meta.query_advice(advices[8], Rotation::cur());
+            let pk_d_new_y = meta.query_advice(advices[9], Rotation::cur());
+
+            Constraints::with_selector(
+                q_cross_address,
+                [
+                    (
+                        "(disable_cross_address = 1) => (split_flag = 0)",
+                        disable_cross_address.clone() * split_flag,
+                    ),
+                    (
+                        "(disable_cross_address = 1) => (g_d_old_x = g_d_new_x)",
+                        disable_cross_address.clone() * (g_d_old_x - g_d_new_x),
+                    ),
+                    (
+                        "(disable_cross_address = 1) => (g_d_old_y = g_d_new_y)",
+                        disable_cross_address.clone() * (g_d_old_y - g_d_new_y),
+                    ),
+                    (
+                        "(disable_cross_address = 1) => (pk_d_old_x = pk_d_new_x)",
+                        disable_cross_address.clone() * (pk_d_old_x - pk_d_new_x),
+                    ),
+                    (
+                        "(disable_cross_address = 1) => (pk_d_old_y = pk_d_new_y)",
+                        disable_cross_address.clone() * (pk_d_old_y - pk_d_new_y),
+                    ),
+                ],
+            )
+        });
+
         // Addition of two field elements.
         let add_config = AddChip::configure(meta, advices[7], advices[8], advices[6]);
 
@@ -436,6 +482,7 @@ impl OrchardCircuit for OrchardZSA {
         ConfigZSA {
             primary,
             q_orchard,
+            q_cross_address,
             advices,
             add_config,
             ecc_config,
@@ -787,33 +834,33 @@ impl OrchardCircuit for OrchardZSA {
             derived_cm_old.constrain_equal(layouter.namespace(|| "cm_old equality"), &cm_old)?;
         }
 
+        // Witness g_d_new
+        let g_d_new = {
+            let g_d_new = circuit.g_d_new.map(|g_d_new| g_d_new.to_affine());
+            NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "witness g_d_new_star"),
+                g_d_new,
+            )?
+        };
+
+        // Witness pk_d_new
+        let pk_d_new = {
+            let pk_d_new = circuit
+                .pk_d_new
+                .map(|pk_d_new| pk_d_new.inner().to_affine());
+            NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "witness pk_d_new"),
+                pk_d_new,
+            )?
+        };
+
         // New note commitment integrity.
         // See [ZIP-226: Transfer and Burn of Zcash Shielded Assets][notecommit] for more details.
         //
         // [notecommit]: https://zips.z.cash/zip-0226#note-structure-commitment.
         {
-            // Witness g_d_new
-            let g_d_new = {
-                let g_d_new = circuit.g_d_new.map(|g_d_new| g_d_new.to_affine());
-                NonIdentityPoint::new(
-                    ecc_chip.clone(),
-                    layouter.namespace(|| "witness g_d_new_star"),
-                    g_d_new,
-                )?
-            };
-
-            // Witness pk_d_new
-            let pk_d_new = {
-                let pk_d_new = circuit
-                    .pk_d_new
-                    .map(|pk_d_new| pk_d_new.inner().to_affine());
-                NonIdentityPoint::new(
-                    ecc_chip.clone(),
-                    layouter.namespace(|| "witness pk_d_new"),
-                    pk_d_new,
-                )?
-            };
-
             // ρ^new = nf^old
             let rho_new = nf_old.inner().clone();
 
@@ -981,6 +1028,72 @@ impl OrchardCircuit for OrchardZSA {
                 )?;
 
                 config.q_orchard.enable(&mut region, 0)
+            },
+        )?;
+
+        // Constrain the cross-address restriction checks.
+        layouter.assign_region(
+            || "Cross-address restriction checks",
+            |mut region| {
+                region.assign_advice_from_instance(
+                    || "disable_cross_address",
+                    config.primary,
+                    DISABLE_CROSS_ADDRESS,
+                    config.advices[0],
+                    0,
+                )?;
+                split_flag.copy_advice(|| "split_flag", &mut region, config.advices[1], 0)?;
+
+                g_d_old.inner().x().copy_advice(
+                    || "g_d_old_x",
+                    &mut region,
+                    config.advices[2],
+                    0,
+                )?;
+                g_d_old.inner().y().copy_advice(
+                    || "g_d_old_y",
+                    &mut region,
+                    config.advices[3],
+                    0,
+                )?;
+                pk_d_old.inner().x().copy_advice(
+                    || "pk_d_old_x",
+                    &mut region,
+                    config.advices[4],
+                    0,
+                )?;
+                pk_d_old.inner().y().copy_advice(
+                    || "pk_d_old_y",
+                    &mut region,
+                    config.advices[5],
+                    0,
+                )?;
+
+                g_d_new.inner().x().copy_advice(
+                    || "g_d_new_x",
+                    &mut region,
+                    config.advices[6],
+                    0,
+                )?;
+                g_d_new.inner().y().copy_advice(
+                    || "g_d_new_y",
+                    &mut region,
+                    config.advices[7],
+                    0,
+                )?;
+                pk_d_new.inner().x().copy_advice(
+                    || "pk_d_new_x",
+                    &mut region,
+                    config.advices[8],
+                    0,
+                )?;
+                pk_d_new.inner().y().copy_advice(
+                    || "pk_d_new_y",
+                    &mut region,
+                    config.advices[9],
+                    0,
+                )?;
+                config.q_cross_address.enable(&mut region, 0)
             },
         )?;
 
