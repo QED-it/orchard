@@ -39,8 +39,9 @@ use crate::{
         note_commit::{gadgets::note_commit, NoteCommitChip, ZsaNoteCommitParams},
         unpack,
         value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
-        AdditionalZsaWitnesses, Config, OrchardCircuit, OrchardCircuitVersion, Witnesses, ANCHOR,
-        CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+        AdditionalZsaWitnesses, AddressPoints, Config, OrchardCircuit, OrchardCircuitVersion,
+        Witnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT,
+        ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
     },
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
     flavor::OrchardZSA,
@@ -75,10 +76,13 @@ impl OrchardCircuit for OrchardZSA {
         // Constrain v_old = 0 or enable_spends = 1
         // Constrain v_new = 0 or enable_outputs = 1
         // Constrain is_zatoshi_asset to be boolean
-        // Constraint if is_zatoshi_asset = 1 then asset = zatoshi_asset else asset != zatoshi_asset
-        // Constraint if split_flag = 0 then psi_old = psi_nf
-        // Constraint if split_flag = 1, then is_zatoshi_asset = 0
-        // Constraint if enable_zsa = 0, then is_zatoshi_asset = 1
+        // Constrain if is_zatoshi_asset = 1 then asset = zatoshi_asset else asset != zatoshi_asset
+        // Constrain if split_flag = 0 then psi_old = psi_nf
+        // Constrain if split_flag = 1, then is_zatoshi_asset = 0
+        // Constrain if enable_zsa = 0, then is_zatoshi_asset = 1
+        // Cross-address constraints:
+        // Constrain if disable_cross_address = 1, then split_flag = 0
+        // Constrain if disable_cross_address = 1, then coord_old = coord_new
         //
         // [circuitstatement]: https://zips.z.cash/zip-0226#circuit-statement
         let q_orchard = meta.selector();
@@ -118,6 +122,9 @@ impl OrchardCircuit for OrchardZSA {
             let psi_nf = meta.query_advice(advices[5], Rotation::next());
 
             let enable_zsa = meta.query_advice(advices[6], Rotation::next());
+            let disable_cross_address = meta.query_advice(advices[7], Rotation::next());
+            let coord_old = meta.query_advice(advices[8], Rotation::next());
+            let coord_new = meta.query_advice(advices[9], Rotation::next());
 
             Constraints::with_selector(
                 q_orchard,
@@ -174,11 +181,20 @@ impl OrchardCircuit for OrchardZSA {
                     ),
                     (
                         "(split_flag = 1) => (is_zatoshi_asset = 0)",
-                        split_flag * is_zatoshi_asset.clone(),
+                        split_flag.clone() * is_zatoshi_asset.clone(),
                     ),
                     (
                         "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
                         (one.clone() - enable_zsa) * (one - is_zatoshi_asset),
+                    ),
+                    // Cross-address constraints
+                    (
+                        "(disable_cross_address = 1) => (split_flag = 0)",
+                        disable_cross_address.clone() * split_flag,
+                    ),
+                    (
+                        "(disable_cross_address = 1) => (coord_old = coord_new)",
+                        disable_cross_address.clone() * (coord_old - coord_new),
                     ),
                 ],
             )
@@ -662,33 +678,33 @@ impl OrchardCircuit for OrchardZSA {
             derived_cm_old.constrain_equal(layouter.namespace(|| "cm_old equality"), &cm_old)?;
         }
 
+        // Witness g_d_new
+        let g_d_new = {
+            let g_d_new = circuit.g_d_new.map(|g_d_new| g_d_new.to_affine());
+            NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "witness g_d_new_star"),
+                g_d_new,
+            )?
+        };
+
+        // Witness pk_d_new
+        let pk_d_new = {
+            let pk_d_new = circuit
+                .pk_d_new
+                .map(|pk_d_new| pk_d_new.inner().to_affine());
+            NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "witness pk_d_new"),
+                pk_d_new,
+            )?
+        };
+
         // New note commitment integrity.
         // See [ZIP-226: Transfer and Burn of Zcash Shielded Assets][notecommit] for more details.
         //
         // [notecommit]: https://zips.z.cash/zip-0226#note-structure-commitment.
         {
-            // Witness g_d_new
-            let g_d_new = {
-                let g_d_new = circuit.g_d_new.map(|g_d_new| g_d_new.to_affine());
-                NonIdentityPoint::new(
-                    ecc_chip.clone(),
-                    layouter.namespace(|| "witness g_d_new_star"),
-                    g_d_new,
-                )?
-            };
-
-            // Witness pk_d_new
-            let pk_d_new = {
-                let pk_d_new = circuit
-                    .pk_d_new
-                    .map(|pk_d_new| pk_d_new.inner().to_affine());
-                NonIdentityPoint::new(
-                    ecc_chip.clone(),
-                    layouter.namespace(|| "witness pk_d_new"),
-                    pk_d_new,
-                )?
-            };
-
             // ρ^new = nf^old
             let rho_new = nf_old.inner().clone();
 
@@ -855,9 +871,39 @@ impl OrchardCircuit for OrchardZSA {
                     1,
                 )?;
 
+                // Value for cross_address restriction
+                region.assign_advice_from_instance(
+                    || "disable_cross_address",
+                    config.primary,
+                    DISABLE_CROSS_ADDRESS,
+                    config.advices[7],
+                    1,
+                )?;
+                region.assign_advice_from_constant(
+                    || "zero (neutralize coord_old/new check)",
+                    config.advices[8],
+                    1,
+                    pallas::Base::zero(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "zero (neutralize coord_old/new check)",
+                    config.advices[9],
+                    1,
+                    pallas::Base::zero(),
+                )?;
+
                 config.q_orchard.enable(&mut region, 0)
             },
         )?;
+
+        let addrs = AddressPoints {
+            g_d_old,
+            pk_d_old,
+            g_d_new,
+            pk_d_new,
+        };
+
+        synthesize_cross_address_checks(&config, &mut layouter, &addrs)?;
 
         Ok(())
     }
@@ -873,6 +919,267 @@ impl OrchardCircuit for OrchardZSA {
             split_flag,
         })
     }
+}
+
+/// Enforces the post-NU 6.3 cross-address restriction for one action: when
+/// `disableCrossAddress` is nonzero, the spent note and output note must be
+/// addressed to the same expanded receiver, meaning equal `(g_d, pk_d)`.
+///
+/// This reuses the existing "Orchard circuit checks" gate instead of adding a
+/// new gate. The gate already has two product constraints,
+/// - `(v_old + 1 - is_zatoshi_asset) * (root - anchor) = 0`, with exactly the shape needed for
+///   `disableCrossAddress * (old_coord - new_coord) = 0` when `is_zatoshi_asset = 1`, and
+/// - `disableCrossAddress * (old_coord - new_coord) = 0`.
+///
+/// The post-NU 6.3 circuit enables that gate on 4 extra rows, two per point of `(g_d, pk_d)`, with:
+///
+/// ```text
+/// First row:
+/// v_old            <- disableCrossAddress
+/// v_new            <- 0 (constant)
+/// magnitude        <- disableCrossAddress
+/// sign             <- 1 (constant)
+/// root             <- old_coord_x
+/// anchor           <- new_coord_x
+/// enable_spend     <- 1 (constant)
+/// enable_output    <- 1 (constant)
+/// split_flag       <- 0 (constant)
+/// is_zatoshi_asset <- 1 (constant)
+///
+/// Second row
+/// asset_x          <- zatoshi_asset.x()
+/// asset_y          <- zatoshi_asset.y()
+/// diff_asset_x_inv <- 0 (constant)
+/// diff_asset_y_inv <- 0 (constant)
+/// psi_old          <- 0 (constant)
+/// psi_nf           <- 0 (constant)
+/// enable_zsa       <- 1 (constant)
+/// disable_cross_address <- disableCrossAddress
+/// old_coord        <- old_coord_y
+/// new_coord        <- new_coord_y
+/// ```
+///
+/// With this layout, the gate constraints become:
+///
+/// ```text
+/// split_flag * (1 - split_flag) = 0
+///     ->  0 * (1-0) = 0
+/// v_old * (1 - split_flag) - v_new = magnitude * sign
+///     -> disableCrossAddress * (1-0) - 0 = disableCrossAddress * 1
+/// (v_old + 1 - is_zatoshi_asset) * (root - anchor) = 0
+///     ->  (disableCrossAddress + 1 - 1) * (old_coord_x - new_coord_x) = 0
+/// v_old * (1 - enable_spend) = 0
+///     ->  disableCrossAddress * (1 - 1) = 0
+/// v_new * (1 - enable_output) = 0
+///     ->  0 * (1 - 1) = 0
+/// is_zatoshi_asset * (1 - is_zatoshi_asset) = 0
+///     -> 1 * (1-1) = 0
+/// is_zatoshi_asset * diff_asset_x = 0
+///     -> 1 * (zatoshi_asset.x() - zatoshi_asset.x()) = 0
+/// is_zatoshi_asset * diff_asset_y = 0
+///     -> 1 * (zatoshi_asset_y() - zatoshi_asset.y()) = 0
+/// (1 - is_zatoshi_asset) * (diff_asset_x * diff_asset_x_inv - 1) * (diff_asset_y * diff_asset_y_inv - 1) = 0
+///     -> (1 - 1) * (diff_asset_x * 0 - 1) * (diff_asset_y * 0 - 1) = 0
+/// (1 - split_flag)*(psi_old - psi_nf) = 0
+///     -> (1 - 0) * (0 - 0) = 0
+/// split_flag * is_zatoshi_asset = 0
+///     -> 0 * 1 = 0
+/// (1 - enable_zsa) * (1 - is_zatoshi_asset) = 0
+///     -> (1 - 1) * (1 - 1) = 0
+/// disable_cross_address * split_flag = 0
+///     -> disableCrossAddress * 0 = 0
+/// disableCrossAddress * (old_coord_y - new_coord_y) = 0
+/// ```
+///
+/// The second line and the last line are the actual cross-address check. Any nonzero
+/// `disableCrossAddress` value forces each old coordinate to equal the
+/// corresponding new coordinate. The public API encodes `disableCrossAddress`
+/// as 0 or 1, but this algebra does not rely on a boolean constraint.
+fn synthesize_cross_address_checks(
+    config: &Config<PallasLookupRangeCheck4_5BConfig>,
+    layouter: &mut impl Layouter<pallas::Base>,
+    addrs: &AddressPoints<PallasLookupRangeCheck4_5BConfig>,
+) -> Result<(), plonk::Error> {
+    let AddressPoints {
+        g_d_old,
+        pk_d_old,
+        g_d_new,
+        pk_d_new,
+    } = addrs;
+
+    layouter.assign_region(
+        || "ZSA cross-address checks",
+        |mut region| {
+            let coordinate_checks = [("g_d", g_d_old, g_d_new), ("pk_d", pk_d_old, pk_d_new)];
+
+            let mut offset = 0;
+
+            for (label, old_point, new_point) in coordinate_checks.into_iter() {
+                config.q_orchard.enable(&mut region, offset)?;
+
+                // Copy disableCrossAddress from the public input at
+                // primary[DISABLE_CROSS_ADDRESS] into advices[0] for this
+                // coordinate-check row.
+                let cross_address_disabled = region.assign_advice_from_instance(
+                    || "v_old <- disableCrossAddress",
+                    config.primary,
+                    DISABLE_CROSS_ADDRESS,
+                    config.advices[0],
+                    offset,
+                )?;
+
+                // Fill the v_new, magnitude, sign and split_flag cells so the reused
+                // value-balance constraint reads:
+                // disableCrossAddress * (1-0) - 0 = disableCrossAddress * 1.
+                region.assign_advice_from_constant(
+                    || "v_new <- zero",
+                    config.advices[1],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+                cross_address_disabled.copy_advice(
+                    || "magnitude <- disableCrossAddress",
+                    &mut region,
+                    config.advices[2],
+                    offset,
+                )?;
+                region.assign_advice_from_constant(
+                    || "sign <- one",
+                    config.advices[3],
+                    offset,
+                    pallas::Base::one(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "split_flag <- zero",
+                    config.advices[8],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+
+                // Copy the old coordinate into the gate's root cell and the
+                // new coordinate into its anchor cell for the equality check.
+                old_point.inner().x().copy_advice(
+                    || format!("root <- {label} x"),
+                    &mut region,
+                    config.advices[4],
+                    offset,
+                )?;
+                new_point.inner().x().copy_advice(
+                    || format!("anchor <- {label} x"),
+                    &mut region,
+                    config.advices[5],
+                    offset,
+                )?;
+
+                // Set both enable flags to one so the unrelated enable checks
+                // in q_orchard are neutralized on these rows.
+                region.assign_advice_from_constant(
+                    || "one (neutralize enable_spend check)",
+                    config.advices[6],
+                    offset,
+                    pallas::Base::one(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "one (neutralize enable_output check)",
+                    config.advices[7],
+                    offset,
+                    pallas::Base::one(),
+                )?;
+
+                // Set `is_zatoshi_asset` to 1.
+                region.assign_advice_from_constant(
+                    || "is_zatoshi_asset <- 1",
+                    config.advices[9],
+                    offset,
+                    pallas::Base::one(),
+                )?;
+
+                // Second row
+                offset += 1;
+
+                // Set `(asset_x, asset_y) = AssetBase::zatoshi()`.
+                let zatoshi_asset = AssetBase::zatoshi()
+                    .cv_base()
+                    .to_affine()
+                    .coordinates()
+                    .unwrap();
+                region.assign_advice_from_constant(
+                    || "asset_x <- zatoshi_asset.x()",
+                    config.advices[0],
+                    offset,
+                    *zatoshi_asset.x(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "asset_y <- zatoshi_asset.y()",
+                    config.advices[1],
+                    offset,
+                    *zatoshi_asset.y(),
+                )?;
+
+                // Set `diff_asset_x_inv` and `diff_asset_y_inv` to 0.
+                region.assign_advice_from_constant(
+                    || "diff_asset_x_inv <- 0",
+                    config.advices[2],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "diff_asset_y_inv <- 0",
+                    config.advices[3],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+
+                // Set `psi_old` and `psi_nf` to 0 to satisfy the following constraint (split_flag=0):
+                // (1 - split_flag)*(psi_old - psi_nf) = 0
+                region.assign_advice_from_constant(
+                    || "psi_old <- 0",
+                    config.advices[4],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "psi_nf <- 0",
+                    config.advices[5],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+
+                // Set `enable_zsa` to 1 to satisfy the following constraint:
+                // (1 - enable_zsa) * (1 - is_zatoshi_asset) = 0
+                region.assign_advice_from_constant(
+                    || "enable_zsa <- 1",
+                    config.advices[6],
+                    offset,
+                    pallas::Base::one(),
+                )?;
+
+                cross_address_disabled.copy_advice(
+                    || "disable_cross_address <- disableCrossAddress",
+                    &mut region,
+                    config.advices[7],
+                    offset,
+                )?;
+
+                old_point.inner().y().copy_advice(
+                    || format!("root <- {label} y"),
+                    &mut region,
+                    config.advices[8],
+                    offset,
+                )?;
+                new_point.inner().y().copy_advice(
+                    || format!("anchor <- {label} y"),
+                    &mut region,
+                    config.advices[9],
+                    offset,
+                )?;
+
+                offset += 1;
+            }
+
+            Ok(())
+        },
+    )
 }
 
 #[cfg(test)]
