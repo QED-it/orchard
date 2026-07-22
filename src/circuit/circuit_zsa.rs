@@ -10,45 +10,170 @@ use pasta_curves::{arithmetic::CurveAffine, pallas};
 
 use halo2_gadgets::{
     ecc::{
-        chip::EccChip, CircuitVersion, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar,
+        chip::{EccChip, EccConfig},
+        CircuitVersion, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar,
     },
-    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
+    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
     sinsemilla::{
-        chip::SinsemillaChip,
-        merkle::{chip::MerkleChip, MerklePath},
+        chip::{SinsemillaChip, SinsemillaConfig},
+        merkle::{
+            chip::{MerkleChip, MerkleConfig},
+            MerklePath,
+        },
     },
     utilities::{
         bool_check,
+        cond_swap::CondSwapChip,
         lookup_range_check::{LookupRangeCheck4_5BConfig, PallasLookupRangeCheck4_5BConfig},
     },
 };
 
 use halo2_proofs::{
     circuit::{Layouter, Value},
-    plonk::{self, Constraints, Expression},
+    plonk::{self, Advice, Column, Constraints, Expression, Instance as InstanceColumn, Selector},
     poly::Rotation,
 };
 
 use crate::{
     circuit::{
-        commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
+        commit_ivk::{gadgets::commit_ivk, CommitIvkChip, CommitIvkConfig},
         derive_nullifier::{gadgets::derive_nullifier, ZsaNullifierParams},
         gadget::{
-            add_chip::AddChip, assign_free_advice, assign_is_zatoshi_asset, assign_split_flag,
+            add_chip::{AddChip, AddConfig},
+            assign_free_advice, assign_is_zatoshi_asset, assign_split_flag,
         },
-        note_commit::{gadgets::note_commit, NoteCommitChip, ZsaNoteCommitParams},
+        note_commit::{
+            gadgets::note_commit, NoteCommitChip, NoteCommitConfig, ZsaNoteCommitParams,
+        },
         unpack,
         value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
-        AdditionalZsaWitnesses, Config, OrchardCircuit, OrchardCircuitVersion, Witnesses, ANCHOR,
-        CMX, CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+        AdditionalZsaWitnesses, OrchardCircuit, OrchardCircuitVersion, Witnesses, ANCHOR, CMX,
+        CV_NET_X, CV_NET_Y, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
     },
-    constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
+    constants::{
+        OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
+    },
     flavor::OrchardZSA,
     note::AssetBase,
 };
 
+/// Configuration needed to use the Orchard Action circuit.
+#[derive(Clone, Debug)]
+pub struct ConfigZSA {
+    primary: Column<InstanceColumn>,
+    q_orchard: Selector,
+    advices: [Column<Advice>; 10],
+    add_config: AddConfig,
+    ecc_config: EccConfig<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>,
+    poseidon_config: PoseidonConfig<pallas::Base, 3, 2>,
+    merkle_config_1: MerkleConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck4_5BConfig,
+    >,
+    merkle_config_2: MerkleConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck4_5BConfig,
+    >,
+    sinsemilla_config_1: SinsemillaConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck4_5BConfig,
+    >,
+    sinsemilla_config_2: SinsemillaConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck4_5BConfig,
+    >,
+    commit_ivk_config: CommitIvkConfig,
+    old_note_commit_config: NoteCommitConfig<PallasLookupRangeCheck4_5BConfig>,
+    new_note_commit_config: NoteCommitConfig<PallasLookupRangeCheck4_5BConfig>,
+}
+
+impl ConfigZSA {
+    pub(super) fn add_chip(&self) -> AddChip {
+        AddChip::construct(self.add_config.clone())
+    }
+
+    pub(super) fn commit_ivk_chip(&self) -> CommitIvkChip {
+        CommitIvkChip::construct(self.commit_ivk_config.clone())
+    }
+
+    pub(super) fn ecc_chip(
+        &self,
+        circuit_version: CircuitVersion,
+    ) -> EccChip<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig> {
+        EccChip::construct(self.ecc_config.clone(), circuit_version)
+    }
+
+    pub(super) fn sinsemilla_chip_1(
+        &self,
+    ) -> SinsemillaChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck4_5BConfig,
+    > {
+        SinsemillaChip::construct(self.sinsemilla_config_1.clone())
+    }
+
+    pub(super) fn sinsemilla_chip_2(
+        &self,
+    ) -> SinsemillaChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck4_5BConfig,
+    > {
+        SinsemillaChip::construct(self.sinsemilla_config_2.clone())
+    }
+
+    pub(super) fn merkle_chip_1(
+        &self,
+    ) -> MerkleChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck4_5BConfig,
+    > {
+        MerkleChip::construct(self.merkle_config_1.clone())
+    }
+
+    pub(super) fn merkle_chip_2(
+        &self,
+    ) -> MerkleChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheck4_5BConfig,
+    > {
+        MerkleChip::construct(self.merkle_config_2.clone())
+    }
+
+    pub(super) fn poseidon_chip(&self) -> PoseidonChip<pallas::Base, 3, 2> {
+        PoseidonChip::construct(self.poseidon_config.clone())
+    }
+
+    pub(super) fn note_commit_chip_new(&self) -> NoteCommitChip<PallasLookupRangeCheck4_5BConfig> {
+        NoteCommitChip::construct(self.new_note_commit_config.clone())
+    }
+
+    pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip<PallasLookupRangeCheck4_5BConfig> {
+        NoteCommitChip::construct(self.old_note_commit_config.clone())
+    }
+
+    pub(super) fn cond_swap_chip(&self) -> CondSwapChip<pallas::Base> {
+        CondSwapChip::construct(self.merkle_config_1.cond_swap_config().clone())
+    }
+}
+
 impl OrchardCircuit for OrchardZSA {
-    type Config = Config<PallasLookupRangeCheck4_5BConfig>;
+    type Config = ConfigZSA;
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
         // Advice columns used in the Orchard circuit.
@@ -308,7 +433,7 @@ impl OrchardCircuit for OrchardZSA {
         let new_note_commit_config =
             NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone(), true);
 
-        Config {
+        ConfigZSA {
             primary,
             q_orchard,
             advices,

@@ -8,9 +8,7 @@ use alloc::vec::Vec;
 use group::{Curve, GroupEncoding};
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
-    plonk::{
-        self, Advice, BatchVerifier, Column, Instance as InstanceColumn, Selector, SingleVerifier,
-    },
+    plonk::{self, BatchVerifier, SingleVerifier},
     transcript::{Blake2bRead, Blake2bWrite},
 };
 use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
@@ -20,12 +18,7 @@ use std::marker::PhantomData;
 use crate::{
     builder::SpendInfo,
     bundle::Flags,
-    circuit::{
-        commit_ivk::CommitIvkConfig, gadget::add_chip::AddConfig, note_commit::NoteCommitConfig,
-    },
-    constants::{
-        OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, MERKLE_DEPTH_ORCHARD,
-    },
+    constants::MERKLE_DEPTH_ORCHARD,
     keys::{
         CommitIvkRandomness, DiversifiedTransmissionKey, NullifierDerivingKey, SpendValidatingKey,
     },
@@ -39,12 +32,7 @@ use crate::{
     tree::{Anchor, MerkleHashOrchard},
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
 };
-use halo2_gadgets::{
-    ecc::{chip::EccConfig, CircuitVersion},
-    poseidon::Pow5Config as PoseidonConfig,
-    sinsemilla::{chip::SinsemillaConfig, merkle::chip::MerkleConfig},
-    utilities::lookup_range_check::PallasLookupRangeCheck,
-};
+use halo2_gadgets::ecc::CircuitVersion;
 
 mod circuit_vanilla;
 mod circuit_zsa;
@@ -79,28 +67,6 @@ const ENABLE_SPEND: usize = 7;
 const ENABLE_OUTPUT: usize = 8;
 const DISABLE_CROSS_ADDRESS: usize = 9;
 const ENABLE_ZSA: usize = 10;
-
-/// Configuration needed to use the Orchard Action circuit.
-#[derive(Clone, Debug)]
-pub struct Config<Lookup: PallasLookupRangeCheck> {
-    primary: Column<InstanceColumn>,
-    q_orchard: Selector,
-    advices: [Column<Advice>; 10],
-    add_config: AddConfig,
-    ecc_config: EccConfig<OrchardFixedBases, Lookup>,
-    poseidon_config: PoseidonConfig<pallas::Base, 3, 2>,
-    merkle_config_1:
-        MerkleConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup>,
-    merkle_config_2:
-        MerkleConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup>,
-    sinsemilla_config_1:
-        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup>,
-    sinsemilla_config_2:
-        SinsemillaConfig<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup>,
-    commit_ivk_config: CommitIvkConfig,
-    old_note_commit_config: NoteCommitConfig<Lookup>,
-    new_note_commit_config: NoteCommitConfig<Lookup>,
-}
 
 /// The `OrchardCircuit` trait defines an interface for different implementations of the PLONK circuit
 /// for the different Orchard protocol flavors (Vanilla and ZSA). It serves as a bridge between

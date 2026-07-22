@@ -6,41 +6,170 @@ use group::Curve;
 
 use pasta_curves::pallas;
 
-use halo2_gadgets::{
-    ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
-    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
-    sinsemilla::{
-        chip::SinsemillaChip,
-        merkle::{chip::MerkleChip, MerklePath},
-    },
-    utilities::lookup_range_check::{
-        LookupRangeCheck, LookupRangeCheckConfig, PallasLookupRangeCheckConfig,
-    },
-};
-use halo2_proofs::{
-    circuit::{Layouter, Value},
-    plonk::{self, Constraints, Expression},
-    poly::Rotation,
-};
-
 use crate::{
     circuit::{
-        commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
+        commit_ivk::{gadgets::commit_ivk, CommitIvkChip, CommitIvkConfig},
         derive_nullifier::gadgets::derive_nullifier,
-        gadget::{add_chip::AddChip, assign_free_advice},
-        note_commit::{gadgets::note_commit, NoteCommitChip},
+        gadget::{
+            add_chip::{AddChip, AddConfig},
+            assign_free_advice,
+        },
+        note_commit::{gadgets::note_commit, NoteCommitChip, NoteCommitConfig},
         value_commit_orchard::gadgets::value_commit_orchard,
-        AdditionalZsaWitnesses, Config, OrchardCircuit, OrchardCircuitVersion, Witnesses, ANCHOR,
-        CMX, CV_NET_X, CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X,
-        RK_Y,
+        AdditionalZsaWitnesses, OrchardCircuit, OrchardCircuitVersion, Witnesses, ANCHOR, CMX,
+        CV_NET_X, CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
     },
-    constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
+    constants::{
+        OrchardCommitDomains, OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains,
+    },
     flavor::OrchardVanilla,
     note::AssetBase,
 };
 
+use halo2_gadgets::{
+    ecc::{
+        chip::{EccChip, EccConfig},
+        CircuitVersion, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar,
+    },
+    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
+    sinsemilla::{
+        chip::{SinsemillaChip, SinsemillaConfig},
+        merkle::{
+            chip::{MerkleChip, MerkleConfig},
+            MerklePath,
+        },
+    },
+    utilities::{
+        cond_swap::CondSwapChip,
+        lookup_range_check::{
+            LookupRangeCheck, LookupRangeCheckConfig, PallasLookupRangeCheckConfig,
+        },
+    },
+};
+
+use halo2_proofs::{
+    circuit::{Layouter, Value},
+    plonk::{self, Advice, Column, Constraints, Expression, Instance as InstanceColumn, Selector},
+    poly::Rotation,
+};
+
+/// Configuration needed to use the Orchard Action circuit.
+#[derive(Clone, Debug)]
+pub struct ConfigVanilla {
+    primary: Column<InstanceColumn>,
+    q_orchard: Selector,
+    advices: [Column<Advice>; 10],
+    add_config: AddConfig,
+    ecc_config: EccConfig<OrchardFixedBases, PallasLookupRangeCheckConfig>,
+    poseidon_config: PoseidonConfig<pallas::Base, 3, 2>,
+    merkle_config_1: MerkleConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheckConfig,
+    >,
+    merkle_config_2: MerkleConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheckConfig,
+    >,
+    sinsemilla_config_1: SinsemillaConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheckConfig,
+    >,
+    sinsemilla_config_2: SinsemillaConfig<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheckConfig,
+    >,
+    commit_ivk_config: CommitIvkConfig,
+    old_note_commit_config: NoteCommitConfig<PallasLookupRangeCheckConfig>,
+    new_note_commit_config: NoteCommitConfig<PallasLookupRangeCheckConfig>,
+}
+
+impl ConfigVanilla {
+    pub(super) fn add_chip(&self) -> AddChip {
+        AddChip::construct(self.add_config.clone())
+    }
+
+    pub(super) fn commit_ivk_chip(&self) -> CommitIvkChip {
+        CommitIvkChip::construct(self.commit_ivk_config.clone())
+    }
+
+    pub(super) fn ecc_chip(
+        &self,
+        circuit_version: CircuitVersion,
+    ) -> EccChip<OrchardFixedBases, PallasLookupRangeCheckConfig> {
+        EccChip::construct(self.ecc_config.clone(), circuit_version)
+    }
+
+    pub(super) fn sinsemilla_chip_1(
+        &self,
+    ) -> SinsemillaChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheckConfig,
+    > {
+        SinsemillaChip::construct(self.sinsemilla_config_1.clone())
+    }
+
+    pub(super) fn sinsemilla_chip_2(
+        &self,
+    ) -> SinsemillaChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheckConfig,
+    > {
+        SinsemillaChip::construct(self.sinsemilla_config_2.clone())
+    }
+
+    pub(super) fn merkle_chip_1(
+        &self,
+    ) -> MerkleChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheckConfig,
+    > {
+        MerkleChip::construct(self.merkle_config_1.clone())
+    }
+
+    pub(super) fn merkle_chip_2(
+        &self,
+    ) -> MerkleChip<
+        OrchardHashDomains,
+        OrchardCommitDomains,
+        OrchardFixedBases,
+        PallasLookupRangeCheckConfig,
+    > {
+        MerkleChip::construct(self.merkle_config_2.clone())
+    }
+
+    pub(super) fn poseidon_chip(&self) -> PoseidonChip<pallas::Base, 3, 2> {
+        PoseidonChip::construct(self.poseidon_config.clone())
+    }
+
+    pub(super) fn note_commit_chip_new(&self) -> NoteCommitChip<PallasLookupRangeCheckConfig> {
+        NoteCommitChip::construct(self.new_note_commit_config.clone())
+    }
+
+    pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip<PallasLookupRangeCheckConfig> {
+        NoteCommitChip::construct(self.old_note_commit_config.clone())
+    }
+
+    pub(super) fn cond_swap_chip(&self) -> CondSwapChip<pallas::Base> {
+        CondSwapChip::construct(self.merkle_config_1.cond_swap_config().clone())
+    }
+}
+
 impl OrchardCircuit for OrchardVanilla {
-    type Config = Config<PallasLookupRangeCheckConfig>;
+    type Config = ConfigVanilla;
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
         // Advice columns used in the Orchard circuit.
@@ -217,7 +346,7 @@ impl OrchardCircuit for OrchardVanilla {
         let new_note_commit_config =
             NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone(), false);
 
-        Config {
+        ConfigVanilla {
             primary,
             q_orchard,
             advices,
@@ -290,7 +419,7 @@ impl Witnesses {
     #[allow(non_snake_case)]
     fn synthesize_base(
         &self,
-        config: &Config<PallasLookupRangeCheckConfig>,
+        config: &ConfigVanilla,
         layouter: &mut impl Layouter<pallas::Base>,
     ) -> Result<AddressPoints, plonk::Error> {
         // Load the Sinsemilla generator lookup table used by the whole circuit.
@@ -706,7 +835,7 @@ impl Witnesses {
     /// the floor planner from overlapping another selector-enabled region with the
     /// check rows.
     fn synthesize_cross_address_checks(
-        config: &Config<PallasLookupRangeCheckConfig>,
+        config: &ConfigVanilla,
         layouter: &mut impl Layouter<pallas::Base>,
         addrs: &AddressPoints,
     ) -> Result<(), plonk::Error> {

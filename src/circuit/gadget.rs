@@ -3,17 +3,7 @@
 use ff::Field;
 use pasta_curves::pallas;
 
-use super::{commit_ivk::CommitIvkChip, note_commit::NoteCommitChip, Config};
-use crate::{
-    constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
-    note::AssetBase,
-};
-use halo2_gadgets::{
-    ecc::{chip::EccChip, CircuitVersion},
-    poseidon::Pow5Chip as PoseidonChip,
-    sinsemilla::{chip::SinsemillaChip, merkle::chip::MerkleChip},
-    utilities::{cond_swap::CondSwapChip, lookup_range_check::PallasLookupRangeCheck},
-};
+use crate::note::AssetBase;
 use halo2_proofs::{
     circuit::{AssignedCell, Chip, Layouter, Value},
     plonk::{self, Advice, Assigned, Column},
@@ -24,63 +14,6 @@ pub(in crate::circuit) mod add_chip;
 /// Addition chip for constraining `a + b = c` in-circuit.
 #[cfg(feature = "unstable-voting-circuits")]
 pub mod add_chip;
-
-impl<Lookup: PallasLookupRangeCheck> Config<Lookup> {
-    pub(super) fn add_chip(&self) -> add_chip::AddChip {
-        add_chip::AddChip::construct(self.add_config.clone())
-    }
-
-    pub(super) fn commit_ivk_chip(&self) -> CommitIvkChip {
-        CommitIvkChip::construct(self.commit_ivk_config.clone())
-    }
-
-    pub(super) fn ecc_chip(
-        &self,
-        circuit_version: CircuitVersion,
-    ) -> EccChip<OrchardFixedBases, Lookup> {
-        EccChip::construct(self.ecc_config.clone(), circuit_version)
-    }
-
-    pub(super) fn sinsemilla_chip_1(
-        &self,
-    ) -> SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup> {
-        SinsemillaChip::construct(self.sinsemilla_config_1.clone())
-    }
-
-    pub(super) fn sinsemilla_chip_2(
-        &self,
-    ) -> SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup> {
-        SinsemillaChip::construct(self.sinsemilla_config_2.clone())
-    }
-
-    pub(super) fn merkle_chip_1(
-        &self,
-    ) -> MerkleChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup> {
-        MerkleChip::construct(self.merkle_config_1.clone())
-    }
-
-    pub(super) fn merkle_chip_2(
-        &self,
-    ) -> MerkleChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup> {
-        MerkleChip::construct(self.merkle_config_2.clone())
-    }
-
-    pub(super) fn poseidon_chip(&self) -> PoseidonChip<pallas::Base, 3, 2> {
-        PoseidonChip::construct(self.poseidon_config.clone())
-    }
-
-    pub(super) fn note_commit_chip_new(&self) -> NoteCommitChip<Lookup> {
-        NoteCommitChip::construct(self.new_note_commit_config.clone())
-    }
-
-    pub(super) fn note_commit_chip_old(&self) -> NoteCommitChip<Lookup> {
-        NoteCommitChip::construct(self.old_note_commit_config.clone())
-    }
-
-    pub(super) fn cond_swap_chip(&self) -> CondSwapChip<pallas::Base> {
-        CondSwapChip::construct(self.merkle_config_1.cond_swap_config().clone())
-    }
-}
 
 /// An instruction set for adding two circuit words (field elements).
 #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
