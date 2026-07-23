@@ -36,7 +36,7 @@ use {
     crate::{
         action::Action,
         bundle::derive_bvk,
-        circuit::{Circuit, Instance, OrchardCircuitVersion, ProvingKey, Witnesses},
+        circuit::{Circuit, Instance, OrchardCircuitVersion, ProvingKey},
         flavor::OrchardFlavor,
     },
     nonempty::NonEmpty,
@@ -736,7 +736,7 @@ impl ActionInfo {
         self,
         mut rng: impl RngCore,
         circuit_version: OrchardCircuitVersion,
-    ) -> (Action<SigningMetadata, FL>, Witnesses) {
+    ) -> (Action<SigningMetadata, FL>, Circuit) {
         let v_net = self.value_sum();
         let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.output.asset);
 
@@ -759,7 +759,7 @@ impl ActionInfo {
                 "rk is non-identity (α was generated randomly) and epk is a \
                  valid non-identity point by construction",
             ),
-            Witnesses::from_action_context_unchecked::<FL>(
+            Circuit::from_action_context_unchecked(
                 self.spend,
                 note,
                 alpha,
@@ -1330,7 +1330,7 @@ fn finish_unauthorized_bundle<V: TryFrom<i64>, FL: OrchardFlavor, R: RngCore>(
         .into_bsk();
 
     // Create the actions.
-    let (actions, witnesses): (Vec<_>, Vec<_>) = pre_actions
+    let (actions, circuits): (Vec<_>, Vec<_>) = pre_actions
         .into_iter()
         .map(|a| a.build(&mut rng, circuit_version))
         .unzip();
@@ -1349,7 +1349,7 @@ fn finish_unauthorized_bundle<V: TryFrom<i64>, FL: OrchardFlavor, R: RngCore>(
                 anchor,
                 InProgress {
                     proof: Unproven {
-                        witnesses,
+                        circuits,
                         circuit_version,
                     },
                     sigs: Unauthorized { bsk },
@@ -1704,16 +1704,13 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 #[cfg(feature = "circuit")]
 #[derive(Clone, Debug)]
 pub struct Unproven {
-    witnesses: Vec<Witnesses>,
+    circuits: Vec<Circuit>,
     circuit_version: OrchardCircuitVersion,
 }
 
 #[cfg(feature = "circuit")]
 impl<S: InProgressSignatures> InProgress<Unproven, S> {
     /// Creates the proof for this bundle.
-    ///
-    /// The `OrchardCircuit` type parameter must match the circuit used when generating the witnesses
-    /// contained in this `Unproven` structure to ensure consistency and correctness of the proof.
     ///
     /// # Errors
     ///
@@ -1723,22 +1720,13 @@ impl<S: InProgressSignatures> InProgress<Unproven, S> {
     ///
     /// Also returns an error if `pk` does not match the circuit version this
     /// bundle's actions were built for, or if proof creation fails.
-    pub fn create_proof<C: crate::circuit::OrchardCircuit>(
+    pub fn create_proof(
         &self,
         pk: &ProvingKey,
         instances: &[Instance],
         rng: impl RngCore,
     ) -> Result<Proof, halo2_proofs::plonk::Error> {
-        let circuits = self
-            .proof
-            .witnesses
-            .iter()
-            .map(|witnesses| Circuit::<C> {
-                witnesses: witnesses.clone(),
-                phantom: core::marker::PhantomData,
-            })
-            .collect::<Vec<Circuit<C>>>();
-        Proof::create(pk, &circuits, instances, rng)
+        Proof::create(pk, &self.proof.circuits, instances, rng)
     }
 }
 
@@ -1775,7 +1763,7 @@ impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven, 
             &mut (),
             |_, _, a| Ok(a),
             |_, auth| {
-                let proof = auth.create_proof::<FL>(pk, &instances, &mut rng)?;
+                let proof = auth.create_proof(pk, &instances, &mut rng)?;
                 Ok(InProgress {
                     proof,
                     sigs: auth.sigs,
@@ -2101,7 +2089,7 @@ pub mod testing {
                     .unwrap();
             }
 
-            let pk = ProvingKey::build::<FL>(OrchardCircuitVersion::FixedPostNu6_2);
+            let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
             builder
                 .build(&mut self.rng)
                 .unwrap()
@@ -2376,7 +2364,7 @@ mod tests {
     }
 
     fn shielding_bundle<FL: OrchardFlavor>(bundle_version: BundleVersion) {
-        let pk = ProvingKey::build::<FL>(bundle_version.circuit_version());
+        let pk = ProvingKey::build(bundle_version.circuit_version());
         let mut rng = OsRng;
 
         let builder = output_only_builder(&mut rng, bundle_version, BundleType::DEFAULT);
@@ -3080,7 +3068,7 @@ mod tests {
 
     #[test]
     fn restricted_pczt_structural_checks_reject_tampering() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
         let mut rng = OsRng;
         let spend_sk = SpendingKey::random(&mut rng);
         let spend_fvk = FullViewingKey::from(&spend_sk);
@@ -3162,14 +3150,14 @@ mod tests {
         };
 
         let mut rng = OsRng;
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
         let bundle = build_restricted(&mut rng);
         assert!(matches!(
             bundle.create_proof(&pk, &mut rng),
             Err(BuildError::Proof(halo2_proofs::plonk::Error::Synthesis)),
         ));
 
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
         let bundle = build_restricted(&mut rng);
         bundle.create_proof(&pk, &mut rng).unwrap();
     }

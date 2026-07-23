@@ -138,8 +138,8 @@ fn output_only_builder(
 fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     let mut rng = StdRng::seed_from_u64(1u64);
     let bundle_version = FL::DEFAULT_BUNDLE_VERSION;
-    let pk = ProvingKey::build::<FL>(bundle_version.circuit_version());
-    let vk = VerifyingKey::build::<FL>(bundle_version.circuit_version());
+    let pk = ProvingKey::build(bundle_version.circuit_version());
+    let vk = VerifyingKey::build(bundle_version.circuit_version());
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -317,10 +317,9 @@ fn bundle_chain_zsa() {
 #[test]
 fn builder_builds_for_insecure_circuit_version() {
     let mut rng = OsRng;
-    let insecure_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::InsecurePreNu6_2);
-    let insecure_vk =
-        VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::InsecurePreNu6_2);
-    let fixed_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+    let insecure_pk = ProvingKey::build(OrchardCircuitVersion::InsecurePreNu6_2);
+    let insecure_vk = VerifyingKey::build(OrchardCircuitVersion::InsecurePreNu6_2);
+    let fixed_vk = VerifyingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -350,8 +349,8 @@ fn builder_builds_for_insecure_circuit_version() {
 #[test]
 fn builder_builds_for_post_nu6_3_circuit_version() {
     let mut rng = OsRng;
-    let post_nu6_3_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
-    let post_nu6_3_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -480,8 +479,8 @@ fn ironwood_bundle_helpers_decrypt_and_recover_outputs() {
 #[test]
 fn post_nu6_3_coinbase_bundle_proves_and_verifies() {
     let mut rng = OsRng;
-    let post_nu6_3_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
-    let post_nu6_3_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -518,8 +517,8 @@ fn post_nu6_3_coinbase_bundle_proves_and_verifies() {
 #[test]
 fn unpadded_ironwood_bundle_builds_single_action_and_verifies() {
     let mut rng = OsRng;
-    let post_nu6_3_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
-    let post_nu6_3_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -555,10 +554,10 @@ fn unpadded_ironwood_bundle_builds_single_action_and_verifies() {
 #[test]
 fn post_nu6_3_restricted_bundle_chain() {
     let mut rng = OsRng;
-    let post_nu6_3_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
-    let post_nu6_3_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
-    let fixed_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
-    let fixed_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+    let post_nu6_3_pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
+    let fixed_pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
+    let fixed_vk = VerifyingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -693,9 +692,8 @@ fn post_nu6_3_restricted_bundle_chain() {
 #[test]
 fn ironwood_post_nu6_3_unrestricted_bundle_proves_and_verifies() {
     let mut rng = OsRng;
-    let post_nu6_3_pk =
-        ProvingKey::build::<OrchardVanilla>(BundleVersion::ironwood_v3().circuit_version());
-    let post_nu6_3_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_pk = ProvingKey::build(BundleVersion::ironwood_v3().circuit_version());
+    let post_nu6_3_vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);

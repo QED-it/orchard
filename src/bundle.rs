@@ -2016,7 +2016,7 @@ pub(crate) mod tests {
             crate::circuit::OrchardCircuitVersion::InsecurePreNu6_2,
             crate::circuit::OrchardCircuitVersion::FixedPostNu6_2,
         ] {
-            let vk = crate::circuit::VerifyingKey::build::<OrchardVanilla>(circuit_version);
+            let vk = crate::circuit::VerifyingKey::build(circuit_version);
 
             assert!(matches!(
                 bundle.verify_proof(&vk),

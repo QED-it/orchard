@@ -1916,7 +1916,7 @@ mod tests {
         let bundle_version = BundleVersion::zsa();
 
         // Setup keys
-        let pk = ProvingKey::build::<OrchardZSA>(bundle_version.circuit_version());
+        let pk = ProvingKey::build(bundle_version.circuit_version());
         let sk = SpendingKey::from_bytes([1; 32]).unwrap();
         let fvk = FullViewingKey::from(&sk);
         let recipient = fvk.address_at(0u32, Scope::External);

@@ -9,9 +9,7 @@ use group::Curve;
 use pasta_curves::{arithmetic::CurveAffine, pallas};
 
 use halo2_gadgets::{
-    ecc::{
-        chip::EccChip, CircuitVersion, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar,
-    },
+    ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
     poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
     sinsemilla::{
         chip::SinsemillaChip,
@@ -24,12 +22,13 @@ use halo2_gadgets::{
 };
 
 use halo2_proofs::{
-    circuit::{Layouter, Value},
+    circuit::{floor_planner, Layouter, Value},
     plonk::{self, Constraints, Expression},
     poly::Rotation,
 };
 
 use crate::{
+    builder::SpendInfo,
     circuit::{
         commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
         derive_nullifier::{gadgets::derive_nullifier, ZsaNullifierParams},
@@ -37,19 +36,101 @@ use crate::{
             add_chip::AddChip, assign_free_advice, assign_is_zatoshi_asset, assign_split_flag,
         },
         note_commit::{gadgets::note_commit, NoteCommitChip, ZsaNoteCommitParams},
-        unpack,
         value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
-        AdditionalZsaWitnesses, AddressPoints, Config, OrchardCircuit, OrchardCircuitVersion,
-        Witnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT,
-        ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+        AddressPoints, CircuitVanilla, Config, OrchardCircuitVersion, ANCHOR, CMX, CV_NET_X,
+        CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X,
+        RK_Y,
     },
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
-    flavor::OrchardZSA,
-    note::AssetBase,
+    note::{AssetBase, Note},
+    value::ValueCommitTrapdoor,
 };
 
-impl OrchardCircuit for OrchardZSA {
+/// The ZSA-specific witnesses.
+#[derive(Clone, Debug)]
+pub struct AdditionalZsaWitnesses {
+    pub(crate) psi_nf: pallas::Base,
+    pub(crate) asset: AssetBase,
+    pub(crate) split_flag: bool,
+}
+
+fn unpack(
+    zsa_values: Value<AdditionalZsaWitnesses>,
+) -> (Value<pallas::Base>, Value<AssetBase>, Value<bool>) {
+    (
+        zsa_values.clone().map(|values| values.psi_nf),
+        zsa_values.clone().map(|values| values.asset),
+        zsa_values.map(|values| values.split_flag),
+    )
+}
+
+/// The OrchardZSA Action circuit.
+#[derive(Clone, Debug)]
+pub struct CircuitZsa {
+    pub(crate) common_witnesses: CircuitVanilla,
+
+    // The ZSA-specific witnesses.
+    pub(crate) additional_zsa_witnesses: Value<AdditionalZsaWitnesses>,
+}
+
+impl CircuitZsa {
+    /// Returns an empty circuit with all private witnesses unknown.
+    ///
+    /// This is used for circuit shape-dependent operations, such as generating keys
+    /// or rendering the circuit layout, where witness values are not required.
+    pub(crate) fn empty() -> Self {
+        CircuitZsa {
+            common_witnesses: CircuitVanilla::empty(OrchardCircuitVersion::ZSA),
+            additional_zsa_witnesses: Value::unknown(),
+        }
+    }
+
+    /// Constructs a `CircuitZsa` from the following components:
+    /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
+    /// - `output_note`: a note created in scope of the action
+    /// - `alpha`: a scalar used for randomization of the action spend validating key
+    /// - `rcv`: trapdoor for the action value commitment
+    ///
+    /// # Panics
+    ///
+    /// Panics if `circuit_version` is not ZSA.
+    pub(crate) fn from_action_context_unchecked(
+        spend: SpendInfo,
+        output_note: Note,
+        alpha: pallas::Scalar,
+        rcv: ValueCommitTrapdoor,
+        circuit_version: OrchardCircuitVersion,
+    ) -> Self {
+        if !circuit_version.is_zsa() {
+            panic!("circuit version must be ZSA in OrchardZSA circuit");
+        }
+
+        let (common_witnesses, psi_nf) = CircuitVanilla::from_action_context_common(
+            &spend,
+            &output_note,
+            alpha,
+            rcv,
+            circuit_version,
+        );
+
+        CircuitZsa {
+            common_witnesses,
+            additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
+                psi_nf,
+                asset: spend.note.asset(),
+                split_flag: spend.split_flag,
+            }),
+        }
+    }
+}
+
+impl plonk::Circuit<pallas::Base> for CircuitZsa {
     type Config = Config<PallasLookupRangeCheck4_5BConfig>;
+    type FloorPlanner = floor_planner::V1;
+
+    fn without_witnesses(&self) -> Self {
+        CircuitZsa::empty()
+    }
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
         // Advice columns used in the Orchard circuit.
@@ -337,28 +418,19 @@ impl OrchardCircuit for OrchardZSA {
 
     #[allow(non_snake_case)]
     fn synthesize(
-        circuit: &Witnesses,
+        &self,
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
-        if circuit.circuit_version != OrchardCircuitVersion::ZSA {
-            return Err(plonk::Error::Synthesis);
-        }
-
-        // Prevent synthesis of insecure ZSA circuits.
-        if circuit.circuit_version.halo2_version() == CircuitVersion::InsecureUnanchoredBase {
-            return Err(plonk::Error::Synthesis);
-        }
-
         // Load the Sinsemilla generator lookup table used by the whole circuit.
         SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
         // Unpack the ZSA witnesses.
         let (psi_nf_value, asset_value, split_flag_value) =
-            unpack(circuit.additional_zsa_witnesses.clone());
+            unpack(self.additional_zsa_witnesses.clone());
 
         // Construct the ECC chip.
-        let ecc_chip = config.ecc_chip(circuit.circuit_version.halo2_version());
+        let ecc_chip = config.ecc_chip(self.common_witnesses.circuit_version.halo2_version());
 
         // Witness private inputs that are used across multiple checks.
         let (psi_nf, psi_old, rho_old, cm_old, g_d_old, ak_P, nk, v_old, v_new, asset) = {
@@ -373,32 +445,38 @@ impl OrchardCircuit for OrchardZSA {
             let psi_old = assign_free_advice(
                 layouter.namespace(|| "witness psi_old"),
                 config.advices[0],
-                circuit.psi_old,
+                self.common_witnesses.psi_old,
             )?;
 
             // Witness rho_old
             let rho_old = assign_free_advice(
                 layouter.namespace(|| "witness rho_old"),
                 config.advices[0],
-                circuit.rho_old.map(|rho| rho.into_inner()),
+                self.common_witnesses.rho_old.map(|rho| rho.into_inner()),
             )?;
 
             // Witness cm_old
             let cm_old = Point::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "cm_old"),
-                circuit.cm_old.as_ref().map(|cm| cm.inner().to_affine()),
+                self.common_witnesses
+                    .cm_old
+                    .as_ref()
+                    .map(|cm| cm.inner().to_affine()),
             )?;
 
             // Witness g_d_old
             let g_d_old = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "gd_old"),
-                circuit.g_d_old.as_ref().map(|gd| gd.to_affine()),
+                self.common_witnesses
+                    .g_d_old
+                    .as_ref()
+                    .map(|gd| gd.to_affine()),
             )?;
 
             // Witness ak_P.
-            let ak_P: Value<pallas::Point> = circuit.ak.as_ref().map(|ak| ak.into());
+            let ak_P: Value<pallas::Point> = self.common_witnesses.ak.as_ref().map(|ak| ak.into());
             let ak_P = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness ak_P"),
@@ -409,21 +487,21 @@ impl OrchardCircuit for OrchardZSA {
             let nk = assign_free_advice(
                 layouter.namespace(|| "witness nk"),
                 config.advices[0],
-                circuit.nk.map(|nk| nk.inner()),
+                self.common_witnesses.nk.map(|nk| nk.inner()),
             )?;
 
             // Witness v_old.
             let v_old = assign_free_advice(
                 layouter.namespace(|| "witness v_old"),
                 config.advices[0],
-                circuit.v_old,
+                self.common_witnesses.v_old,
             )?;
 
             // Witness v_new.
             let v_new = assign_free_advice(
                 layouter.namespace(|| "witness v_new"),
                 config.advices[0],
-                circuit.v_new,
+                self.common_witnesses.v_new,
             )?;
 
             // Witness asset
@@ -456,13 +534,14 @@ impl OrchardCircuit for OrchardZSA {
 
         // Merkle path validity check.
         let root = {
-            let path = circuit
+            let path = self
+                .common_witnesses
                 .path
                 .map(|typed_path| typed_path.map(|node| node.inner()));
             let merkle_inputs = MerklePath::construct(
                 [config.merkle_chip_1(), config.merkle_chip_2()],
                 OrchardHashDomains::MerkleCrh,
-                circuit.pos,
+                self.common_witnesses.pos,
                 path,
             );
             let leaf = cm_old.extract_p().inner().clone();
@@ -481,9 +560,9 @@ impl OrchardCircuit for OrchardZSA {
                 //   v_old - v_new if split_flag = false
                 let v_net = split_flag_value.and_then(|split_flag| {
                     if split_flag {
-                        Value::known(crate::value::NoteValue::ZERO) - circuit.v_new
+                        Value::known(crate::value::NoteValue::ZERO) - self.common_witnesses.v_new
                     } else {
-                        circuit.v_old - circuit.v_new
+                        self.common_witnesses.v_old - self.common_witnesses.v_new
                     }
                 });
 
@@ -517,7 +596,7 @@ impl OrchardCircuit for OrchardZSA {
             let rcv = ScalarFixed::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "rcv"),
-                circuit.rcv.as_ref().map(|rcv| rcv.inner()),
+                self.common_witnesses.rcv.as_ref().map(|rcv| rcv.inner()),
             )?;
 
             let cv_net = value_commit_orchard(
@@ -570,7 +649,7 @@ impl OrchardCircuit for OrchardZSA {
             let alpha = ScalarFixed::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "alpha"),
-                circuit.alpha,
+                self.common_witnesses.alpha,
             )?;
 
             // alpha_commitment = [alpha] SpendAuthG
@@ -595,7 +674,7 @@ impl OrchardCircuit for OrchardZSA {
                 let rivk = ScalarFixed::new(
                     ecc_chip.clone(),
                     layouter.namespace(|| "rivk"),
-                    circuit.rivk.map(|rivk| rivk.inner()),
+                    self.common_witnesses.rivk.map(|rivk| rivk.inner()),
                 )?;
 
                 commit_ivk(
@@ -626,7 +705,7 @@ impl OrchardCircuit for OrchardZSA {
             let pk_d_old = NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness pk_d_old"),
-                circuit
+                self.common_witnesses
                     .pk_d_old
                     .map(|pk_d_old| pk_d_old.inner().to_affine()),
             )?;
@@ -644,7 +723,10 @@ impl OrchardCircuit for OrchardZSA {
             let rcm_old = ScalarFixed::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "rcm_old"),
-                circuit.rcm_old.as_ref().map(|rcm_old| rcm_old.inner()),
+                self.common_witnesses
+                    .rcm_old
+                    .as_ref()
+                    .map(|rcm_old| rcm_old.inner()),
             )?;
 
             // g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)
@@ -653,7 +735,7 @@ impl OrchardCircuit for OrchardZSA {
                     "g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)"
                 }),
                 config.sinsemilla_chip_1(),
-                config.ecc_chip(circuit.circuit_version.halo2_version()),
+                config.ecc_chip(self.common_witnesses.circuit_version.halo2_version()),
                 config.note_commit_chip_old(),
                 g_d_old.inner(),
                 pk_d_old.inner(),
@@ -674,7 +756,10 @@ impl OrchardCircuit for OrchardZSA {
 
         // Witness g_d_new
         let g_d_new = {
-            let g_d_new = circuit.g_d_new.map(|g_d_new| g_d_new.to_affine());
+            let g_d_new = self
+                .common_witnesses
+                .g_d_new
+                .map(|g_d_new| g_d_new.to_affine());
             NonIdentityPoint::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "witness g_d_new_star"),
@@ -684,7 +769,8 @@ impl OrchardCircuit for OrchardZSA {
 
         // Witness pk_d_new
         let pk_d_new = {
-            let pk_d_new = circuit
+            let pk_d_new = self
+                .common_witnesses
                 .pk_d_new
                 .map(|pk_d_new| pk_d_new.inner().to_affine());
             NonIdentityPoint::new(
@@ -706,13 +792,16 @@ impl OrchardCircuit for OrchardZSA {
             let psi_new = assign_free_advice(
                 layouter.namespace(|| "witness psi_new"),
                 config.advices[0],
-                circuit.psi_new,
+                self.common_witnesses.psi_new,
             )?;
 
             let rcm_new = ScalarFixed::new(
                 ecc_chip,
                 layouter.namespace(|| "rcm_new"),
-                circuit.rcm_new.as_ref().map(|rcm_new| rcm_new.inner()),
+                self.common_witnesses
+                    .rcm_new
+                    .as_ref()
+                    .map(|rcm_new| rcm_new.inner()),
             )?;
 
             // g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)
@@ -721,7 +810,7 @@ impl OrchardCircuit for OrchardZSA {
                     "g★_d || pk★_d || i2lebsp_{64}(v) || i2lebsp_{255}(rho) || i2lebsp_{255}(psi)"
                 }),
                 config.sinsemilla_chip_2(),
-                config.ecc_chip(circuit.circuit_version.halo2_version()),
+                config.ecc_chip(self.common_witnesses.circuit_version.halo2_version()),
                 config.note_commit_chip_new(),
                 g_d_new.inner(),
                 pk_d_new.inner(),
@@ -887,18 +976,6 @@ impl OrchardCircuit for OrchardZSA {
         synthesize_cross_address_checks(&config, &mut layouter, &addrs)?;
 
         Ok(())
-    }
-
-    fn build_additional_zsa_witnesses(
-        psi_nf: pallas::Base,
-        asset: AssetBase,
-        split_flag: bool,
-    ) -> Value<AdditionalZsaWitnesses> {
-        Value::known(AdditionalZsaWitnesses {
-            psi_nf,
-            asset,
-            split_flag,
-        })
     }
 }
 
@@ -1184,8 +1261,8 @@ mod tests {
         builder::SpendInfo,
         bundle::Flags,
         circuit::{
-            AdditionalZsaWitnesses, Circuit, Instance, OrchardCircuitVersion, Proof, ProvingKey,
-            VerifyingKey, Witnesses, K,
+            circuit_zsa::AdditionalZsaWitnesses, Circuit, CircuitVanilla, CircuitZsa, Instance,
+            OrchardCircuitVersion, Proof, ProvingKey, VerifyingKey, K,
         },
         flavor::OrchardZSA,
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
@@ -1198,7 +1275,7 @@ mod tests {
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
-    fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit<OrchardZSA>, Instance) {
+    fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit, Instance) {
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, NoteVersion::ZSA);
 
         let sender_address = spent_note.recipient();
@@ -1223,9 +1300,8 @@ mod tests {
         let psi_old = spent_note.rseed().psi(&spent_note.rho());
 
         (
-            Circuit {
-                witnesses: Witnesses {
-                    circuit_version: OrchardCircuitVersion::ZSA,
+            Circuit::OrchardZSA(CircuitZsa {
+                common_witnesses: CircuitVanilla {
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),
                     g_d_old: Value::known(sender_address.g_d()),
@@ -1245,15 +1321,14 @@ mod tests {
                     psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
                     rcm_new: Value::known(output_note.rcm()),
                     rcv: Value::known(rcv),
-
-                    additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
-                        psi_nf: psi_old,
-                        asset: spent_note.asset(),
-                        split_flag: false,
-                    }),
+                    circuit_version: OrchardCircuitVersion::ZSA,
                 },
-                phantom: core::marker::PhantomData,
-            },
+                additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
+                    psi_nf: psi_old,
+                    asset: spent_note.asset(),
+                    split_flag: false,
+                }),
+            }),
             Instance {
                 anchor,
                 cv_net,
@@ -1334,7 +1409,7 @@ mod tests {
             .map(|()| generate_dummy_circuit_instance(&mut rng))
             .unzip();
 
-        let vk = VerifyingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
 
         // Test that the pinned verification key (representing the circuit) is as expected.
         // Set ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF to regenerate it (and the proof below).
@@ -1358,7 +1433,7 @@ mod tests {
             let circuit_cost =
                 halo2_proofs::dev::CircuitCost::<pasta_curves::vesta::Point, _>::measure(
                     K,
-                    &circuits[0],
+                    circuits[0].as_zsa().unwrap(),
                 );
             assert_eq!(usize::from(circuit_cost.proof_size(1)), 5120);
             assert_eq!(usize::from(circuit_cost.proof_size(2)), 7392);
@@ -1377,7 +1452,7 @@ mod tests {
             assert_eq!(
                 MockProver::run(
                     K,
-                    circuit,
+                    circuit.as_zsa().unwrap(),
                     instance
                         .to_halo2_instance()
                         .iter()
@@ -1390,7 +1465,7 @@ mod tests {
             );
         }
 
-        let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
+        let pk = ProvingKey::build(OrchardCircuitVersion::ZSA);
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(&vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
@@ -1398,7 +1473,7 @@ mod tests {
 
     #[test]
     fn serialized_proof_test_case() {
-        let vk = VerifyingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
 
         if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
             let create_proof = || -> std::io::Result<()> {
@@ -1407,7 +1482,7 @@ mod tests {
                 let (circuit, instance) = generate_dummy_circuit_instance(OsRng);
                 let instances = &[instance.clone()];
 
-                let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
+                let pk = ProvingKey::build(OrchardCircuitVersion::ZSA);
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
@@ -1442,7 +1517,7 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = Circuit::<OrchardZSA>::empty(OrchardCircuitVersion::ZSA);
+        let circuit = CircuitZsa::empty();
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)
             .view_height(0..(1 << 11))
@@ -1450,14 +1525,10 @@ mod tests {
             .unwrap();
     }
 
-    fn check_proof_of_orchard_circuit(
-        circuit: &Circuit<OrchardZSA>,
-        instance: &Instance,
-        should_pass: bool,
-    ) {
+    fn check_proof_of_orchard_circuit(circuit: &Circuit, instance: &Instance, should_pass: bool) {
         let proof_verify = MockProver::run(
             K,
-            circuit,
+            circuit.as_zsa().unwrap(),
             instance
                 .to_halo2_instance()
                 .iter()
@@ -1480,7 +1551,7 @@ mod tests {
         split_flag: bool,
         orchard_circuit_version: OrchardCircuitVersion,
         rng: R,
-    ) -> (Circuit<OrchardZSA>, Instance) {
+    ) -> (Circuit, Instance) {
         generate_circuit_instance_inner(
             is_zatoshi_asset,
             split_flag,
@@ -1497,7 +1568,7 @@ mod tests {
         split_flag: bool,
         orchard_circuit_version: OrchardCircuitVersion,
         rng: R,
-    ) -> (Circuit<OrchardZSA>, Instance) {
+    ) -> (Circuit, Instance) {
         generate_circuit_instance_inner(
             is_zatoshi_asset,
             split_flag,
@@ -1513,7 +1584,7 @@ mod tests {
         orchard_circuit_version: OrchardCircuitVersion,
         output_matches_spend: bool,
         mut rng: R,
-    ) -> (Circuit<OrchardZSA>, Instance) {
+    ) -> (Circuit, Instance) {
         // We cannot create a split note with a zatoshi asset.
         assert!(!(is_zatoshi_asset && split_flag));
 
@@ -1613,16 +1684,13 @@ mod tests {
         };
 
         (
-            Circuit {
-                witnesses: Witnesses::from_action_context_unchecked::<OrchardZSA>(
-                    spend_info,
-                    output_note,
-                    alpha,
-                    rcv,
-                    orchard_circuit_version,
-                ),
-                phantom: core::marker::PhantomData,
-            },
+            Circuit::from_action_context_unchecked(
+                spend_info,
+                output_note,
+                alpha,
+                rcv,
+                orchard_circuit_version,
+            ),
             Instance {
                 anchor,
                 cv_net,
@@ -1698,33 +1766,13 @@ mod tests {
 
             // Set cm_old to be a random NoteCommitment
             // The proof should fail
-            let circuit_wrong_cm_old = Circuit {
-                witnesses: Witnesses {
-                    circuit_version: circuit.witnesses.circuit_version,
-                    path: circuit.witnesses.path,
-                    pos: circuit.witnesses.pos,
-                    g_d_old: circuit.witnesses.g_d_old,
-                    pk_d_old: circuit.witnesses.pk_d_old,
-                    v_old: circuit.witnesses.v_old,
-                    rho_old: circuit.witnesses.rho_old,
-                    psi_old: circuit.witnesses.psi_old,
-                    rcm_old: circuit.witnesses.rcm_old.clone(),
+            let circuit_wrong_cm_old = Circuit::OrchardZSA(CircuitZsa {
+                common_witnesses: CircuitVanilla {
                     cm_old: Value::known(random_note_commitment(&mut rng)),
-                    alpha: circuit.witnesses.alpha,
-                    ak: circuit.witnesses.ak.clone(),
-                    nk: circuit.witnesses.nk,
-                    rivk: circuit.witnesses.rivk,
-                    g_d_new: circuit.witnesses.g_d_new,
-                    pk_d_new: circuit.witnesses.pk_d_new,
-                    v_new: circuit.witnesses.v_new,
-                    psi_new: circuit.witnesses.psi_new,
-                    rcm_new: circuit.witnesses.rcm_new.clone(),
-                    rcv: circuit.witnesses.rcv.clone(),
-
-                    additional_zsa_witnesses: circuit.witnesses.additional_zsa_witnesses.clone(),
+                    ..circuit.as_zsa().unwrap().common_witnesses.clone()
                 },
-                phantom: core::marker::PhantomData,
-            };
+                ..circuit.as_zsa().unwrap().clone()
+            });
             check_proof_of_orchard_circuit(&circuit_wrong_cm_old, &instance, false);
 
             // Set cmx_pub to be a random NoteCommitment
@@ -1760,40 +1808,18 @@ mod tests {
             // If split_flag = 0 , set psi_nf to be a random Pallas base element
             // The proof should fail
             if !split_flag {
-                let circuit_wrong_psi_nf = Circuit {
-                    witnesses: Witnesses {
-                        circuit_version: circuit.witnesses.circuit_version,
-                        path: circuit.witnesses.path,
-                        pos: circuit.witnesses.pos,
-                        g_d_old: circuit.witnesses.g_d_old,
-                        pk_d_old: circuit.witnesses.pk_d_old,
-                        v_old: circuit.witnesses.v_old,
-                        rho_old: circuit.witnesses.rho_old,
-                        psi_old: circuit.witnesses.psi_old,
-                        rcm_old: circuit.witnesses.rcm_old.clone(),
-                        cm_old: circuit.witnesses.cm_old.clone(),
-                        alpha: circuit.witnesses.alpha,
-                        ak: circuit.witnesses.ak.clone(),
-                        nk: circuit.witnesses.nk,
-                        rivk: circuit.witnesses.rivk,
-                        g_d_new: circuit.witnesses.g_d_new,
-                        pk_d_new: circuit.witnesses.pk_d_new,
-                        v_new: circuit.witnesses.v_new,
-                        psi_new: circuit.witnesses.psi_new,
-                        rcm_new: circuit.witnesses.rcm_new.clone(),
-                        rcv: circuit.witnesses.rcv.clone(),
-
-                        additional_zsa_witnesses: circuit
-                            .witnesses
-                            .additional_zsa_witnesses
-                            .clone()
-                            .map(|zsa_values| AdditionalZsaWitnesses {
-                                psi_nf: pallas::Base::random(&mut rng),
-                                ..zsa_values
-                            }),
-                    },
-                    phantom: core::marker::PhantomData,
-                };
+                let circuit_wrong_psi_nf = Circuit::OrchardZSA(CircuitZsa {
+                    additional_zsa_witnesses: circuit
+                        .as_zsa()
+                        .unwrap()
+                        .additional_zsa_witnesses
+                        .clone()
+                        .map(|zsa_values| AdditionalZsaWitnesses {
+                            psi_nf: pallas::Base::random(&mut rng),
+                            ..zsa_values
+                        }),
+                    ..circuit.as_zsa().unwrap().clone()
+                });
                 check_proof_of_orchard_circuit(&circuit_wrong_psi_nf, &instance, false);
             }
 
@@ -1814,19 +1840,6 @@ mod tests {
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_enable_zsa, false);
             }
         }
-    }
-
-    #[test]
-    fn cannot_create_insecure_zsa_proof() {
-        let mut rng = OsRng;
-        let (circuit, instance) = generate_circuit_instance(
-            true,
-            false,
-            OrchardCircuitVersion::InsecurePreNu6_2,
-            &mut rng,
-        );
-        let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
-        assert!(Proof::create(&pk, &[circuit], &[instance], &mut rng).is_err());
     }
 
     #[test]
@@ -1870,8 +1883,8 @@ mod tests {
         );
         instance.cross_address_disabled = true;
 
-        let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
-        let vk = VerifyingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
+        let pk = ProvingKey::build(OrchardCircuitVersion::ZSA);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
 
         let instances = &[instance.clone()];
 

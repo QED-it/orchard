@@ -516,7 +516,7 @@ mod tests {
     #[test]
     fn shielding_bundle() {
         let bundle_version = BundleVersion::orchard_v2();
-        let pk = ProvingKey::build::<OrchardVanilla>(bundle_version.circuit_version());
+        let pk = ProvingKey::build(bundle_version.circuit_version());
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -561,8 +561,8 @@ mod tests {
 
     #[test]
     fn create_proof_uses_proving_key_circuit_version() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
-        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -584,8 +584,8 @@ mod tests {
     #[test]
     fn qr_output_version_checks_note_commitment() {
         let mut rng = OsRng;
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
-        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
 
         let sk = SpendingKey::random(&mut rng);
         let fvk = FullViewingKey::from(&sk);
@@ -643,7 +643,7 @@ mod tests {
 
     #[test]
     fn qr_spend_version_checks_nullifier_and_proves() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -744,7 +744,7 @@ mod tests {
     #[test]
     fn shielded_bundle() {
         let bundle_version = BundleVersion::orchard_v2();
-        let pk = ProvingKey::build::<OrchardVanilla>(bundle_version.circuit_version());
+        let pk = ProvingKey::build(bundle_version.circuit_version());
         let mut rng = OsRng;
 
         // Pretend we derived the spending key via ZIP 32.
@@ -1176,7 +1176,7 @@ mod tests {
 
     #[test]
     fn create_proof_rejects_identity_rk() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -1190,7 +1190,7 @@ mod tests {
 
     #[test]
     fn extract_rejects_identity_rk() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -1209,7 +1209,7 @@ mod tests {
 
     #[test]
     fn extract_rejects_non_canonical_proof() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -1357,7 +1357,7 @@ mod tests {
             OrchardCircuitVersion::FixedPostNu6_2,
             OrchardCircuitVersion::PostNu6_3,
         ] {
-            let pk = ProvingKey::build::<OrchardVanilla>(circuit_version);
+            let pk = ProvingKey::build(circuit_version);
 
             let mut mismatched_pczt_bundle = minimal_finalized_pczt_bundle(rng);
             mismatched_pczt_bundle.flags = Flags::CROSS_ADDRESS_DISABLED;
@@ -1372,7 +1372,7 @@ mod tests {
 
         // A pre-NU 6.3 proving key rejects the structurally-conforming restricted
         // statement at the instance check, leaving the bundle unmodified.
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
         assert!(matches!(
             pczt_bundle.create_proof(&pk, rng),
             Err(ProverError::ProofFailed(
@@ -1383,7 +1383,7 @@ mod tests {
 
         // A post-NU 6.3 proving key proves the same statement, and the proof verifies
         // in the extracted bundle under the post-NU 6.3 verifying key.
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
         pczt_bundle.create_proof(&pk, rng).unwrap();
 
         pczt_bundle.actions_mut()[bundle_meta.spend_action_index(0).unwrap()]
@@ -1400,9 +1400,7 @@ mod tests {
             .apply_binding_signature(sighash, rng)
             .unwrap();
         bundle
-            .verify_proof(&VerifyingKey::build::<OrchardVanilla>(
-                OrchardCircuitVersion::PostNu6_3,
-            ))
+            .verify_proof(&VerifyingKey::build(OrchardCircuitVersion::PostNu6_3))
             .unwrap();
     }
 

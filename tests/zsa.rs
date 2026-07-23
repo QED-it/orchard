@@ -340,8 +340,8 @@ fn verify_reference_note(note: &Note, asset: AssetBase) {
 fn zsa_issue_and_transfer() {
     // --------------------------- Setup -----------------------------------------
 
-    let pk = ProvingKey::build::<OrchardZSA>(BundleVersion::zsa().circuit_version());
-    let vk = VerifyingKey::build::<OrchardZSA>(BundleVersion::zsa().circuit_version());
+    let pk = ProvingKey::build(BundleVersion::zsa().circuit_version());
+    let vk = VerifyingKey::build(BundleVersion::zsa().circuit_version());
 
     let keys = prepare_keys(&pk, &vk, 5);
     let keys2 = prepare_keys(&pk, &vk, 10);

@@ -349,7 +349,7 @@ mod tests {
         tx_version: TxVersion,
     ) -> Bundle<Authorized, i64, FL> {
         let mut rng = StdRng::seed_from_u64(6);
-        let pk = ProvingKey::build::<FL>(bundle_version.circuit_version());
+        let pk = ProvingKey::build(bundle_version.circuit_version());
         let bundle = generate_bundle(bundle_version)
             .create_proof(&pk, &mut rng)
             .unwrap();

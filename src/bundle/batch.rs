@@ -156,7 +156,6 @@ mod tests {
     use crate::{
         bundle::tests::{sample_authorized_bundle, with_cross_address_disabled},
         circuit::{OrchardCircuitVersion, VerifyingKey},
-        flavor::OrchardVanilla,
     };
 
     #[test]
@@ -171,7 +170,7 @@ mod tests {
             OrchardCircuitVersion::InsecurePreNu6_2,
             OrchardCircuitVersion::FixedPostNu6_2,
         ] {
-            let vk = VerifyingKey::build::<OrchardVanilla>(circuit_version);
+            let vk = VerifyingKey::build(circuit_version);
             let mut validator = BatchValidator::new(&vk);
             assert_eq!(
                 validator.add_bundle(&bundle, [0; 32]),
@@ -180,7 +179,7 @@ mod tests {
         }
 
         // The post-NU 6.3 key supports the restriction, so the bundle is accepted.
-        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
         let mut validator = BatchValidator::new(&vk);
         assert_eq!(validator.add_bundle(&bundle, [0; 32]), Ok(()));
     }
@@ -192,7 +191,7 @@ mod tests {
             OrchardCircuitVersion::FixedPostNu6_2,
             OrchardCircuitVersion::PostNu6_3,
         ] {
-            let vk = VerifyingKey::build::<OrchardVanilla>(circuit_version);
+            let vk = VerifyingKey::build(circuit_version);
             assert!(BatchValidator::new(&vk).validate(OsRng));
         }
     }

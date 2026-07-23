@@ -28,7 +28,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let valid_ivk = PreparedIncomingViewingKey::new(&valid_ivk);
 
     let bundle_version = FL::DEFAULT_BUNDLE_VERSION;
-    let pk = ProvingKey::build::<FL>(bundle_version.circuit_version());
+    let pk = ProvingKey::build(bundle_version.circuit_version());
 
     // Compact actions don't have the full AEAD ciphertext, so ZIP 307 trial-decryption
     // relies on an invalid ivk resulting in random noise for which the note commitment

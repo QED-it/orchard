@@ -18,29 +18,200 @@ use halo2_gadgets::{
     },
 };
 use halo2_proofs::{
-    circuit::{Layouter, Value},
+    circuit::{floor_planner, Layouter, Value},
     plonk::{self, Constraints, Expression},
     poly::Rotation,
 };
 
 use crate::{
+    builder::SpendInfo,
     circuit::{
         commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
         derive_nullifier::gadgets::derive_nullifier,
         gadget::{add_chip::AddChip, assign_free_advice},
         note_commit::{gadgets::note_commit, NoteCommitChip},
         value_commit_orchard::gadgets::value_commit_orchard,
-        AdditionalZsaWitnesses, AddressPoints, Config, OrchardCircuit, OrchardCircuitVersion,
-        Witnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT,
-        ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
+        AddressPoints, Config, OrchardCircuitVersion, ANCHOR, CMX, CV_NET_X, CV_NET_Y,
+        DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
     },
-    constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
-    flavor::OrchardVanilla,
-    note::AssetBase,
+    constants::{
+        OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains, MERKLE_DEPTH_ORCHARD,
+    },
+    keys::{
+        CommitIvkRandomness, DiversifiedTransmissionKey, NullifierDerivingKey, SpendValidatingKey,
+    },
+    note::{
+        commitment::{NoteCommitTrapdoor, NoteCommitment},
+        Note, Rho,
+    },
+    spec::NonIdentityPallasPoint,
+    tree::MerkleHashOrchard,
+    value::{NoteValue, ValueCommitTrapdoor},
 };
 
-impl OrchardCircuit for OrchardVanilla {
+/// The OrchardVanilla Action circuit.
+///
+/// The `circuit_version` field selects which circuit to build. Callers must choose it
+/// explicitly instead of relying on a default.
+///
+/// This structure is embedded in `CircuitZsa` for the ZSA variation.
+#[derive(Clone, Debug)]
+pub struct CircuitVanilla {
+    pub(crate) path: Value<[MerkleHashOrchard; MERKLE_DEPTH_ORCHARD]>,
+    pub(crate) pos: Value<u32>,
+    pub(crate) g_d_old: Value<NonIdentityPallasPoint>,
+    pub(crate) pk_d_old: Value<DiversifiedTransmissionKey>,
+    pub(crate) v_old: Value<NoteValue>,
+    pub(crate) rho_old: Value<Rho>,
+    pub(crate) psi_old: Value<pallas::Base>,
+    pub(crate) rcm_old: Value<NoteCommitTrapdoor>,
+    pub(crate) cm_old: Value<NoteCommitment>,
+    pub(crate) alpha: Value<pallas::Scalar>,
+    pub(crate) ak: Value<SpendValidatingKey>,
+    pub(crate) nk: Value<NullifierDerivingKey>,
+    pub(crate) rivk: Value<CommitIvkRandomness>,
+    pub(crate) g_d_new: Value<NonIdentityPallasPoint>,
+    pub(crate) pk_d_new: Value<DiversifiedTransmissionKey>,
+    pub(crate) v_new: Value<NoteValue>,
+    pub(crate) psi_new: Value<pallas::Base>,
+    pub(crate) rcm_new: Value<NoteCommitTrapdoor>,
+    pub(crate) rcv: Value<ValueCommitTrapdoor>,
+
+    pub(crate) circuit_version: OrchardCircuitVersion,
+}
+
+impl CircuitVanilla {
+    /// Returns an empty circuit with all private witnesses unknown.
+    ///
+    /// This is used for circuit shape-dependent operations, such as generating keys
+    /// or rendering the circuit layout, where witness values are not required but the
+    /// selected circuit version still determines the configured constraints.
+    pub(crate) fn empty(circuit_version: OrchardCircuitVersion) -> Self {
+        CircuitVanilla {
+            path: Value::unknown(),
+            pos: Value::unknown(),
+            g_d_old: Value::unknown(),
+            pk_d_old: Value::unknown(),
+            v_old: Value::unknown(),
+            rho_old: Value::unknown(),
+            psi_old: Value::unknown(),
+            rcm_old: Value::unknown(),
+            cm_old: Value::unknown(),
+            alpha: Value::unknown(),
+            ak: Value::unknown(),
+            nk: Value::unknown(),
+            rivk: Value::unknown(),
+            g_d_new: Value::unknown(),
+            pk_d_new: Value::unknown(),
+            v_new: Value::unknown(),
+            psi_new: Value::unknown(),
+            rcm_new: Value::unknown(),
+            rcv: Value::unknown(),
+            circuit_version,
+        }
+    }
+
+    /// Constructs a `CircuitVanilla` for the given `circuit_version` from the following components:
+    /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
+    /// - `output_note`: a note created in scope of the action
+    /// - `alpha`: a scalar used for randomization of the action spend validating key
+    /// - `rcv`: trapdoor for the action value commitment
+    /// - `circuit_version`: the [`OrchardCircuitVersion`] selected for the circuit
+    ///
+    /// This function returns also `psi_nf` which is only consumed by
+    /// [`CircuitZsa`], for its split-note handling.
+    ///
+    /// [`SpendInfo`]: crate::builder::SpendInfo
+    /// [`OrchardCircuitVersion`]: crate::circuit::OrchardCircuitVersion
+    /// [`CircuitZsa`]: crate::circuit::circuit_zsa::CircuitZsa
+    pub(crate) fn from_action_context_common(
+        spend: &SpendInfo,
+        output_note: &Note,
+        alpha: pallas::Scalar,
+        rcv: ValueCommitTrapdoor,
+        circuit_version: OrchardCircuitVersion,
+    ) -> (Self, pallas::Base) {
+        let sender_address = spend.note.recipient();
+        let rho_old = spend.note.rho();
+        let psi_old = spend.note.psi();
+        let rcm_old = spend.note.rcm();
+
+        let psi_new = output_note.psi();
+        let rcm_new = output_note.rcm();
+
+        let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
+        let psi_nf = nf_rseed.psi(&rho_old);
+
+        (
+            CircuitVanilla {
+                path: Value::known(spend.merkle_path.auth_path()),
+                pos: Value::known(spend.merkle_path.position()),
+                g_d_old: Value::known(sender_address.g_d()),
+                pk_d_old: Value::known(*sender_address.pk_d()),
+                v_old: Value::known(spend.note.value()),
+                rho_old: Value::known(rho_old),
+                psi_old: Value::known(psi_old),
+                rcm_old: Value::known(rcm_old),
+                cm_old: Value::known(spend.note.commitment()),
+                alpha: Value::known(alpha),
+                ak: Value::known(spend.fvk.clone().into()),
+                nk: Value::known(*spend.fvk.nk()),
+                rivk: Value::known(spend.fvk.rivk(spend.scope)),
+                g_d_new: Value::known(output_note.recipient().g_d()),
+                pk_d_new: Value::known(*output_note.recipient().pk_d()),
+                v_new: Value::known(output_note.value()),
+                psi_new: Value::known(psi_new),
+                rcm_new: Value::known(rcm_new),
+                rcv: Value::known(rcv),
+                circuit_version,
+            },
+            psi_nf,
+        )
+    }
+
+    /// Constructs a `CircuitVanilla` for the given `circuit_version` from the following
+    /// components:
+    /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
+    /// - `output_note`: a note created in scope of the action
+    /// - `alpha`: a scalar used for randomization of the action spend validating key
+    /// - `rcv`: trapdoor for the action value commitment
+    ///
+    /// # Panics
+    ///
+    /// Panics if
+    /// - if the spent note's asset is not zatoshi,
+    /// - if`spend.split_flag` is true, or
+    /// - if `circuit_version` is ZSA.
+    pub(crate) fn from_action_context_unchecked(
+        spend: SpendInfo,
+        output_note: Note,
+        alpha: pallas::Scalar,
+        rcv: ValueCommitTrapdoor,
+        circuit_version: OrchardCircuitVersion,
+    ) -> Self {
+        if !(bool::from(spend.note.asset().is_zatoshi())) {
+            panic!("asset must be zatoshi in OrchardVanilla circuit");
+        }
+        if spend.split_flag {
+            panic!("split_flag must be false in OrchardVanilla circuit");
+        }
+        if circuit_version.is_zsa() {
+            panic!("circuit version must not be ZSA in OrchardVanilla circuit");
+        }
+
+        let (circuit, _) =
+            Self::from_action_context_common(&spend, &output_note, alpha, rcv, circuit_version);
+        circuit
+    }
+}
+
+impl plonk::Circuit<pallas::Base> for CircuitVanilla {
     type Config = Config<PallasLookupRangeCheckConfig>;
+    type FloorPlanner = floor_planner::V1;
+
+    fn without_witnesses(&self) -> Self {
+        CircuitVanilla::empty(self.circuit_version)
+    }
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
         // Advice columns used in the Orchard circuit.
@@ -236,43 +407,25 @@ impl OrchardCircuit for OrchardVanilla {
 
     #[allow(non_snake_case)]
     fn synthesize(
-        circuit: &Witnesses,
+        &self,
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
-        if circuit.circuit_version == OrchardCircuitVersion::ZSA {
+        if self.circuit_version.is_zsa() {
             return Err(plonk::Error::Synthesis);
         }
 
-        let addrs = circuit.synthesize_base(&config, &mut layouter)?;
+        let addrs = self.synthesize_base(&config, &mut layouter)?;
 
-        if circuit.circuit_version.supports_cross_address_restriction() {
-            Witnesses::synthesize_cross_address_checks(&config, &mut layouter, &addrs)?;
+        if self.circuit_version.supports_cross_address_restriction() {
+            CircuitVanilla::synthesize_cross_address_checks(&config, &mut layouter, &addrs)?;
         }
 
         Ok(())
     }
-
-    /// For OrchardVanilla circuits, `build_additional_zsa_witnesses` returns `Value::unknown()`.
-    ///
-    /// # Panics
-    /// Panics if the asset is not zatoshi or if `split_flag` is true.
-    fn build_additional_zsa_witnesses(
-        _: pallas::Base,
-        asset: AssetBase,
-        split_flag: bool,
-    ) -> Value<AdditionalZsaWitnesses> {
-        if !(bool::from(asset.is_zatoshi())) {
-            panic!("asset must be zatoshi in OrchardVanilla circuit");
-        }
-        if split_flag {
-            panic!("split_flag must be false in OrchardVanilla circuit");
-        }
-        Value::unknown()
-    }
 }
 
-impl Witnesses {
+impl CircuitVanilla {
     /// Synthesizes the Orchard Action checks common to every circuit version,
     /// parameterized by `self.circuit_version`, returning the cells carrying the old
     /// and new note addresses so that circuit versions can impose additional
@@ -821,8 +974,8 @@ mod tests {
     use crate::{
         bundle::{BundleVersion, Flags},
         circuit::{
-            Circuit, Instance, OrchardCircuitVersion, Proof, ProvingKey, SingleVerifier,
-            VerifyingKey, Witnesses, K,
+            Circuit, CircuitVanilla, Instance, OrchardCircuitVersion, Proof, ProvingKey,
+            SingleVerifier, VerifyingKey, K,
         },
         flavor::OrchardVanilla,
         keys::SpendValidatingKey,
@@ -836,7 +989,7 @@ mod tests {
     fn generate_circuit_instance<R: RngCore>(
         rng: R,
         circuit_version: OrchardCircuitVersion,
-    ) -> (Circuit<OrchardVanilla>, Instance) {
+    ) -> (Circuit, Instance) {
         generate_circuit_instance_inner(rng, circuit_version, false)
     }
 
@@ -845,7 +998,7 @@ mod tests {
     fn generate_self_transfer_circuit_instance<R: RngCore>(
         rng: R,
         circuit_version: OrchardCircuitVersion,
-    ) -> (Circuit<OrchardVanilla>, Instance) {
+    ) -> (Circuit, Instance) {
         generate_circuit_instance_inner(rng, circuit_version, true)
     }
 
@@ -853,7 +1006,7 @@ mod tests {
         mut rng: R,
         circuit_version: OrchardCircuitVersion,
         output_matches_spend: bool,
-    ) -> (Circuit<OrchardVanilla>, Instance) {
+    ) -> (Circuit, Instance) {
         // Note Version does not matter for this
         let note_version = NoteVersion::V2;
         let (_, fvk, spent_note) = Note::dummy(&mut rng, None, note_version);
@@ -894,32 +1047,28 @@ mod tests {
         let anchor = path.root(spent_note.commitment().into());
 
         (
-            Circuit {
-                witnesses: Witnesses {
-                    circuit_version,
-                    path: Value::known(path.auth_path()),
-                    pos: Value::known(path.position()),
-                    g_d_old: Value::known(sender_address.g_d()),
-                    pk_d_old: Value::known(*sender_address.pk_d()),
-                    v_old: Value::known(spent_note.value()),
-                    rho_old: Value::known(spent_note.rho()),
-                    psi_old: Value::known(spent_note.psi()),
-                    rcm_old: Value::known(spent_note.rcm()),
-                    cm_old: Value::known(spent_note.commitment()),
-                    alpha: Value::known(alpha),
-                    ak: Value::known(ak),
-                    nk: Value::known(nk),
-                    rivk: Value::known(rivk),
-                    g_d_new: Value::known(output_note.recipient().g_d()),
-                    pk_d_new: Value::known(*output_note.recipient().pk_d()),
-                    v_new: Value::known(output_note.value()),
-                    psi_new: Value::known(output_note.psi()),
-                    rcm_new: Value::known(output_note.rcm()),
-                    rcv: Value::known(rcv),
-                    additional_zsa_witnesses: Value::unknown(),
-                },
-                phantom: core::marker::PhantomData,
-            },
+            Circuit::OrchardVanilla(CircuitVanilla {
+                circuit_version,
+                path: Value::known(path.auth_path()),
+                pos: Value::known(path.position()),
+                g_d_old: Value::known(sender_address.g_d()),
+                pk_d_old: Value::known(*sender_address.pk_d()),
+                v_old: Value::known(spent_note.value()),
+                rho_old: Value::known(spent_note.rho()),
+                psi_old: Value::known(spent_note.psi()),
+                rcm_old: Value::known(spent_note.rcm()),
+                cm_old: Value::known(spent_note.commitment()),
+                alpha: Value::known(alpha),
+                ak: Value::known(ak),
+                nk: Value::known(nk),
+                rivk: Value::known(rivk),
+                g_d_new: Value::known(output_note.recipient().g_d()),
+                pk_d_new: Value::known(*output_note.recipient().pk_d()),
+                v_new: Value::known(output_note.value()),
+                psi_new: Value::known(output_note.psi()),
+                rcm_new: Value::known(output_note.rcm()),
+                rcv: Value::known(rcv),
+            }),
             Instance {
                 anchor,
                 cv_net,
@@ -1057,10 +1206,10 @@ mod tests {
 
     #[test]
     fn post_nu6_3_cross_address_restriction_is_conditional() {
-        let mock_verify = |circuit: &Circuit<OrchardVanilla>, instance: &Instance| {
+        let mock_verify = |circuit: &Circuit, instance: &Instance| {
             MockProver::run(
                 K,
-                circuit,
+                circuit.as_vanilla().unwrap(),
                 instance
                     .to_halo2_instance()
                     .iter()
@@ -1094,8 +1243,8 @@ mod tests {
             generate_self_transfer_circuit_instance(&mut rng, OrchardCircuitVersion::PostNu6_3);
         instance.cross_address_disabled = true;
 
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
-        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
 
         let proof = Proof::create(
             &pk,
@@ -1120,8 +1269,8 @@ mod tests {
             generate_circuit_instance(&mut rng, OrchardCircuitVersion::FixedPostNu6_2);
         instance.cross_address_disabled = true;
 
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
-        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
 
         let raw_instances = instance.to_halo2_instance();
         let raw_instances: Vec<_> = raw_instances.iter().map(|i| &i[..]).collect();
@@ -1131,7 +1280,7 @@ mod tests {
         super::plonk::create_proof(
             &pk.params,
             &pk.pk,
-            core::slice::from_ref(&circuit),
+            core::slice::from_ref(circuit.as_vanilla().unwrap()),
             &raw_instances,
             &mut rng,
             &mut transcript,
@@ -1174,7 +1323,7 @@ mod tests {
         path: &str,
         expected: &str,
     ) -> VerifyingKey {
-        let vk = VerifyingKey::build::<OrchardVanilla>(circuit_version);
+        let vk = VerifyingKey::build(circuit_version);
 
         if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
             std::fs::write(path, format!("{:#?}\n", vk.vk.pinned()))
@@ -1202,7 +1351,7 @@ mod tests {
             let circuit_cost =
                 halo2_proofs::dev::CircuitCost::<pasta_curves::vesta::Point, _>::measure(
                     K,
-                    &circuits[0],
+                    circuits[0].as_vanilla().unwrap(),
                 );
             // These sizes are identical for every circuit version: the post-NU 6.3 circuit reuses the
             // existing Orchard checks gate on spare rows and adds no columns or
@@ -1224,7 +1373,7 @@ mod tests {
             assert_eq!(
                 MockProver::run(
                     K,
-                    circuit,
+                    circuit.as_vanilla().unwrap(),
                     instance
                         .to_halo2_instance()
                         .iter()
@@ -1237,7 +1386,7 @@ mod tests {
             );
         }
 
-        let pk = ProvingKey::build::<OrchardVanilla>(circuit_version);
+        let pk = ProvingKey::build(circuit_version);
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
@@ -1275,15 +1424,15 @@ mod tests {
         let (circuit, instance) = generate_circuit_instance(&mut rng, proving_version);
         let instances = core::slice::from_ref(&instance);
 
-        let pk = ProvingKey::build::<OrchardVanilla>(proving_version);
+        let pk = ProvingKey::build(proving_version);
         let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
 
         // Verifies under the matching version's verifying key.
-        let vk_matching = VerifyingKey::build::<OrchardVanilla>(proving_version);
+        let vk_matching = VerifyingKey::build(proving_version);
         assert!(proof.verify(&vk_matching, instances).is_ok());
 
         // Does not verify under the other version's verifying key.
-        let vk_other = VerifyingKey::build::<OrchardVanilla>(other_version);
+        let vk_other = VerifyingKey::build(other_version);
         assert!(proof.verify(&vk_other, instances).is_err());
     }
 
@@ -1345,7 +1494,7 @@ mod tests {
             let (circuit, instance) = generate_circuit_instance(&mut rng, circuit_version);
             let instances = core::slice::from_ref(&instance);
 
-            let mismatched_pk = ProvingKey::build::<OrchardVanilla>(pk_version);
+            let mismatched_pk = ProvingKey::build(pk_version);
 
             assert!(matches!(
                 Proof::create(&mismatched_pk, &[circuit], instances, &mut rng),
@@ -1362,7 +1511,7 @@ mod tests {
         expected_proof_size: usize,
         restricted: bool,
     ) {
-        let vk = VerifyingKey::build::<OrchardVanilla>(circuit_version);
+        let vk = VerifyingKey::build(circuit_version);
         // Set ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF to regenerate this serialized proof
         // fixture. The non-regeneration path embeds and verifies the checked-in fixture.
         if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
@@ -1377,7 +1526,7 @@ mod tests {
                 instance.cross_address_disabled = restricted;
                 let instances = core::slice::from_ref(&instance);
 
-                let pk = ProvingKey::build::<OrchardVanilla>(circuit_version);
+                let pk = ProvingKey::build(circuit_version);
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
@@ -1442,7 +1591,7 @@ mod tests {
     // pre-NU6.2 verifying key and a sample proof, so they are never regenerated.
     #[test]
     fn insecure_against_stored_circuit() {
-        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::InsecurePreNu6_2);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::InsecurePreNu6_2);
         assert_eq!(
             format!("{:#?}\n", vk.vk.pinned()),
             include_str!("../circuit_data/circuit_description_insecure_vanilla")
@@ -1470,7 +1619,7 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = Circuit::<OrchardVanilla>::empty(OrchardCircuitVersion::FixedPostNu6_2);
+        let circuit = CircuitVanilla::empty(OrchardCircuitVersion::FixedPostNu6_2);
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)
             .view_height(0..(1 << 11))

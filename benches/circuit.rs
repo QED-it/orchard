@@ -29,8 +29,8 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
 
     let bundle_version = FL::DEFAULT_BUNDLE_VERSION;
 
-    let vk = VerifyingKey::build::<FL>(bundle_version.circuit_version());
-    let pk = ProvingKey::build::<FL>(bundle_version.circuit_version());
+    let vk = VerifyingKey::build(bundle_version.circuit_version());
+    let pk = ProvingKey::build(bundle_version.circuit_version());
 
     let create_bundle = |num_recipients| {
         let mut builder = Builder::new(
@@ -73,7 +73,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 b.iter(|| {
                     bundle
                         .authorization()
-                        .create_proof::<FL>(&pk, &instances, rng)
+                        .create_proof(&pk, &instances, rng)
                         .unwrap()
                 });
             });
