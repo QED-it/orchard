@@ -11,7 +11,7 @@ use crate::{
         Authorization, Authorized, BundleVersion, CommitmentError, TxVersion,
     },
     flavor::OrchardVanilla,
-    note::{AssetBase, Note},
+    note::Note,
     note_encryption::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, MEMO_SIZE,
     },
@@ -36,9 +36,6 @@ impl OrchardPrimitives for OrchardVanilla {
         NoteBytesData(np)
     }
 
-    fn extract_asset(_plaintext: &Self::CompactNotePlaintextBytes) -> Option<AssetBase> {
-        Some(AssetBase::zatoshi())
-    }
     /// Write disjoint parts of each bundle action as 3 separate hashes
     /// as defined in [ZIP-244: Transaction Identifier Non-Malleability][zip244]:
     /// * \[(nullifier, cmx, ephemeral_key, enc_ciphertext\[..52\])*\] personalized

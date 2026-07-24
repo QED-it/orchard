@@ -9,7 +9,6 @@ use zcash_note_encryption::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
 
 use crate::{
     bundle::{Authorization, Authorized, BundleVersion, CommitmentError, TxVersion},
-    note::AssetBase,
     note_encryption::{Memo, MEMO_SIZE},
     sighash_kind::OrchardSighashKind,
     Bundle, Note,
@@ -38,9 +37,6 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
 
     /// Builds NotePlaintextBytes from Note and Memo.
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes;
-
-    /// Extracts the asset from the note plaintext.
-    fn extract_asset(plaintext: &Self::CompactNotePlaintextBytes) -> Option<AssetBase>;
 
     /// Evaluate `orchard_digest` for the bundle as defined in
     /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]

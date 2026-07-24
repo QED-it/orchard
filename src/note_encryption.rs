@@ -17,7 +17,7 @@ use crate::{
         DiversifiedTransmissionKey, Diversifier, EphemeralPublicKey, EphemeralSecretKey,
         OutgoingViewingKey, PreparedEphemeralPublicKey, PreparedIncomingViewingKey, SharedSecret,
     },
-    note::{ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho},
+    note::{AssetBase, ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho},
     primitives::OrchardPrimitives,
     value::{NoteValue, ValueCommitment},
     Address, Note,
@@ -74,6 +74,23 @@ pub(crate) fn prf_ock_orchard(
     )
 }
 
+/// Extracts the asset from a compact note plaintext.
+///
+/// [`NoteVersion::V2`] and [`NoteVersion::V3`] plaintexts always denote notes holding zatoshis.
+/// [`NoteVersion::ZSA`] plaintexts additionally embed the asset in the bytes following the
+/// Vanilla compact note fields.
+fn extract_asset(note_version: NoteVersion, plaintext: &[u8]) -> Option<AssetBase> {
+    match note_version {
+        NoteVersion::V2 | NoteVersion::V3 => Some(AssetBase::zatoshi()),
+        NoteVersion::ZSA => {
+            let bytes = plaintext[COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA]
+                .try_into()
+                .unwrap();
+            AssetBase::from_bytes(bytes).into()
+        }
+    }
+}
+
 pub(crate) fn parse_note_plaintext_without_memo<Pr: OrchardPrimitives, F>(
     rho: Rho,
     plaintext: &Pr::CompactNotePlaintextBytes,
@@ -105,7 +122,7 @@ where
 
     let pk_d = get_pk_d(&diversifier);
     let recipient = Address::from_parts(diversifier, pk_d);
-    let asset = Pr::extract_asset(plaintext)?;
+    let asset = extract_asset(note_version, plaintext.as_ref())?;
     let note = Option::from(Note::from_parts(
         recipient,
         value,

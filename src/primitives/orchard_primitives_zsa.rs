@@ -11,7 +11,7 @@ use crate::{
         Authorization, Authorized, BundleVersion, CommitmentError, TxVersion,
     },
     flavor::OrchardZSA,
-    note::{AssetBase, Note},
+    note::Note,
     note_encryption::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
         MEMO_SIZE,
@@ -37,14 +37,6 @@ impl OrchardPrimitives for OrchardZSA {
         np[COMPACT_NOTE_SIZE_ZSA..].copy_from_slice(memo);
 
         NoteBytesData(np)
-    }
-
-    fn extract_asset(plaintext: &Self::CompactNotePlaintextBytes) -> Option<AssetBase> {
-        let bytes = plaintext.as_ref()[COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA]
-            .try_into()
-            .unwrap();
-
-        AssetBase::from_bytes(bytes).into()
     }
 
     /// Evaluate `orchard_digest` for the bundle as defined in
