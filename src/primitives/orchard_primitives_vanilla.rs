@@ -22,8 +22,6 @@ use crate::{
 
 impl OrchardPrimitives for OrchardVanilla {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_VANILLA;
-    const BASE_PROOF_SIZE: usize = 2720;
-    const PER_ACTION_PROOF_SIZE: usize = 2272;
 
     type NotePlaintextBytes = NoteBytesData<{ Self::NOTE_PLAINTEXT_SIZE }>;
     type NoteCiphertextBytes = NoteBytesData<{ Self::ENC_CIPHERTEXT_SIZE }>;

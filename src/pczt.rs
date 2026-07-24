@@ -380,7 +380,6 @@ mod tests {
         bundle::{BundleVersion, Flags},
         circuit::{OrchardCircuitVersion, ProvingKey, VerifyingKey},
         constants::MERKLE_DEPTH_ORCHARD,
-        flavor::OrchardVanilla,
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{AssetBase, ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho},
         pczt::{
@@ -1550,9 +1549,8 @@ mod tests {
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
         pczt_bundle.zkproof = Some(crate::Proof::new(vec![
             0;
-            crate::Proof::expected_proof_size::<
-                OrchardVanilla,
-            >(
+            crate::Proof::expected_proof_size(
+                BundleVersion::orchard_v3(),
                 pczt_bundle.actions.len()
             )
         ]));

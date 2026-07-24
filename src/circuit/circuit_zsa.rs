@@ -1259,12 +1259,11 @@ mod tests {
 
     use crate::{
         builder::SpendInfo,
-        bundle::Flags,
+        bundle::{BundleVersion, Flags},
         circuit::{
             circuit_zsa::AdditionalZsaWitnesses, Circuit, CircuitVanilla, CircuitZsa, Instance,
             OrchardCircuitVersion, Proof, ProvingKey, VerifyingKey, K,
         },
-        flavor::OrchardZSA,
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{
             commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, NoteVersion,
@@ -1439,10 +1438,10 @@ mod tests {
             assert_eq!(usize::from(circuit_cost.proof_size(2)), 7392);
             // The constants in `Proof::expected_proof_size` must track the circuit's actual
             // proof size; this guards them against drift if the circuit ever changes.
-            assert_eq!(Proof::expected_proof_size::<OrchardZSA>(1), 5120);
-            assert_eq!(Proof::expected_proof_size::<OrchardZSA>(2), 7392);
+            assert_eq!(Proof::expected_proof_size(BundleVersion::zsa(), 1), 5120);
+            assert_eq!(Proof::expected_proof_size(BundleVersion::zsa(), 2), 7392);
             assert_eq!(
-                Proof::expected_proof_size::<OrchardZSA>(instances.len()),
+                Proof::expected_proof_size(BundleVersion::zsa(), instances.len()),
                 usize::from(circuit_cost.proof_size(instances.len())),
             );
             usize::from(circuit_cost.proof_size(instances.len()))

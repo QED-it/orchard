@@ -151,6 +151,16 @@ impl BundleVersion {
         }
     }
 
+    /// Returns the `(base, per_action)` proof-size constants for the circuit that proves and
+    /// verifies actions for this bundle version, such that a canonical proof for `num_actions`
+    /// actions is exactly `base + per_action * num_actions` bytes.
+    pub(crate) const fn proof_size_constants(&self) -> (usize, usize) {
+        match self.protocol_version {
+            ProtocolVersion::InsecureV1 | ProtocolVersion::V2 | ProtocolVersion::V3 => (2720, 2272),
+            ProtocolVersion::ZSA => (2848, 2272),
+        }
+    }
+
     /// The [`NoteVersion`] associated with this bundle version.
     ///
     /// Orchard pools use V2 note plaintexts for all protocol versions.
@@ -589,11 +599,12 @@ impl<A: Authorization, V: fmt::Debug, Pr: OrchardPrimitives> fmt::Debug for Bund
 /// Returns [`BundleError::NonCanonicalProofSize`] if it does not. This is the shared check
 /// used by the proof-carrying bundle constructors to reject non-canonical (e.g. padded)
 /// proofs; see [`Bundle::try_from_parts`] (GHSA-2x4w-pxqw-58v9).
-pub(crate) fn validate_proof_size<Pr: OrchardPrimitives>(
+pub(crate) fn validate_proof_size(
     proof: &Proof,
     num_actions: usize,
+    bundle_version: BundleVersion,
 ) -> Result<(), BundleError> {
-    let expected = Proof::expected_proof_size::<Pr>(num_actions);
+    let expected = Proof::expected_proof_size(bundle_version, num_actions);
     let actual = proof.as_ref().len();
     if actual == expected {
         Ok(())
@@ -1109,7 +1120,7 @@ impl<V, Pr: OrchardPrimitives> Bundle<Authorized, V, Pr> {
             return Err(BundleError::InvalidBundleVersion);
         }
         if bundle_version.enforces_canonical_proof_size() {
-            validate_proof_size::<Pr>(authorization.proof(), actions.len())?;
+            validate_proof_size(authorization.proof(), actions.len(), bundle_version)?;
         }
         validate_flags(&flags, bundle_version)?;
         Ok(Bundle::from_parts_unchecked(
@@ -1433,7 +1444,10 @@ pub mod testing {
                 sk in arb_binding_signing_key(),
                 rng_seed in prop::array::uniform32(prop::num::u8::ANY),
                 // A fake proof of the canonical length, so the bundle passes `try_from_parts`.
-                fake_proof in vec(prop::num::u8::ANY, Proof::expected_proof_size::<Pr>(n_actions)),
+                fake_proof in vec(
+                    prop::num::u8::ANY,
+                    Proof::expected_proof_size(bundle_version, n_actions),
+                ),
                 fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
                 flags in Just(flags),
                 burn in vec(Self::arb_asset_to_burn(), 1usize..10),
@@ -1471,11 +1485,7 @@ pub(crate) mod tests {
     use super::{
         Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags, TxVersion,
     };
-    use crate::{
-        flavor::{OrchardVanilla, OrchardZSA},
-        sighash_kind::test_sighash_info_for_kind,
-        Proof,
-    };
+    use crate::{flavor::OrchardVanilla, sighash_kind::test_sighash_info_for_kind, Proof};
 
     #[cfg(feature = "circuit")]
     pub(crate) fn with_cross_address_disabled(
@@ -1627,15 +1637,21 @@ pub(crate) mod tests {
     #[test]
     fn expected_proof_size_matches_known_values_vanilla() {
         // The canonical proof sizes for one and two actions, fixed by the action circuit.
-        assert_eq!(Proof::expected_proof_size::<OrchardVanilla>(1), 4992);
-        assert_eq!(Proof::expected_proof_size::<OrchardVanilla>(2), 7264);
+        assert_eq!(
+            Proof::expected_proof_size(BundleVersion::orchard_v3(), 1),
+            4992
+        );
+        assert_eq!(
+            Proof::expected_proof_size(BundleVersion::orchard_v3(), 2),
+            7264
+        );
 
         // The size is affine in the number of actions: each action contributes a fixed amount.
-        let per_action = Proof::expected_proof_size::<OrchardVanilla>(2)
-            - Proof::expected_proof_size::<OrchardVanilla>(1);
+        let per_action = Proof::expected_proof_size(BundleVersion::orchard_v3(), 2)
+            - Proof::expected_proof_size(BundleVersion::orchard_v3(), 1);
         assert_eq!(
-            Proof::expected_proof_size::<OrchardVanilla>(3)
-                - Proof::expected_proof_size::<OrchardVanilla>(2),
+            Proof::expected_proof_size(BundleVersion::orchard_v3(), 3)
+                - Proof::expected_proof_size(BundleVersion::orchard_v3(), 2),
             per_action,
         );
     }
@@ -1643,15 +1659,15 @@ pub(crate) mod tests {
     #[test]
     fn expected_proof_size_matches_known_values_zsa() {
         // The canonical proof sizes for one and two actions, fixed by the action circuit.
-        assert_eq!(Proof::expected_proof_size::<OrchardZSA>(1), 5120);
-        assert_eq!(Proof::expected_proof_size::<OrchardZSA>(2), 7392);
+        assert_eq!(Proof::expected_proof_size(BundleVersion::zsa(), 1), 5120);
+        assert_eq!(Proof::expected_proof_size(BundleVersion::zsa(), 2), 7392);
 
         // The size is affine in the number of actions: each action contributes a fixed amount.
-        let per_action = Proof::expected_proof_size::<OrchardZSA>(2)
-            - Proof::expected_proof_size::<OrchardZSA>(1);
+        let per_action = Proof::expected_proof_size(BundleVersion::zsa(), 2)
+            - Proof::expected_proof_size(BundleVersion::zsa(), 1);
         assert_eq!(
-            Proof::expected_proof_size::<OrchardZSA>(3)
-                - Proof::expected_proof_size::<OrchardZSA>(2),
+            Proof::expected_proof_size(BundleVersion::zsa(), 3)
+                - Proof::expected_proof_size(BundleVersion::zsa(), 2),
             per_action,
         );
     }
@@ -1864,10 +1880,10 @@ pub(crate) mod tests {
             bundle in BundleArb::<OrchardVanilla>::arb_bundle(3)
         ) {
             let actions = bundle.actions().clone();
-            let expected = Proof::expected_proof_size::<OrchardVanilla>(actions.len());
             let flags = *bundle.flags();
             // Ironwood enforces canonical proof size and accepts any cross-address flag value.
             let bundle_version = BundleVersion::ironwood_v3();
+            let expected = Proof::expected_proof_size(bundle_version, actions.len());
             let value_balance = *bundle.value_balance();
             let anchor = *bundle.anchor();
             let binding_signature = bundle.authorization().binding_signature().clone();
@@ -1932,7 +1948,7 @@ pub(crate) mod tests {
             bundle in BundleArb::<OrchardVanilla>::arb_bundle(3)
         ) {
             let actions = bundle.actions().clone();
-            let expected = Proof::expected_proof_size::<OrchardVanilla>(actions.len());
+            let expected = Proof::expected_proof_size(bundle.bundle_version, actions.len());
             let mut flags = *bundle.flags();
             flags.cross_address_enabled = false;
             let value_balance = *bundle.value_balance();
@@ -1962,7 +1978,8 @@ pub(crate) mod tests {
             // The historical pre-NU6.2 Orchard pool does not enforce canonical proof size, so a
             // padded proof is accepted: its transaction is already committed and cannot be
             // re-canonicalized.
-            let expected = Proof::expected_proof_size::<OrchardVanilla>(bundle.actions().len());
+            let bundle_version = BundleVersion::orchard_insecure_v1();
+            let expected = Proof::expected_proof_size(bundle_version, bundle.actions().len());
             let padded = Bundle::try_from_parts(
                 bundle.actions().clone(),
                 Flags::ENABLED,
@@ -1973,7 +1990,7 @@ pub(crate) mod tests {
                     Proof::new(vec![0u8; expected + 1]),
                     bundle.authorization().binding_signature().clone(),
                 ),
-                BundleVersion::orchard_insecure_v1(),
+                bundle_version,
             );
             prop_assert!(padded.is_ok());
         }

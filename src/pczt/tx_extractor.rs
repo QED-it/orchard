@@ -60,9 +60,10 @@ impl super::Bundle {
         // transition in `apply_binding_signature`. Circuit-key support for bundle
         // flags is checked when proving or verifying.
         if let Some(bundle) = &bundle {
-            crate::bundle::validate_proof_size::<OrchardVanilla>(
+            crate::bundle::validate_proof_size(
                 &bundle.authorization().proof,
                 bundle.actions().len(),
+                bundle.bundle_version(),
             )?;
         }
 
