@@ -8,7 +8,7 @@ use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
 
 use crate::{
-    bundle::{Authorization, Authorized, BundleVersion, CommitmentError, TxVersion},
+    bundle::{Authorized, BundleVersion, CommitmentError, TxVersion},
     note_encryption::{Memo, MEMO_SIZE},
     sighash_kind::OrchardSighashKind,
     Bundle, Note,
@@ -37,19 +37,6 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
 
     /// Builds NotePlaintextBytes from Note and Memo.
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes;
-
-    /// Evaluate `orchard_digest` for the bundle as defined in
-    /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
-    /// for OrchardVanilla and as defined in
-    /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
-    /// for OrchardZSA
-    ///
-    /// [zip244]: https://zips.z.cash/zip-0244
-    /// [zip246]: https://zips.z.cash/zip-0246
-    fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
-        bundle: &Bundle<A, V, Self>,
-        tx_version: TxVersion,
-    ) -> Result<Blake2bHash, CommitmentError>;
 
     /// Evaluate `orchard_auth_digest` for the bundle as defined in
     /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]

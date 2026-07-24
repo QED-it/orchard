@@ -5,6 +5,7 @@ use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::{
     bundle::{Authorization, Authorized, Bundle, CommitmentError, TxVersion},
+    note_encryption::{COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA, MEMO_SIZE},
     primitives::OrchardPrimitives,
     sighash_kind::OrchardSighashKind,
     ValuePool,
@@ -161,6 +162,140 @@ pub(crate) fn hasher(personal: &[u8; 16]) -> State {
     Params::new().hash_length(32).personal(personal).to_state()
 }
 
+/// Write disjoint parts of each bundle action as 3 separate hashes
+/// as defined in [ZIP-244: Transaction Identifier Non-Malleability][zip244]:
+/// * \[(nullifier, cmx, ephemeral_key, enc_ciphertext\[..52\])*\] personalized
+///   with the format's compact-action personalization string
+/// * \[enc_ciphertext\[52..564\]*\] (memo ciphertexts) personalized
+///   with the format's action-memos personalization string
+/// * \[(cv, rk, enc_ciphertext\[564..\], out_ciphertext)*\] personalized
+///   with the format's non-compact-action personalization string
+///
+/// Then, hash these together along with (flags, value_balance_orchard, and — for the v5
+/// transaction format only — anchor_orchard), personalized with the format's bundle
+/// personalization string. In the v6 format the anchor is included by
+/// `hash_bundle_auth_data` instead.
+///
+/// Returns [`CommitmentError::InvalidTransactionVersion`] if `tx_version` is not valid for the
+/// bundle's [`BundleVersion`].
+///
+/// [zip244]: https://zips.z.cash/zip-0244
+/// [`BundleVersion`]: crate::bundle::BundleVersion
+fn hash_bundle_txid_data_vanilla<A: Authorization, V: Copy + Into<i64>, Pr: OrchardPrimitives>(
+    bundle: &Bundle<A, V, Pr>,
+    tx_version: TxVersion,
+) -> Result<Blake2bHash, CommitmentError> {
+    let format = bundle
+        .bundle_version()
+        .value_pool()
+        .commitment_format(tx_version)?;
+
+    let personalizations = format.personalizations();
+    let mut h = hasher(personalizations.bundle);
+    let mut ch = hasher(personalizations.actions_compact);
+    let mut mh = hasher(personalizations.actions_memos);
+    let mut nh = hasher(personalizations.actions_noncompact);
+
+    for action in bundle.actions().iter() {
+        ch.update(&action.nullifier().to_bytes());
+        ch.update(&action.cmx().to_bytes());
+        ch.update(&action.encrypted_note().epk_bytes);
+        ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..COMPACT_NOTE_SIZE_VANILLA]);
+
+        mh.update(
+            &action.encrypted_note().enc_ciphertext.as_ref()
+                [COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_VANILLA + MEMO_SIZE],
+        );
+
+        nh.update(&action.cv_net().to_bytes());
+        nh.update(&<[u8; 32]>::from(action.rk()));
+        nh.update(
+            &action.encrypted_note().enc_ciphertext.as_ref()
+                [COMPACT_NOTE_SIZE_VANILLA + MEMO_SIZE..],
+        );
+        nh.update(&action.encrypted_note().out_ciphertext);
+    }
+
+    h.update(ch.finalize().as_bytes());
+    h.update(mh.finalize().as_bytes());
+    h.update(nh.finalize().as_bytes());
+    h.update(&[bundle.flag_byte()]);
+    h.update(&(*bundle.value_balance()).into().to_le_bytes());
+    if format.includes_anchor_in_txid_digest() {
+        h.update(&bundle.anchor().to_bytes());
+    }
+    Ok(h.finalize())
+}
+
+/// Evaluate `orchard_digest` for the bundle as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
+///
+/// [zip246]: https://zips.z.cash/zip-0246
+fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>, Pr: OrchardPrimitives>(
+    bundle: &Bundle<A, V, Pr>,
+    tx_version: TxVersion,
+) -> Result<Blake2bHash, CommitmentError> {
+    let format = bundle
+        .bundle_version()
+        .value_pool()
+        .commitment_format(tx_version)?;
+
+    let personalizations = format.personalizations();
+    let zsa_personalizations = personalizations.zsa.unwrap();
+
+    let mut h = hasher(personalizations.bundle);
+    let mut agh = hasher(zsa_personalizations.action_groups);
+
+    let mut ch = hasher(personalizations.actions_compact);
+    // TODO Remove mh once new Memo Bundles are implemented (ZIP-231).
+    let mut mh = hasher(personalizations.actions_memos);
+    let mut nh = hasher(personalizations.actions_noncompact);
+
+    for action in bundle.actions().iter() {
+        ch.update(&action.nullifier().to_bytes());
+        ch.update(&action.cmx().to_bytes());
+        ch.update(&action.encrypted_note().epk_bytes);
+        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
+        ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..COMPACT_NOTE_SIZE_ZSA]);
+        // TODO Uncomment once new Memo Bundles are implemented (ZIP-231).
+        // ch.update(&action.encrypted_note().enc_ciphertext.as_ref());
+
+        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
+        mh.update(
+            &action.encrypted_note().enc_ciphertext.as_ref()
+                [COMPACT_NOTE_SIZE_ZSA..COMPACT_NOTE_SIZE_ZSA + MEMO_SIZE],
+        );
+
+        nh.update(&action.cv_net().to_bytes());
+        nh.update(&<[u8; 32]>::from(action.rk()));
+        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
+        nh.update(
+            &action.encrypted_note().enc_ciphertext.as_ref()[COMPACT_NOTE_SIZE_ZSA + MEMO_SIZE..],
+        );
+        nh.update(&action.encrypted_note().out_ciphertext);
+    }
+
+    agh.update(ch.finalize().as_bytes());
+    // TODO Remove once new Memo Bundles are implemented (ZIP-231).
+    agh.update(mh.finalize().as_bytes());
+    agh.update(nh.finalize().as_bytes());
+
+    agh.update(&[bundle.flag_byte()]);
+    // For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
+    agh.update(&0u32.to_le_bytes());
+
+    let mut burn_hasher = hasher(zsa_personalizations.ironwood_burn);
+    for burn_item in bundle.burn() {
+        burn_hasher.update(&burn_item.0.to_bytes());
+        burn_hasher.update(&burn_item.1.to_bytes());
+    }
+    agh.update(burn_hasher.finalize().as_bytes());
+    h.update(agh.finalize().as_bytes());
+
+    h.update(&(*bundle.value_balance()).into().to_le_bytes());
+    Ok(h.finalize())
+}
+
 /// Evaluate `orchard_digest` for the bundle as defined in
 /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
 /// or in [ZIP-229: Version 6 Transaction Format][zip229]
@@ -179,7 +314,10 @@ pub(crate) fn hash_bundle_txid_data<
     bundle: &Bundle<A, V, Pr>,
     tx_version: TxVersion,
 ) -> Result<Blake2bHash, CommitmentError> {
-    Pr::hash_bundle_txid_data(bundle, tx_version)
+    match tx_version {
+        TxVersion::V5 | TxVersion::V6 => hash_bundle_txid_data_vanilla(bundle, tx_version),
+        TxVersion::ZSA => hash_bundle_txid_data_zsa(bundle, tx_version),
+    }
 }
 
 /// Construct the commitment for the absent bundle as defined in

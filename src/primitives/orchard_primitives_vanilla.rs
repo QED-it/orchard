@@ -8,13 +8,11 @@ use zcash_note_encryption::note_bytes::NoteBytesData;
 use crate::{
     bundle::{
         commitments::{hasher, BundleCommitmentFormat},
-        Authorization, Authorized, BundleVersion, CommitmentError, TxVersion,
+        Authorized, BundleVersion, CommitmentError, TxVersion,
     },
     flavor::OrchardVanilla,
     note::Note,
-    note_encryption::{
-        build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, MEMO_SIZE,
-    },
+    note_encryption::{build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA},
     primitives::orchard_primitives::OrchardPrimitives,
     sighash_kind::OrchardSighashKind,
     Bundle,
@@ -34,75 +32,6 @@ impl OrchardPrimitives for OrchardVanilla {
         np[COMPACT_NOTE_SIZE_VANILLA..].copy_from_slice(memo);
 
         NoteBytesData(np)
-    }
-
-    /// Write disjoint parts of each bundle action as 3 separate hashes
-    /// as defined in [ZIP-244: Transaction Identifier Non-Malleability][zip244]:
-    /// * \[(nullifier, cmx, ephemeral_key, enc_ciphertext\[..52\])*\] personalized
-    ///   with the format's compact-action personalization string
-    /// * \[enc_ciphertext\[52..564\]*\] (memo ciphertexts) personalized
-    ///   with the format's action-memos personalization string
-    /// * \[(cv, rk, enc_ciphertext\[564..\], out_ciphertext)*\] personalized
-    ///   with the format's non-compact-action personalization string
-    ///
-    /// Then, hash these together along with (flags, value_balance_orchard, and — for the v5
-    /// transaction format only — anchor_orchard), personalized with the format's bundle
-    /// personalization string. In the v6 format the anchor is included by
-    /// `hash_bundle_auth_data` instead.
-    ///
-    /// Returns [`CommitmentError::InvalidTransactionVersion`] if `tx_version` is not valid for the
-    /// bundle's [`BundleVersion`].
-    ///
-    /// [zip244]: https://zips.z.cash/zip-0244
-    /// [`BundleVersion`]: crate::bundle::BundleVersion
-    fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
-        bundle: &Bundle<A, V, OrchardVanilla>,
-        tx_version: TxVersion,
-    ) -> Result<Blake2bHash, CommitmentError> {
-        let format = bundle
-            .bundle_version()
-            .value_pool()
-            .commitment_format(tx_version)?;
-
-        if format == BundleCommitmentFormat::ZSA {
-            return Err(CommitmentError::InvalidTransactionVersion);
-        }
-
-        let personalizations = format.personalizations();
-        let mut h = hasher(personalizations.bundle);
-        let mut ch = hasher(personalizations.actions_compact);
-        let mut mh = hasher(personalizations.actions_memos);
-        let mut nh = hasher(personalizations.actions_noncompact);
-
-        for action in bundle.actions().iter() {
-            ch.update(&action.nullifier().to_bytes());
-            ch.update(&action.cmx().to_bytes());
-            ch.update(&action.encrypted_note().epk_bytes);
-            ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..Self::COMPACT_NOTE_SIZE]);
-
-            mh.update(
-                &action.encrypted_note().enc_ciphertext.as_ref()
-                    [Self::COMPACT_NOTE_SIZE..Self::COMPACT_NOTE_SIZE + MEMO_SIZE],
-            );
-
-            nh.update(&action.cv_net().to_bytes());
-            nh.update(&<[u8; 32]>::from(action.rk()));
-            nh.update(
-                &action.encrypted_note().enc_ciphertext.as_ref()
-                    [Self::COMPACT_NOTE_SIZE + MEMO_SIZE..],
-            );
-            nh.update(&action.encrypted_note().out_ciphertext);
-        }
-
-        h.update(ch.finalize().as_bytes());
-        h.update(mh.finalize().as_bytes());
-        h.update(nh.finalize().as_bytes());
-        h.update(&[bundle.flag_byte()]);
-        h.update(&(*bundle.value_balance()).into().to_le_bytes());
-        if format.includes_anchor_in_txid_digest() {
-            h.update(&bundle.anchor().to_bytes());
-        }
-        Ok(h.finalize())
     }
 
     /// Construct the commitment to the authorizing data of an

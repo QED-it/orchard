@@ -8,13 +8,12 @@ use zcash_note_encryption::note_bytes::NoteBytesData;
 use crate::{
     bundle::{
         commitments::{get_compact_size, hasher, BundleCommitmentFormat},
-        Authorization, Authorized, BundleVersion, CommitmentError, TxVersion,
+        Authorized, BundleVersion, CommitmentError, TxVersion,
     },
     flavor::OrchardZSA,
     note::Note,
     note_encryption::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
-        MEMO_SIZE,
     },
     primitives::orchard_primitives::OrchardPrimitives,
     sighash_kind::OrchardSighashKind,
@@ -37,80 +36,6 @@ impl OrchardPrimitives for OrchardZSA {
         np[COMPACT_NOTE_SIZE_ZSA..].copy_from_slice(memo);
 
         NoteBytesData(np)
-    }
-
-    /// Evaluate `orchard_digest` for the bundle as defined in
-    /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
-    ///
-    /// [zip246]: https://zips.z.cash/zip-0246
-    fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
-        bundle: &Bundle<A, V, OrchardZSA>,
-        tx_version: TxVersion,
-    ) -> Result<Blake2bHash, CommitmentError> {
-        let format = bundle
-            .bundle_version()
-            .value_pool()
-            .commitment_format(tx_version)?;
-
-        if format != BundleCommitmentFormat::ZSA {
-            return Err(CommitmentError::InvalidTransactionVersion);
-        }
-
-        let personalizations = format.personalizations();
-        let zsa_personalizations = personalizations.zsa.unwrap();
-
-        let mut h = hasher(personalizations.bundle);
-        let mut agh = hasher(zsa_personalizations.action_groups);
-
-        let mut ch = hasher(personalizations.actions_compact);
-        // TODO Remove mh once new Memo Bundles are implemented (ZIP-231).
-        let mut mh = hasher(personalizations.actions_memos);
-        let mut nh = hasher(personalizations.actions_noncompact);
-
-        for action in bundle.actions().iter() {
-            ch.update(&action.nullifier().to_bytes());
-            ch.update(&action.cmx().to_bytes());
-            ch.update(&action.encrypted_note().epk_bytes);
-            // TODO Remove once new Memo Bundles are implemented (ZIP-231).
-            ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..Self::COMPACT_NOTE_SIZE]);
-            // TODO Uncomment once new Memo Bundles are implemented (ZIP-231).
-            // ch.update(&action.encrypted_note().enc_ciphertext.as_ref());
-
-            // TODO Remove once new Memo Bundles are implemented (ZIP-231).
-            mh.update(
-                &action.encrypted_note().enc_ciphertext.as_ref()
-                    [Self::COMPACT_NOTE_SIZE..Self::COMPACT_NOTE_SIZE + MEMO_SIZE],
-            );
-
-            nh.update(&action.cv_net().to_bytes());
-            nh.update(&<[u8; 32]>::from(action.rk()));
-            // TODO Remove once new Memo Bundles are implemented (ZIP-231).
-            nh.update(
-                &action.encrypted_note().enc_ciphertext.as_ref()
-                    [Self::COMPACT_NOTE_SIZE + MEMO_SIZE..],
-            );
-            nh.update(&action.encrypted_note().out_ciphertext);
-        }
-
-        agh.update(ch.finalize().as_bytes());
-        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
-        agh.update(mh.finalize().as_bytes());
-        agh.update(nh.finalize().as_bytes());
-
-        agh.update(&[bundle.flag_byte()]);
-        // For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
-        agh.update(&0u32.to_le_bytes());
-
-        let mut burn_hasher = hasher(zsa_personalizations.ironwood_burn);
-        for burn_item in bundle.burn() {
-            burn_hasher.update(&burn_item.0.to_bytes());
-            burn_hasher.update(&burn_item.1.to_bytes());
-        }
-        agh.update(burn_hasher.finalize().as_bytes());
-        h.update(agh.finalize().as_bytes());
-
-        h.update(&(*bundle.value_balance()).into().to_le_bytes());
-        Ok(h.finalize())
     }
 
     /// Evaluate `orchard_auth_digest` for the bundle as defined in
