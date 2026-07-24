@@ -1,21 +1,14 @@
 //! This module implements the note encryption and commitment logic specific for the
 //! `OrchardVanilla` flavor.
 
-use alloc::vec::Vec;
-use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::note_bytes::NoteBytesData;
 
 use crate::{
-    bundle::{
-        commitments::{hasher, BundleCommitmentFormat},
-        Authorized, BundleVersion, CommitmentError, TxVersion,
-    },
+    bundle::BundleVersion,
     flavor::OrchardVanilla,
     note::Note,
     note_encryption::{build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA},
     primitives::orchard_primitives::OrchardPrimitives,
-    sighash_kind::OrchardSighashKind,
-    Bundle,
 };
 
 impl OrchardPrimitives for OrchardVanilla {
@@ -32,52 +25,6 @@ impl OrchardPrimitives for OrchardVanilla {
         np[COMPACT_NOTE_SIZE_VANILLA..].copy_from_slice(memo);
 
         NoteBytesData(np)
-    }
-
-    /// Construct the commitment to the authorizing data of an
-    /// authorized bundle as defined in [ZIP-244: Transaction
-    /// Identifier Non-Malleability][zip244]
-    ///
-    /// # Panics
-    ///
-    /// Panics if any signature in the bundle uses a sighash kind different from
-    /// `OrchardSighashKind::AllEffecting`. In Orchard/Ironwood v5/v6 transactions, this is the
-    /// only defined sighash kind.
-    ///
-    /// [zip244]: https://zips.z.cash/zip-0244
-    fn hash_bundle_auth_data<V>(
-        bundle: &Bundle<Authorized, V, OrchardVanilla>,
-        tx_version: TxVersion,
-        _sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
-    ) -> Result<Blake2bHash, CommitmentError> {
-        let format = bundle
-            .bundle_version()
-            .value_pool()
-            .commitment_format(tx_version)?;
-
-        if format == BundleCommitmentFormat::ZSA {
-            return Err(CommitmentError::InvalidTransactionVersion);
-        }
-        let mut h = hasher(format.personalizations().auth);
-        h.update(bundle.authorization().proof().as_ref());
-        for action in bundle.actions().iter() {
-            assert_eq!(
-                *action.authorization().sighash_kind(),
-                OrchardSighashKind::AllEffecting
-            );
-            h.update(&<[u8; 64]>::from(action.authorization().sig()));
-        }
-        assert_eq!(
-            *bundle.authorization().binding_signature().sighash_kind(),
-            OrchardSighashKind::AllEffecting
-        );
-        h.update(&<[u8; 64]>::from(
-            bundle.authorization().binding_signature().sig(),
-        ));
-        if format.includes_anchor_in_authorizing_digest() {
-            h.update(&bundle.anchor().to_bytes());
-        }
-        Ok(h.finalize())
     }
 
     /// Returns true if the bundle version is equal to (Orchard, *) or (Ironwood, V3).

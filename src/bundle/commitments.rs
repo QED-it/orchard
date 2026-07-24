@@ -337,6 +337,95 @@ pub fn hash_bundle_txid_empty(
     .finalize())
 }
 
+/// Construct the commitment to the authorizing data of an
+/// authorized bundle as defined in [ZIP-244: Transaction
+/// Identifier Non-Malleability][zip244]
+///
+/// # Panics
+///
+/// Panics if any signature in the bundle uses a sighash kind different from
+/// `OrchardSighashKind::AllEffecting`. In Orchard/Ironwood v5/v6 transactions, this is the
+/// only defined sighash kind.
+///
+/// [zip244]: https://zips.z.cash/zip-0244
+fn hash_bundle_auth_data_vanilla<V, Pr: OrchardPrimitives>(
+    bundle: &Bundle<Authorized, V, Pr>,
+    tx_version: TxVersion,
+    _sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
+) -> Result<Blake2bHash, CommitmentError> {
+    let format = bundle
+        .bundle_version()
+        .value_pool()
+        .commitment_format(tx_version)?;
+
+    let mut h = hasher(format.personalizations().auth);
+    h.update(bundle.authorization().proof().as_ref());
+    for action in bundle.actions().iter() {
+        assert_eq!(
+            *action.authorization().sighash_kind(),
+            OrchardSighashKind::AllEffecting
+        );
+        h.update(&<[u8; 64]>::from(action.authorization().sig()));
+    }
+    assert_eq!(
+        *bundle.authorization().binding_signature().sighash_kind(),
+        OrchardSighashKind::AllEffecting
+    );
+    h.update(&<[u8; 64]>::from(
+        bundle.authorization().binding_signature().sig(),
+    ));
+    if format.includes_anchor_in_authorizing_digest() {
+        h.update(&bundle.anchor().to_bytes());
+    }
+    Ok(h.finalize())
+}
+
+/// Evaluate `orchard_auth_digest` for the bundle as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
+///
+/// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
+/// for a given [`OrchardSighashKind`].
+///
+/// [zip246]: https://zips.z.cash/zip-0246
+fn hash_bundle_auth_data_zsa<V, Pr: OrchardPrimitives>(
+    bundle: &Bundle<Authorized, V, Pr>,
+    tx_version: TxVersion,
+    sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
+) -> Result<Blake2bHash, CommitmentError> {
+    let format = bundle
+        .bundle_version()
+        .value_pool()
+        .commitment_format(tx_version)?;
+
+    let personalizations = format.personalizations();
+    let zsa_personalizations = personalizations.zsa.unwrap();
+
+    let mut h = hasher(personalizations.auth);
+    let mut agh = hasher(zsa_personalizations.action_groups_auth);
+    agh.update(bundle.authorization().proof().as_ref());
+    let mut sash = hasher(zsa_personalizations.zsa_spend_auth);
+    for action in bundle.actions().iter() {
+        let sighash_info = sighash_info_for_kind(action.authorization().sighash_kind());
+        sash.update(&get_compact_size(sighash_info.len()));
+        sash.update(sighash_info.as_slice());
+        sash.update(&<[u8; 64]>::from(action.authorization().sig()));
+    }
+    agh.update(sash.finalize().as_bytes());
+    h.update(agh.finalize().as_bytes());
+
+    let sighash_info =
+        sighash_info_for_kind(bundle.authorization().binding_signature().sighash_kind());
+    h.update(&get_compact_size(sighash_info.len()));
+    h.update(sighash_info.as_slice());
+    h.update(&<[u8; 64]>::from(
+        bundle.authorization().binding_signature().sig(),
+    ));
+
+    h.update(&bundle.anchor().to_bytes());
+
+    Ok(h.finalize())
+}
+
 /// Evaluate `orchard_auth_digest` for the bundle as defined in
 /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
 /// or in [ZIP-229: Version 6 Transaction Format][zip229]
@@ -355,7 +444,12 @@ pub(crate) fn hash_bundle_auth_data<V, Pr: OrchardPrimitives>(
     tx_version: TxVersion,
     sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
 ) -> Result<Blake2bHash, CommitmentError> {
-    Pr::hash_bundle_auth_data(bundle, tx_version, sighash_info_for_kind)
+    match tx_version {
+        TxVersion::V5 | TxVersion::V6 => {
+            hash_bundle_auth_data_vanilla(bundle, tx_version, sighash_info_for_kind)
+        }
+        TxVersion::ZSA => hash_bundle_auth_data_zsa(bundle, tx_version, sighash_info_for_kind),
+    }
 }
 
 /// Construct the commitment for an absent bundle as defined in

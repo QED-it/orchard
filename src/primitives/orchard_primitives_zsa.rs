@@ -1,23 +1,16 @@
 //! This module implements the note encryption and commitment logic specific for the `OrchardZSA`
 //! flavor.
 
-use alloc::vec::Vec;
-use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::note_bytes::NoteBytesData;
 
 use crate::{
-    bundle::{
-        commitments::{get_compact_size, hasher, BundleCommitmentFormat},
-        Authorized, BundleVersion, CommitmentError, TxVersion,
-    },
+    bundle::BundleVersion,
     flavor::OrchardZSA,
     note::Note,
     note_encryption::{
         build_base_note_plaintext_bytes, Memo, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
     },
     primitives::orchard_primitives::OrchardPrimitives,
-    sighash_kind::OrchardSighashKind,
-    Bundle,
 };
 
 impl OrchardPrimitives for OrchardZSA {
@@ -36,56 +29,6 @@ impl OrchardPrimitives for OrchardZSA {
         np[COMPACT_NOTE_SIZE_ZSA..].copy_from_slice(memo);
 
         NoteBytesData(np)
-    }
-
-    /// Evaluate `orchard_auth_digest` for the bundle as defined in
-    /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
-    ///
-    /// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
-    /// for a given [`OrchardSighashKind`].
-    ///
-    /// [zip246]: https://zips.z.cash/zip-0246
-    fn hash_bundle_auth_data<V>(
-        bundle: &Bundle<Authorized, V, OrchardZSA>,
-        tx_version: TxVersion,
-        sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
-    ) -> Result<Blake2bHash, CommitmentError> {
-        let format = bundle
-            .bundle_version()
-            .value_pool()
-            .commitment_format(tx_version)?;
-
-        if format != BundleCommitmentFormat::ZSA {
-            return Err(CommitmentError::InvalidTransactionVersion);
-        }
-
-        let personalizations = format.personalizations();
-        let zsa_personalizations = personalizations.zsa.unwrap();
-
-        let mut h = hasher(personalizations.auth);
-        let mut agh = hasher(zsa_personalizations.action_groups_auth);
-        agh.update(bundle.authorization().proof().as_ref());
-        let mut sash = hasher(zsa_personalizations.zsa_spend_auth);
-        for action in bundle.actions().iter() {
-            let sighash_info = sighash_info_for_kind(action.authorization().sighash_kind());
-            sash.update(&get_compact_size(sighash_info.len()));
-            sash.update(sighash_info.as_slice());
-            sash.update(&<[u8; 64]>::from(action.authorization().sig()));
-        }
-        agh.update(sash.finalize().as_bytes());
-        h.update(agh.finalize().as_bytes());
-
-        let sighash_info =
-            sighash_info_for_kind(bundle.authorization().binding_signature().sighash_kind());
-        h.update(&get_compact_size(sighash_info.len()));
-        h.update(sighash_info.as_slice());
-        h.update(&<[u8; 64]>::from(
-            bundle.authorization().binding_signature().sig(),
-        ));
-
-        h.update(&bundle.anchor().to_bytes());
-
-        Ok(h.finalize())
     }
 
     /// Returns true if the bundle version is equal to (Ironwood, ZSA).

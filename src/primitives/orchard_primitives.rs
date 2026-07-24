@@ -1,17 +1,14 @@
 //! The OrchardPrimitives trait represents the difference between the `OrchardVanilla` and the
 //! `OrchardZSA` commitment, encryption and decryption procedures.
 
-use alloc::vec::Vec;
 use core::fmt;
 
-use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::{note_bytes::NoteBytes, AEAD_TAG_SIZE};
 
 use crate::{
-    bundle::{Authorized, BundleVersion, CommitmentError, TxVersion},
+    bundle::BundleVersion,
     note_encryption::{Memo, MEMO_SIZE},
-    sighash_kind::OrchardSighashKind,
-    Bundle, Note,
+    Note,
 };
 
 /// Represents the Orchard protocol domain specifics required for commitment, note encryption and
@@ -37,23 +34,6 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
 
     /// Builds NotePlaintextBytes from Note and Memo.
     fn build_note_plaintext_bytes(note: &Note, memo: &Memo) -> Self::NotePlaintextBytes;
-
-    /// Evaluate `orchard_auth_digest` for the bundle as defined in
-    /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
-    /// for OrchardVanilla and as defined in
-    /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
-    /// for OrchardZSA
-    ///
-    /// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
-    /// for a given [`OrchardSighashKind`].
-    ///
-    /// [zip244]: https://zips.z.cash/zip-0244
-    /// [zip246]: https://zips.z.cash/zip-0246
-    fn hash_bundle_auth_data<V>(
-        bundle: &Bundle<Authorized, V, Self>,
-        tx_version: TxVersion,
-        sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
-    ) -> Result<Blake2bHash, CommitmentError>;
 
     /// Returns true if the bundle version is equal to
     /// - (Orchard, *) or (Ironwood, V3) for OrchardVanilla, or
