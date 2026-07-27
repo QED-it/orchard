@@ -2,7 +2,6 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use orchard::{
     builder::{Builder, BundleType},
     circuit::ProvingKey,
-    flavor::{OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
     note_encryption::{CompactAction, NoteEncryptionDomain},
@@ -17,7 +16,7 @@ use pprof::criterion::{Output, PProfProfiler};
 
 mod utils;
 
-use utils::OrchardFlavorBench;
+use utils::{OrchardFlavorBench, OrchardVanilla, OrchardZSA};
 
 fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let rng = OsRng;
@@ -79,7 +78,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 [0; 512],
             )
             .unwrap();
-        let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().unwrap().0;
+        let bundle: Bundle<_, i64> = builder.build(rng).unwrap().unwrap().0;
         bundle
             .create_proof(&pk, rng)
             .unwrap()
@@ -88,7 +87,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     };
     let action = bundle.actions().first();
 
-    let domain = NoteEncryptionDomain::<FL::DomainVersion, FL>::for_action(action);
+    let domain = NoteEncryptionDomain::<FL::DomainVersion>::for_action(action);
 
     let compact = {
         let mut group = FL::benchmark_group(c, "note-decryption");
@@ -131,7 +130,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
         let actions: Vec<_> = (0..100)
             .map(|_| {
                 (
-                    NoteEncryptionDomain::<FL::DomainVersion, FL>::for_action(action),
+                    NoteEncryptionDomain::<FL::DomainVersion>::for_action(action),
                     action.clone(),
                 )
             })
@@ -139,7 +138,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
         let compact: Vec<_> = (0..100)
             .map(|_| {
                 (
-                    NoteEncryptionDomain::<FL::DomainVersion, FL>::for_action(action),
+                    NoteEncryptionDomain::<FL::DomainVersion>::for_action(action),
                     CompactAction::from(action),
                 )
             })

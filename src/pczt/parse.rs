@@ -13,15 +13,12 @@ use zip32::ChildIndex;
 use super::{Action, Bundle, Output, Spend, Zip32Derivation};
 use crate::{
     bundle::{BundleVersion, Flags},
-    flavor::OrchardVanilla,
     keys::{FullViewingKey, SpendingKey},
     note::{
         ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
     },
-    primitives::{
-        redpallas::{self, SpendAuth},
-        OrchardPrimitives,
-    },
+    note_encryption::NoteCiphertextBytes,
+    primitives::redpallas::{self, SpendAuth},
     tree::{MerkleHashOrchard, MerklePath},
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof, NOTE_COMMITMENT_TREE_DEPTH,
@@ -375,12 +372,10 @@ impl Output {
             .into_option()
             .ok_or(ParseError::InvalidExtractedNoteCommitment)?;
 
-        let encrypted_note = TransmittedNoteCiphertext::<OrchardVanilla> {
+        let encrypted_note = TransmittedNoteCiphertext {
             epk_bytes: ephemeral_key,
-            enc_ciphertext: <OrchardVanilla as OrchardPrimitives>::NoteCiphertextBytes::from_slice(
-                enc_ciphertext.as_slice(),
-            )
-            .ok_or(ParseError::InvalidEncCiphertext)?,
+            enc_ciphertext: NoteCiphertextBytes::from_slice(enc_ciphertext.as_slice())
+                .ok_or(ParseError::InvalidEncCiphertext)?,
             out_ciphertext: out_ciphertext
                 .as_slice()
                 .try_into()

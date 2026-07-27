@@ -5,8 +5,7 @@ use rand::{CryptoRng, RngCore};
 
 use super::Action;
 use crate::{
-    bundle::{Authorization, Authorized, EffectsOnly},
-    flavor::OrchardVanilla,
+    bundle::{validate_action_ciphertext_kind, Authorization, Authorized, EffectsOnly},
     primitives::redpallas::{self, Binding, SpendAuth},
     sighash_kind::{OrchardBindingSig, OrchardSighashKind, OrchardSpendAuthSig},
     Proof,
@@ -20,7 +19,7 @@ impl super::Bundle {
     /// [regular `Bundle`]: crate::Bundle
     pub fn extract_effects<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::Bundle<EffectsOnly, V, OrchardVanilla>>, TxExtractorError> {
+    ) -> Result<Option<crate::Bundle<EffectsOnly, V>>, TxExtractorError> {
         self.to_tx_data(|_| Ok(()), |_| Ok(EffectsOnly))
     }
 
@@ -31,7 +30,7 @@ impl super::Bundle {
     /// [regular `Bundle`]: crate::Bundle
     pub fn extract<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::Bundle<Unbound, V, OrchardVanilla>>, TxExtractorError> {
+    ) -> Result<Option<crate::Bundle<Unbound, V>>, TxExtractorError> {
         let bundle = self.to_tx_data(
             |action| {
                 action
@@ -75,7 +74,7 @@ impl super::Bundle {
         &self,
         action_auth: F,
         bundle_auth: G,
-    ) -> Result<Option<crate::Bundle<A, V, OrchardVanilla>>, E>
+    ) -> Result<Option<crate::Bundle<A, V>>, E>
     where
         A: Authorization,
         E: From<TxExtractorError>,
@@ -102,6 +101,9 @@ impl super::Bundle {
             .collect::<Result<_, E>>()?;
 
         Ok(if let Some(actions) = NonEmpty::from_vec(actions) {
+            validate_action_ciphertext_kind(&actions, self.bundle_version)
+                .map_err(TxExtractorError::from)?;
+
             let value_balance = i64::try_from(self.value_sum)
                 .ok()
                 .and_then(|v| v.try_into().ok())
@@ -150,8 +152,8 @@ pub enum TxExtractorError {
     },
     /// The bundle's flags cannot be encoded under its value pool and protocol version.
     UnrepresentableFlags,
-    /// The bundle version is incompatible with the flavor (OrchardVanilla or OrchardZSA)
-    InvalidBundleVersion,
+    /// Some action's encrypted-note ciphertext is not the kind the bundle's version implies.
+    MismatchedActionCiphertextKind,
 }
 
 impl From<crate::ActionFromPartsError> for TxExtractorError {
@@ -172,8 +174,8 @@ impl From<crate::bundle::BundleError> for TxExtractorError {
             crate::bundle::BundleError::UnrepresentableFlags => {
                 TxExtractorError::UnrepresentableFlags
             }
-            crate::bundle::BundleError::InvalidBundleVersion => {
-                TxExtractorError::InvalidBundleVersion
+            crate::bundle::BundleError::MismatchedActionCiphertextKind => {
+                TxExtractorError::MismatchedActionCiphertextKind
             }
         }
     }
@@ -211,9 +213,9 @@ impl fmt::Display for TxExtractorError {
                 f,
                 "Orchard bundle flags are not representable under its value pool and protocol version",
             ),
-            TxExtractorError::InvalidBundleVersion => write!(
+            TxExtractorError::MismatchedActionCiphertextKind => write!(
                 f,
-                "The bundle version is incompatible with the flavor (OrchardVanilla or OrchardZSA)",
+                "an action's encrypted-note ciphertext kind is inconsistent with the bundle's version",
             ),
         }
     }
@@ -233,7 +235,7 @@ impl Authorization for Unbound {
     type SpendAuth = redpallas::Signature<SpendAuth>;
 }
 
-impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
+impl<V> crate::Bundle<Unbound, V> {
     /// Verifies the given sighash with every `spend_auth_sig`, and then binds the bundle.
     ///
     /// Returns `None` if the given sighash does not validate against every `spend_auth_sig`.
@@ -241,7 +243,7 @@ impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
         self,
         sighash: [u8; 32],
         rng: R,
-    ) -> Option<crate::Bundle<Authorized, V, OrchardVanilla>> {
+    ) -> Option<crate::Bundle<Authorized, V>> {
         if self
             .actions()
             .iter()

@@ -5,14 +5,12 @@ use orchard::{
     builder::{Builder, BundleType},
     bundle::{Authorized, BatchValidator, BundleVersion, Flags, TxVersion},
     circuit::{OrchardCircuitVersion, ProvingKey, VerifyingKey},
-    flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, NoteVersion},
     note_encryption::{
         DomainVersion, IronwoodDomain, NoteEncryptionDomain, OrchardDomain, OrchardVersion,
         ZSAVersion,
     },
-    primitives::OrchardPrimitives,
     sighash_kind::OrchardSighashKind,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
@@ -48,8 +46,8 @@ fn single_leaf_witness(cmx: &ExtractedNoteCommitment) -> (MerkleHashOrchard, Mer
     (root, merkle_path.into())
 }
 
-pub fn verify_bundle<Pr: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, i64, Pr>,
+pub fn verify_bundle(
+    bundle: &Bundle<Authorized, i64>,
     vk: &VerifyingKey,
     tx_version: TxVersion,
     verify_proof: bool,
@@ -85,7 +83,12 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
     (merkle_path, root.into())
 }
 
-trait BundleOrchardFlavor: OrchardFlavor {
+/// Marker type selecting the Vanilla flavor for the flavor-parameterized tests in this file.
+struct OrchardVanilla;
+/// Marker type selecting the ZSA flavor for the flavor-parameterized tests in this file.
+struct OrchardZSA;
+
+trait BundleOrchardFlavor {
     const DEFAULT_BUNDLE_VERSION: BundleVersion;
     const TX_VERSION: TxVersion;
     const SPENDS_DISABLED_FLAGS: Flags;
@@ -146,7 +149,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     let recipient = fvk.address_at(0u32, Scope::External);
 
     // Create a shielding bundle.
-    let (shielding_bundle, orchard_digest_1): (Bundle<_, i64, FL>, [u8; 32]) = {
+    let (shielding_bundle, orchard_digest_1): (Bundle<_, i64>, [u8; 32]) = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -202,7 +205,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
             .actions()
             .iter()
             .find_map(|action| {
-                let domain = NoteEncryptionDomain::<FL::DomainVersion, FL>::for_action(action);
+                let domain = NoteEncryptionDomain::<FL::DomainVersion>::for_action(action);
                 try_note_decryption(&domain, &ivk, action)
             })
             .unwrap()
@@ -229,7 +232,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     }
 
     // Create a shielded bundle spending the previous output.
-    let (shielded_bundle, orchard_digest_2): (Bundle<_, i64, FL>, [u8; 32]) = {
+    let (shielded_bundle, orchard_digest_2): (Bundle<_, i64>, [u8; 32]) = {
         let (merkle_path, anchor) = build_merkle_path(&note);
 
         let mut builder = Builder::new(
@@ -332,7 +335,7 @@ fn builder_builds_for_insecure_circuit_version() {
     );
 
     let (unauthorized, _) = builder
-        .build::<i64, OrchardVanilla>(&mut rng)
+        .build::<i64>(&mut rng)
         .unwrap()
         .unwrap();
     let sighash: [u8; 32] = unauthorized
@@ -359,7 +362,7 @@ fn builder_builds_for_post_nu6_3_circuit_version() {
     let builder = output_only_builder(BundleVersion::ironwood_v3(), BundleType::DEFAULT, recipient);
 
     let (unauthorized, _) = builder
-        .build::<i64, OrchardVanilla>(&mut rng)
+        .build::<i64>(&mut rng)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -387,7 +390,7 @@ fn ironwood_builder_outputs_decrypt_with_ironwood_domain() {
 
     let builder = output_only_builder(BundleVersion::ironwood_v3(), BundleType::DEFAULT, recipient);
     let (bundle, bundle_meta) = builder
-        .build::<i64, OrchardVanilla>(&mut rng)
+        .build::<i64>(&mut rng)
         .unwrap()
         .unwrap();
     let action = &bundle.actions()[bundle_meta
@@ -431,7 +434,7 @@ fn ironwood_bundle_helpers_decrypt_and_recover_outputs() {
         Ok(())
     );
     let (bundle, bundle_meta) = builder
-        .build::<i64, OrchardVanilla>(&mut rng)
+        .build::<i64>(&mut rng)
         .unwrap()
         .unwrap();
     let action_idx = bundle_meta
@@ -493,7 +496,7 @@ fn post_nu6_3_coinbase_bundle_proves_and_verifies() {
     );
 
     let (unauthorized, _) = builder
-        .build::<i64, OrchardVanilla>(&mut rng)
+        .build::<i64>(&mut rng)
         .unwrap()
         .unwrap();
     assert_eq!(unauthorized.actions().len(), 1);
@@ -532,7 +535,7 @@ fn unpadded_ironwood_bundle_builds_single_action_and_verifies() {
     assert_eq!(builder.bundle_type(), BundleType::UNPADDED);
 
     let (unauthorized, bundle_meta) = builder
-        .build::<i64, OrchardVanilla>(&mut rng)
+        .build::<i64>(&mut rng)
         .unwrap()
         .unwrap();
     assert_eq!(unauthorized.actions().len(), 1);
@@ -563,7 +566,7 @@ fn post_nu6_3_restricted_bundle_chain() {
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
-    let shielding_bundle: Bundle<_, i64, OrchardVanilla> = {
+    let shielding_bundle: Bundle<_, i64> = {
         let builder =
             output_only_builder(BundleVersion::orchard_v2(), BundleType::DEFAULT, recipient);
 
@@ -579,7 +582,7 @@ fn post_nu6_3_restricted_bundle_chain() {
     verify_bundle(&shielding_bundle, &fixed_vk, TxVersion::V5, true);
 
     let change_addr = fvk.address_at(0u32, Scope::Internal);
-    let restricted_bundle: Bundle<_, i64, OrchardVanilla> = {
+    let restricted_bundle: Bundle<_, i64> = {
         let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
         let (note, _, _) = shielding_bundle
             .actions()
@@ -700,7 +703,7 @@ fn ironwood_post_nu6_3_unrestricted_bundle_proves_and_verifies() {
     let recipient = fvk.address_at(0u32, Scope::External);
 
     // Shield a note to spend (an unrestricted, output-only post-NU6.3 bundle).
-    let shielding_bundle: Bundle<_, i64, OrchardVanilla> = {
+    let shielding_bundle: Bundle<_, i64> = {
         let builder =
             output_only_builder(BundleVersion::ironwood_v3(), BundleType::DEFAULT, recipient);
         let (unauthorized, _) = builder.build(&mut rng).unwrap().unwrap();
@@ -749,7 +752,7 @@ fn ironwood_post_nu6_3_unrestricted_bundle_proves_and_verifies() {
         Ok(())
     );
     let (unauthorized, _) = builder
-        .build::<i64, OrchardVanilla>(&mut rng)
+        .build::<i64>(&mut rng)
         .unwrap()
         .unwrap();
 

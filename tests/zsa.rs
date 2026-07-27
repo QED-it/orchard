@@ -9,7 +9,6 @@ use orchard::{
     builder::{BuildError, Builder, BundleType},
     bundle::{burn_validation::BurnError, Authorized, BundleVersion, Flags, TxVersion},
     circuit::{ProvingKey, VerifyingKey},
-    flavor::OrchardZSA,
     issuance::{
         auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
         compute_asset_desc_hash, verify_issue_bundle, AwaitingNullifier, IssueBundle, IssueInfo,
@@ -91,7 +90,7 @@ fn build_and_sign_bundle(
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
-) -> Bundle<Authorized, i64, OrchardZSA> {
+) -> Bundle<Authorized, i64> {
     let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
     let sighash = unauthorized
         .commitment(TxVersion::ZSA)
@@ -206,7 +205,7 @@ fn issue_zsa_notes(
 fn create_zatoshi_note(keys: &Keychain) -> Note {
     let mut rng = OsRng;
 
-    let shielding_bundle: Bundle<_, i64, OrchardZSA> = {
+    let shielding_bundle: Bundle<_, i64> = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -274,7 +273,7 @@ fn build_and_verify_bundle(
     keys: &Keychain,
 ) -> Result<(), String> {
     let rng = OsRng;
-    let shielded_bundle: Bundle<_, i64, OrchardZSA> = {
+    let shielded_bundle: Bundle<_, i64> = {
         let mut builder = Builder::new(
             BundleType::DEFAULT,
             BundleVersion::zsa(),
@@ -315,7 +314,7 @@ fn build_and_verify_bundle(
     Ok(())
 }
 
-fn verify_unique_spent_nullifiers(bundle: &Bundle<Authorized, i64, OrchardZSA>) -> bool {
+fn verify_unique_spent_nullifiers(bundle: &Bundle<Authorized, i64>) -> bool {
     let mut seen = HashSet::new();
     bundle
         .actions()

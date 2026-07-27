@@ -35,7 +35,6 @@ pub mod circuit;
 mod constants;
 #[cfg(feature = "unstable-voting-circuits")]
 pub mod constants;
-pub mod flavor;
 #[cfg(feature = "zsa-issuance")]
 pub mod issuance;
 pub mod keys;

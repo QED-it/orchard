@@ -9,10 +9,7 @@ use tracing::debug;
 use super::{Authorized, Bundle};
 use crate::{
     circuit::VerifyingKey,
-    primitives::{
-        redpallas::{self, Binding, SpendAuth},
-        OrchardPrimitives,
-    },
+    primitives::redpallas::{self, Binding, SpendAuth},
 };
 
 /// A signature within an authorized Orchard bundle.
@@ -79,9 +76,9 @@ impl<'a> BatchValidator<'a> {
     /// Returns [`BatchError::RestrictionUnsupportedByKey`] if the bundle disables cross-address
     /// transfers but the validator's verifying key's circuit version does not support the
     /// cross-address restriction; in that case the bundle is not added to the batch.
-    pub fn add_bundle<V: Copy + Into<i64>, Pr: OrchardPrimitives>(
+    pub fn add_bundle<V: Copy + Into<i64>>(
         &mut self,
-        bundle: &Bundle<Authorized, V, Pr>,
+        bundle: &Bundle<Authorized, V>,
         sighash: [u8; 32],
     ) -> Result<(), BatchError> {
         if !bundle.flags().cross_address_enabled() && !self.vk.supports_cross_address_restriction()
@@ -154,13 +151,13 @@ mod tests {
 
     use super::{BatchError, BatchValidator};
     use crate::{
-        bundle::tests::{sample_authorized_bundle, with_cross_address_disabled},
+        bundle::tests::{sample_authorized_bundle_vanilla, with_cross_address_disabled},
         circuit::{OrchardCircuitVersion, VerifyingKey},
     };
 
     #[test]
     fn add_bundle_rejects_unsupported_cross_address_restriction() {
-        let bundle = with_cross_address_disabled(sample_authorized_bundle(1))
+        let bundle = with_cross_address_disabled(sample_authorized_bundle_vanilla(1))
             .try_map_value_balance(i64::try_from)
             .expect("generated bundle value balance fits in i64");
 

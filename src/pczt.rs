@@ -12,7 +12,6 @@ use zip32::ChildIndex;
 
 use crate::{
     bundle::{BundleVersion, Flags},
-    flavor::OrchardVanilla,
     keys::{FullViewingKey, SpendingKey},
     note::{ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
@@ -254,7 +253,7 @@ pub struct Output {
     /// - `ephemeral_key`
     /// - `enc_ciphertext`
     /// - `out_ciphertext`
-    pub(crate) encrypted_note: TransmittedNoteCiphertext<OrchardVanilla>,
+    pub(crate) encrypted_note: TransmittedNoteCiphertext,
 
     /// The address that will receive the output.
     ///

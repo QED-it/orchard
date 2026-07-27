@@ -1902,7 +1902,6 @@ mod tests {
             builder::{Builder, BundleType},
             bundle::{BundleVersion, TxVersion},
             circuit::ProvingKey,
-            flavor::OrchardZSA,
             keys::SpendAuthorizingKey,
             note::ExtractedNoteCommitment,
             tree::{MerkleHashOrchard, MerklePath},
@@ -1975,13 +1974,13 @@ mod tests {
             .add_output(None, recipient, NoteValue::from_raw(5), asset1, [0u8; 512])
             .unwrap();
         let unauthorized = builder
-            .build::<i64, OrchardZSA>(&mut rng)
+            .build::<i64>(&mut rng)
             .unwrap()
             .unwrap()
             .0;
         let sighash = unauthorized.commitment(TxVersion::ZSA).unwrap().into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
-        let authorized: Bundle<_, i64, OrchardZSA> = proven
+        let authorized: Bundle<_, i64> = proven
             .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
             .unwrap();
 

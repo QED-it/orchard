@@ -6,7 +6,6 @@ use blake2b_simd::{Hash as Blake2bHash, Params, State};
 use crate::{
     bundle::{Authorization, Authorized, Bundle, CommitmentError, TxVersion},
     note_encryption::{COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA, MEMO_SIZE},
-    primitives::OrchardPrimitives,
     sighash_kind::OrchardSighashKind,
     ValuePool,
 };
@@ -181,8 +180,8 @@ pub(crate) fn hasher(personal: &[u8; 16]) -> State {
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [`BundleVersion`]: crate::bundle::BundleVersion
-fn hash_bundle_txid_data_vanilla<A: Authorization, V: Copy + Into<i64>, Pr: OrchardPrimitives>(
-    bundle: &Bundle<A, V, Pr>,
+fn hash_bundle_txid_data_vanilla<A: Authorization, V: Copy + Into<i64>>(
+    bundle: &Bundle<A, V>,
     tx_version: TxVersion,
 ) -> Result<Blake2bHash, CommitmentError> {
     let format = bundle
@@ -231,8 +230,8 @@ fn hash_bundle_txid_data_vanilla<A: Authorization, V: Copy + Into<i64>, Pr: Orch
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
-fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>, Pr: OrchardPrimitives>(
-    bundle: &Bundle<A, V, Pr>,
+fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>>(
+    bundle: &Bundle<A, V>,
     tx_version: TxVersion,
 ) -> Result<Blake2bHash, CommitmentError> {
     let format = bundle
@@ -306,12 +305,8 @@ fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>, Pr: OrchardP
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip229]: https://zips.z.cash/zip-0229
 /// [zip246]: https://zips.z.cash/zip-0246
-pub(crate) fn hash_bundle_txid_data<
-    A: Authorization,
-    V: Copy + Into<i64>,
-    Pr: OrchardPrimitives,
->(
-    bundle: &Bundle<A, V, Pr>,
+pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
+    bundle: &Bundle<A, V>,
     tx_version: TxVersion,
 ) -> Result<Blake2bHash, CommitmentError> {
     match tx_version {
@@ -348,8 +343,8 @@ pub fn hash_bundle_txid_empty(
 /// only defined sighash kind.
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
-fn hash_bundle_auth_data_vanilla<V, Pr: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, V, Pr>,
+fn hash_bundle_auth_data_vanilla<V>(
+    bundle: &Bundle<Authorized, V>,
     tx_version: TxVersion,
     _sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
 ) -> Result<Blake2bHash, CommitmentError> {
@@ -387,8 +382,8 @@ fn hash_bundle_auth_data_vanilla<V, Pr: OrchardPrimitives>(
 /// for a given [`OrchardSighashKind`].
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
-fn hash_bundle_auth_data_zsa<V, Pr: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, V, Pr>,
+fn hash_bundle_auth_data_zsa<V>(
+    bundle: &Bundle<Authorized, V>,
     tx_version: TxVersion,
     sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
 ) -> Result<Blake2bHash, CommitmentError> {
@@ -439,8 +434,8 @@ fn hash_bundle_auth_data_zsa<V, Pr: OrchardPrimitives>(
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip229]: https://zips.z.cash/zip-0229
 /// [zip246]: https://zips.z.cash/zip-0246
-pub(crate) fn hash_bundle_auth_data<V, Pr: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, V, Pr>,
+pub(crate) fn hash_bundle_auth_data<V>(
+    bundle: &Bundle<Authorized, V>,
     tx_version: TxVersion,
     sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
 ) -> Result<Blake2bHash, CommitmentError> {
@@ -493,7 +488,6 @@ mod tests {
             Authorized, Bundle, BundleVersion, TxVersion,
         },
         circuit::ProvingKey,
-        flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         keys::{FullViewingKey, Scope, SpendingKey},
         note::AssetBase,
         sighash_kind::test_sighash_info_for_kind,
@@ -502,9 +496,7 @@ mod tests {
     };
     use rand::{rngs::StdRng, SeedableRng};
 
-    fn generate_bundle<FL: OrchardFlavor>(
-        bundle_version: BundleVersion,
-    ) -> UnauthorizedBundle<i64, FL> {
+    fn generate_bundle(bundle_version: BundleVersion) -> UnauthorizedBundle<i64> {
         let rng = StdRng::seed_from_u64(5);
 
         let sk = SpendingKey::from_bytes([7; 32]).unwrap();
@@ -537,7 +529,7 @@ mod tests {
             )
             .unwrap();
 
-        builder.build::<i64, FL>(rng).unwrap().unwrap().0
+        builder.build::<i64>(rng).unwrap().unwrap().0
     }
 
     /// Verifies that the hash for an Orchard Vanilla bundle matches a fixed reference value.
@@ -548,7 +540,7 @@ mod tests {
     /// is now treated as the expected output for this implementation.
     #[test]
     fn test_hash_bundle_txid_data_for_orchard_vanilla() {
-        let bundle = generate_bundle::<OrchardVanilla>(BundleVersion::orchard_v2());
+        let bundle = generate_bundle(BundleVersion::orchard_v2());
         let sighash = hash_bundle_txid_data(&bundle, TxVersion::V5).unwrap();
         assert_eq!(
             sighash.to_hex().as_str(),
@@ -568,7 +560,7 @@ mod tests {
     /// is now treated as the expected output for this implementation.
     #[test]
     fn test_hash_bundle_txid_data_for_orchard_zsa() {
-        let bundle = generate_bundle::<OrchardZSA>(BundleVersion::zsa());
+        let bundle = generate_bundle(BundleVersion::zsa());
         let sighash = hash_bundle_txid_data(&bundle, TxVersion::ZSA).unwrap();
         assert_eq!(
             sighash.to_hex().as_str(),
@@ -576,10 +568,10 @@ mod tests {
         );
     }
 
-    fn generate_auth_bundle<FL: OrchardFlavor>(
+    fn generate_auth_bundle(
         bundle_version: BundleVersion,
         tx_version: TxVersion,
-    ) -> Bundle<Authorized, i64, FL> {
+    ) -> Bundle<Authorized, i64> {
         let mut rng = StdRng::seed_from_u64(6);
         let pk = ProvingKey::build(bundle_version.circuit_version());
         let bundle = generate_bundle(bundle_version)
@@ -598,8 +590,7 @@ mod tests {
     /// is now treated as the expected output for this implementation.
     #[test]
     fn test_hash_bundle_auth_data_for_orchard_vanilla() {
-        let bundle =
-            generate_auth_bundle::<OrchardVanilla>(BundleVersion::orchard_v2(), TxVersion::V5);
+        let bundle = generate_auth_bundle(BundleVersion::orchard_v2(), TxVersion::V5);
         let orchard_auth_digest =
             hash_bundle_auth_data(&bundle, TxVersion::V5, test_sighash_info_for_kind).unwrap();
         assert_eq!(
@@ -621,7 +612,7 @@ mod tests {
     /// is now treated as the expected output for this implementation.
     #[test]
     fn test_hash_bundle_auth_data_for_orchard_zsa() {
-        let bundle = generate_auth_bundle::<OrchardZSA>(BundleVersion::zsa(), TxVersion::ZSA);
+        let bundle = generate_auth_bundle(BundleVersion::zsa(), TxVersion::ZSA);
         let orchard_auth_digest =
             hash_bundle_auth_data(&bundle, TxVersion::ZSA, test_sighash_info_for_kind).unwrap();
         assert_eq!(

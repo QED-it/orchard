@@ -9,7 +9,6 @@ use pprof::criterion::{Output, PProfProfiler};
 use orchard::{
     builder::{Builder, BundleType},
     circuit::{ProvingKey, VerifyingKey},
-    flavor::{OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, Scope, SpendingKey},
     note::AssetBase,
     value::NoteValue,
@@ -19,7 +18,7 @@ use rand::rngs::OsRng;
 
 mod utils;
 
-use utils::OrchardFlavorBench;
+use utils::{OrchardFlavorBench, OrchardVanilla, OrchardZSA};
 
 fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let rng = OsRng;
@@ -51,7 +50,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 )
                 .unwrap();
         }
-        let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().unwrap().0;
+        let bundle: Bundle<_, i64> = builder.build(rng).unwrap().unwrap().0;
 
         let instances: Vec<_> = bundle
             .actions()

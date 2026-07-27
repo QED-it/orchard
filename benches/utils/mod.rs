@@ -2,11 +2,15 @@ use criterion::{measurement::Measurement, BenchmarkGroup, Criterion};
 
 use orchard::{
     bundle::BundleVersion,
-    flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     note_encryption::{DomainVersion, OrchardVersion, ZSAVersion},
 };
 
-pub(crate) trait OrchardFlavorBench: OrchardFlavor {
+/// Marker type selecting the Vanilla flavor for the flavor-parameterized benchmarks.
+pub(crate) struct OrchardVanilla;
+/// Marker type selecting the ZSA flavor for the flavor-parameterized benchmarks.
+pub(crate) struct OrchardZSA;
+
+pub(crate) trait OrchardFlavorBench {
     const DEFAULT_BUNDLE_VERSION: BundleVersion;
     type DomainVersion: DomainVersion;
 
