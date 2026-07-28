@@ -40,7 +40,10 @@ use crate::{
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
 };
 use halo2_gadgets::{
-    ecc::{chip::EccConfig, CircuitVersion},
+    ecc::{
+        chip::{EccChip, EccConfig},
+        CircuitVersion, NonIdentityPoint,
+    },
     poseidon::Pow5Config as PoseidonConfig,
     sinsemilla::{chip::SinsemillaConfig, merkle::chip::MerkleConfig},
     utilities::lookup_range_check::PallasLookupRangeCheck,
@@ -197,10 +200,10 @@ impl OrchardCircuitVersion {
     /// [`PostNu6_3`]: OrchardCircuitVersion::PostNu6_3
     pub fn supports_cross_address_restriction(self) -> bool {
         match self {
-            OrchardCircuitVersion::InsecurePreNu6_2
-            | OrchardCircuitVersion::FixedPostNu6_2
-            | OrchardCircuitVersion::ZSA => false,
-            OrchardCircuitVersion::PostNu6_3 => true,
+            OrchardCircuitVersion::InsecurePreNu6_2 | OrchardCircuitVersion::FixedPostNu6_2 => {
+                false
+            }
+            OrchardCircuitVersion::PostNu6_3 | OrchardCircuitVersion::ZSA => true,
         }
     }
 
@@ -590,8 +593,8 @@ impl Instance {
         self.enable_zsa
     }
 
-    /// Note: Before the ZSA feature was introduced, this method returned a 9-element instance slice.
-    /// With ZSA, it now returns 10 elements, the last one corresponding to `enable_zsa`.
+    /// Note: Before the ZSA feature was introduced, this method returned a 10-element instance slice.
+    /// With ZSA, it now returns 11 elements, the last one corresponding to `enable_zsa`.
     /// In vanilla Orchard, `enable_zsa` is always false, so this extra element is always zero.
     /// Since halo2_proofs pads instance values with zero, old proofs (without this element)
     /// and new proofs behave identically.
@@ -638,7 +641,7 @@ impl Proof {
     ///
     /// Returns [`plonk::Error::InvalidInstances`] if any instance has
     /// `disableCrossAddress = 1` and `pk` is not an
-    /// [`OrchardCircuitVersion::PostNu6_3`] proving key.
+    /// [`OrchardCircuitVersion::PostNu6_3`] or an [`OrchardCircuitVersion::ZSA`] proving key.
     ///
     /// All instances of a bundle carry the same `disableCrossAddress` value; that uniformity
     /// is the bundle layer's invariant, and is not checked here.
@@ -685,7 +688,7 @@ impl Proof {
     ///
     /// Returns [`plonk::Error::InvalidInstances`] if any instance has
     /// `disableCrossAddress = 1` and `vk` is not an
-    /// [`OrchardCircuitVersion::PostNu6_3`] verifying key.
+    /// [`OrchardCircuitVersion::PostNu6_3`] or an [`OrchardCircuitVersion::ZSA`] verifying key.
     ///
     /// Also returns an error if proof verification fails.
     pub fn verify(&self, vk: &VerifyingKey, instances: &[Instance]) -> Result<(), plonk::Error> {
@@ -737,6 +740,16 @@ impl Proof {
 
         batch.add_proof(instances, self.0.clone());
     }
+}
+
+/// Cells carrying the addresses of an action's spent and newly created notes, returned
+/// from the shared synthesis logic so that circuit versions can impose additional
+/// constraints on them.
+struct AddressPoints<Lookup: PallasLookupRangeCheck> {
+    g_d_old: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
+    pk_d_old: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
+    g_d_new: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
+    pk_d_new: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
 }
 
 #[cfg(test)]
