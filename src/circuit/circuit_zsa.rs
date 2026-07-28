@@ -902,7 +902,7 @@ impl OrchardCircuit for OrchardZSA {
     }
 }
 
-/// Enforces the post-NU 6.3 cross-address restriction for one action: when
+/// Enforces the ZSA cross-address restriction for one action: when
 /// `disableCrossAddress` is nonzero, the spent note and output note must be
 /// addressed to the same expanded receiver, meaning equal `(g_d, pk_d)`.
 ///
@@ -911,7 +911,7 @@ impl OrchardCircuit for OrchardZSA {
 /// `(v_old + 1 - is_zatoshi_asset) * (root - anchor) = 0`, with exactly the shape needed for
 /// `disableCrossAddress * (old_coord - new_coord) = 0` when `is_zatoshi_asset = 1`.
 ///
-/// The post-NU 6.3 circuit enables that gate on eight extra rows, two per affine coordinate of
+/// The ZSA circuit enables that gate on eight extra rows, two per affine coordinate of
 /// `(g_d, pk_d)`, with:
 ///
 /// ```text
