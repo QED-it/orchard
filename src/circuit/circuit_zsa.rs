@@ -986,7 +986,7 @@ fn synthesize_cross_address_checks(
     } = addrs;
 
     layouter.assign_region(
-        || "post-NU 6.3 cross-address checks",
+        || "ZSA cross-address checks",
         |mut region| {
             let coordinate_checks = [
                 ("g_d x", g_d_old.inner().x(), g_d_new.inner().x()),
@@ -1141,6 +1141,22 @@ fn synthesize_cross_address_checks(
                     || "disable_cross_address <- disableCrossAddress",
                     &mut region,
                     config.advices[7],
+                    offset,
+                )?;
+
+                // Occupy the otherwise-unused rightmost advice columns so the
+                // floor planner cannot lay out another region (and enable its
+                // gate) on these rows.
+                cross_address_disabled.copy_advice(
+                    || "disableCrossAddress padding",
+                    &mut region,
+                    config.advices[8],
+                    offset,
+                )?;
+                cross_address_disabled.copy_advice(
+                    || "disableCrossAddress padding",
+                    &mut region,
+                    config.advices[9],
                     offset,
                 )?;
 
@@ -1478,10 +1494,17 @@ mod tests {
     /// note's expanded receiver, as the cross-address restriction requires.
     fn generate_self_transfer_circuit_instance<R: CryptoRngCore>(
         is_zatoshi_asset: bool,
+        split_flag: bool,
         orchard_circuit_version: OrchardCircuitVersion,
         rng: R,
     ) -> (Circuit<OrchardZSA>, Instance) {
-        generate_circuit_instance_inner(is_zatoshi_asset, false, orchard_circuit_version, true, rng)
+        generate_circuit_instance_inner(
+            is_zatoshi_asset,
+            split_flag,
+            orchard_circuit_version,
+            true,
+            rng,
+        )
     }
 
     fn generate_circuit_instance_inner<R: CryptoRngCore>(
@@ -1493,10 +1516,6 @@ mod tests {
     ) -> (Circuit<OrchardZSA>, Instance) {
         // We cannot create a split note with a zatoshi asset.
         assert!(!(is_zatoshi_asset && split_flag));
-        // `split_flag` and `cross_address_disabled` cannot both be enabled at the
-        // same time. A split note's output is forced to a negative net value, which
-        // is not a meaningful self-transfer.
-        assert!(!(output_matches_spend && split_flag));
 
         // Create asset
         let asset_base = if is_zatoshi_asset {
@@ -1821,18 +1840,34 @@ mod tests {
         instance.cross_address_disabled = true;
         check_proof_of_orchard_circuit(&circuit, &instance, false);
 
-        // ...while a restricted self-transfer statement is satisfiable.
-        let (circuit, mut instance) =
-            generate_self_transfer_circuit_instance(false, OrchardCircuitVersion::ZSA, OsRng);
+        // ...while a restricted self-transfer statement is satisfiable...
+        let (circuit, mut instance) = generate_self_transfer_circuit_instance(
+            false,
+            false,
+            OrchardCircuitVersion::ZSA,
+            OsRng,
+        );
         instance.cross_address_disabled = true;
         check_proof_of_orchard_circuit(&circuit, &instance, true);
+
+        // ... but `split_flag` and `cross_address_disabled` cannot both be enabled at the same
+        // time. A split note's output is forced to a negative net value, which is not a meaningful
+        // self-transfer.
+        let (circuit, mut instance) =
+            generate_self_transfer_circuit_instance(false, true, OrchardCircuitVersion::ZSA, OsRng);
+        instance.cross_address_disabled = true;
+        check_proof_of_orchard_circuit(&circuit, &instance, false);
     }
 
     #[test]
     fn zsa_restricted_statement_proves_and_verifies() {
         let mut rng = OsRng;
-        let (circuit, mut instance) =
-            generate_self_transfer_circuit_instance(false, OrchardCircuitVersion::ZSA, &mut rng);
+        let (circuit, mut instance) = generate_self_transfer_circuit_instance(
+            false,
+            false,
+            OrchardCircuitVersion::ZSA,
+            &mut rng,
+        );
         instance.cross_address_disabled = true;
 
         let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);

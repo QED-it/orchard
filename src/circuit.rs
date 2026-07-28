@@ -593,8 +593,8 @@ impl Instance {
         self.enable_zsa
     }
 
-    /// Note: Before the ZSA feature was introduced, this method returned a 9-element instance slice.
-    /// With ZSA, it now returns 10 elements, the last one corresponding to `enable_zsa`.
+    /// Note: Before the ZSA feature was introduced, this method returned a 10-element instance slice.
+    /// With ZSA, it now returns 11 elements, the last one corresponding to `enable_zsa`.
     /// In vanilla Orchard, `enable_zsa` is always false, so this extra element is always zero.
     /// Since halo2_proofs pads instance values with zero, old proofs (without this element)
     /// and new proofs behave identically.
@@ -641,7 +641,7 @@ impl Proof {
     ///
     /// Returns [`plonk::Error::InvalidInstances`] if any instance has
     /// `disableCrossAddress = 1` and `pk` is not an
-    /// [`OrchardCircuitVersion::PostNu6_3`] or an [`OrchardCircuitVersion::ZSA`] proving key .
+    /// [`OrchardCircuitVersion::PostNu6_3`] or an [`OrchardCircuitVersion::ZSA`] proving key.
     ///
     /// All instances of a bundle carry the same `disableCrossAddress` value; that uniformity
     /// is the bundle layer's invariant, and is not checked here.
