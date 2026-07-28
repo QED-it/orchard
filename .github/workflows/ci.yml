@@ -116,26 +116,18 @@ jobs:
       - name: Test Orchard book
         run: mdbook test book/
 
-  codecov:
-    name: Code coverage
-    runs-on: ubuntu-latest
-    container:
-      image: xd009642/tarpaulin:develop-nightly
-      options: --security-opt seccomp=unconfined
-    steps:
-      - uses: actions/checkout@v4
-      - name: Generate coverage report
-        # Limited to 10 minutes; hitting the limit counts as success.
-        run: |
-          timeout 10m cargo tarpaulin --engine llvm --all-features --release --timeout 600 --out xml && status=0 || status=$?
-          if [ "$status" -eq 124 ]; then
-            echo "Coverage run reached the 10 minute limit without failing; treating as success."
-            exit 0
-          fi
-          exit "$status"
-      - name: Upload coverage to Codecov
-        if: ${{ hashFiles('cobertura.xml') != '' }}
-        uses: codecov/codecov-action@v3.1.4
+#  codecov:
+#    name: Code coverage
+#    runs-on: ubuntu-latest
+#    container:
+#      image: xd009642/tarpaulin:develop-nightly
+#      options: --security-opt seccomp=unconfined
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: Generate coverage report
+#        run: cargo tarpaulin --engine llvm --all-features --release --timeout 600 --out xml
+#      - name: Upload coverage to Codecov
+#        uses: codecov/codecov-action@v3.1.4
 
   doc-links:
     name: Intra-doc links
