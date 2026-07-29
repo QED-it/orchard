@@ -178,16 +178,23 @@ pub enum Circuit {
 }
 
 impl Circuit {
-    fn circuit_version(&self) -> OrchardCircuitVersion {
+    /// Returns [`plonk::Error::Synthesis`] if this circuit's kind doesn't match its
+    /// `circuit_version` (a `Circuit::OrchardZSA` not carrying [`OrchardCircuitVersion::ZSA`], or
+    /// a `Circuit::OrchardVanilla` carrying it), which should be unreachable given the crate's
+    /// constructors.
+    fn circuit_version(&self) -> Result<OrchardCircuitVersion, plonk::Error> {
         match self {
-            Circuit::OrchardVanilla(circuit) => circuit.circuit_version,
+            Circuit::OrchardVanilla(circuit) => {
+                if circuit.circuit_version == OrchardCircuitVersion::ZSA {
+                    return Err(plonk::Error::Synthesis);
+                }
+                Ok(circuit.circuit_version)
+            }
             Circuit::OrchardZSA(circuit) => {
                 if circuit.common_witnesses.circuit_version != OrchardCircuitVersion::ZSA {
-                    panic!(
-                        "Circuit::OrchardZSA could only be created with OrchardCircuitVersion::ZSA"
-                    );
+                    return Err(plonk::Error::Synthesis);
                 }
-                OrchardCircuitVersion::ZSA
+                Ok(circuit.common_witnesses.circuit_version)
             }
         }
     }
@@ -542,11 +549,10 @@ impl Proof {
         instances: &[Instance],
         mut rng: impl RngCore,
     ) -> Result<Self, plonk::Error> {
-        if circuits
-            .iter()
-            .any(|c| c.circuit_version() != pk.circuit_version)
-        {
-            return Err(plonk::Error::Synthesis);
+        for circuit in circuits {
+            if circuit.circuit_version()? != pk.circuit_version {
+                return Err(plonk::Error::Synthesis);
+            }
         }
 
         if instances.iter().any(Instance::cross_address_disabled)
