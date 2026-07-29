@@ -1841,6 +1841,35 @@ mod tests {
         }
     }
 
+    // Proving a ZSA circuit with a proving key for a different circuit version is a misuse: the
+    // proving key and circuits must agree (see `Proof::create`). Confirm `create` rejects it with
+    // `plonk::Error::Synthesis` rather than emitting an unverifiable proof.
+    #[test]
+    fn create_rejects_mismatched_proving_key_version() {
+        let mut rng = OsRng;
+
+        let (circuit, instance) =
+            generate_circuit_instance(true, false, OrchardCircuitVersion::ZSA, &mut rng);
+
+        for pk_version in [
+            OrchardCircuitVersion::InsecurePreNu6_2,
+            OrchardCircuitVersion::FixedPostNu6_2,
+            OrchardCircuitVersion::PostNu6_3,
+        ] {
+            let mismatched_pk = ProvingKey::build(pk_version);
+
+            assert!(matches!(
+                Proof::create(
+                    &mismatched_pk,
+                    &[circuit.clone()],
+                    &[instance.clone()],
+                    &mut rng
+                ),
+                Err(super::plonk::Error::Synthesis),
+            ));
+        }
+    }
+
     #[test]
     fn zsa_cross_address_restriction_is_conditional() {
         // An unrestricted cross-address statement is satisfiable...
