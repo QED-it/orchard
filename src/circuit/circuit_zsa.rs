@@ -422,6 +422,10 @@ impl plonk::Circuit<pallas::Base> for CircuitZsa {
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
+        if !self.common_witnesses.circuit_version.is_zsa() {
+            return Err(plonk::Error::Synthesis);
+        }
+
         // Load the Sinsemilla generator lookup table used by the whole circuit.
         SinsemillaChip::load(config.sinsemilla_config_1.clone(), &mut layouter)?;
 
