@@ -5,14 +5,22 @@ use orchard::{
     builder::{Builder, BundleType},
     bundle::{Authorized, BatchValidator, BundleVersion, Flags, TxVersion},
     circuit::{OrchardCircuitVersion, ProvingKey, VerifyingKey},
+    flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
-    note::{ExtractedNoteCommitment, NoteVersion},
-    note_encryption::{IronwoodDomain, OrchardDomain},
+    note::{AssetBase, ExtractedNoteCommitment, NoteVersion},
+    note_encryption::{
+        DomainVersion, IronwoodDomain, NoteEncryptionDomain, OrchardDomain, OrchardVersion,
+        ZSAVersion,
+    },
+    primitives::OrchardPrimitives,
+    sighash_kind::OrchardSighashKind,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
-    Address, Bundle,
+    Address, Anchor, Bundle, Note,
 };
 use rand::rngs::OsRng;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
 
@@ -40,20 +48,62 @@ fn single_leaf_witness(cmx: &ExtractedNoteCommitment) -> (MerkleHashOrchard, Mer
     (root, merkle_path.into())
 }
 
-fn verify_bundle(bundle: &Bundle<Authorized, i64>, vk: &VerifyingKey, tx_version: TxVersion) {
-    assert!(matches!(bundle.verify_proof(vk), Ok(())));
+pub fn verify_bundle<Pr: OrchardPrimitives>(
+    bundle: &Bundle<Authorized, i64, Pr>,
+    vk: &VerifyingKey,
+    tx_version: TxVersion,
+    verify_proof: bool,
+) {
+    if verify_proof {
+        assert!(matches!(bundle.verify_proof(vk), Ok(())));
+    }
     let sighash: [u8; 32] = bundle
         .commitment(tx_version)
         .expect("bundle flags are representable in this format")
         .into();
     let bvk = bundle.binding_validating_key();
     for action in bundle.actions() {
-        assert_eq!(action.rk().verify(&sighash, action.authorization()), Ok(()));
+        assert_eq!(
+            action.authorization().sighash_kind(),
+            &OrchardSighashKind::AllEffecting,
+        );
+        assert_eq!(
+            action.rk().verify(&sighash, action.authorization().sig()),
+            Ok(())
+        );
     }
     assert_eq!(
-        bvk.verify(&sighash, bundle.authorization().binding_signature()),
+        bvk.verify(&sighash, bundle.authorization().binding_signature().sig()),
         Ok(())
     );
+}
+
+pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
+    // Use the tree with a single leaf.
+    let cmx: ExtractedNoteCommitment = note.commitment().into();
+    let (root, merkle_path) = single_leaf_witness(&cmx);
+    (merkle_path, root.into())
+}
+
+trait BundleOrchardFlavor: OrchardFlavor {
+    const DEFAULT_BUNDLE_VERSION: BundleVersion;
+    const TX_VERSION: TxVersion;
+    const SPENDS_DISABLED_FLAGS: Flags;
+    type DomainVersion: DomainVersion;
+}
+
+impl BundleOrchardFlavor for OrchardVanilla {
+    const DEFAULT_BUNDLE_VERSION: BundleVersion = BundleVersion::orchard_v2();
+    const TX_VERSION: TxVersion = TxVersion::V5;
+    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED;
+    type DomainVersion = OrchardVersion;
+}
+
+impl BundleOrchardFlavor for OrchardZSA {
+    const DEFAULT_BUNDLE_VERSION: BundleVersion = BundleVersion::zsa();
+    const TX_VERSION: TxVersion = TxVersion::ZSA;
+    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED_WITH_ZSA;
+    type DomainVersion = ZSAVersion;
 }
 
 /// The flags used by the output-only (shielding and coinbase) steps of these tests: spends
@@ -73,26 +123,51 @@ fn output_only_builder(
     let mut builder = Builder::new(bundle_type, bundle_version, SHIELDING_FLAGS, anchor)
         .expect("shielding flags are valid for the bundle version");
     assert_eq!(
-        builder.add_output(None, recipient, NoteValue::from_raw(5000), [0u8; 512]),
+        builder.add_output(
+            None,
+            recipient,
+            NoteValue::from_raw(5000),
+            AssetBase::zatoshi(),
+            [0u8; 512]
+        ),
         Ok(())
     );
     builder
 }
 
-#[test]
-fn bundle_chain() {
-    let mut rng = OsRng;
-    let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
-    let vk = VerifyingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
+fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
+    let mut rng = StdRng::seed_from_u64(1u64);
+    let bundle_version = FL::DEFAULT_BUNDLE_VERSION;
+    let pk = ProvingKey::build::<FL>(bundle_version.circuit_version());
+    let vk = VerifyingKey::build::<FL>(bundle_version.circuit_version());
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
     // Create a shielding bundle.
-    let shielding_bundle: Bundle<_, i64> = {
-        let builder =
-            output_only_builder(BundleVersion::orchard_v2(), BundleType::DEFAULT, recipient);
+    let (shielding_bundle, orchard_digest_1): (Bundle<_, i64, FL>, [u8; 32]) = {
+        // Use the empty tree.
+        let anchor = MerkleHashOrchard::empty_root(32.into()).into();
+
+        let mut builder = Builder::new(
+            BundleType::DEFAULT,
+            bundle_version,
+            FL::SPENDS_DISABLED_FLAGS,
+            anchor,
+        )
+        .expect("spends-disabled flags are valid for the bundle version");
+        let note_value = NoteValue::from_raw(5000);
+        assert_eq!(
+            builder.add_output(
+                None,
+                recipient,
+                note_value,
+                AssetBase::zatoshi(),
+                [0u8; 512]
+            ),
+            Ok(())
+        );
         let (unauthorized, bundle_meta) = builder.build(&mut rng).unwrap().unwrap();
 
         assert_eq!(
@@ -104,61 +179,136 @@ fn bundle_chain() {
                     &fvk.to_ivk(Scope::External)
                 )
                 .map(|(note, _, _)| note.value()),
-            Some(NoteValue::from_raw(5000))
+            Some(note_value)
         );
 
         let sighash = unauthorized
-            .commitment(TxVersion::V5)
+            .commitment(FL::TX_VERSION)
             .expect("bundle flags are representable in this format")
             .into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
-        proven.apply_signatures(rng, sighash, &[]).unwrap()
+        (
+            proven.apply_signatures(rng.clone(), sighash, &[]).unwrap(),
+            sighash,
+        )
     };
 
     // Verify the shielding bundle.
-    verify_bundle(&shielding_bundle, &vk, TxVersion::V5);
+    verify_bundle(&shielding_bundle, &vk, FL::TX_VERSION, true);
 
-    // Create a shielded bundle spending the previous output.
-    let shielded_bundle: Bundle<_, i64> = {
+    let note = {
         let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
-        let (note, _, _) = shielding_bundle
+        shielding_bundle
             .actions()
             .iter()
             .find_map(|action| {
-                let domain = OrchardDomain::for_action(action);
+                let domain = NoteEncryptionDomain::<FL::DomainVersion, FL>::for_action(action);
                 try_note_decryption(&domain, &ivk, action)
             })
-            .unwrap();
+            .unwrap()
+            .0
+    };
 
-        // Use the tree with a single leaf.
-        let cmx: ExtractedNoteCommitment = note.commitment().into();
-        let (root, merkle_path) = single_leaf_witness(&cmx);
+    // Test that spend adding attempt fails when spends are disabled.
+    // Note: We do not need a separate positive test for spends enabled
+    // as the following code adds spends with spends enabled.
+    {
+        let (merkle_path, anchor) = build_merkle_path(&note);
 
         let mut builder = Builder::new(
             BundleType::DEFAULT,
-            BundleVersion::orchard_v2(),
-            BundleVersion::orchard_v2().default_flags(),
-            root.into(),
+            bundle_version,
+            // Intentionally testing with SPENDS_DISABLED as SPENDS_DISABLED_WITH_ZSA is already
+            // tested above (for OrchardZSA case). Both should work.
+            Flags::SPENDS_DISABLED,
+            anchor,
         )
-        .unwrap();
+        .expect("spends-disabled flags are valid for the bundle version");
+
+        assert!(builder.add_spend(fvk.clone(), note, merkle_path).is_err());
+    }
+
+    // Create a shielded bundle spending the previous output.
+    let (shielded_bundle, orchard_digest_2): (Bundle<_, i64, FL>, [u8; 32]) = {
+        let (merkle_path, anchor) = build_merkle_path(&note);
+
+        let mut builder = Builder::new(
+            BundleType::DEFAULT,
+            bundle_version,
+            bundle_version.default_flags(),
+            anchor,
+        )
+        .expect("default flags are valid for the bundle version");
         assert_eq!(builder.add_spend(fvk, note, merkle_path), Ok(()));
         assert_eq!(
-            builder.add_output(None, recipient, NoteValue::from_raw(5000), [0u8; 512]),
+            builder.add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(5000),
+                AssetBase::zatoshi(),
+                [0u8; 512]
+            ),
             Ok(())
         );
         let (unauthorized, _) = builder.build(&mut rng).unwrap().unwrap();
         let sighash = unauthorized
-            .commitment(TxVersion::V5)
+            .commitment(FL::TX_VERSION)
             .expect("bundle flags are representable in this format")
             .into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
-        proven
-            .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
-            .unwrap()
+        (
+            proven
+                .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
+                .unwrap(),
+            sighash,
+        )
     };
 
     // Verify the shielded bundle.
-    verify_bundle(&shielded_bundle, &vk, TxVersion::V5);
+    verify_bundle(&shielded_bundle, &vk, FL::TX_VERSION, true);
+    (orchard_digest_1, orchard_digest_2)
+}
+
+#[test]
+fn bundle_chain_vanilla() {
+    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardVanilla>();
+    assert_eq!(
+        orchard_digest_1,
+        // Locks the `orchard_digest` for OrchardVanilla
+        [
+            165, 242, 106, 135, 168, 224, 110, 252, 175, 110, 63, 29, 78, 243, 33, 14, 152, 202,
+            209, 47, 68, 32, 138, 96, 79, 213, 218, 93, 45, 87, 221, 174
+        ]
+    );
+    assert_eq!(
+        orchard_digest_2,
+        // Locks the `orchard_digest` for OrchardVanilla
+        [
+            74, 174, 42, 41, 68, 92, 171, 110, 10, 148, 217, 61, 68, 50, 49, 1, 1, 180, 221, 210,
+            97, 237, 25, 198, 195, 77, 19, 160, 186, 172, 8, 26
+        ]
+    );
+}
+
+#[test]
+fn bundle_chain_zsa() {
+    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardZSA>();
+    assert_eq!(
+        orchard_digest_1,
+        // Locks the `orchard_digest` for OrchardZSA
+        [
+            51, 125, 219, 53, 244, 237, 140, 156, 133, 175, 230, 45, 156, 75, 11, 151, 151, 34,
+            245, 84, 208, 196, 248, 187, 20, 54, 111, 230, 69, 34, 114, 72
+        ]
+    );
+    assert_eq!(
+        orchard_digest_2,
+        // Locks the `orchard_digest` for OrchardZSA
+        [
+            134, 103, 36, 170, 193, 49, 193, 89, 199, 73, 231, 32, 135, 130, 9, 119, 224, 62, 101,
+            240, 132, 164, 83, 61, 147, 47, 159, 94, 172, 105, 132, 82
+        ]
+    );
 }
 
 // A bundle built with the circuit version set to `InsecurePreNu6_2` produces a proof against
@@ -167,9 +317,10 @@ fn bundle_chain() {
 #[test]
 fn builder_builds_for_insecure_circuit_version() {
     let mut rng = OsRng;
-    let insecure_pk = ProvingKey::build(OrchardCircuitVersion::InsecurePreNu6_2);
-    let insecure_vk = VerifyingKey::build(OrchardCircuitVersion::InsecurePreNu6_2);
-    let fixed_vk = VerifyingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
+    let insecure_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::InsecurePreNu6_2);
+    let insecure_vk =
+        VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::InsecurePreNu6_2);
+    let fixed_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -181,7 +332,10 @@ fn builder_builds_for_insecure_circuit_version() {
         recipient,
     );
 
-    let (unauthorized, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
+    let (unauthorized, _) = builder
+        .build::<i64, OrchardVanilla>(&mut rng)
+        .unwrap()
+        .unwrap();
     let sighash: [u8; 32] = unauthorized
         .commitment(TxVersion::V5)
         .expect("bundle flags are representable in this format")
@@ -196,8 +350,8 @@ fn builder_builds_for_insecure_circuit_version() {
 #[test]
 fn builder_builds_for_post_nu6_3_circuit_version() {
     let mut rng = OsRng;
-    let post_nu6_3_pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
-    let post_nu6_3_vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -205,7 +359,10 @@ fn builder_builds_for_post_nu6_3_circuit_version() {
 
     let builder = output_only_builder(BundleVersion::ironwood_v3(), BundleType::DEFAULT, recipient);
 
-    let (unauthorized, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
+    let (unauthorized, _) = builder
+        .build::<i64, OrchardVanilla>(&mut rng)
+        .unwrap()
+        .unwrap();
     assert_eq!(
         unauthorized.circuit_version(),
         OrchardCircuitVersion::PostNu6_3
@@ -218,7 +375,7 @@ fn builder_builds_for_post_nu6_3_circuit_version() {
     let proven = unauthorized.create_proof(&post_nu6_3_pk, &mut rng).unwrap();
     let bundle = proven.apply_signatures(rng, sighash, &[]).unwrap();
 
-    verify_bundle(&bundle, &post_nu6_3_vk, TxVersion::V6);
+    verify_bundle(&bundle, &post_nu6_3_vk, TxVersion::V6, true);
 }
 
 #[test]
@@ -230,7 +387,10 @@ fn ironwood_builder_outputs_decrypt_with_ironwood_domain() {
     let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
 
     let builder = output_only_builder(BundleVersion::ironwood_v3(), BundleType::DEFAULT, recipient);
-    let (bundle, bundle_meta) = builder.build::<i64>(&mut rng).unwrap().unwrap();
+    let (bundle, bundle_meta) = builder
+        .build::<i64, OrchardVanilla>(&mut rng)
+        .unwrap()
+        .unwrap();
     let action = &bundle.actions()[bundle_meta
         .output_action_index(0)
         .expect("Output 0 can be found")];
@@ -266,11 +426,15 @@ fn ironwood_bundle_helpers_decrypt_and_recover_outputs() {
             Some(ovk.clone()),
             recipient,
             NoteValue::from_raw(5000),
+            AssetBase::zatoshi(),
             [0u8; 512],
         ),
         Ok(())
     );
-    let (bundle, bundle_meta) = builder.build::<i64>(&mut rng).unwrap().unwrap();
+    let (bundle, bundle_meta) = builder
+        .build::<i64, OrchardVanilla>(&mut rng)
+        .unwrap()
+        .unwrap();
     let action_idx = bundle_meta
         .output_action_index(0)
         .expect("Output 0 can be found");
@@ -316,8 +480,8 @@ fn ironwood_bundle_helpers_decrypt_and_recover_outputs() {
 #[test]
 fn post_nu6_3_coinbase_bundle_proves_and_verifies() {
     let mut rng = OsRng;
-    let post_nu6_3_pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
-    let post_nu6_3_vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -329,7 +493,10 @@ fn post_nu6_3_coinbase_bundle_proves_and_verifies() {
         recipient,
     );
 
-    let (unauthorized, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
+    let (unauthorized, _) = builder
+        .build::<i64, OrchardVanilla>(&mut rng)
+        .unwrap()
+        .unwrap();
     assert_eq!(unauthorized.actions().len(), 1);
     assert!(!unauthorized.flags().spends_enabled());
     assert!(unauthorized.flags().cross_address_enabled());
@@ -341,7 +508,7 @@ fn post_nu6_3_coinbase_bundle_proves_and_verifies() {
     let proven = unauthorized.create_proof(&post_nu6_3_pk, &mut rng).unwrap();
     let bundle = proven.apply_signatures(rng, sighash, &[]).unwrap();
 
-    verify_bundle(&bundle, &post_nu6_3_vk, TxVersion::V6);
+    verify_bundle(&bundle, &post_nu6_3_vk, TxVersion::V6, true);
 }
 
 // An explicitly unpadded transactional bundle builds exactly the requested single action
@@ -351,8 +518,8 @@ fn post_nu6_3_coinbase_bundle_proves_and_verifies() {
 #[test]
 fn unpadded_ironwood_bundle_builds_single_action_and_verifies() {
     let mut rng = OsRng;
-    let post_nu6_3_pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
-    let post_nu6_3_vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
@@ -365,7 +532,10 @@ fn unpadded_ironwood_bundle_builds_single_action_and_verifies() {
     );
     assert_eq!(builder.bundle_type(), BundleType::UNPADDED);
 
-    let (unauthorized, bundle_meta) = builder.build::<i64>(&mut rng).unwrap().unwrap();
+    let (unauthorized, bundle_meta) = builder
+        .build::<i64, OrchardVanilla>(&mut rng)
+        .unwrap()
+        .unwrap();
     assert_eq!(unauthorized.actions().len(), 1);
     assert_eq!(bundle_meta.output_action_index(0), Some(0));
 
@@ -376,7 +546,7 @@ fn unpadded_ironwood_bundle_builds_single_action_and_verifies() {
     let proven = unauthorized.create_proof(&post_nu6_3_pk, &mut rng).unwrap();
     let bundle = proven.apply_signatures(rng, sighash, &[]).unwrap();
 
-    verify_bundle(&bundle, &post_nu6_3_vk, TxVersion::V6);
+    verify_bundle(&bundle, &post_nu6_3_vk, TxVersion::V6, true);
 }
 
 // A post-NU 6.3 restricted bundle chain: an ordinary shielding bundle, followed by a bundle
@@ -385,16 +555,16 @@ fn unpadded_ironwood_bundle_builds_single_action_and_verifies() {
 #[test]
 fn post_nu6_3_restricted_bundle_chain() {
     let mut rng = OsRng;
-    let post_nu6_3_pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
-    let post_nu6_3_vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
-    let fixed_pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
-    let fixed_vk = VerifyingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
+    let post_nu6_3_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+    let fixed_pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+    let fixed_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
-    let shielding_bundle: Bundle<_, i64> = {
+    let shielding_bundle: Bundle<_, i64, OrchardVanilla> = {
         let builder =
             output_only_builder(BundleVersion::orchard_v2(), BundleType::DEFAULT, recipient);
 
@@ -407,10 +577,10 @@ fn post_nu6_3_restricted_bundle_chain() {
         proven.apply_signatures(rng, sighash, &[]).unwrap()
     };
 
-    verify_bundle(&shielding_bundle, &fixed_vk, TxVersion::V5);
+    verify_bundle(&shielding_bundle, &fixed_vk, TxVersion::V5, true);
 
     let change_addr = fvk.address_at(0u32, Scope::Internal);
-    let restricted_bundle: Bundle<_, i64> = {
+    let restricted_bundle: Bundle<_, i64, OrchardVanilla> = {
         let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
         let (note, _, _) = shielding_bundle
             .actions()
@@ -438,6 +608,7 @@ fn post_nu6_3_restricted_bundle_chain() {
                 Some(fvk.to_ovk(Scope::Internal)),
                 change_addr,
                 NoteValue::from_raw(3000),
+                AssetBase::zatoshi(),
                 [0u8; 512],
             ),
             Ok(())
@@ -485,7 +656,7 @@ fn post_nu6_3_restricted_bundle_chain() {
     };
 
     assert_eq!(restricted_bundle.value_balance(), &2000);
-    verify_bundle(&restricted_bundle, &post_nu6_3_vk, TxVersion::V5);
+    verify_bundle(&restricted_bundle, &post_nu6_3_vk, TxVersion::V5, true);
     assert!(restricted_bundle.verify_proof(&fixed_vk).is_err());
 
     let mut validator = BatchValidator::new(&post_nu6_3_vk);
@@ -522,15 +693,16 @@ fn post_nu6_3_restricted_bundle_chain() {
 #[test]
 fn ironwood_post_nu6_3_unrestricted_bundle_proves_and_verifies() {
     let mut rng = OsRng;
-    let post_nu6_3_pk = ProvingKey::build(BundleVersion::ironwood_v3().circuit_version());
-    let post_nu6_3_vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
+    let post_nu6_3_pk =
+        ProvingKey::build::<OrchardVanilla>(BundleVersion::ironwood_v3().circuit_version());
+    let post_nu6_3_vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
 
     let sk = SpendingKey::from_bytes([0; 32]).unwrap();
     let fvk = FullViewingKey::from(&sk);
     let recipient = fvk.address_at(0u32, Scope::External);
 
     // Shield a note to spend (an unrestricted, output-only post-NU6.3 bundle).
-    let shielding_bundle: Bundle<_, i64> = {
+    let shielding_bundle: Bundle<_, i64, OrchardVanilla> = {
         let builder =
             output_only_builder(BundleVersion::ironwood_v3(), BundleType::DEFAULT, recipient);
         let (unauthorized, _) = builder.build(&mut rng).unwrap().unwrap();
@@ -569,10 +741,19 @@ fn ironwood_post_nu6_3_unrestricted_bundle_proves_and_verifies() {
     .unwrap();
     assert_eq!(builder.add_spend(fvk.clone(), note, merkle_path), Ok(()));
     assert_eq!(
-        builder.add_output(None, change_addr, NoteValue::from_raw(5000), [0u8; 512]),
+        builder.add_output(
+            None,
+            change_addr,
+            NoteValue::from_raw(5000),
+            AssetBase::zatoshi(),
+            [0u8; 512]
+        ),
         Ok(())
     );
-    let (unauthorized, _) = builder.build(&mut rng).unwrap().unwrap();
+    let (unauthorized, _) = builder
+        .build::<i64, OrchardVanilla>(&mut rng)
+        .unwrap()
+        .unwrap();
 
     assert_eq!(
         unauthorized.circuit_version(),
@@ -595,5 +776,5 @@ fn ironwood_post_nu6_3_unrestricted_bundle_proves_and_verifies() {
         .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
         .unwrap();
 
-    verify_bundle(&bundle, &post_nu6_3_vk, TxVersion::V6);
+    verify_bundle(&bundle, &post_nu6_3_vk, TxVersion::V6, true);
 }

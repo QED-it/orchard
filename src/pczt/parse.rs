@@ -7,17 +7,21 @@ use alloc::vec::Vec;
 use ff::PrimeField;
 use incrementalmerkletree::Hashable;
 use pasta_curves::pallas;
-use zcash_note_encryption::OutgoingCipherKey;
+use zcash_note_encryption::{note_bytes::NoteBytes, OutgoingCipherKey};
 use zip32::ChildIndex;
 
 use super::{Action, Bundle, Output, Spend, Zip32Derivation};
 use crate::{
     bundle::{BundleVersion, Flags},
+    flavor::OrchardVanilla,
     keys::{FullViewingKey, SpendingKey},
     note::{
         ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
     },
-    primitives::redpallas::{self, SpendAuth},
+    primitives::{
+        redpallas::{self, SpendAuth},
+        OrchardPrimitives,
+    },
     tree::{MerkleHashOrchard, MerklePath},
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
     Address, Anchor, Proof, NOTE_COMMITMENT_TREE_DEPTH,
@@ -371,12 +375,12 @@ impl Output {
             .into_option()
             .ok_or(ParseError::InvalidExtractedNoteCommitment)?;
 
-        let encrypted_note = TransmittedNoteCiphertext {
+        let encrypted_note = TransmittedNoteCiphertext::<OrchardVanilla> {
             epk_bytes: ephemeral_key,
-            enc_ciphertext: enc_ciphertext
-                .as_slice()
-                .try_into()
-                .map_err(|_| ParseError::InvalidEncCiphertext)?,
+            enc_ciphertext: <OrchardVanilla as OrchardPrimitives>::NoteCiphertextBytes::from_slice(
+                enc_ciphertext.as_slice(),
+            )
+            .ok_or(ParseError::InvalidEncCiphertext)?,
             out_ciphertext: out_ciphertext
                 .as_slice()
                 .try_into()

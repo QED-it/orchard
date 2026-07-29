@@ -6,7 +6,9 @@ use rand::{CryptoRng, RngCore};
 use super::Action;
 use crate::{
     bundle::{Authorization, Authorized, EffectsOnly},
+    flavor::OrchardVanilla,
     primitives::redpallas::{self, Binding, SpendAuth},
+    sighash_kind::{OrchardBindingSig, OrchardSighashKind, OrchardSpendAuthSig},
     Proof,
 };
 
@@ -18,7 +20,7 @@ impl super::Bundle {
     /// [regular `Bundle`]: crate::Bundle
     pub fn extract_effects<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::Bundle<EffectsOnly, V>>, TxExtractorError> {
+    ) -> Result<Option<crate::Bundle<EffectsOnly, V, OrchardVanilla>>, TxExtractorError> {
         self.to_tx_data(|_| Ok(()), |_| Ok(EffectsOnly))
     }
 
@@ -29,7 +31,7 @@ impl super::Bundle {
     /// [regular `Bundle`]: crate::Bundle
     pub fn extract<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::Bundle<Unbound, V>>, TxExtractorError> {
+    ) -> Result<Option<crate::Bundle<Unbound, V, OrchardVanilla>>, TxExtractorError> {
         let bundle = self.to_tx_data(
             |action| {
                 action
@@ -58,7 +60,7 @@ impl super::Bundle {
         // transition in `apply_binding_signature`. Circuit-key support for bundle
         // flags is checked when proving or verifying.
         if let Some(bundle) = &bundle {
-            crate::bundle::validate_proof_size(
+            crate::bundle::validate_proof_size::<OrchardVanilla>(
                 &bundle.authorization().proof,
                 bundle.actions().len(),
             )?;
@@ -72,7 +74,7 @@ impl super::Bundle {
         &self,
         action_auth: F,
         bundle_auth: G,
-    ) -> Result<Option<crate::Bundle<A, V>>, E>
+    ) -> Result<Option<crate::Bundle<A, V, OrchardVanilla>>, E>
     where
         A: Authorization,
         E: From<TxExtractorError>,
@@ -110,6 +112,7 @@ impl super::Bundle {
                 actions,
                 self.flags,
                 value_balance,
+                vec![], //No burn in PCZT V1
                 self.anchor,
                 authorization,
                 self.bundle_version,
@@ -146,6 +149,8 @@ pub enum TxExtractorError {
     },
     /// The bundle's flags cannot be encoded under its value pool and protocol version.
     UnrepresentableFlags,
+    /// The bundle version is incompatible with the flavor (OrchardVanilla or OrchardZSA)
+    InvalidBundleVersion,
 }
 
 impl From<crate::ActionFromPartsError> for TxExtractorError {
@@ -165,6 +170,9 @@ impl From<crate::bundle::BundleError> for TxExtractorError {
             }
             crate::bundle::BundleError::UnrepresentableFlags => {
                 TxExtractorError::UnrepresentableFlags
+            }
+            crate::bundle::BundleError::InvalidBundleVersion => {
+                TxExtractorError::InvalidBundleVersion
             }
         }
     }
@@ -202,6 +210,10 @@ impl fmt::Display for TxExtractorError {
                 f,
                 "Orchard bundle flags are not representable under its value pool and protocol version",
             ),
+            TxExtractorError::InvalidBundleVersion => write!(
+                f,
+                "The bundle version is incompatible with the flavor (OrchardVanilla or OrchardZSA)",
+            ),
         }
     }
 }
@@ -220,7 +232,7 @@ impl Authorization for Unbound {
     type SpendAuth = redpallas::Signature<SpendAuth>;
 }
 
-impl<V> crate::Bundle<Unbound, V> {
+impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
     /// Verifies the given sighash with every `spend_auth_sig`, and then binds the bundle.
     ///
     /// Returns `None` if the given sighash does not validate against every `spend_auth_sig`.
@@ -228,7 +240,7 @@ impl<V> crate::Bundle<Unbound, V> {
         self,
         sighash: [u8; 32],
         rng: R,
-    ) -> Option<crate::Bundle<Authorized, V>> {
+    ) -> Option<crate::Bundle<Authorized, V, OrchardVanilla>> {
         if self
             .actions()
             .iter()
@@ -236,8 +248,16 @@ impl<V> crate::Bundle<Unbound, V> {
         {
             Some(self.map_authorization(
                 &mut (),
-                |_, _, a| a,
-                |_, Unbound { proof, bsk }| Authorized::from_parts(proof, bsk.sign(rng, &sighash)),
+                |_, _, a| OrchardSpendAuthSig::new(OrchardSighashKind::AllEffecting, a),
+                |_, Unbound { proof, bsk }| {
+                    Authorized::from_parts(
+                        proof,
+                        OrchardBindingSig::new(
+                            OrchardSighashKind::AllEffecting,
+                            bsk.sign(rng, &sighash),
+                        ),
+                    )
+                },
             ))
         } else {
             None

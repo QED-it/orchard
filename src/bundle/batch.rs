@@ -9,7 +9,10 @@ use tracing::debug;
 use super::{Authorized, Bundle};
 use crate::{
     circuit::VerifyingKey,
-    primitives::redpallas::{self, Binding, SpendAuth},
+    primitives::{
+        redpallas::{self, Binding, SpendAuth},
+        OrchardPrimitives,
+    },
 };
 
 /// A signature within an authorized Orchard bundle.
@@ -76,9 +79,9 @@ impl<'a> BatchValidator<'a> {
     /// Returns [`BatchError::RestrictionUnsupportedByKey`] if the bundle disables cross-address
     /// transfers but the validator's verifying key's circuit version does not support the
     /// cross-address restriction; in that case the bundle is not added to the batch.
-    pub fn add_bundle<V: Copy + Into<i64>>(
+    pub fn add_bundle<V: Copy + Into<i64>, Pr: OrchardPrimitives>(
         &mut self,
-        bundle: &Bundle<Authorized, V>,
+        bundle: &Bundle<Authorized, V, Pr>,
         sighash: [u8; 32],
     ) -> Result<(), BatchError> {
         if !bundle.flags().cross_address_enabled() && !self.vk.supports_cross_address_restriction()
@@ -90,14 +93,15 @@ impl<'a> BatchValidator<'a> {
             self.signatures.push(BundleSignature {
                 signature: action
                     .rk()
-                    .create_batch_item(action.authorization().clone(), &sighash),
+                    .create_batch_item(action.authorization().sig().clone(), &sighash),
             });
         }
 
         self.signatures.push(BundleSignature {
-            signature: bundle
-                .binding_validating_key()
-                .create_batch_item(bundle.authorization().binding_signature().clone(), &sighash),
+            signature: bundle.binding_validating_key().create_batch_item(
+                bundle.authorization().binding_signature().sig().clone(),
+                &sighash,
+            ),
         });
 
         bundle
@@ -152,6 +156,7 @@ mod tests {
     use crate::{
         bundle::tests::{sample_authorized_bundle, with_cross_address_disabled},
         circuit::{OrchardCircuitVersion, VerifyingKey},
+        flavor::OrchardVanilla,
     };
 
     #[test]
@@ -166,7 +171,7 @@ mod tests {
             OrchardCircuitVersion::InsecurePreNu6_2,
             OrchardCircuitVersion::FixedPostNu6_2,
         ] {
-            let vk = VerifyingKey::build(circuit_version);
+            let vk = VerifyingKey::build::<OrchardVanilla>(circuit_version);
             let mut validator = BatchValidator::new(&vk);
             assert_eq!(
                 validator.add_bundle(&bundle, [0; 32]),
@@ -175,7 +180,7 @@ mod tests {
         }
 
         // The post-NU 6.3 key supports the restriction, so the bundle is accepted.
-        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
         let mut validator = BatchValidator::new(&vk);
         assert_eq!(validator.add_bundle(&bundle, [0; 32]), Ok(()));
     }
@@ -187,7 +192,7 @@ mod tests {
             OrchardCircuitVersion::FixedPostNu6_2,
             OrchardCircuitVersion::PostNu6_3,
         ] {
-            let vk = VerifyingKey::build(circuit_version);
+            let vk = VerifyingKey::build::<OrchardVanilla>(circuit_version);
             assert!(BatchValidator::new(&vk).validate(OsRng));
         }
     }

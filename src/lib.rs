@@ -35,11 +35,15 @@ pub mod circuit;
 mod constants;
 #[cfg(feature = "unstable-voting-circuits")]
 pub mod constants;
+pub mod flavor;
+#[cfg(feature = "zsa-issuance")]
+pub mod issuance;
 pub mod keys;
 pub mod note;
 pub mod note_encryption;
 pub mod pczt;
 pub mod primitives;
+pub mod sighash_kind;
 #[cfg(not(feature = "unstable-voting-circuits"))]
 mod spec;
 #[cfg(feature = "unstable-voting-circuits")]
@@ -51,13 +55,18 @@ pub mod zip32;
 #[cfg(test)]
 mod test_vectors;
 
+use crate::primitives::OrchardPrimitives;
 pub use action::{Action, ActionFromPartsError};
 pub use address::Address;
 pub use bundle::Bundle;
 pub use constants::MERKLE_DEPTH_ORCHARD as NOTE_COMMITMENT_TREE_DEPTH;
 pub use constants::{L_ORCHARD_BASE, L_ORCHARD_SCALAR, L_VALUE};
 pub use note::{Note, NoteVersion};
+pub use note_encryption::CompactAction;
 pub use tree::Anchor;
+
+#[cfg(feature = "test-dependencies")]
+pub use note_encryption::testing::fake_compact_action;
 
 /// A proof of the validity of an Orchard [`Bundle`].
 ///
@@ -108,13 +117,11 @@ impl Proof {
     /// constructing a bundle from untrusted bytes; see [`Bundle::try_from_parts`].
     ///
     /// [`Bundle::try_from_parts`]: crate::Bundle::try_from_parts
-    pub const fn expected_proof_size(num_actions: usize) -> usize {
+    pub const fn expected_proof_size<Pr: OrchardPrimitives>(num_actions: usize) -> usize {
         // The proof is a fixed base size plus a fixed contribution per action. These constants
         // are determined by the halo2 action circuit; see the `circuit` module's round-trip
         // tests, which cross-check them against `CircuitCost::proof_size`.
-        const BASE: usize = 2720;
-        const PER_ACTION: usize = 2272;
-        BASE + PER_ACTION * num_actions
+        Pr::BASE_PROOF_SIZE + Pr::PER_ACTION_PROOF_SIZE * num_actions
     }
 }
 
@@ -155,4 +162,6 @@ pub enum ProtocolVersion {
     /// For transactional bundles affecting the [`ValuePool::Ironwood`] value pool, cross-address
     /// transfers are permitted and notes use V3 plaintexts.
     V3,
+    /// The version of the Orchard protocol used in ZSA.
+    ZSA,
 }

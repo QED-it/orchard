@@ -12,6 +12,7 @@ use zip32::ChildIndex;
 
 use crate::{
     bundle::{BundleVersion, Flags},
+    flavor::OrchardVanilla,
     keys::{FullViewingKey, SpendingKey},
     note::{ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
@@ -253,7 +254,7 @@ pub struct Output {
     /// - `ephemeral_key`
     /// - `enc_ciphertext`
     /// - `out_ciphertext`
-    pub(crate) encrypted_note: TransmittedNoteCiphertext,
+    pub(crate) encrypted_note: TransmittedNoteCiphertext<OrchardVanilla>,
 
     /// The address that will receive the output.
     ///
@@ -379,8 +380,9 @@ mod tests {
         bundle::{BundleVersion, Flags},
         circuit::{OrchardCircuitVersion, ProvingKey, VerifyingKey},
         constants::MERKLE_DEPTH_ORCHARD,
+        flavor::OrchardVanilla,
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
-        note::{ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho},
+        note::{AssetBase, ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho},
         pczt::{
             IoFinalizerError, ParseError, ProverError, SignerError, TxExtractorError, VerifyError,
             Zip32Derivation,
@@ -418,6 +420,7 @@ mod tests {
         let note = Note::new(
             spend_recipient,
             NoteValue::from_raw(15_000),
+            AssetBase::zatoshi(),
             rho,
             note_version,
             &mut rng,
@@ -439,6 +442,7 @@ mod tests {
                 None,
                 change_recipient,
                 NoteValue::from_raw(5_000),
+                AssetBase::zatoshi(),
                 [0u8; 512],
             )
             .unwrap();
@@ -466,7 +470,13 @@ mod tests {
         )
         .unwrap();
         builder
-            .add_output(None, recipient, NoteValue::from_raw(5000), [0u8; 512])
+            .add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(5000),
+                AssetBase::zatoshi(),
+                [0u8; 512],
+            )
             .unwrap();
         let mut pczt_bundle = builder.build_for_pczt(&mut rng).unwrap().0;
 
@@ -487,7 +497,13 @@ mod tests {
         )
         .unwrap();
         builder
-            .add_output(None, recipient, NoteValue::from_raw(5000), [0u8; 512])
+            .add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(5000),
+                AssetBase::zatoshi(),
+                [0u8; 512],
+            )
             .unwrap();
         builder.build_for_pczt(&mut rng).unwrap().0
     }
@@ -500,7 +516,7 @@ mod tests {
     #[test]
     fn shielding_bundle() {
         let bundle_version = BundleVersion::orchard_v2();
-        let pk = ProvingKey::build(bundle_version.circuit_version());
+        let pk = ProvingKey::build::<OrchardVanilla>(bundle_version.circuit_version());
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -516,7 +532,13 @@ mod tests {
         )
         .unwrap();
         builder
-            .add_output(None, recipient, NoteValue::from_raw(5000), [0u8; 512])
+            .add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(5000),
+                AssetBase::zatoshi(),
+                [0u8; 512],
+            )
             .unwrap();
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, -5000);
@@ -539,8 +561,8 @@ mod tests {
 
     #[test]
     fn create_proof_uses_proving_key_circuit_version() {
-        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
-        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -562,8 +584,8 @@ mod tests {
     #[test]
     fn qr_output_version_checks_note_commitment() {
         let mut rng = OsRng;
-        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
-        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
 
         let sk = SpendingKey::random(&mut rng);
         let fvk = FullViewingKey::from(&sk);
@@ -577,7 +599,13 @@ mod tests {
         )
         .unwrap();
         builder
-            .add_output(None, recipient, NoteValue::from_raw(5000), [0u8; 512])
+            .add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(5000),
+                AssetBase::zatoshi(),
+                [0u8; 512],
+            )
             .unwrap();
         let (mut pczt_bundle, bundle_meta) = builder.build_for_pczt(&mut rng).unwrap();
         let output_action_index = bundle_meta.output_action_index(0).unwrap();
@@ -615,7 +643,7 @@ mod tests {
 
     #[test]
     fn qr_spend_version_checks_nullifier_and_proves() {
-        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -629,6 +657,7 @@ mod tests {
                 if let Some(note) = Note::from_parts(
                     recipient,
                     value,
+                    AssetBase::zatoshi(),
                     rho,
                     RandomSeed::random(&mut rng, &rho),
                     NoteVersion::V3,
@@ -675,7 +704,13 @@ mod tests {
             .add_spend(fvk.clone(), note, merkle_path.into())
             .unwrap();
         builder
-            .add_output(None, recipient, NoteValue::from_raw(10_000), [0u8; 512])
+            .add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(10_000),
+                AssetBase::zatoshi(),
+                [0u8; 512],
+            )
             .unwrap();
         let (mut pczt_bundle, bundle_meta) = builder.build_for_pczt(&mut rng).unwrap();
         let spend_action_index = bundle_meta.spend_action_index(0).unwrap();
@@ -709,7 +744,7 @@ mod tests {
     #[test]
     fn shielded_bundle() {
         let bundle_version = BundleVersion::orchard_v2();
-        let pk = ProvingKey::build(bundle_version.circuit_version());
+        let pk = ProvingKey::build::<OrchardVanilla>(bundle_version.circuit_version());
         let mut rng = OsRng;
 
         // Pretend we derived the spending key via ZIP 32.
@@ -727,6 +762,7 @@ mod tests {
                 if let Some(note) = Note::from_parts(
                     recipient,
                     value,
+                    AssetBase::zatoshi(),
                     rho,
                     RandomSeed::random(&mut rng, &rho),
                     bundle_version.note_version(),
@@ -775,13 +811,20 @@ mod tests {
             .add_spend(fvk.clone(), note, merkle_path.into())
             .unwrap();
         builder
-            .add_output(None, recipient, NoteValue::from_raw(10_000), [0u8; 512])
+            .add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(10_000),
+                AssetBase::zatoshi(),
+                [0u8; 512],
+            )
             .unwrap();
         builder
             .add_output(
                 Some(fvk.to_ovk(Scope::Internal)),
                 fvk.address_at(0u32, Scope::Internal),
                 NoteValue::from_raw(5_000),
+                AssetBase::zatoshi(),
                 [0u8; 512],
             )
             .unwrap();
@@ -858,6 +901,7 @@ mod tests {
                 if let Some(note) = Note::from_parts(
                     recipient,
                     value,
+                    AssetBase::zatoshi(),
                     rho,
                     RandomSeed::random(&mut rng, &rho),
                     bundle_version.note_version(),
@@ -905,13 +949,20 @@ mod tests {
             .add_spend(fvk.clone(), note, merkle_path.into())
             .unwrap();
         builder
-            .add_output(None, recipient, NoteValue::from_raw(10_000), [0u8; 512])
+            .add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(10_000),
+                AssetBase::zatoshi(),
+                [0u8; 512],
+            )
             .unwrap();
         builder
             .add_output(
                 Some(fvk.to_ovk(Scope::Internal)),
                 fvk.address_at(0u32, Scope::Internal),
                 NoteValue::from_raw(5_000),
+                AssetBase::zatoshi(),
                 [0u8; 512],
             )
             .unwrap();
@@ -977,7 +1028,7 @@ mod tests {
                 *spend.nullifier(),
                 output.cmx().to_bytes(),
                 output.encrypted_note().epk_bytes,
-                output.encrypted_note().enc_ciphertext.to_vec(),
+                output.encrypted_note().enc_ciphertext.as_ref().to_vec(),
                 output.encrypted_note().out_ciphertext.to_vec(),
                 output.recipient().map(|r| r.to_raw_address_bytes()),
                 output.value().map(|v| v.inner()),
@@ -1125,7 +1176,7 @@ mod tests {
 
     #[test]
     fn create_proof_rejects_identity_rk() {
-        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -1139,7 +1190,7 @@ mod tests {
 
     #[test]
     fn extract_rejects_identity_rk() {
-        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -1158,7 +1209,7 @@ mod tests {
 
     #[test]
     fn extract_rejects_non_canonical_proof() {
-        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -1306,7 +1357,7 @@ mod tests {
             OrchardCircuitVersion::FixedPostNu6_2,
             OrchardCircuitVersion::PostNu6_3,
         ] {
-            let pk = ProvingKey::build(circuit_version);
+            let pk = ProvingKey::build::<OrchardVanilla>(circuit_version);
 
             let mut mismatched_pczt_bundle = minimal_finalized_pczt_bundle(rng);
             mismatched_pczt_bundle.flags = Flags::CROSS_ADDRESS_DISABLED;
@@ -1321,7 +1372,7 @@ mod tests {
 
         // A pre-NU 6.3 proving key rejects the structurally-conforming restricted
         // statement at the instance check, leaving the bundle unmodified.
-        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
         assert!(matches!(
             pczt_bundle.create_proof(&pk, rng),
             Err(ProverError::ProofFailed(
@@ -1332,7 +1383,7 @@ mod tests {
 
         // A post-NU 6.3 proving key proves the same statement, and the proof verifies
         // in the extracted bundle under the post-NU 6.3 verifying key.
-        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
         pczt_bundle.create_proof(&pk, rng).unwrap();
 
         pczt_bundle.actions_mut()[bundle_meta.spend_action_index(0).unwrap()]
@@ -1349,7 +1400,9 @@ mod tests {
             .apply_binding_signature(sighash, rng)
             .unwrap();
         bundle
-            .verify_proof(&VerifyingKey::build(OrchardCircuitVersion::PostNu6_3))
+            .verify_proof(&VerifyingKey::build::<OrchardVanilla>(
+                OrchardCircuitVersion::PostNu6_3,
+            ))
             .unwrap();
     }
 
@@ -1397,6 +1450,7 @@ mod tests {
         let note = Note::new(
             spend_recipient,
             NoteValue::from_raw(15_000),
+            AssetBase::zatoshi(),
             rho,
             note_version,
             &mut rng,
@@ -1498,7 +1552,9 @@ mod tests {
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
         pczt_bundle.zkproof = Some(crate::Proof::new(vec![
             0;
-            crate::Proof::expected_proof_size(
+            crate::Proof::expected_proof_size::<
+                OrchardVanilla,
+            >(
                 pczt_bundle.actions.len()
             )
         ]));

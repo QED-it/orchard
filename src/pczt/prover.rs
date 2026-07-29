@@ -7,8 +7,9 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     builder::SpendInfo,
-    circuit::{Circuit, Instance, ProvingKey},
-    note::Rho,
+    circuit::{Circuit, Instance, ProvingKey, Witnesses},
+    flavor::OrchardVanilla,
+    note::{AssetBase, Rho},
     Note, Proof,
 };
 
@@ -75,6 +76,7 @@ impl super::Bundle {
                         .recipient
                         .ok_or(ProverError::MissingRecipient)?,
                     action.spend.value.ok_or(ProverError::MissingValue)?,
+                    AssetBase::zatoshi(),
                     action.spend.rho.ok_or(ProverError::MissingRho)?,
                     action.spend.rseed.ok_or(ProverError::MissingRandomSeed)?,
                     action.spend.note_version,
@@ -97,6 +99,7 @@ impl super::Bundle {
                         .recipient
                         .ok_or(ProverError::MissingRecipient)?,
                     action.output.value.ok_or(ProverError::MissingValue)?,
+                    AssetBase::zatoshi(),
                     Rho::from_nf_old(action.spend.nullifier),
                     action.output.rseed.ok_or(ProverError::MissingRandomSeed)?,
                     action.output.note_version,
@@ -113,8 +116,18 @@ impl super::Bundle {
                     .clone()
                     .ok_or(ProverError::MissingValueCommitTrapdoor)?;
 
-                Circuit::from_action_context(spend, output_note, alpha, rcv, pk.circuit_version())
-                    .ok_or(ProverError::RhoMismatch)
+                Witnesses::from_action_context::<OrchardVanilla>(
+                    spend,
+                    output_note,
+                    alpha,
+                    rcv,
+                    pk.circuit_version(),
+                )
+                .ok_or(ProverError::RhoMismatch)
+                .map(|witnesses| Circuit::<OrchardVanilla> {
+                    witnesses,
+                    phantom: core::marker::PhantomData,
+                })
             })
             .collect::<Result<Vec<_>, ProverError>>()?;
 
