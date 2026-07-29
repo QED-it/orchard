@@ -334,10 +334,7 @@ fn builder_builds_for_insecure_circuit_version() {
         recipient,
     );
 
-    let (unauthorized, _) = builder
-        .build::<i64>(&mut rng)
-        .unwrap()
-        .unwrap();
+    let (unauthorized, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
     let sighash: [u8; 32] = unauthorized
         .commitment(TxVersion::V5)
         .expect("bundle flags are representable in this format")
@@ -361,10 +358,7 @@ fn builder_builds_for_post_nu6_3_circuit_version() {
 
     let builder = output_only_builder(BundleVersion::ironwood_v3(), BundleType::DEFAULT, recipient);
 
-    let (unauthorized, _) = builder
-        .build::<i64>(&mut rng)
-        .unwrap()
-        .unwrap();
+    let (unauthorized, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
     assert_eq!(
         unauthorized.circuit_version(),
         OrchardCircuitVersion::PostNu6_3
@@ -389,10 +383,7 @@ fn ironwood_builder_outputs_decrypt_with_ironwood_domain() {
     let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
 
     let builder = output_only_builder(BundleVersion::ironwood_v3(), BundleType::DEFAULT, recipient);
-    let (bundle, bundle_meta) = builder
-        .build::<i64>(&mut rng)
-        .unwrap()
-        .unwrap();
+    let (bundle, bundle_meta) = builder.build::<i64>(&mut rng).unwrap().unwrap();
     let action = &bundle.actions()[bundle_meta
         .output_action_index(0)
         .expect("Output 0 can be found")];
@@ -433,10 +424,7 @@ fn ironwood_bundle_helpers_decrypt_and_recover_outputs() {
         ),
         Ok(())
     );
-    let (bundle, bundle_meta) = builder
-        .build::<i64>(&mut rng)
-        .unwrap()
-        .unwrap();
+    let (bundle, bundle_meta) = builder.build::<i64>(&mut rng).unwrap().unwrap();
     let action_idx = bundle_meta
         .output_action_index(0)
         .expect("Output 0 can be found");
@@ -495,10 +483,7 @@ fn post_nu6_3_coinbase_bundle_proves_and_verifies() {
         recipient,
     );
 
-    let (unauthorized, _) = builder
-        .build::<i64>(&mut rng)
-        .unwrap()
-        .unwrap();
+    let (unauthorized, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
     assert_eq!(unauthorized.actions().len(), 1);
     assert!(!unauthorized.flags().spends_enabled());
     assert!(unauthorized.flags().cross_address_enabled());
@@ -534,10 +519,7 @@ fn unpadded_ironwood_bundle_builds_single_action_and_verifies() {
     );
     assert_eq!(builder.bundle_type(), BundleType::UNPADDED);
 
-    let (unauthorized, bundle_meta) = builder
-        .build::<i64>(&mut rng)
-        .unwrap()
-        .unwrap();
+    let (unauthorized, bundle_meta) = builder.build::<i64>(&mut rng).unwrap().unwrap();
     assert_eq!(unauthorized.actions().len(), 1);
     assert_eq!(bundle_meta.output_action_index(0), Some(0));
 
@@ -751,10 +733,7 @@ fn ironwood_post_nu6_3_unrestricted_bundle_proves_and_verifies() {
         ),
         Ok(())
     );
-    let (unauthorized, _) = builder
-        .build::<i64>(&mut rng)
-        .unwrap()
-        .unwrap();
+    let (unauthorized, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
 
     assert_eq!(
         unauthorized.circuit_version(),

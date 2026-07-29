@@ -315,7 +315,9 @@ mod tests {
     use super::{Action, ActionFromPartsError};
     use crate::{
         note::{AssetBase, ExtractedNoteCommitment, Nullifier, TransmittedNoteCiphertext},
-        note_encryption::{NoteCiphertextBytes, ENC_CIPHERTEXT_SIZE_VANILLA, ENC_CIPHERTEXT_SIZE_ZSA},
+        note_encryption::{
+            NoteCiphertextBytes, ENC_CIPHERTEXT_SIZE_VANILLA, ENC_CIPHERTEXT_SIZE_ZSA,
+        },
         primitives::redpallas::{self, SpendAuth},
         value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
     };
@@ -346,7 +348,9 @@ mod tests {
     /// encoding of the group generator. `cv_net` is an arbitrary value
     /// commitment; its own Pallas-point type check lives at deserialization in
     /// `ValueCommitment::from_bytes` (e.g. `src/pczt/parse.rs`).
-    fn dummy_other_fields(enc_ciphertext_size: usize) -> (
+    fn dummy_other_fields(
+        enc_ciphertext_size: usize,
+    ) -> (
         Nullifier,
         ExtractedNoteCommitment,
         TransmittedNoteCiphertext,
