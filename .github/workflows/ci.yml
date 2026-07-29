@@ -116,18 +116,18 @@ jobs:
       - name: Test Orchard book
         run: mdbook test book/
 
-  codecov:
-    name: Code coverage
-    runs-on: ubuntu-latest
-    container:
-      image: xd009642/tarpaulin:develop-nightly
-      options: --security-opt seccomp=unconfined
-    steps:
-      - uses: actions/checkout@v4
-      - name: Generate coverage report
-        run: cargo tarpaulin --engine llvm --all-features --release --timeout 600 --out xml
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3.1.4
+#  codecov:
+#    name: Code coverage
+#    runs-on: ubuntu-latest
+#    container:
+#      image: xd009642/tarpaulin:develop-nightly
+#      options: --security-opt seccomp=unconfined
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: Generate coverage report
+#        run: cargo tarpaulin --engine llvm --all-features --release --timeout 600 --out xml
+#      - name: Upload coverage to Codecov
+#        uses: codecov/codecov-action@v3.1.4
 
   doc-links:
     name: Intra-doc links
