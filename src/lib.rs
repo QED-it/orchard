@@ -162,6 +162,9 @@ pub enum ProtocolVersion {
     /// For transactional bundles affecting the [`ValuePool::Ironwood`] value pool, cross-address
     /// transfers are permitted and notes use V3 plaintexts.
     V3,
-    /// The version of the Orchard protocol used in ZSA.
+    /// The version of the Orchard protocol used in ZSA, only instantiated for the Ironwood value
+    /// pool.
+    ///
+    /// Uses the ZSA circuit. Cross-address transfers are permitted and notes use ZSA plaintexts.
     ZSA,
 }
