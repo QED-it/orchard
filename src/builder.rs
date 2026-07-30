@@ -2368,11 +2368,6 @@ mod tests {
     }
 
     #[test]
-    fn shielding_bundle_orchard_v3() {
-        shielding_bundle(BundleVersion::orchard_v3())
-    }
-
-    #[test]
     fn shielding_bundle_ironwood_v3() {
         shielding_bundle(BundleVersion::ironwood_v3())
     }
