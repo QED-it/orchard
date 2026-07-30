@@ -7,6 +7,11 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+### Changed
+- The minimum `halo2_proofs` version is now 0.3.5, which provides the
+  match-only fixture exporter used by the random `verifier-fingerprint`
+  captures.
+
 ## [0.15.4] - 2026-07-23
 
 ### Changed
