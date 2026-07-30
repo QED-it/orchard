@@ -221,6 +221,8 @@ pub(crate) mod testing {
         cmx: &ExtractedNoteCommitment,
         mut rng: impl RngCore,
     ) -> TransmittedNoteCiphertext {
+        // The Orchard, Ironwood and ZSA encryptor aliases share encryption behavior;
+        // `Note::version()` selects the note plaintext lead byte.
         let encryptor = NoteEncryption::<NoteEncryptionDomain<OrchardVersion>>::new(
             None,
             note,
