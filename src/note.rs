@@ -47,7 +47,7 @@ pub enum NoteVersion {
     ///
     /// [ZIP 2005]: https://zips.z.cash/zip-2005
     V3,
-    /// ZSA
+    /// The quantum-recoverable ZSA note plaintext version.
     ZSA,
 }
 
