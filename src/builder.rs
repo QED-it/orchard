@@ -2054,7 +2054,7 @@ pub mod testing {
 
     impl<R: RngCore + CryptoRng> ArbitraryBundleInputs<R> {
         /// Create a bundle from the set of arbitrary bundle inputs.
-        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>>(mut self) -> Bundle<Authorized, V> {
+        fn into_bundle<V: TryFrom<i64>>(mut self) -> Bundle<Authorized, V> {
             let fvk = FullViewingKey::from(&self.sk);
             let bundle_version = BundleVersion::orchard_v2();
             let mut builder = Builder::new(
@@ -2145,15 +2145,14 @@ pub mod testing {
     }
 
     /// Produce an arbitrary valid Orchard bundle using a random spending key.
-    pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
-    ) -> impl Strategy<Value = Bundle<Authorized, V>> {
+    pub fn arb_bundle<V: TryFrom<i64> + Debug>() -> impl Strategy<Value = Bundle<Authorized, V>> {
         arb_spending_key()
             .prop_flat_map(arb_bundle_inputs)
             .prop_map(|inputs| inputs.into_bundle::<V>())
     }
 
     /// Produce an arbitrary valid Orchard bundle using a specified spending key.
-    pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
+    pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug>(
         k: SpendingKey,
     ) -> impl Strategy<Value = Bundle<Authorized, V>> {
         arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V>())
@@ -2366,6 +2365,11 @@ mod tests {
     #[test]
     fn shielding_bundle_orchard_v2() {
         shielding_bundle(BundleVersion::orchard_v2())
+    }
+
+    #[test]
+    fn shielding_bundle_orchard_v3() {
+        shielding_bundle(BundleVersion::orchard_v3())
     }
 
     #[test]
