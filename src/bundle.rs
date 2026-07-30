@@ -1585,6 +1585,19 @@ pub(crate) mod tests {
     }
 
     #[cfg(feature = "circuit")]
+    pub(crate) fn sample_authorized_bundle(
+        n_actions: usize,
+    ) -> Bundle<Authorized, crate::value::ValueSum> {
+        use proptest::strategy::ValueTree;
+
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        arb_bundle(n_actions)
+            .new_tree(&mut runner)
+            .expect("strategy can generate a bundle")
+            .current()
+    }
+
+    #[cfg(feature = "circuit")]
     pub(crate) fn sample_authorized_bundle_vanilla(
         n_actions: usize,
     ) -> Bundle<Authorized, crate::value::ValueSum> {

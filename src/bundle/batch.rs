@@ -151,13 +151,13 @@ mod tests {
 
     use super::{BatchError, BatchValidator};
     use crate::{
-        bundle::tests::{sample_authorized_bundle_vanilla, with_cross_address_disabled},
+        bundle::tests::{sample_authorized_bundle, with_cross_address_disabled},
         circuit::{OrchardCircuitVersion, VerifyingKey},
     };
 
     #[test]
     fn add_bundle_rejects_unsupported_cross_address_restriction() {
-        let bundle = with_cross_address_disabled(sample_authorized_bundle_vanilla(1))
+        let bundle = with_cross_address_disabled(sample_authorized_bundle(1))
             .try_map_value_balance(i64::try_from)
             .expect("generated bundle value balance fits in i64");
 
