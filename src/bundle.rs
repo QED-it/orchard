@@ -200,7 +200,8 @@ impl BundleVersion {
 
     /// The default [`Flags`] for a bundle of this version: spends and outputs enabled, with the
     /// cross-address bit set to the least-restrictive value the version permits (enabled unless
-    /// the version mandates the restriction).
+    /// the version mandates the restriction) and with the enable_zsa bit set only when the version
+    /// permits zsa transfers.
     ///
     /// This is the prover-side default a builder uses when the caller does not restrict the bundle
     /// further. Where the version leaves the cross-address choice free (e.g. the Ironwood pool), a
@@ -232,7 +233,9 @@ impl BundleVersion {
 /// The two formats use different commitment personalization strings and include the bundle's
 /// anchor in different digests: v5 includes the anchor in the transaction-ID digest, while v6
 /// includes it in the authorizing digest. Ironwood bundles exist only in v6 transactions, so
-/// attempting to compute an Ironwood commitment for a v5 transaction returns an error.
+/// attempting to compute an Ironwood commitment for a v5 or ZSA transaction returns an error.
+/// ZSA bundles exist only in ZSA transactions, so attempting to compute a ZSA commitment for a v5
+/// or v6 transaction returns an error.
 ///
 /// This is independent of the [`BundleVersion`] that governs construction: the same
 /// Orchard bundle can be committed under either transaction version, and the caller must pass the one
@@ -245,7 +248,7 @@ pub enum TxVersion {
     V5,
     /// A v6 transaction.
     V6,
-    /// ZSA
+    /// A ZSA transaction.
     ZSA,
 }
 
@@ -1386,7 +1389,7 @@ pub mod testing {
     prop_compose! {
         /// Create an arbitrary set of flags with cross-address transfers enabled and ZSA
         /// transfers disabled. This is representable for all `bundle_version` other than
-        /// Orchard post-NU6.3.
+        /// Orchard post-NU6.3 and ZSA.
         ///
         /// Use `arb_flags_ironwood_post_nu6_3` for a strategy that can also disable
         /// cross-address transfers.
@@ -1493,7 +1496,7 @@ pub mod testing {
                 },
                 bundle_version,
             )
-            .expect("fake proof has the canonical length")
+            .expect("fake proof has the canonical length and flags are representable")
         }
     }
 
@@ -1516,7 +1519,6 @@ pub mod testing {
             ),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
             flags in Just(flags),
-            burn in vec(arb_asset_to_burn(), 1usize..10),
             bundle_version in Just(bundle_version),
         ) -> Bundle<Authorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
@@ -1527,7 +1529,7 @@ pub mod testing {
                 NonEmpty::from_vec(actions).unwrap(),
                 flags,
                 balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
-                burn,
+                vec![], // No burn for non-ZSA bundle
                 anchor,
                 Authorized {
                     proof: Proof::new(fake_proof),
@@ -1535,7 +1537,7 @@ pub mod testing {
                 },
                 bundle_version,
             )
-            .expect("fake proof has the canonical length")
+            .expect("fake proof has the canonical length and flags are representable")
         }
     }
 }
@@ -1719,23 +1721,23 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn expected_proof_size_matches_known_values_vanilla() {
+    fn expected_proof_size_matches_known_values_ironwood() {
         // The canonical proof sizes for one and two actions, fixed by the action circuit.
         assert_eq!(
-            Proof::expected_proof_size(BundleVersion::orchard_v3(), 1),
+            Proof::expected_proof_size(BundleVersion::ironwood_v3(), 1),
             4992
         );
         assert_eq!(
-            Proof::expected_proof_size(BundleVersion::orchard_v3(), 2),
+            Proof::expected_proof_size(BundleVersion::ironwood_v3(), 2),
             7264
         );
 
         // The size is affine in the number of actions: each action contributes a fixed amount.
-        let per_action = Proof::expected_proof_size(BundleVersion::orchard_v3(), 2)
-            - Proof::expected_proof_size(BundleVersion::orchard_v3(), 1);
+        let per_action = Proof::expected_proof_size(BundleVersion::ironwood_v3(), 2)
+            - Proof::expected_proof_size(BundleVersion::ironwood_v3(), 1);
         assert_eq!(
-            Proof::expected_proof_size(BundleVersion::orchard_v3(), 3)
-                - Proof::expected_proof_size(BundleVersion::orchard_v3(), 2),
+            Proof::expected_proof_size(BundleVersion::ironwood_v3(), 3)
+                - Proof::expected_proof_size(BundleVersion::ironwood_v3(), 2),
             per_action,
         );
     }
@@ -1964,6 +1966,8 @@ pub(crate) mod tests {
 
         #[test]
         fn try_from_parts_enforces_canonical_proof_size(
+            // `bundle_version` below is non-ZSA; `arb_bundle_vanilla` keeps the actions non-ZSA
+            // too, avoiding an unrelated `MismatchedActionCiphertextKind` error.
             bundle in arb_bundle_vanilla(3)
         ) {
             let actions = bundle.actions().clone();
@@ -2048,6 +2052,8 @@ pub(crate) mod tests {
 
         #[test]
         fn try_from_parts_preserves_cross_address_disabled(
+            // `bundle_version` below is non-ZSA; `arb_bundle_vanilla` keeps the actions non-ZSA
+            // too, avoiding an unrelated `MismatchedActionCiphertextKind` error.
             bundle in arb_bundle_vanilla(3)
         ) {
             let actions = bundle.actions().clone();
@@ -2102,7 +2108,11 @@ pub(crate) mod tests {
         }
 
         #[test]
-        fn insecure_v1_skips_proof_size_enforcement(bundle in arb_bundle_vanilla(3)) {
+        fn insecure_v1_skips_proof_size_enforcement(
+            // `bundle_version` below is non-ZSA; `arb_bundle_vanilla` keeps the actions non-ZSA
+            // too, avoiding an unrelated `MismatchedActionCiphertextKind` error.
+            bundle in arb_bundle_vanilla(3)
+        ) {
             // The historical pre-NU6.2 Orchard pool does not enforce canonical proof size, so a
             // padded proof is accepted: its transaction is already committed and cannot be
             // re-canonicalized.
@@ -2129,6 +2139,9 @@ pub(crate) mod tests {
     fn from_parts_rejects_unrepresentable_flags() {
         // A cross-address-disabled flag set has no pre-NU6.3 Orchard encoding, so a bundle
         // carrying that combination cannot be constructed under `orchard_v2()`.
+        //
+        // `bundle_version` below is non-ZSA; `sample_authorized_bundle_vanilla` keeps the actions
+        // non-ZSA too, avoiding an unrelated `MismatchedActionCiphertextKind` error.
         let bundle = sample_authorized_bundle_vanilla(1);
         let flags = Flags::from_parts(
             bundle.flags().spends_enabled(),
@@ -2155,6 +2168,9 @@ pub(crate) mod tests {
     #[cfg(feature = "circuit")]
     #[test]
     fn verify_proof_rejects_cross_address_disabled_for_unsupported_keys() {
+        // The `vk`s below are non-ZSA; `sample_authorized_bundle_vanilla` keeps the bundle
+        // non-ZSA too, avoiding an unrelated `InvalidInstances` error from a mismatched circuit
+        // shape.
         let bundle = with_cross_address_disabled(sample_authorized_bundle_vanilla(1));
 
         for circuit_version in [
