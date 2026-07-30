@@ -49,9 +49,9 @@ pub(crate) const MEMO_SIZE: usize = 512;
 pub(crate) type Memo = [u8; MEMO_SIZE];
 
 /// The size of a Vanilla note plaintext, including memo.
-pub(crate) const NOTE_PLAINTEXT_SIZE_VANILLA: usize = COMPACT_NOTE_SIZE_VANILLA + MEMO_SIZE;
+const NOTE_PLAINTEXT_SIZE_VANILLA: usize = COMPACT_NOTE_SIZE_VANILLA + MEMO_SIZE;
 /// The size of a ZSA note plaintext, including memo.
-pub(crate) const NOTE_PLAINTEXT_SIZE_ZSA: usize = COMPACT_NOTE_SIZE_ZSA + MEMO_SIZE;
+const NOTE_PLAINTEXT_SIZE_ZSA: usize = COMPACT_NOTE_SIZE_ZSA + MEMO_SIZE;
 /// The size of a Vanilla encrypted note ciphertext, accounting for the AEAD tag.
 pub(crate) const ENC_CIPHERTEXT_SIZE_VANILLA: usize = NOTE_PLAINTEXT_SIZE_VANILLA + AEAD_TAG_SIZE;
 /// The size of a ZSA encrypted note ciphertext, accounting for the AEAD tag.
@@ -82,7 +82,7 @@ pub(crate) fn prf_ock_orchard(
     )
 }
 
-pub(crate) fn parse_note_plaintext_without_memo<F>(
+fn parse_note_plaintext_without_memo<F>(
     rho: Rho,
     plaintext: &CompactNotePlaintextBytes,
     note_version: NoteVersion,
@@ -91,7 +91,9 @@ pub(crate) fn parse_note_plaintext_without_memo<F>(
 where
     F: FnOnce(&Diversifier) -> DiversifiedTransmissionKey,
 {
-    // The unwraps below are guaranteed to succeed
+    assert!(plaintext.as_ref().len() >= compact_note_size(note_version));
+
+    // The unwraps below are guaranteed to succeed by the assertion above
     let diversifier = Diversifier::from_bytes(
         plaintext.as_ref()[NOTE_DIVERSIFIER_OFFSET..NOTE_VALUE_OFFSET]
             .try_into()
@@ -112,6 +114,7 @@ where
     ))?;
 
     let pk_d = get_pk_d(&diversifier);
+
     let recipient = Address::from_parts(diversifier, pk_d);
     let asset = extract_asset(note_version, plaintext.as_ref())?;
     let note = Option::from(Note::from_parts(
@@ -368,6 +371,14 @@ pub(crate) fn enc_ciphertext_size(note_version: NoteVersion) -> usize {
     }
 }
 
+/// Returns the size of a compact note plaintext for a note of `note_version`.
+fn compact_note_size(note_version: NoteVersion) -> usize {
+    match note_version {
+        NoteVersion::V2 | NoteVersion::V3 => COMPACT_NOTE_SIZE_VANILLA,
+        NoteVersion::ZSA => COMPACT_NOTE_SIZE_ZSA,
+    }
+}
+
 // Constructs a note plaintext bytes array given note information.
 pub(crate) fn build_base_note_plaintext_bytes<const NOTE_PLAINTEXT_SIZE: usize>(
     note: &Note,
@@ -427,7 +438,7 @@ mod sealed {
     pub trait Sealed {}
 }
 
-pub(crate) trait DomainPolicy {
+trait DomainPolicy {
     fn note_version(&self, plaintext: &[u8]) -> Option<NoteVersion>;
 }
 
@@ -502,14 +513,15 @@ impl DomainPolicy for BundleDomainPolicy {
 /// parsing and decryption. Encryption uses the version recorded by the note.
 #[derive(Debug, Clone)]
 pub struct NoteEncryptionDomain<P> {
-    pub(crate) rho: Rho,
-    pub(crate) policy: P,
+    rho: Rho,
+    policy: P,
 }
 
 impl<P> memuse::DynamicUsage for NoteEncryptionDomain<P> {
     fn dynamic_usage(&self) -> usize {
         self.rho.dynamic_usage()
     }
+
     fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
         self.rho.dynamic_usage_bounds()
     }
