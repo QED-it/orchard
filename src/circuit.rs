@@ -129,7 +129,7 @@ pub enum OrchardCircuitVersion {
     /// The post-NU 6.3 circuit. This uses the fixed circuit with additional constraints
     /// enforcing the `disableCrossAddress` public input.
     PostNu6_3,
-    /// ZSA
+    /// The ZSA circuit.
     ZSA,
 }
 
@@ -178,10 +178,13 @@ pub enum Circuit {
 }
 
 impl Circuit {
-    /// Returns [`plonk::Error::Synthesis`] if this circuit's kind doesn't match its
-    /// `circuit_version` (a `Circuit::OrchardZSA` not carrying [`OrchardCircuitVersion::ZSA`], or
-    /// a `Circuit::OrchardVanilla` carrying it), which should be unreachable given the crate's
-    /// constructors.
+    /// Returns the [`OrchardCircuitVersion`] this circuit instance is configured for.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`plonk::Error::Synthesis`] if the variant and its inner circuit version are
+    /// inconsistent: a `Circuit::OrchardVanilla` carrying [`OrchardCircuitVersion::ZSA`], or a
+    /// `Circuit::OrchardZSA` not carrying it.
     fn circuit_version(&self) -> Result<OrchardCircuitVersion, plonk::Error> {
         match self {
             Circuit::OrchardVanilla(circuit) => {
@@ -290,6 +293,16 @@ impl Circuit {
             Circuit::OrchardVanilla(_) => None,
         }
     }
+}
+
+/// Cells carrying the addresses of an action's spent and newly created notes, returned
+/// from the shared synthesis logic so that circuit versions can impose additional
+/// constraints on them.
+struct AddressPoints<Lookup: PallasLookupRangeCheck> {
+    g_d_old: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
+    pk_d_old: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
+    g_d_new: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
+    pk_d_new: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
 }
 
 /// The verifying key for the Orchard Action circuit.
@@ -659,16 +672,6 @@ impl Proof {
 
         batch.add_proof(instances, self.0.clone());
     }
-}
-
-/// Cells carrying the addresses of an action's spent and newly created notes, returned
-/// from the shared synthesis logic so that circuit versions can impose additional
-/// constraints on them.
-struct AddressPoints<Lookup: PallasLookupRangeCheck> {
-    g_d_old: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
-    pk_d_old: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
-    g_d_new: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
-    pk_d_new: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
 }
 
 #[cfg(test)]
