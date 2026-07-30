@@ -51,9 +51,6 @@ use crate::{
 
 /// The OrchardVanilla Action circuit.
 ///
-/// The `circuit_version` field selects which circuit to build. Callers must choose it
-/// explicitly instead of relying on a default.
-///
 /// This structure is embedded in `CircuitZsa` for the ZSA variation.
 #[derive(Clone, Debug)]
 pub struct CircuitVanilla {
