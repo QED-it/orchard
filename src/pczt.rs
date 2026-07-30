@@ -1545,18 +1545,19 @@ mod tests {
     fn extract_preserves_cross_address_disabled() {
         let rng = OsRng;
 
+        let bundle_version = BundleVersion::orchard_v3();
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
         pczt_bundle.zkproof = Some(crate::Proof::new(vec![
             0;
             crate::Proof::expected_proof_size(
-                BundleVersion::orchard_v3(),
+                bundle_version,
                 pczt_bundle.actions.len()
             )
         ]));
         // Cross-address-disabled flags are only representable from NU6.3 onward, and the Orchard
         // pool at NU6.3 mandates the restriction; that is the version under which an extracted
         // bundle can legitimately carry these flags.
-        pczt_bundle.bundle_version = BundleVersion::orchard_v3();
+        pczt_bundle.bundle_version = bundle_version;
         pczt_bundle.flags = Flags::CROSS_ADDRESS_DISABLED;
 
         let bundle = pczt_bundle.extract::<i64>().unwrap().unwrap();
