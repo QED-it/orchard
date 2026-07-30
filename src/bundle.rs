@@ -198,14 +198,6 @@ impl BundleVersion {
         )
     }
 
-    /// Whether the consensus rules for this version *permit* vanilla transfers.
-    pub(crate) fn permits_vanilla(&self) -> bool {
-        matches!(
-            (self.value_pool, self.protocol_version),
-            (ValuePool::Orchard, _) | (ValuePool::Ironwood, ProtocolVersion::V3)
-        )
-    }
-
     /// The default [`Flags`] for a bundle of this version: spends and outputs enabled, with the
     /// cross-address bit set to the least-restrictive value the version permits (enabled unless
     /// the version mandates the restriction).
