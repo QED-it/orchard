@@ -26,35 +26,35 @@ const ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcAc
 const ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActNHash";
 const ZCASH_ORCHARD_V5_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrchaHash";
 const ZCASH_ORCHARD_V6_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrchaH_v6";
-pub(crate) const ZCASH_IRONWOOD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIronwd_H_v6";
+const ZCASH_IRONWOOD_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIronwd_H_v6";
 const ZCASH_IRONWOOD_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrnActCH_v6";
-pub(crate) const ZCASH_IRONWOOD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrnActMH_v6";
+const ZCASH_IRONWOOD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrnActMH_v6";
 const ZCASH_IRONWOOD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrnActNH_v6";
-pub(crate) const ZCASH_IRONWOOD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthIrnwdH_v6";
+const ZCASH_IRONWOOD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthIrnwdH_v6";
 
-pub(crate) const ZCASH_ZSA_ACTION_GROUPS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActGHash";
-pub(crate) const ZCASH_ZSA_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxId6OActC_Hash";
-pub(crate) const ZCASH_ZSA_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxId6OActN_Hash";
-pub(crate) const ZCASH_ZSA_BURN_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcBurnHash";
-pub(crate) const ZCASH_ZSA_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrcAGHash";
-pub(crate) const ZCASH_ZSA_SPEND_AUTH_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrSASHash";
+const ZCASH_ZSA_ACTION_GROUPS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcActGHash";
+const ZCASH_ZSA_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxId6OActC_Hash";
+const ZCASH_ZSA_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxId6OActN_Hash";
+const ZCASH_ZSA_BURN_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcBurnHash";
+const ZCASH_ZSA_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrcAGHash";
+const ZCASH_ZSA_SPEND_AUTH_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrSASHash";
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct BundleCommitmentPersonalizations {
-    pub(crate) bundle: &'static [u8; 16],
-    pub(crate) actions_compact: &'static [u8; 16],
-    pub(crate) actions_memos: &'static [u8; 16],
-    pub(crate) actions_noncompact: &'static [u8; 16],
-    pub(crate) auth: &'static [u8; 16],
-    pub(crate) zsa: Option<ZSAPersonalizations>,
+struct BundleCommitmentPersonalizations {
+    bundle: &'static [u8; 16],
+    actions_compact: &'static [u8; 16],
+    actions_memos: &'static [u8; 16],
+    actions_noncompact: &'static [u8; 16],
+    auth: &'static [u8; 16],
+    zsa: Option<ZSAPersonalizations>,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ZSAPersonalizations {
-    pub(crate) action_groups: &'static [u8; 16],
-    pub(crate) ironwood_burn: &'static [u8; 16],
-    pub(crate) action_groups_auth: &'static [u8; 16],
-    pub(crate) zsa_spend_auth: &'static [u8; 16],
+struct ZSAPersonalizations {
+    action_groups: &'static [u8; 16],
+    ironwood_burn: &'static [u8; 16],
+    action_groups_auth: &'static [u8; 16],
+    zsa_spend_auth: &'static [u8; 16],
 }
 
 const ORCHARD_V5_PERSONALIZATIONS: BundleCommitmentPersonalizations =
@@ -120,7 +120,7 @@ pub(crate) enum BundleCommitmentFormat {
 }
 
 impl ValuePool {
-    pub(crate) fn commitment_format(
+    fn commitment_format(
         self,
         tx_version: TxVersion,
     ) -> Result<BundleCommitmentFormat, CommitmentError> {
@@ -136,7 +136,7 @@ impl ValuePool {
 }
 
 impl BundleCommitmentFormat {
-    pub(crate) fn personalizations(self) -> BundleCommitmentPersonalizations {
+    fn personalizations(self) -> BundleCommitmentPersonalizations {
         match self {
             BundleCommitmentFormat::OrchardV5 => ORCHARD_V5_PERSONALIZATIONS,
             BundleCommitmentFormat::OrchardV6 => ORCHARD_V6_PERSONALIZATIONS,
@@ -145,11 +145,11 @@ impl BundleCommitmentFormat {
         }
     }
 
-    pub(crate) fn includes_anchor_in_txid_digest(self) -> bool {
+    fn includes_anchor_in_txid_digest(self) -> bool {
         matches!(self, BundleCommitmentFormat::OrchardV5)
     }
 
-    pub(crate) fn includes_anchor_in_authorizing_digest(self) -> bool {
+    fn includes_anchor_in_authorizing_digest(self) -> bool {
         matches!(
             self,
             BundleCommitmentFormat::OrchardV6 | BundleCommitmentFormat::IronwoodV6
@@ -157,7 +157,7 @@ impl BundleCommitmentFormat {
     }
 }
 
-pub(crate) fn hasher(personal: &[u8; 16]) -> State {
+fn hasher(personal: &[u8; 16]) -> State {
     Params::new().hash_length(32).personal(personal).to_state()
 }
 
@@ -188,7 +188,6 @@ fn hash_bundle_txid_data_vanilla<A: Authorization, V: Copy + Into<i64>>(
         .bundle_version()
         .value_pool()
         .commitment_format(tx_version)?;
-
     let personalizations = format.personalizations();
     let mut h = hasher(personalizations.bundle);
     let mut ch = hasher(personalizations.actions_compact);
@@ -226,7 +225,7 @@ fn hash_bundle_txid_data_vanilla<A: Authorization, V: Copy + Into<i64>>(
     Ok(h.finalize())
 }
 
-/// Evaluate `orchard_digest` for the bundle as defined in
+/// Evaluate `orchard_digest` for the ZSSA bundle as defined in
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
@@ -296,11 +295,9 @@ fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>>(
 }
 
 /// Evaluate `orchard_digest` for the bundle as defined in
-/// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
-/// or in [ZIP-229: Version 6 Transaction Format][zip229]
-/// for OrchardVanilla and as defined in
-/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
-/// for OrchardZSA
+/// [ZIP-244: Transaction Identifier Non-Malleability][zip244] for Orchard, as defined in
+/// [ZIP-229: Version 6 Transaction Format][zip229] for Ironwood, and as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246] for ZSA.
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip229]: https://zips.z.cash/zip-0229
@@ -352,7 +349,6 @@ fn hash_bundle_auth_data_vanilla<V>(
         .bundle_version()
         .value_pool()
         .commitment_format(tx_version)?;
-
     let mut h = hasher(format.personalizations().auth);
     h.update(bundle.authorization().proof().as_ref());
     for action in bundle.actions().iter() {
@@ -375,7 +371,7 @@ fn hash_bundle_auth_data_vanilla<V>(
     Ok(h.finalize())
 }
 
-/// Evaluate `orchard_auth_digest` for the bundle as defined in
+/// Evaluate `orchard_auth_digest` for the ZSA bundle as defined in
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
 /// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
@@ -422,11 +418,9 @@ fn hash_bundle_auth_data_zsa<V>(
 }
 
 /// Evaluate `orchard_auth_digest` for the bundle as defined in
-/// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
-/// or in [ZIP-229: Version 6 Transaction Format][zip229]
-/// for OrchardVanilla and as defined in
-/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
-/// for OrchardZSA
+/// [ZIP-244: Transaction Identifier Non-Malleability][zip244] for Orchard, as defined in
+/// [ZIP-229: Version 6 Transaction Format][zip229] for Ironwood, and as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246] for ZSA.
 ///
 /// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
 /// for a given [`OrchardSighashKind`].
@@ -589,13 +583,13 @@ mod tests {
     /// was (re)generated after intentional changes that affect the digest, and
     /// is now treated as the expected output for this implementation.
     #[test]
-    fn test_hash_bundle_auth_data_for_orchard_vanilla() {
+    fn test_hash_bundle_auth_data_for_orchard_v2() {
         let bundle = generate_auth_bundle(BundleVersion::orchard_v2(), TxVersion::V5);
         let orchard_auth_digest =
             hash_bundle_auth_data(&bundle, TxVersion::V5, test_sighash_info_for_kind).unwrap();
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            // Bundle hash for Orchard (vanilla) generated using
+            // Bundle hash for Orchard V2 generated using
             // Zcash/Orchard commit: 82e0739
             "37d6c29faa98c2cb54420f3f7cac0477fdb105df1cdfde7adb7fbf68a24e3085"
         );
