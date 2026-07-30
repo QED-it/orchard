@@ -18,7 +18,7 @@ use rand::rngs::OsRng;
 
 mod utils;
 
-use utils::{OrchardFlavorBench, OrchardVanilla, OrchardZSA};
+use utils::{Ironwood, Orchard, OrchardFlavorBench, Zsa};
 
 fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let rng = OsRng;
@@ -107,15 +107,21 @@ fn create_config() -> Criterion {
 }
 
 criterion_group! {
-    name = benches_vanilla;
+    name = benches_orchard;
     config = create_config();
-    targets = criterion_benchmark::<OrchardVanilla>
+    targets = criterion_benchmark::<Orchard>
+}
+
+criterion_group! {
+    name = benches_ironwood;
+    config = create_config();
+    targets = criterion_benchmark::<Ironwood>
 }
 
 criterion_group! {
     name = benches_zsa;
     config = create_config();
-    targets = criterion_benchmark::<OrchardZSA>
+    targets = criterion_benchmark::<Zsa>
 }
 
-criterion_main!(benches_vanilla, benches_zsa);
+criterion_main!(benches_orchard, benches_ironwood, benches_zsa);
