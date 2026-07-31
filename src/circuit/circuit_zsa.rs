@@ -1303,7 +1303,7 @@ mod tests {
         let psi_old = spent_note.rseed().psi(&spent_note.rho());
 
         (
-            Circuit::OrchardZSA(CircuitZsa {
+            Circuit::ZSA(CircuitZsa {
                 common_witnesses: CircuitNative {
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),
@@ -1769,7 +1769,7 @@ mod tests {
 
             // Set cm_old to be a random NoteCommitment
             // The proof should fail
-            let circuit_wrong_cm_old = Circuit::OrchardZSA(CircuitZsa {
+            let circuit_wrong_cm_old = Circuit::ZSA(CircuitZsa {
                 common_witnesses: CircuitNative {
                     cm_old: Value::known(random_note_commitment(&mut rng)),
                     ..circuit.as_zsa().unwrap().common_witnesses.clone()
@@ -1811,7 +1811,7 @@ mod tests {
             // If split_flag = 0 , set psi_nf to be a random Pallas base element
             // The proof should fail
             if !split_flag {
-                let circuit_wrong_psi_nf = Circuit::OrchardZSA(CircuitZsa {
+                let circuit_wrong_psi_nf = Circuit::ZSA(CircuitZsa {
                     additional_zsa_witnesses: circuit
                         .as_zsa()
                         .unwrap()
