@@ -188,13 +188,13 @@ impl Circuit {
     fn circuit_version(&self) -> Result<OrchardCircuitVersion, plonk::Error> {
         match self {
             Circuit::Native(circuit) => {
-                if circuit.circuit_version == OrchardCircuitVersion::ZSA {
+                if circuit.circuit_version.is_zsa() {
                     return Err(plonk::Error::Synthesis);
                 }
                 Ok(circuit.circuit_version)
             }
             Circuit::ZSA(circuit) => {
-                if circuit.common_witnesses.circuit_version != OrchardCircuitVersion::ZSA {
+                if !circuit.common_witnesses.circuit_version.is_zsa() {
                     return Err(plonk::Error::Synthesis);
                 }
                 Ok(circuit.common_witnesses.circuit_version)
@@ -210,13 +210,10 @@ impl Circuit {
     /// or rendering the circuit layout, where witness values are not required but the
     /// selected circuit version still determines the configured constraints.
     fn empty(circuit_version: OrchardCircuitVersion) -> Self {
-        match circuit_version {
-            OrchardCircuitVersion::ZSA => Circuit::ZSA(CircuitZsa::empty()),
-            OrchardCircuitVersion::InsecurePreNu6_2
-            | OrchardCircuitVersion::FixedPostNu6_2
-            | OrchardCircuitVersion::PostNu6_3 => {
-                Circuit::Native(CircuitNative::empty(circuit_version))
-            }
+        if circuit_version.is_zsa() {
+            Circuit::ZSA(CircuitZsa::empty())
+        } else {
+            Circuit::Native(CircuitNative::empty(circuit_version))
         }
     }
 
@@ -254,27 +251,22 @@ impl Circuit {
         rcv: ValueCommitTrapdoor,
         circuit_version: OrchardCircuitVersion,
     ) -> Self {
-        match circuit_version {
-            OrchardCircuitVersion::ZSA => {
-                Circuit::ZSA(CircuitZsa::from_action_context_unchecked(
-                    spend,
-                    output_note,
-                    alpha,
-                    rcv,
-                    circuit_version,
-                ))
-            }
-            OrchardCircuitVersion::InsecurePreNu6_2
-            | OrchardCircuitVersion::FixedPostNu6_2
-            | OrchardCircuitVersion::PostNu6_3 => {
-                Circuit::Native(CircuitNative::from_action_context_unchecked(
-                    spend,
-                    output_note,
-                    alpha,
-                    rcv,
-                    circuit_version,
-                ))
-            }
+        if circuit_version.is_zsa() {
+            Circuit::ZSA(CircuitZsa::from_action_context_unchecked(
+                spend,
+                output_note,
+                alpha,
+                rcv,
+                circuit_version,
+            ))
+        } else {
+            Circuit::Native(CircuitNative::from_action_context_unchecked(
+                spend,
+                output_note,
+                alpha,
+                rcv,
+                circuit_version,
+            ))
         }
     }
 
