@@ -271,7 +271,7 @@ impl Circuit {
     }
 
     /// Returns the inner [`CircuitNative`], or `None` if this is a `Circuit::ZSA`.
-    fn as_vanilla(&self) -> Option<&CircuitNative> {
+    fn as_native(&self) -> Option<&CircuitNative> {
         match self {
             Circuit::Native(circuit) => Some(circuit),
             Circuit::ZSA(_) => None,
@@ -591,7 +591,7 @@ impl Proof {
         } else {
             let circuits: Vec<_> = circuits
                 .iter()
-                .map(|c| c.as_vanilla().expect("checked above").clone())
+                .map(|c| c.as_native().expect("checked above").clone())
                 .collect();
             plonk::create_proof(
                 &pk.params,

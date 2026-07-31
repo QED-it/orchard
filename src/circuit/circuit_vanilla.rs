@@ -1205,7 +1205,7 @@ mod tests {
         let mock_verify = |circuit: &Circuit, instance: &Instance| {
             MockProver::run(
                 K,
-                circuit.as_vanilla().unwrap(),
+                circuit.as_native().unwrap(),
                 instance
                     .to_halo2_instance()
                     .iter()
@@ -1276,7 +1276,7 @@ mod tests {
         super::plonk::create_proof(
             &pk.params,
             &pk.pk,
-            core::slice::from_ref(circuit.as_vanilla().unwrap()),
+            core::slice::from_ref(circuit.as_native().unwrap()),
             &raw_instances,
             &mut rng,
             &mut transcript,
@@ -1347,7 +1347,7 @@ mod tests {
             let circuit_cost =
                 halo2_proofs::dev::CircuitCost::<pasta_curves::vesta::Point, _>::measure(
                     K,
-                    circuits[0].as_vanilla().unwrap(),
+                    circuits[0].as_native().unwrap(),
                 );
             // These sizes are identical for every circuit version: the post-NU 6.3 circuit reuses the
             // existing Orchard checks gate on spare rows and adds no columns or
@@ -1375,7 +1375,7 @@ mod tests {
             assert_eq!(
                 MockProver::run(
                     K,
-                    circuit.as_vanilla().unwrap(),
+                    circuit.as_native().unwrap(),
                     instance
                         .to_halo2_instance()
                         .iter()
