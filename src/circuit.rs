@@ -171,7 +171,7 @@ impl OrchardCircuitVersion {
 pub enum Circuit {
     /// The Vanilla Orchard Action circuit.
     /// It is used with all [`OrchardCircuitVersion`] except [`OrchardCircuitVersion::ZSA`].
-    OrchardVanilla(CircuitNative),
+    Native(CircuitNative),
     /// The ZSA Orchard Action circuit.
     /// It is used only with [`OrchardCircuitVersion::ZSA`].
     ZSA(CircuitZsa),
@@ -183,11 +183,11 @@ impl Circuit {
     /// # Errors
     ///
     /// Returns [`plonk::Error::Synthesis`] if the variant and its inner circuit version are
-    /// inconsistent: a `Circuit::OrchardVanilla` carrying [`OrchardCircuitVersion::ZSA`], or a
+    /// inconsistent: a `Circuit::Native` carrying [`OrchardCircuitVersion::ZSA`], or a
     /// `Circuit::ZSA` not carrying it.
     fn circuit_version(&self) -> Result<OrchardCircuitVersion, plonk::Error> {
         match self {
-            Circuit::OrchardVanilla(circuit) => {
+            Circuit::Native(circuit) => {
                 if circuit.circuit_version == OrchardCircuitVersion::ZSA {
                     return Err(plonk::Error::Synthesis);
                 }
@@ -215,7 +215,7 @@ impl Circuit {
             OrchardCircuitVersion::InsecurePreNu6_2
             | OrchardCircuitVersion::FixedPostNu6_2
             | OrchardCircuitVersion::PostNu6_3 => {
-                Circuit::OrchardVanilla(CircuitNative::empty(circuit_version))
+                Circuit::Native(CircuitNative::empty(circuit_version))
             }
         }
     }
@@ -267,7 +267,7 @@ impl Circuit {
             OrchardCircuitVersion::InsecurePreNu6_2
             | OrchardCircuitVersion::FixedPostNu6_2
             | OrchardCircuitVersion::PostNu6_3 => {
-                Circuit::OrchardVanilla(CircuitNative::from_action_context_unchecked(
+                Circuit::Native(CircuitNative::from_action_context_unchecked(
                     spend,
                     output_note,
                     alpha,
@@ -281,16 +281,16 @@ impl Circuit {
     /// Returns the inner [`CircuitNative`], or `None` if this is a `Circuit::ZSA`.
     fn as_vanilla(&self) -> Option<&CircuitNative> {
         match self {
-            Circuit::OrchardVanilla(circuit) => Some(circuit),
+            Circuit::Native(circuit) => Some(circuit),
             Circuit::ZSA(_) => None,
         }
     }
 
-    /// Returns the inner [`CircuitZsa`], or `None` if this is a `Circuit::OrchardVanilla`.
+    /// Returns the inner [`CircuitZsa`], or `None` if this is a `Circuit::Native`.
     fn as_zsa(&self) -> Option<&CircuitZsa> {
         match self {
             Circuit::ZSA(circuit) => Some(circuit),
-            Circuit::OrchardVanilla(_) => None,
+            Circuit::Native(_) => None,
         }
     }
 }
@@ -322,7 +322,7 @@ impl VerifyingKey {
     pub fn build(circuit_version: OrchardCircuitVersion) -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
         let vk = match Circuit::empty(circuit_version) {
-            Circuit::OrchardVanilla(circuit) => plonk::keygen_vk(&params, &circuit).unwrap(),
+            Circuit::Native(circuit) => plonk::keygen_vk(&params, &circuit).unwrap(),
             Circuit::ZSA(circuit) => plonk::keygen_vk(&params, &circuit).unwrap(),
         };
 
@@ -362,7 +362,7 @@ impl ProvingKey {
     pub fn build(circuit_version: OrchardCircuitVersion) -> Self {
         let params = halo2_proofs::poly::commitment::Params::new(K);
         let pk = match Circuit::empty(circuit_version) {
-            Circuit::OrchardVanilla(circuit) => {
+            Circuit::Native(circuit) => {
                 let vk = plonk::keygen_vk(&params, &circuit).unwrap();
                 plonk::keygen_pk(&params, vk, &circuit).unwrap()
             }
