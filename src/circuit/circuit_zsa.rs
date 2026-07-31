@@ -64,7 +64,7 @@ fn unpack(
     )
 }
 
-/// The OrchardZSA Action circuit.
+/// The ZSA Action circuit.
 #[derive(Clone, Debug)]
 pub struct CircuitZsa {
     pub(crate) common_witnesses: CircuitNative,
@@ -102,7 +102,7 @@ impl CircuitZsa {
         circuit_version: OrchardCircuitVersion,
     ) -> Self {
         if !circuit_version.is_zsa() {
-            panic!("circuit version must be ZSA in OrchardZSA circuit");
+            panic!("circuit version must be ZSA in ZSA circuit");
         }
 
         let (common_witnesses, psi_nf) = CircuitNative::from_action_context_common(
@@ -147,10 +147,10 @@ impl plonk::Circuit<pallas::Base> for CircuitZsa {
             meta.advice_column(),
         ];
 
-        // The new or updated constraints for OrchardZSA are explained in
+        // The new or updated constraints for ZSA are explained in
         // [ZIP-226: Transfer and Burn of Zcash Shielded Assets][circuitstatement].
         //
-        // All OrchardZSA constraints:
+        // All ZSA constraints:
         // Constrain split_flag to be boolean
         // Constrain v_old * (1 - split_flag) - v_new = magnitude * sign
         // Constrain (v_old = 0 and is_zatoshi_asset = 1) or (calculated root = anchor)
