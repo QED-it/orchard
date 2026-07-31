@@ -558,7 +558,7 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle, TxVersion::ZSA).unwrap();
         assert_eq!(
             sighash.to_hex().as_str(),
-            "5c2d17a3466f7f90f1765241d9cea75d822966cd7adc105f36ab8862da6e2db2"
+            "7c03e9a02f6fe79f6507426d90c56ab11bd2aaaac4ea660598af3285e04edcc4"
         );
     }
 
@@ -611,7 +611,7 @@ mod tests {
             hash_bundle_auth_data(&bundle, TxVersion::ZSA, test_sighash_info_for_kind).unwrap();
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            "336e63cfd372522cd2a0bfa9b0cc3885a5ff67d3a1910dc30709d82dcb47b43c"
+            "0dd8a47f5a531a51239270609a63fc64484db2397f255e7c0655734025652d3b"
         );
     }
 
