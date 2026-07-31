@@ -53,7 +53,7 @@ use crate::{
 ///
 /// This structure is embedded in `CircuitZsa` for the ZSA variation.
 #[derive(Clone, Debug)]
-pub struct CircuitVanilla {
+pub struct CircuitNative {
     pub(crate) path: Value<[MerkleHashOrchard; MERKLE_DEPTH_ORCHARD]>,
     pub(crate) pos: Value<u32>,
     pub(crate) g_d_old: Value<NonIdentityPallasPoint>,
@@ -77,14 +77,14 @@ pub struct CircuitVanilla {
     pub(crate) circuit_version: OrchardCircuitVersion,
 }
 
-impl CircuitVanilla {
+impl CircuitNative {
     /// Returns an empty circuit with all private witnesses unknown.
     ///
     /// This is used for circuit shape-dependent operations, such as generating keys
     /// or rendering the circuit layout, where witness values are not required but the
     /// selected circuit version still determines the configured constraints.
     pub(crate) fn empty(circuit_version: OrchardCircuitVersion) -> Self {
-        CircuitVanilla {
+        CircuitNative {
             path: Value::unknown(),
             pos: Value::unknown(),
             g_d_old: Value::unknown(),
@@ -108,7 +108,7 @@ impl CircuitVanilla {
         }
     }
 
-    /// Constructs a `CircuitVanilla` for the given `circuit_version` from the following components:
+    /// Constructs a `CircuitNative` for the given `circuit_version` from the following components:
     /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
     /// - `output_note`: a note created in scope of the action
     /// - `alpha`: a scalar used for randomization of the action spend validating key
@@ -140,7 +140,7 @@ impl CircuitVanilla {
         let psi_nf = nf_rseed.psi(&rho_old);
 
         (
-            CircuitVanilla {
+            CircuitNative {
                 path: Value::known(spend.merkle_path.auth_path()),
                 pos: Value::known(spend.merkle_path.position()),
                 g_d_old: Value::known(sender_address.g_d()),
@@ -166,7 +166,7 @@ impl CircuitVanilla {
         )
     }
 
-    /// Constructs a `CircuitVanilla` for the given `circuit_version` from the following
+    /// Constructs a `CircuitNative` for the given `circuit_version` from the following
     /// components:
     /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
     /// - `output_note`: a note created in scope of the action
@@ -202,12 +202,12 @@ impl CircuitVanilla {
     }
 }
 
-impl plonk::Circuit<pallas::Base> for CircuitVanilla {
+impl plonk::Circuit<pallas::Base> for CircuitNative {
     type Config = Config<PallasLookupRangeCheckConfig>;
     type FloorPlanner = floor_planner::V1;
 
     fn without_witnesses(&self) -> Self {
-        CircuitVanilla::empty(self.circuit_version)
+        CircuitNative::empty(self.circuit_version)
     }
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
@@ -415,14 +415,14 @@ impl plonk::Circuit<pallas::Base> for CircuitVanilla {
         let addrs = self.synthesize_base(&config, &mut layouter)?;
 
         if self.circuit_version.supports_cross_address_restriction() {
-            CircuitVanilla::synthesize_cross_address_checks(&config, &mut layouter, &addrs)?;
+            CircuitNative::synthesize_cross_address_checks(&config, &mut layouter, &addrs)?;
         }
 
         Ok(())
     }
 }
 
-impl CircuitVanilla {
+impl CircuitNative {
     /// Synthesizes the Orchard Action checks common to every circuit version,
     /// parameterized by `self.circuit_version`, returning the cells carrying the old
     /// and new note addresses so that circuit versions can impose additional
@@ -971,7 +971,7 @@ mod tests {
     use crate::{
         bundle::{BundleVersion, Flags},
         circuit::{
-            Circuit, CircuitVanilla, Instance, OrchardCircuitVersion, Proof, ProvingKey,
+            Circuit, CircuitNative, Instance, OrchardCircuitVersion, Proof, ProvingKey,
             SingleVerifier, VerifyingKey, K,
         },
         keys::SpendValidatingKey,
@@ -1043,7 +1043,7 @@ mod tests {
         let anchor = path.root(spent_note.commitment().into());
 
         (
-            Circuit::OrchardVanilla(CircuitVanilla {
+            Circuit::OrchardVanilla(CircuitNative {
                 circuit_version,
                 path: Value::known(path.auth_path()),
                 pos: Value::known(path.position()),
@@ -1621,7 +1621,7 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = CircuitVanilla::empty(OrchardCircuitVersion::FixedPostNu6_2);
+        let circuit = CircuitNative::empty(OrchardCircuitVersion::FixedPostNu6_2);
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)
             .view_height(0..(1 << 11))

@@ -40,7 +40,7 @@ use halo2_gadgets::{
 mod circuit_vanilla;
 mod circuit_zsa;
 
-use circuit_vanilla::CircuitVanilla;
+use circuit_vanilla::CircuitNative;
 use circuit_zsa::CircuitZsa;
 
 #[cfg(not(feature = "unstable-voting-circuits"))]
@@ -171,7 +171,7 @@ impl OrchardCircuitVersion {
 pub enum Circuit {
     /// The Vanilla Orchard Action circuit.
     /// It is used with all [`OrchardCircuitVersion`] except [`OrchardCircuitVersion::ZSA`].
-    OrchardVanilla(CircuitVanilla),
+    OrchardVanilla(CircuitNative),
     /// The ZSA Orchard Action circuit.
     /// It is used only with [`OrchardCircuitVersion::ZSA`].
     OrchardZSA(CircuitZsa),
@@ -215,7 +215,7 @@ impl Circuit {
             OrchardCircuitVersion::InsecurePreNu6_2
             | OrchardCircuitVersion::FixedPostNu6_2
             | OrchardCircuitVersion::PostNu6_3 => {
-                Circuit::OrchardVanilla(CircuitVanilla::empty(circuit_version))
+                Circuit::OrchardVanilla(CircuitNative::empty(circuit_version))
             }
         }
     }
@@ -267,7 +267,7 @@ impl Circuit {
             OrchardCircuitVersion::InsecurePreNu6_2
             | OrchardCircuitVersion::FixedPostNu6_2
             | OrchardCircuitVersion::PostNu6_3 => {
-                Circuit::OrchardVanilla(CircuitVanilla::from_action_context_unchecked(
+                Circuit::OrchardVanilla(CircuitNative::from_action_context_unchecked(
                     spend,
                     output_note,
                     alpha,
@@ -278,8 +278,8 @@ impl Circuit {
         }
     }
 
-    /// Returns the inner [`CircuitVanilla`], or `None` if this is a `Circuit::OrchardZSA`.
-    fn as_vanilla(&self) -> Option<&CircuitVanilla> {
+    /// Returns the inner [`CircuitNative`], or `None` if this is a `Circuit::OrchardZSA`.
+    fn as_vanilla(&self) -> Option<&CircuitNative> {
         match self {
             Circuit::OrchardVanilla(circuit) => Some(circuit),
             Circuit::OrchardZSA(_) => None,

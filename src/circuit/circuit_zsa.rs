@@ -37,7 +37,7 @@ use crate::{
         },
         note_commit::{gadgets::note_commit, NoteCommitChip, ZsaNoteCommitParams},
         value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
-        AddressPoints, CircuitVanilla, Config, OrchardCircuitVersion, ANCHOR, CMX, CV_NET_X,
+        AddressPoints, CircuitNative, Config, OrchardCircuitVersion, ANCHOR, CMX, CV_NET_X,
         CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X,
         RK_Y,
     },
@@ -67,7 +67,7 @@ fn unpack(
 /// The OrchardZSA Action circuit.
 #[derive(Clone, Debug)]
 pub struct CircuitZsa {
-    pub(crate) common_witnesses: CircuitVanilla,
+    pub(crate) common_witnesses: CircuitNative,
 
     // The ZSA-specific witnesses.
     pub(crate) additional_zsa_witnesses: Value<AdditionalZsaWitnesses>,
@@ -80,7 +80,7 @@ impl CircuitZsa {
     /// or rendering the circuit layout, where witness values are not required.
     pub(crate) fn empty() -> Self {
         CircuitZsa {
-            common_witnesses: CircuitVanilla::empty(OrchardCircuitVersion::ZSA),
+            common_witnesses: CircuitNative::empty(OrchardCircuitVersion::ZSA),
             additional_zsa_witnesses: Value::unknown(),
         }
     }
@@ -105,7 +105,7 @@ impl CircuitZsa {
             panic!("circuit version must be ZSA in OrchardZSA circuit");
         }
 
-        let (common_witnesses, psi_nf) = CircuitVanilla::from_action_context_common(
+        let (common_witnesses, psi_nf) = CircuitNative::from_action_context_common(
             &spend,
             &output_note,
             alpha,
@@ -1265,7 +1265,7 @@ mod tests {
         builder::SpendInfo,
         bundle::{BundleVersion, Flags},
         circuit::{
-            circuit_zsa::AdditionalZsaWitnesses, Circuit, CircuitVanilla, CircuitZsa, Instance,
+            circuit_zsa::AdditionalZsaWitnesses, Circuit, CircuitNative, CircuitZsa, Instance,
             OrchardCircuitVersion, Proof, ProvingKey, VerifyingKey, K,
         },
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
@@ -1304,7 +1304,7 @@ mod tests {
 
         (
             Circuit::OrchardZSA(CircuitZsa {
-                common_witnesses: CircuitVanilla {
+                common_witnesses: CircuitNative {
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),
                     g_d_old: Value::known(sender_address.g_d()),
@@ -1770,7 +1770,7 @@ mod tests {
             // Set cm_old to be a random NoteCommitment
             // The proof should fail
             let circuit_wrong_cm_old = Circuit::OrchardZSA(CircuitZsa {
-                common_witnesses: CircuitVanilla {
+                common_witnesses: CircuitNative {
                     cm_old: Value::known(random_note_commitment(&mut rng)),
                     ..circuit.as_zsa().unwrap().common_witnesses.clone()
                 },
