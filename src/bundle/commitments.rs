@@ -526,34 +526,49 @@ mod tests {
         builder.build::<i64>(rng).unwrap().unwrap().0
     }
 
-    /// Verifies that the hash for an Orchard Vanilla bundle matches a fixed reference value.
+    /// Verifies that the hash for an Orchard V2 bundle matches a fixed reference value.
     ///
     /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
     /// bundle contents), so the resulting digest must remain stable. The reference value
     /// was (re)generated after intentional changes that affect the digest, and
     /// is now treated as the expected output for this implementation.
     #[test]
-    fn test_hash_bundle_txid_data_for_orchard_vanilla() {
+    fn test_hash_bundle_txid_data_for_orchard_v2() {
         let bundle = generate_bundle(BundleVersion::orchard_v2());
         let sighash = hash_bundle_txid_data(&bundle, TxVersion::V5).unwrap();
         assert_eq!(
             sighash.to_hex().as_str(),
-            // Bundle hash for Orchard (vanilla) generated using
-            // Zcash/Orchard commit: 9d89b504
+            // Bundle hash for Orchard V2 generated using
+            // Zcash/Orchard commit: d9bfa9f
             "0ac1e319f6761a8561b7bd3fc0907a5c73ed5590a6c210c4d39ffae1d5741875"
         );
     }
 
-    // TODO Constance: add test for (Orchard, V3) and (Ironwood, V3)
-
-    /// Verifies that the hash for an OrchardZSA bundle matches a fixed reference value.
+    /// Verifies that the hash for an Ironwood V3 bundle matches a fixed reference value.
     ///
     /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
     /// bundle contents), so the resulting digest must remain stable. The reference value
     /// was (re)generated after intentional changes that affect the digest, and
     /// is now treated as the expected output for this implementation.
     #[test]
-    fn test_hash_bundle_txid_data_for_orchard_zsa() {
+    fn test_hash_bundle_txid_data_for_ironwood_v3() {
+        let bundle = generate_bundle(BundleVersion::ironwood_v3());
+        let sighash = hash_bundle_txid_data(&bundle, TxVersion::V6).unwrap();
+        assert_eq!(
+            sighash.to_hex().as_str(),
+            // Bundle hash for Ironwood V3 generated using
+            // Zcash/Orchard commit: d9bfa9f
+            "5f408a48dff8e499487169a9adb4f59ec41d7d393e8d4ee15e70e51c67b018a3"
+        );
+    }
+    /// Verifies that the hash for a ZSA bundle matches a fixed reference value.
+    ///
+    /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
+    /// bundle contents), so the resulting digest must remain stable. The reference value
+    /// was (re)generated after intentional changes that affect the digest, and
+    /// is now treated as the expected output for this implementation.
+    #[test]
+    fn test_hash_bundle_txid_data_for_zsa() {
         let bundle = generate_bundle(BundleVersion::zsa());
         let sighash = hash_bundle_txid_data(&bundle, TxVersion::ZSA).unwrap();
         assert_eq!(
@@ -575,7 +590,7 @@ mod tests {
         bundle.prepare(rng, sighash).finalize().unwrap()
     }
 
-    /// Verifies that the authorizing data commitment for an Orchard Vanilla bundle matches a fixed
+    /// Verifies that the authorizing data commitment for an Orchard V2 bundle matches a fixed
     /// reference value.
     ///
     /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
@@ -590,14 +605,12 @@ mod tests {
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
             // Bundle hash for Orchard V2 generated using
-            // Zcash/Orchard commit: 82e0739
+            // Zcash/Orchard commit: d9bfa9f
             "37d6c29faa98c2cb54420f3f7cac0477fdb105df1cdfde7adb7fbf68a24e3085"
         );
     }
 
-    // TODO Constance: add test for (Orchard, V3) and (Ironwood, V3)
-
-    /// Verifies that the authorizing data commitment for an OrchardZSA bundle matches a fixed
+    /// Verifies that the authorizing data commitment for an Ironwood V3 bundle matches a fixed
     /// reference value.
     ///
     /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
@@ -605,7 +618,26 @@ mod tests {
     /// was (re)generated after intentional changes that affect the digest, and
     /// is now treated as the expected output for this implementation.
     #[test]
-    fn test_hash_bundle_auth_data_for_orchard_zsa() {
+    fn test_hash_bundle_auth_data_for_ironwood_v3() {
+        let bundle = generate_auth_bundle(BundleVersion::ironwood_v3(), TxVersion::V6);
+        let orchard_auth_digest =
+            hash_bundle_auth_data(&bundle, TxVersion::V6, test_sighash_info_for_kind).unwrap();
+        assert_eq!(
+            orchard_auth_digest.to_hex().as_str(),
+            // Bundle hash for Ironwood V3 generated using
+            // Zcash/Orchard commit: d9bfa9f
+            "404871b295dd65dfe4b44c5bfe92bdd194c0f70bc090a4f50b43a51244a37e5f"
+        );
+    }
+    /// Verifies that the authorizing data commitment for a ZSA bundle matches a fixed
+    /// reference value.
+    ///
+    /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
+    /// bundle contents), so the resulting digest must remain stable. The reference value
+    /// was (re)generated after intentional changes that affect the digest, and
+    /// is now treated as the expected output for this implementation.
+    #[test]
+    fn test_hash_bundle_auth_data_for_zsa() {
         let bundle = generate_auth_bundle(BundleVersion::zsa(), TxVersion::ZSA);
         let orchard_auth_digest =
             hash_bundle_auth_data(&bundle, TxVersion::ZSA, test_sighash_info_for_kind).unwrap();
