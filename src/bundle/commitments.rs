@@ -269,7 +269,7 @@ mod tests {
         builder.build::<i64>(rng).unwrap().unwrap().0
     }
 
-    /// Verify that the hash for an Orchard Vanilla bundle matches a fixed reference value
+    /// Verify that the hash for an Orchard V2 bundle matches a fixed reference value
     /// to ensure consistency.
     #[test]
     fn test_hash_bundle_txid_data_for_orchard_v2() {
@@ -278,6 +278,18 @@ mod tests {
         assert_eq!(
             sighash.to_hex().as_str(),
             "0ac1e319f6761a8561b7bd3fc0907a5c73ed5590a6c210c4d39ffae1d5741875"
+        );
+    }
+
+    /// Verify that the hash for an Ironwood V3 bundle matches a fixed reference value
+    /// to ensure consistency.
+    #[test]
+    fn test_hash_bundle_txid_data_for_ironwood_v3() {
+        let bundle = generate_bundle(BundleVersion::ironwood_v3());
+        let sighash = hash_bundle_txid_data(&bundle, TxVersion::V6).unwrap();
+        assert_eq!(
+            sighash.to_hex().as_str(),
+            "5f408a48dff8e499487169a9adb4f59ec41d7d393e8d4ee15e70e51c67b018a3"
         );
     }
 
@@ -294,7 +306,7 @@ mod tests {
         bundle.prepare(rng, sighash).finalize().unwrap()
     }
 
-    /// Verify that the authorizing data commitment for an Orchard Vanilla bundle matches a fixed
+    /// Verify that the authorizing data commitment for an Orchard V2 bundle matches a fixed
     /// reference value to ensure consistency.
     #[test]
     fn test_hash_bundle_auth_data_for_orchard_v2() {
@@ -303,6 +315,18 @@ mod tests {
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
             "37d6c29faa98c2cb54420f3f7cac0477fdb105df1cdfde7adb7fbf68a24e3085"
+        );
+    }
+
+    /// Verify that the authorizing data commitment for an Ironwood V3 bundle matches a fixed
+    /// reference value to ensure consistency.
+    #[test]
+    fn test_hash_bundle_auth_data_for_ironwood_v3() {
+        let bundle = generate_auth_bundle(BundleVersion::ironwood_v3(), TxVersion::V6);
+        let orchard_auth_digest = hash_bundle_auth_data(&bundle, TxVersion::V6).unwrap();
+        assert_eq!(
+            orchard_auth_digest.to_hex().as_str(),
+            "404871b295dd65dfe4b44c5bfe92bdd194c0f70bc090a4f50b43a51244a37e5f"
         );
     }
 }
