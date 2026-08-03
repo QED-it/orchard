@@ -279,7 +279,7 @@ fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>>(
     agh.update(nh.finalize().as_bytes());
 
     agh.update(&[bundle.flag_byte()]);
-    // For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
+    // For the ZSA protocol, `expiry_height` is set to 0, indicating no expiry.
     agh.update(&0u32.to_le_bytes());
 
     let mut burn_hasher = hasher(zsa_personalizations.ironwood_burn);
@@ -546,7 +546,7 @@ mod tests {
 
     // TODO Constance: add test for (Orchard, V3) and (Ironwood, V3)
 
-    /// Verifies that the hash for an OrchardZSA bundle matches a fixed reference value.
+    /// Verifies that the hash for a ZSA bundle matches a fixed reference value.
     ///
     /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
     /// bundle contents), so the resulting digest must remain stable. The reference value
@@ -597,7 +597,7 @@ mod tests {
 
     // TODO Constance: add test for (Orchard, V3) and (Ironwood, V3)
 
-    /// Verifies that the authorizing data commitment for an OrchardZSA bundle matches a fixed
+    /// Verifies that the authorizing data commitment for an ZSA bundle matches a fixed
     /// reference value.
     ///
     /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
@@ -605,7 +605,7 @@ mod tests {
     /// was (re)generated after intentional changes that affect the digest, and
     /// is now treated as the expected output for this implementation.
     #[test]
-    fn test_hash_bundle_auth_data_for_orchard_zsa() {
+    fn test_hash_bundle_auth_data_for_zsa() {
         let bundle = generate_auth_bundle(BundleVersion::zsa(), TxVersion::ZSA);
         let orchard_auth_digest =
             hash_bundle_auth_data(&bundle, TxVersion::ZSA, test_sighash_info_for_kind).unwrap();

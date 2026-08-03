@@ -84,9 +84,10 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
 }
 
 /// Marker type selecting the Vanilla flavor for the flavor-parameterized tests in this file.
-struct OrchardVanilla;
+struct OrchardV2;
 /// Marker type selecting the ZSA flavor for the flavor-parameterized tests in this file.
-struct OrchardZSA;
+#[allow(clippy::upper_case_acronyms)]
+struct ZSA;
 
 trait BundleOrchardFlavor {
     const DEFAULT_BUNDLE_VERSION: BundleVersion;
@@ -95,14 +96,14 @@ trait BundleOrchardFlavor {
     type DomainVersion: DomainVersion;
 }
 
-impl BundleOrchardFlavor for OrchardVanilla {
+impl BundleOrchardFlavor for OrchardV2 {
     const DEFAULT_BUNDLE_VERSION: BundleVersion = BundleVersion::orchard_v2();
     const TX_VERSION: TxVersion = TxVersion::V5;
     const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED;
     type DomainVersion = OrchardVersion;
 }
 
-impl BundleOrchardFlavor for OrchardZSA {
+impl BundleOrchardFlavor for ZSA {
     const DEFAULT_BUNDLE_VERSION: BundleVersion = BundleVersion::zsa();
     const TX_VERSION: TxVersion = TxVersion::ZSA;
     const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED_WITH_ZSA;
@@ -274,7 +275,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
 
 #[test]
 fn bundle_chain_vanilla() {
-    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardVanilla>();
+    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardV2>();
     assert_eq!(
         orchard_digest_1,
         // Locks the `orchard_digest` for OrchardVanilla
@@ -295,10 +296,10 @@ fn bundle_chain_vanilla() {
 
 #[test]
 fn bundle_chain_zsa() {
-    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardZSA>();
+    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<ZSA>();
     assert_eq!(
         orchard_digest_1,
-        // Locks the `orchard_digest` for OrchardZSA
+        // Locks the `orchard_digest` for ZSA
         [
             51, 125, 219, 53, 244, 237, 140, 156, 133, 175, 230, 45, 156, 75, 11, 151, 151, 34,
             245, 84, 208, 196, 248, 187, 20, 54, 111, 230, 69, 34, 114, 72
@@ -306,7 +307,7 @@ fn bundle_chain_zsa() {
     );
     assert_eq!(
         orchard_digest_2,
-        // Locks the `orchard_digest` for OrchardZSA
+        // Locks the `orchard_digest` for ZSA
         [
             134, 103, 36, 170, 193, 49, 193, 89, 199, 73, 231, 32, 135, 130, 9, 119, 224, 62, 101,
             240, 132, 164, 83, 61, 147, 47, 159, 94, 172, 105, 132, 82
