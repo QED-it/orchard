@@ -23,13 +23,13 @@ use crate::circuit::VerifyingKey;
 /// A swap bundle to be applied to the ledger.
 #[derive(Debug, Clone)]
 pub struct Bundle<V> {
-    /// The list of action groups that make up this swap bundle.
+    /// The list of action groups that make up this bundle.
     action_groups: Vec<ActionGroup<ActionGroupAuthorized, V, OrchardZSA>>,
-    /// The net value moved out of this swap.
+    /// The net value moved out of this bundle.
     ///
-    /// This is the sum of Orchard spends minus the sum of Orchard outputs.
+    /// This is the sum of Orchard spends minus the sum of Orchard outputs, across action groups.
     value_balance: V,
-    /// The binding signature for this swap.
+    /// The binding signature for this bundle.
     binding_signature: OrchardBindingSig,
 }
 

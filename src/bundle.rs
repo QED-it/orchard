@@ -236,9 +236,9 @@ pub trait Authorization: fmt::Debug {
 /// A bundle of actions to be applied to the ledger.
 #[derive(Clone)]
 pub struct ActionGroup<A: Authorization, V, Pr: OrchardPrimitives> {
-    /// The list of actions that make up this bundle.
+    /// The list of actions that make up this action group.
     actions: NonEmpty<Action<A::SpendAuth, Pr>>,
-    /// Orchard-specific transaction-level flags for this bundle.
+    /// Orchard-specific transaction-level flags for this action group.
     flags: Flags,
     /// The net value moved out of the Orchard shielded pool.
     ///
@@ -246,14 +246,13 @@ pub struct ActionGroup<A: Authorization, V, Pr: OrchardPrimitives> {
     value_balance: V,
     /// Assets intended for burning
     burn: Vec<(AssetBase, NoteValue)>,
-    /// The root of the Orchard commitment tree that this bundle commits to.
+    /// The root of the Orchard commitment tree that this action group commits to.
     anchor: Anchor,
-    /// Block height after which this Bundle's Actions are invalid by consensus.
+    /// Block height after which this Action Group's Actions are invalid by consensus.
     ///
-    /// For the OrchardZSA protocol, `expiry_height` is set to 0, indicating no expiry.
-    /// This field is reserved for future use.
+    /// An `expiry_height` set to 0, indicates no expiry.
     expiry_height: u32,
-    /// The authorization for this bundle.
+    /// The authorization for this Action Group.
     authorization: A,
 }
 
