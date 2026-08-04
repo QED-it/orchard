@@ -210,13 +210,10 @@ impl Circuit {
     /// or rendering the circuit layout, where witness values are not required but the
     /// selected circuit version still determines the configured constraints.
     fn empty(circuit_version: OrchardCircuitVersion) -> Self {
-        match circuit_version {
-            OrchardCircuitVersion::ZSA => Circuit::OrchardZSA(CircuitZsa::empty()),
-            OrchardCircuitVersion::InsecurePreNu6_2
-            | OrchardCircuitVersion::FixedPostNu6_2
-            | OrchardCircuitVersion::PostNu6_3 => {
-                Circuit::OrchardVanilla(CircuitVanilla::empty(circuit_version))
-            }
+        if circuit_version.is_zsa() {
+            Circuit::OrchardZSA(CircuitZsa::empty())
+        } else {
+            Circuit::OrchardVanilla(CircuitVanilla::empty(circuit_version))
         }
     }
 
@@ -254,27 +251,22 @@ impl Circuit {
         rcv: ValueCommitTrapdoor,
         circuit_version: OrchardCircuitVersion,
     ) -> Self {
-        match circuit_version {
-            OrchardCircuitVersion::ZSA => {
-                Circuit::OrchardZSA(CircuitZsa::from_action_context_unchecked(
-                    spend,
-                    output_note,
-                    alpha,
-                    rcv,
-                    circuit_version,
-                ))
-            }
-            OrchardCircuitVersion::InsecurePreNu6_2
-            | OrchardCircuitVersion::FixedPostNu6_2
-            | OrchardCircuitVersion::PostNu6_3 => {
-                Circuit::OrchardVanilla(CircuitVanilla::from_action_context_unchecked(
-                    spend,
-                    output_note,
-                    alpha,
-                    rcv,
-                    circuit_version,
-                ))
-            }
+        if circuit_version.is_zsa() {
+            Circuit::OrchardZSA(CircuitZsa::from_action_context_unchecked(
+                spend,
+                output_note,
+                alpha,
+                rcv,
+                circuit_version,
+            ))
+        } else {
+            Circuit::OrchardVanilla(CircuitVanilla::from_action_context_unchecked(
+                spend,
+                output_note,
+                alpha,
+                rcv,
+                circuit_version,
+            ))
         }
     }
 
