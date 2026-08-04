@@ -1761,36 +1761,35 @@ pub(crate) mod tests {
     #[test]
     fn empty_commitments_are_domain_separated() {
         use crate::bundle::commitments::{hash_bundle_auth_empty, hash_bundle_txid_empty};
-        use crate::ValuePool;
 
         // The three commitment formats — Orchard v5, Orchard v6, Ironwood v6 — use distinct
         // personalizations, so the absent-bundle digests are all different from one another.
         let formats = [
-            (ValuePool::Orchard, TxVersion::V5),
-            (ValuePool::Orchard, TxVersion::V6),
-            (ValuePool::Ironwood, TxVersion::V6),
+            (BundleVersion::orchard_v3(), TxVersion::V5),
+            (BundleVersion::orchard_v3(), TxVersion::V6),
+            (BundleVersion::ironwood_v3(), TxVersion::V6),
         ];
         for i in 0..formats.len() {
             for j in (i + 1)..formats.len() {
-                let (pi, ti) = formats[i];
-                let (pj, tj) = formats[j];
+                let (bi, ti) = formats[i];
+                let (bj, tj) = formats[j];
                 assert_ne!(
-                    hash_bundle_txid_empty(pi, ti).unwrap().as_bytes(),
-                    hash_bundle_txid_empty(pj, tj).unwrap().as_bytes()
+                    hash_bundle_txid_empty(bi, ti).unwrap().as_bytes(),
+                    hash_bundle_txid_empty(bj, tj).unwrap().as_bytes()
                 );
                 assert_ne!(
-                    hash_bundle_auth_empty(pi, ti).unwrap().as_bytes(),
-                    hash_bundle_auth_empty(pj, tj).unwrap().as_bytes()
+                    hash_bundle_auth_empty(bi, ti).unwrap().as_bytes(),
+                    hash_bundle_auth_empty(bj, tj).unwrap().as_bytes()
                 );
             }
         }
 
         assert!(matches!(
-            hash_bundle_txid_empty(ValuePool::Ironwood, TxVersion::V5),
+            hash_bundle_txid_empty(BundleVersion::ironwood_v3(), TxVersion::V5),
             Err(CommitmentError::InvalidTransactionVersion)
         ));
         assert!(matches!(
-            hash_bundle_auth_empty(ValuePool::Ironwood, TxVersion::V5),
+            hash_bundle_auth_empty(BundleVersion::ironwood_v3(), TxVersion::V5),
             Err(CommitmentError::InvalidTransactionVersion)
         ));
     }

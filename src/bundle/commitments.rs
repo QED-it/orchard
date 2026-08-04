@@ -4,10 +4,10 @@ use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::{
-    bundle::{Authorization, Authorized, Bundle, CommitmentError, TxVersion},
+    bundle::{Authorization, Authorized, Bundle, BundleVersion, CommitmentError, TxVersion},
     note_encryption::{COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA, MEMO_SIZE},
     sighash_kind::OrchardSighashKind,
-    ValuePool,
+    ProtocolVersion, ValuePool,
 };
 
 #[cfg(feature = "zsa-issuance")]
@@ -119,18 +119,27 @@ pub(crate) enum BundleCommitmentFormat {
     ZSA,
 }
 
-impl ValuePool {
+impl BundleVersion {
     fn commitment_format(
         self,
         tx_version: TxVersion,
     ) -> Result<BundleCommitmentFormat, CommitmentError> {
-        match (self, tx_version) {
-            (ValuePool::Orchard, TxVersion::V5) => Ok(BundleCommitmentFormat::OrchardV5),
-            (ValuePool::Orchard, TxVersion::V6) => Ok(BundleCommitmentFormat::OrchardV6),
-            (ValuePool::Orchard, TxVersion::ZSA) => Err(CommitmentError::InvalidTransactionVersion),
-            (ValuePool::Ironwood, TxVersion::V5) => Err(CommitmentError::InvalidTransactionVersion),
-            (ValuePool::Ironwood, TxVersion::V6) => Ok(BundleCommitmentFormat::IronwoodV6),
-            (ValuePool::Ironwood, TxVersion::ZSA) => Ok(BundleCommitmentFormat::ZSA),
+        match (self.value_pool, self.protocol_version, tx_version) {
+            (ValuePool::Orchard, ProtocolVersion::ZSA, _) => {
+                Err(CommitmentError::InvalidTransactionVersion)
+            }
+            (ValuePool::Orchard, _, TxVersion::ZSA) => {
+                Err(CommitmentError::InvalidTransactionVersion)
+            }
+            (ValuePool::Orchard, _, TxVersion::V5) => Ok(BundleCommitmentFormat::OrchardV5),
+            (ValuePool::Orchard, _, TxVersion::V6) => Ok(BundleCommitmentFormat::OrchardV6),
+            (ValuePool::Ironwood, ProtocolVersion::V3, TxVersion::V6) => {
+                Ok(BundleCommitmentFormat::IronwoodV6)
+            }
+            (ValuePool::Ironwood, ProtocolVersion::ZSA, TxVersion::ZSA) => {
+                Ok(BundleCommitmentFormat::ZSA)
+            }
+            (ValuePool::Ironwood, _, _) => Err(CommitmentError::InvalidTransactionVersion),
         }
     }
 }
@@ -186,10 +195,7 @@ fn hash_bundle_txid_data_vanilla<A: Authorization, V: Copy + Into<i64>>(
     bundle: &Bundle<A, V>,
     tx_version: TxVersion,
 ) -> Result<Blake2bHash, CommitmentError> {
-    let format = bundle
-        .bundle_version()
-        .value_pool()
-        .commitment_format(tx_version)?;
+    let format = bundle.bundle_version().commitment_format(tx_version)?;
     let personalizations = format.personalizations();
     let mut h = hasher(personalizations.bundle);
     let mut ch = hasher(personalizations.actions_compact);
@@ -235,10 +241,7 @@ fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>>(
     bundle: &Bundle<A, V>,
     tx_version: TxVersion,
 ) -> Result<Blake2bHash, CommitmentError> {
-    let format = bundle
-        .bundle_version()
-        .value_pool()
-        .commitment_format(tx_version)?;
+    let format = bundle.bundle_version().commitment_format(tx_version)?;
 
     let personalizations = format.personalizations();
     let zsa_personalizations = personalizations.zsa.unwrap();
@@ -319,11 +322,11 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
 pub fn hash_bundle_txid_empty(
-    value_pool: ValuePool,
+    bundle_version: BundleVersion,
     tx_version: TxVersion,
 ) -> Result<Blake2bHash, CommitmentError> {
     Ok(hasher(
-        value_pool
+        bundle_version
             .commitment_format(tx_version)?
             .personalizations()
             .bundle,
@@ -347,10 +350,7 @@ fn hash_bundle_auth_data_vanilla<V>(
     tx_version: TxVersion,
     _sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
 ) -> Result<Blake2bHash, CommitmentError> {
-    let format = bundle
-        .bundle_version()
-        .value_pool()
-        .commitment_format(tx_version)?;
+    let format = bundle.bundle_version().commitment_format(tx_version)?;
     let mut h = hasher(format.personalizations().auth);
     h.update(bundle.authorization().proof().as_ref());
     for action in bundle.actions().iter() {
@@ -385,10 +385,7 @@ fn hash_bundle_auth_data_zsa<V>(
     tx_version: TxVersion,
     sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
 ) -> Result<Blake2bHash, CommitmentError> {
-    let format = bundle
-        .bundle_version()
-        .value_pool()
-        .commitment_format(tx_version)?;
+    let format = bundle.bundle_version().commitment_format(tx_version)?;
 
     let personalizations = format.personalizations();
     let zsa_personalizations = personalizations.zsa.unwrap();
@@ -448,11 +445,11 @@ pub(crate) fn hash_bundle_auth_data<V>(
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
 pub fn hash_bundle_auth_empty(
-    value_pool: ValuePool,
+    bundle_version: BundleVersion,
     tx_version: TxVersion,
 ) -> Result<Blake2bHash, CommitmentError> {
     Ok(hasher(
-        value_pool
+        bundle_version
             .commitment_format(tx_version)?
             .personalizations()
             .auth,
