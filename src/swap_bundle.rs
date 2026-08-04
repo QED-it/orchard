@@ -2,7 +2,9 @@
 
 use crate::{
     bundle::commitments::{hash_swap_bundle, hash_swap_bundle_auth_data},
-    bundle::{derive_bvk, Authorization, ActionGroup, BundleAuthorizingCommitment, BundleCommitment},
+    bundle::{
+        derive_bvk, Authorization, ActionGroup, BundleAuthorizingCommitment, BundleCommitment,
+    },
     flavor::OrchardZSA,
     primitives::redpallas::{self, Binding},
     value::ValueCommitTrapdoor,
@@ -20,7 +22,7 @@ use crate::circuit::VerifyingKey;
 
 /// A swap bundle to be applied to the ledger.
 #[derive(Debug, Clone)]
-pub struct SwapBundle<V> {
+pub struct Bundle<V> {
     /// The list of action groups that make up this swap bundle.
     action_groups: Vec<ActionGroup<ActionGroupAuthorized, V, OrchardZSA>>,
     /// The net value moved out of this swap.
@@ -31,14 +33,14 @@ pub struct SwapBundle<V> {
     binding_signature: OrchardBindingSig,
 }
 
-impl<V> SwapBundle<V> {
+impl<V> Bundle<V> {
     /// Constructs a `SwapBundle` from its constituent parts.
     pub fn from_parts(
         action_groups: Vec<ActionGroup<ActionGroupAuthorized, V, OrchardZSA>>,
         value_balance: V,
         binding_signature: OrchardBindingSig,
     ) -> Self {
-        SwapBundle {
+        Bundle {
             action_groups,
             value_balance,
             binding_signature,
@@ -46,7 +48,7 @@ impl<V> SwapBundle<V> {
     }
 }
 
-impl<V: Copy + Into<i64> + core::ops::Add<Output = V>> SwapBundle<V> {
+impl<V: Copy + Into<i64> + core::ops::Add<Output = V>> Bundle<V> {
     /// Constructs a `SwapBundle` from its action groups and respective binding signature keys.
     /// Keys should go in the same order as the action groups.
     pub fn new<R: RngCore + CryptoRng>(
@@ -78,7 +80,7 @@ impl<V: Copy + Into<i64> + core::ops::Add<Output = V>> SwapBundle<V> {
         let binding_signature =
             OrchardBindingSig::new(OrchardSighashKind::AllEffecting, bsk.sign(rng, &sighash));
         // Create the swap bundle
-        SwapBundle {
+        Bundle {
             action_groups,
             value_balance,
             binding_signature,
@@ -119,7 +121,7 @@ impl<V, D: OrchardPrimitives> ActionGroup<ActionGroupAuthorized, V, D> {
     }
 }
 
-impl<V> SwapBundle<V> {
+impl<V> Bundle<V> {
     /// Returns the list of action groups that make up this swap bundle.
     pub fn action_groups(&self) -> &Vec<ActionGroup<ActionGroupAuthorized, V, OrchardZSA>> {
         &self.action_groups
@@ -138,7 +140,7 @@ impl<V> SwapBundle<V> {
     }
 }
 
-impl<V: Copy + Into<i64>> SwapBundle<V> {
+impl<V: Copy + Into<i64>> Bundle<V> {
     /// Computes a commitment to the effects of this swap bundle, suitable for inclusion
     /// within a transaction ID.
     pub fn commitment(&self) -> BundleCommitment {
@@ -150,7 +152,7 @@ impl<V: Copy + Into<i64>> SwapBundle<V> {
 
     /// Computes a commitment to the authorizing data within this swap bundle.
     ///
-    /// This together with [`SwapBundle::commitment`] bind the entire swap bundle.
+    /// This together with [`Bundle::commitment`] bind the entire swap bundle.
     /// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
     /// for a given [`OrchardSighashKind`].
     pub fn authorizing_commitment(

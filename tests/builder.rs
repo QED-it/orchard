@@ -10,7 +10,7 @@ use orchard::{
     note::{AssetBase, ExtractedNoteCommitment},
     primitives::{OrchardDomain, OrchardPrimitives},
     sighash_kind::OrchardSighashKind,
-    swap_bundle::{ActionGroupAuthorized, SwapBundle},
+    swap_bundle::{ActionGroupAuthorized, Bundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Anchor, ActionGroup, Note,
@@ -50,7 +50,7 @@ pub fn verify_bundle<Pr: OrchardPrimitives>(
 // - verify each action group (its proof and for each action, the spend authorization signature)
 // - verify that bsk is None  for each action group
 // - verify the swap binding signature
-pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>) {
+pub fn verify_swap_bundle(swap_bundle: &Bundle<i64>, vks: Vec<&VerifyingKey>) {
     assert_eq!(vks.len(), swap_bundle.action_groups().len());
     for (action_group, vk) in swap_bundle.action_groups().iter().zip(vks.iter()) {
         verify_action_group(action_group, vk);

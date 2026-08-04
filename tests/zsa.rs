@@ -17,7 +17,7 @@ use orchard::{
     note::{AssetBase, AssetId, ExtractedNoteCommitment, Nullifier},
     primitives::OrchardDomain,
     primitives::redpallas::{Binding, SigningKey},
-    swap_bundle::{ActionGroupAuthorized, SwapBundle},
+    swap_bundle::{ActionGroupAuthorized, Bundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Address, Anchor, ActionGroup, Note,
@@ -378,7 +378,9 @@ fn build_and_verify_action_group(
     Ok((shielded_action_group, bsk))
 }
 
-fn verify_unique_spent_nullifiers<A: Authorization>(bundle: &ActionGroup<A, i64, OrchardZSA>) -> bool {
+fn verify_unique_spent_nullifiers<A: Authorization>(
+    bundle: &ActionGroup<A, i64, OrchardZSA>,
+) -> bool {
     let mut seen = HashSet::new();
     bundle
         .actions()
@@ -921,7 +923,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 4. Create a SwapBundle from the three previous ActionGroups
-        let swap_bundle = SwapBundle::new(
+        let swap_bundle = Bundle::new(
             OsRng,
             vec![action_group1, action_group2, action_group_matcher],
             vec![bsk1, bsk2, bsk_matcher],
@@ -1024,7 +1026,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 4. Create a SwapBundle from the three previous ActionGroups
-        let swap_bundle = SwapBundle::new(
+        let swap_bundle = Bundle::new(
             OsRng,
             vec![action_group1, action_group2, action_group_matcher],
             vec![bsk1, bsk2, bsk_matcher],
@@ -1063,7 +1065,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 2. Create a SwapBundle from the previous ActionGroup
-        let swap_bundle = SwapBundle::new(OsRng, vec![action_group], vec![bsk1]);
+        let swap_bundle = Bundle::new(OsRng, vec![action_group], vec![bsk1]);
         verify_swap_bundle(&swap_bundle, vec![&keys1.vk]);
     }
 }
