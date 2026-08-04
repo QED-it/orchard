@@ -152,7 +152,9 @@ impl BundleCommitmentFormat {
     fn includes_anchor_in_authorizing_digest(self) -> bool {
         matches!(
             self,
-            BundleCommitmentFormat::OrchardV6 | BundleCommitmentFormat::IronwoodV6
+            BundleCommitmentFormat::OrchardV6
+                | BundleCommitmentFormat::IronwoodV6
+                | BundleCommitmentFormat::ZSA
         )
     }
 }
