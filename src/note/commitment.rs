@@ -30,6 +30,14 @@ impl NoteCommitTrapdoor {
     pub(crate) fn inner(&self) -> pallas::Scalar {
         self.0
     }
+
+    /// Constructs a `NoteCommitTrapdoor` from the provided scalar value.
+    ///
+    /// This constructor is only available in tests.
+    #[cfg(test)]
+    pub fn new(trapdoor: pallas::Scalar) -> Self {
+        Self(trapdoor)
+    }
 }
 
 /// A commitment to a note.
