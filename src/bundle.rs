@@ -164,6 +164,12 @@ impl BundleVersion {
         )
     }
 
+    /// Whether the consensus rules for this version *permit* zsa transfers.
+    pub(crate) fn permits_zsa(&self) -> bool {
+        // TODO ZSA
+        false
+    }
+
     /// The default [`Flags`] for a bundle of this version: spends and outputs enabled, with the
     /// cross-address bit set to the least-restrictive value the version permits (enabled unless
     /// the version mandates the restriction).
@@ -402,7 +408,9 @@ impl Flags {
         }
 
         if self.zsa_enabled {
-            // TODO ZSA: Check that BundleVersion permits ZSA
+            if !bundle_version.permits_zsa() {
+                return None;
+            }
             value |= FLAG_ZSA_ENABLED;
         }
 
@@ -453,12 +461,19 @@ impl Flags {
             ProtocolVersion::V3 => bit2,
         };
 
+        // Bit 3 (`zsa_enabled`) can only be 1 for a bundle version that permits ZSA
+        // transfers (the Ironwood pool under `ProtocolVersion::ZSA`); it MUST be 0
+        // otherwise.
+        let bit3 = value & FLAG_ZSA_ENABLED != 0;
+        if bit3 && !bundle_version.permits_zsa() {
+            return None;
+        }
+
         Some(Self {
             spends_enabled: value & FLAG_SPENDS_ENABLED != 0,
             outputs_enabled: value & FLAG_OUTPUTS_ENABLED != 0,
             cross_address_enabled,
-            // TODO ZSA: Check that bundle_version permits ZSA
-            zsa_enabled: value & FLAG_ZSA_ENABLED != 0,
+            zsa_enabled: bit3,
         })
     }
 }
@@ -1445,8 +1460,8 @@ pub(crate) mod tests {
             );
         }
 
-        // Bits 3.. are always reserved, in every NU6.3 pool.
-        for value in 0b1000..=u8::MAX {
+        // Bits 4.. are always reserved, in every NU6.3 pool.
+        for value in 0b10000..=u8::MAX {
             assert_eq!(Flags::from_byte(value, BundleVersion::orchard_v3()), None);
             assert_eq!(Flags::from_byte(value, BundleVersion::ironwood_v3()), None);
         }
