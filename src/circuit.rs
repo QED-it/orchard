@@ -250,7 +250,7 @@ impl Circuit {
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
         circuit_version: OrchardCircuitVersion,
-    ) -> Option<Self> {
+    ) -> Option<Circuit> {
         (Rho::from_nf_old(spend.note.nullifier(&spend.fvk)) == output_note.rho()).then(|| {
             Self::from_action_context_unchecked(spend, output_note, alpha, rcv, circuit_version)
         })
@@ -262,7 +262,7 @@ impl Circuit {
         alpha: pallas::Scalar,
         rcv: ValueCommitTrapdoor,
         circuit_version: OrchardCircuitVersion,
-    ) -> Self {
+    ) -> Circuit {
         if circuit_version.is_zsa() {
             Circuit::OrchardZSA(CircuitZsa::from_action_context_unchecked(
                 spend,
