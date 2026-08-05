@@ -1807,6 +1807,7 @@ pub(crate) mod tests {
             (BundleVersion::orchard_v3(), TxVersion::V5),
             (BundleVersion::orchard_v3(), TxVersion::V6),
             (BundleVersion::ironwood_v3(), TxVersion::V6),
+            (BundleVersion::zsa(), TxVersion::ZSA),
         ];
         for i in 0..formats.len() {
             for j in (i + 1)..formats.len() {
