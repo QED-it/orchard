@@ -236,13 +236,25 @@ pub struct Flags {
     /// expanded receiver as the note it spends; proving and verification must reject the
     /// bundle unless they use a circuit key that supports the restriction.
     cross_address_enabled: bool,
+    /// Flag denoting whether ZSA functionality is enabled in the transaction.
+    ///
+    /// If `false`,  all notes within [`Action`]s in the transaction's [`Bundle`] are
+    /// guaranteed to be notes with zatoshi asset. If `true`, `Action`s may use any asset.
+    ///
+    /// This field was introduced with the ZSA feature; older Orchard versions did not
+    /// include it. Because halo2_proofs zero-extends instance values, old proofs are interpreted
+    /// with this flag equal to zero (`false`), so adding it does not break consensus.
+    zsa_enabled: bool,
 }
 
 const FLAG_SPENDS_ENABLED: u8 = 0b0000_0001;
 const FLAG_OUTPUTS_ENABLED: u8 = 0b0000_0010;
 const FLAG_V6_CROSS_ADDRESS_ENABLED: u8 = 0b0000_0100;
-const FLAGS_ALWAYS_EXPECTED_UNSET: u8 =
-    !(FLAG_SPENDS_ENABLED | FLAG_OUTPUTS_ENABLED | FLAG_V6_CROSS_ADDRESS_ENABLED);
+const FLAG_ZSA_ENABLED: u8 = 0b0000_1000;
+const FLAGS_ALWAYS_EXPECTED_UNSET: u8 = !(FLAG_SPENDS_ENABLED
+    | FLAG_OUTPUTS_ENABLED
+    | FLAG_V6_CROSS_ADDRESS_ENABLED
+    | FLAG_ZSA_ENABLED);
 
 impl Flags {
     /// Construct a set of flags from its constituent parts, including the cross-address bit.
@@ -258,6 +270,8 @@ impl Flags {
             spends_enabled,
             outputs_enabled,
             cross_address_enabled,
+            // TODO ZSA
+            zsa_enabled: false,
         }
     }
 
@@ -272,6 +286,7 @@ impl Flags {
         spends_enabled: true,
         outputs_enabled: true,
         cross_address_enabled: true,
+        zsa_enabled: false,
     };
 
     /// The flag set for a bundle that may create notes but not spend them: every
@@ -283,6 +298,7 @@ impl Flags {
         spends_enabled: false,
         outputs_enabled: true,
         cross_address_enabled: true,
+        zsa_enabled: false,
     };
 
     /// The flag set for a bundle that may spend notes but not create them: every
@@ -294,6 +310,7 @@ impl Flags {
         spends_enabled: true,
         outputs_enabled: false,
         cross_address_enabled: true,
+        zsa_enabled: false,
     };
 
     /// The flag set with spends and outputs enabled and cross-address transfers disabled.
@@ -304,6 +321,7 @@ impl Flags {
         spends_enabled: true,
         outputs_enabled: true,
         cross_address_enabled: false,
+        zsa_enabled: false,
     };
 
     /// Flag denoting whether Orchard spends are enabled in the transaction.
@@ -332,6 +350,14 @@ impl Flags {
     /// bundle unless they use a circuit key that supports the restriction.
     pub fn cross_address_enabled(&self) -> bool {
         self.cross_address_enabled
+    }
+
+    /// Flag denoting whether ZSA functionality is enabled in the transaction.
+    ///
+    /// If `false`, all notes within [`Action`]s in the transaction's [`Bundle`] are
+    /// guaranteed to be notes with zatoshi asset. If `true`, `Action`s may use any asset.
+    pub fn zsa_enabled(&self) -> bool {
+        self.zsa_enabled
     }
 
     /// Serialize flags to a byte as defined in [Zcash Protocol Spec § 7.1: Transaction
@@ -375,6 +401,11 @@ impl Flags {
             (ValuePool::Ironwood, _) => return None,
         }
 
+        if self.zsa_enabled {
+            // TODO ZSA: Check that BundleVersion permits ZSA
+            value |= FLAG_ZSA_ENABLED;
+        }
+
         Some(value)
     }
 
@@ -398,7 +429,7 @@ impl Flags {
     ///
     /// [txencoding]: https://zips.z.cash/protocol/protocol.pdf#txnencoding
     pub fn from_byte(value: u8, bundle_version: BundleVersion) -> Option<Self> {
-        // Bits 3..=7 are always reserved and MUST be 0.
+        // Bits 4..=7 are always reserved and MUST be 0.
         // https://p.z.cash/TCR:bad-txns-v5-reserved-bits-nonzero
         if value & FLAGS_ALWAYS_EXPECTED_UNSET != 0 {
             return None;
@@ -421,10 +452,13 @@ impl Flags {
             ProtocolVersion::InsecureV1 | ProtocolVersion::V2 => true,
             ProtocolVersion::V3 => bit2,
         };
+
         Some(Self {
             spends_enabled: value & FLAG_SPENDS_ENABLED != 0,
             outputs_enabled: value & FLAG_OUTPUTS_ENABLED != 0,
             cross_address_enabled,
+            // TODO ZSA: Check that bundle_version permits ZSA
+            zsa_enabled: value & FLAG_ZSA_ENABLED != 0,
         })
     }
 }
@@ -1176,6 +1210,7 @@ pub mod testing {
                 spends_enabled,
                 outputs_enabled,
                 cross_address_enabled,
+                zsa_enabled: false,
             }
         }
     }
