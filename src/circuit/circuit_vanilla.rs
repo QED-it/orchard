@@ -1406,8 +1406,8 @@ mod tests {
     fn round_trip_fixed() {
         let vk = pinned_circuit_description(
             OrchardCircuitVersion::FixedPostNu6_2,
-            "src/circuit_data/circuit_description_fixed_vanilla",
-            include_str!("../circuit_data/circuit_description_fixed_vanilla"),
+            "src/circuit_data/circuit_description_fixed",
+            include_str!("../circuit_data/circuit_description_fixed"),
         );
         round_trip_for_version(OrchardCircuitVersion::FixedPostNu6_2, &vk);
     }
@@ -1562,8 +1562,8 @@ mod tests {
     fn serialized_fixed_proof_test_case() {
         serialized_proof_test_case_for_version(
             OrchardCircuitVersion::FixedPostNu6_2,
-            "src/circuit_data/circuit_proof_test_case_fixed_vanilla.bin",
-            include_bytes!("../circuit_data/circuit_proof_test_case_fixed_vanilla.bin"),
+            "src/circuit_data/circuit_proof_test_case_fixed.bin",
+            include_bytes!("../circuit_data/circuit_proof_test_case_fixed.bin"),
             ProofFixtureEncoding::LegacyTwoFlags,
             4992,
             false,
@@ -1604,13 +1604,12 @@ mod tests {
         let vk = VerifyingKey::build(OrchardCircuitVersion::InsecurePreNu6_2);
         assert_eq!(
             format!("{:#?}\n", vk.vk.pinned()),
-            include_str!("../circuit_data/circuit_description_insecure_vanilla")
-                .replace("\r\n", "\n")
+            include_str!("../circuit_data/circuit_description_insecure").replace("\r\n", "\n")
         );
 
         let (instance, proof) = {
             let test_case_bytes =
-                include_bytes!("../circuit_data/circuit_proof_test_case_insecure_vanilla.bin");
+                include_bytes!("../circuit_data/circuit_proof_test_case_insecure.bin");
             read_test_case(&test_case_bytes[..], ProofFixtureEncoding::LegacyTwoFlags)
                 .expect("proof must be valid")
         };
