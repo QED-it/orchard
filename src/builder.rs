@@ -492,6 +492,7 @@ pub struct OutputInfo {
     ovk: Option<OutgoingViewingKey>,
     recipient: Address,
     value: NoteValue,
+    asset: AssetBase,
     memo: [u8; 512],
     note_version: NoteVersion,
     /// When set, `build` fills `enc_ciphertext` with random bytes instead of encrypting the
@@ -522,6 +523,8 @@ impl OutputInfo {
             ovk,
             recipient,
             value,
+            // TODO ZSA: asset should be a param, not hardcoded here
+            asset: AssetBase::zatoshi(),
             memo,
             note_version,
             randomized_ciphertext: false,
@@ -544,6 +547,8 @@ impl OutputInfo {
             ovk: None,
             recipient,
             value: NoteValue::ZERO,
+            // TODO ZSA: asset should be a param, not hardcoded here
+            asset: AssetBase::zatoshi(),
             memo: [0u8; 512],
             note_version,
             randomized_ciphertext: matches!(spent_scope, Scope::External),
@@ -714,8 +719,7 @@ impl ActionInfo {
         circuit_version: OrchardCircuitVersion,
     ) -> (Action<SigningMetadata>, Circuit) {
         let v_net = self.value_sum();
-        // TODO ZSA: use self.output.asset instead of zatoshi
-        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), AssetBase::zatoshi());
+        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.output.asset);
 
         let (nf_old, ak, alpha, rk) = self.spend.build(&mut rng);
         let (note, cmx, encrypted_note) = self.output.build(&cv_net, nf_old, &mut rng);
@@ -748,8 +752,7 @@ impl ActionInfo {
 
     fn build_for_pczt(self, mut rng: impl RngCore) -> crate::pczt::Action {
         let v_net = self.value_sum();
-        // TODO ZSA: use self.spend.note.asset() instead of zatoshi
-        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), AssetBase::zatoshi());
+        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.spend.note.asset());
 
         let spend = self.spend.into_pczt(&mut rng);
         let output = self.output.into_pczt(&cv_net, spend.nullifier, &mut rng);

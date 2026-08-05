@@ -307,7 +307,7 @@ impl Note {
         let note = Note {
             recipient,
             value,
-            // TODO ZSA
+            // TODO ZSA: asset should be a param, not hardcoded here
             asset: AssetBase::zatoshi(),
             rho,
             rseed,
@@ -462,8 +462,7 @@ impl Note {
             g_d_bytes,
             pk_d_bytes,
             self.value,
-            // TODO ZSA: use self.asset instead of zatoshi
-            AssetBase::zatoshi(),
+            self.asset,
             self.rho.0,
             psi,
             self.rcm(),
@@ -530,7 +529,7 @@ pub mod testing {
             Note {
                 recipient,
                 value,
-                // TODO ZSA
+                // TODO ZSA: asset should not be hardcoded here
                 asset: AssetBase::zatoshi(),
                 rho,
                 rseed,

@@ -238,7 +238,7 @@ pub(crate) mod testing {
             let cv_net = ValueCommitment::derive(
                 spend_value - output_value,
                 ValueCommitTrapdoor::zero(),
-                // TODO ZSA: add asset
+                // TODO ZSA: asset should be a param, not hardcoded here
                 AssetBase::zatoshi()
             );
             let encrypted_note =
@@ -268,7 +268,7 @@ pub(crate) mod testing {
             let cv_net = ValueCommitment::derive(
                 spend_value - output_value,
                 ValueCommitTrapdoor::zero(),
-                // TODO ZSA: add asset
+                // TODO ZSA: asset should be a param, not hardcoded here
                 AssetBase::zatoshi()
             );
 

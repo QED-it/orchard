@@ -1027,8 +1027,6 @@ mod tests {
             Note::new(
                 sender_address,
                 spent_note.value(),
-                // TODO ZSA
-                // AssetBase::zatoshi(),
                 rho,
                 note_version,
                 &mut rng,

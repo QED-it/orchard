@@ -166,7 +166,7 @@ impl BundleVersion {
 
     /// Whether the consensus rules for this version *permit* zsa transfers.
     pub(crate) fn permits_zsa(&self) -> bool {
-        // TODO ZSA
+        // TODO ZSA: return true only for bundle versions that support ZSA
         false
     }
 
@@ -276,7 +276,7 @@ impl Flags {
             spends_enabled,
             outputs_enabled,
             cross_address_enabled,
-            // TODO ZSA
+            // TODO ZSA: zsa_enabled should be a param, not hardcoded here
             zsa_enabled: false,
         }
     }
