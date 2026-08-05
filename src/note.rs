@@ -16,6 +16,9 @@ use crate::{
     Address,
 };
 
+pub(crate) mod asset_base;
+pub use self::asset_base::AssetBase;
+
 const PRF_EXPAND_PERSONALIZATION: &[u8; 16] = b"Zcash_ExpandSeed";
 const ZIP2005_ORCHARD_QR_RCM_DOMAIN_SEPARATOR: u8 = 0x0B;
 
