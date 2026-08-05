@@ -164,6 +164,18 @@ impl OrchardCircuitVersion {
     fn is_zsa(self) -> bool {
         self == OrchardCircuitVersion::ZSA
     }
+
+    /// Returns the `(base, per_action)` proof-size constants for the circuit that proves and
+    /// verifies actions for this bundle version, such that a canonical proof for `num_actions`
+    /// actions is exactly `base + per_action * num_actions` bytes.
+    pub(crate) const fn proof_size_constants(&self) -> (usize, usize) {
+        match self {
+            OrchardCircuitVersion::InsecurePreNu6_2
+            | OrchardCircuitVersion::FixedPostNu6_2
+            | OrchardCircuitVersion::PostNu6_3 => (2720, 2272),
+            OrchardCircuitVersion::ZSA => (2848, 2272),
+        }
+    }
 }
 
 /// The Orchard Action circuit.

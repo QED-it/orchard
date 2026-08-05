@@ -1368,16 +1368,11 @@ mod tests {
             assert_eq!(usize::from(circuit_cost.proof_size(2)), 7264);
             // The constants in `Proof::expected_proof_size` must track the circuit's actual
             // proof size; this guards them against drift if the circuit ever changes.
+            let circuit_version = BundleVersion::orchard_v3().circuit_version();
+            assert_eq!(Proof::expected_proof_size(circuit_version, 1), 4992);
+            assert_eq!(Proof::expected_proof_size(circuit_version, 2), 7264);
             assert_eq!(
-                Proof::expected_proof_size(BundleVersion::orchard_v3(), 1),
-                4992
-            );
-            assert_eq!(
-                Proof::expected_proof_size(BundleVersion::orchard_v3(), 2),
-                7264
-            );
-            assert_eq!(
-                Proof::expected_proof_size(BundleVersion::orchard_v3(), instances.len()),
+                Proof::expected_proof_size(circuit_version, instances.len()),
                 usize::from(circuit_cost.proof_size(instances.len())),
             );
             usize::from(circuit_cost.proof_size(instances.len()))

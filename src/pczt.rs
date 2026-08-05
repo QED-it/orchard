@@ -1515,6 +1515,7 @@ mod tests {
         pczt_bundle.zkproof = Some(crate::Proof::new(vec![
             0;
             crate::Proof::expected_proof_size(
+                pczt_bundle.bundle_version.circuit_version(),
                 pczt_bundle.actions.len()
             )
         ]));
