@@ -352,6 +352,8 @@ pub struct SpendInfo {
     pub(crate) scope: Scope,
     pub(crate) note: Note,
     pub(crate) merkle_path: Option<MerklePath>,
+    // A flag to indicate whether the value of the note will be counted in the `ValueSum` of the action.
+    pub(crate) split_flag: bool,
 }
 
 impl SpendInfo {
@@ -372,6 +374,7 @@ impl SpendInfo {
             scope,
             note,
             merkle_path: Some(merkle_path),
+            split_flag: false,
         })
     }
 
@@ -392,6 +395,7 @@ impl SpendInfo {
             scope,
             note,
             merkle_path: None,
+            split_flag: false,
         })
     }
 
@@ -410,6 +414,7 @@ impl SpendInfo {
             scope: Scope::External,
             note,
             merkle_path,
+            split_flag: false,
         }
     }
 
@@ -1427,6 +1432,7 @@ fn build_bundle<B, R: RngCore>(
                 scope,
                 note,
                 merkle_path: Some(MerklePath::dummy(&mut rng)),
+                split_flag: false,
             };
             pairs.push((None, Some(chg_idx), spend, output));
         }
