@@ -691,7 +691,7 @@ mod tests {
         use super::super::Instance;
         use crate::{
             bundle::Flags,
-            note::{ExtractedNoteCommitment, Nullifier},
+            note::{AssetBase, ExtractedNoteCommitment, Nullifier},
             primitives::redpallas::{self, SpendAuth},
             tree::Anchor,
             value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -706,8 +706,7 @@ mod tests {
             let cv_net = ValueCommitment::derive(
                 ValueSum::from_raw(42),
                 ValueCommitTrapdoor::zero(),
-                // TODO ZSA
-                // AssetBase::zatoshi(),
+                AssetBase::zatoshi(),
             );
             let nf_old = Nullifier::from_bytes(&[1u8; 32]).unwrap();
             let cmx = ExtractedNoteCommitment::from_bytes(&[2u8; 32]).unwrap();

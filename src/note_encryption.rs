@@ -599,7 +599,7 @@ mod tests {
             IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey,
         },
         note::{
-            ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho,
+            AssetBase, ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho,
             TransmittedNoteCiphertext,
         },
         primitives::redpallas,
@@ -630,7 +630,11 @@ mod tests {
             &mut rng,
         );
         let memo = [7u8; 512];
-        let cv_net = ValueCommitment::derive(ValueSum::from_raw(5), ValueCommitTrapdoor::zero());
+        let cv_net = ValueCommitment::derive(
+            ValueSum::from_raw(5),
+            ValueCommitTrapdoor::zero(),
+            AssetBase::zatoshi(),
+        );
         let cmx = ExtractedNoteCommitment::from(note.commitment());
         let encryptor = IronwoodNoteEncryption::new(Some(fvk.to_ovk(Scope::External)), note, memo);
         let encrypted_note = TransmittedNoteCiphertext {

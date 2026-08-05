@@ -54,9 +54,8 @@ use rand::RngCore;
 use subtle::CtOption;
 
 use crate::{
-    constants::fixed_bases::{
-        VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_R_BYTES, VALUE_COMMITMENT_V_BYTES,
-    },
+    constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_R_BYTES},
+    note::AssetBase,
     primitives::redpallas::{self, Binding},
 };
 
@@ -355,9 +354,9 @@ impl ValueCommitment {
     ///
     /// [concretehomomorphiccommit]: https://zips.z.cash/protocol/nu5.pdf#concretehomomorphiccommit
     #[allow(non_snake_case)]
-    pub fn derive(value: ValueSum, rcv: ValueCommitTrapdoor) -> Self {
+    pub fn derive(value: ValueSum, rcv: ValueCommitTrapdoor, asset: AssetBase) -> Self {
         let hasher = pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION);
-        let V = hasher(&VALUE_COMMITMENT_V_BYTES);
+        let V = asset.cv_base();
         let R = hasher(&VALUE_COMMITMENT_R_BYTES);
         let abs_value = u64::try_from(value.0.abs()).expect("value must be in valid range");
 
@@ -477,7 +476,7 @@ mod tests {
         testing::{arb_note_value_bounded, arb_trapdoor, arb_value_sum_bounded},
         BalanceError, ValueCommitTrapdoor, ValueCommitment, ValueSum, MAX_NOTE_VALUE,
     };
-    use crate::primitives::redpallas;
+    use crate::{note::AssetBase, primitives::redpallas};
 
     proptest! {
         #[test]
@@ -502,9 +501,9 @@ mod tests {
 
             let bvk = (values
                 .into_iter()
-                .map(|(value, rcv)| ValueCommitment::derive(value, rcv))
+                .map(|(value, rcv)| ValueCommitment::derive(value, rcv, AssetBase::zatoshi()))
                 .sum::<ValueCommitment>()
-                - ValueCommitment::derive(value_balance, ValueCommitTrapdoor::zero()))
+                - ValueCommitment::derive(value_balance, ValueCommitTrapdoor::zero(), AssetBase::zatoshi()))
             .into_bvk();
 
             assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);

@@ -982,7 +982,7 @@ mod tests {
             SingleVerifier, VerifyingKey, K,
         },
         keys::SpendValidatingKey,
-        note::{Note, NoteVersion, Rho},
+        note::{AssetBase, Note, NoteVersion, Rho},
         tree::MerklePath,
         value::{ValueCommitTrapdoor, ValueCommitment},
     };
@@ -1045,12 +1045,7 @@ mod tests {
 
         let value = spent_note.value() - output_note.value();
         let rcv = ValueCommitTrapdoor::random(&mut rng);
-        let cv_net = ValueCommitment::derive(
-            value,
-            rcv.clone(),
-            // TODO ZSA
-            // AssetBase::zatoshi(),
-        );
+        let cv_net = ValueCommitment::derive(value, rcv.clone(), AssetBase::zatoshi());
 
         let path = MerklePath::dummy(&mut rng);
         let anchor = path.root(spent_note.commitment().into());

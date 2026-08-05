@@ -196,7 +196,7 @@ pub(crate) mod testing {
     use crate::{
         note::{
             commitment::ExtractedNoteCommitment, nullifier::testing::arb_nullifier,
-            testing::arb_note, TransmittedNoteCiphertext,
+            testing::arb_note, AssetBase, TransmittedNoteCiphertext,
         },
         note_encryption::{OrchardDomain, OrchardNoteEncryption},
         primitives::redpallas::{self, testing::arb_valid_spendauth_keypair},
@@ -237,7 +237,9 @@ pub(crate) mod testing {
             let cmx = ExtractedNoteCommitment::from(note.commitment());
             let cv_net = ValueCommitment::derive(
                 spend_value - output_value,
-                ValueCommitTrapdoor::zero()
+                ValueCommitTrapdoor::zero(),
+                // TODO ZSA: add asset
+                AssetBase::zatoshi()
             );
             let encrypted_note =
                 encrypted_note_for(note, &cv_net, &cmx, StdRng::from_seed(rng_seed));
@@ -265,7 +267,9 @@ pub(crate) mod testing {
             let cmx = ExtractedNoteCommitment::from(note.commitment());
             let cv_net = ValueCommitment::derive(
                 spend_value - output_value,
-                ValueCommitTrapdoor::zero()
+                ValueCommitTrapdoor::zero(),
+                // TODO ZSA: add asset
+                AssetBase::zatoshi()
             );
 
             let encrypted_note =
@@ -293,7 +297,7 @@ mod tests {
 
     use super::{Action, ActionFromPartsError};
     use crate::{
-        note::{ExtractedNoteCommitment, Nullifier, TransmittedNoteCiphertext},
+        note::{AssetBase, ExtractedNoteCommitment, Nullifier, TransmittedNoteCiphertext},
         primitives::redpallas::{self, SpendAuth},
         value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
     };
@@ -337,7 +341,11 @@ mod tests {
             enc_ciphertext: [4u8; 580],
             out_ciphertext: [5u8; 80],
         };
-        let cv_net = ValueCommitment::derive(ValueSum::from_raw(42), ValueCommitTrapdoor::zero());
+        let cv_net = ValueCommitment::derive(
+            ValueSum::from_raw(42),
+            ValueCommitTrapdoor::zero(),
+            AssetBase::zatoshi(),
+        );
         (nf, cmx, encrypted_note, cv_net)
     }
 

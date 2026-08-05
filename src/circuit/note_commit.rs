@@ -3201,13 +3201,12 @@ mod tests {
                         .zip(self.pk_d)
                         .zip(self.rho.zip(self.psi))
                         .zip(self.asset)
-                        .map(|(((g_d, pk_d), (rho, psi)), _asset)| {
+                        .map(|(((g_d, pk_d), (rho, psi)), asset)| {
                             NoteCommitment::derive(
                                 g_d.to_bytes(),
                                 pk_d.to_bytes(),
                                 value,
-                                // TODO ZSA
-                                // asset,
+                                asset,
                                 rho,
                                 psi,
                                 NoteCommitTrapdoor::new(rcm),

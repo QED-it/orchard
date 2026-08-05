@@ -23,7 +23,7 @@ use crate::{
     address::Address,
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
-    note::{Note, NoteVersion},
+    note::{AssetBase, Note, NoteVersion},
     note_encryption::BundleDomain,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::Anchor,
@@ -827,6 +827,7 @@ impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
             - ValueCommitment::derive(
                 ValueSum::from_raw(self.value_balance.into()),
                 ValueCommitTrapdoor::zero(),
+                AssetBase::zatoshi(),
             ))
         .into_bvk()
     }

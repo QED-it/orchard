@@ -462,6 +462,8 @@ impl Note {
             g_d_bytes,
             pk_d_bytes,
             self.value,
+            // TODO ZSA: use self.asset instead of zatoshi
+            AssetBase::zatoshi(),
             self.rho.0,
             psi,
             self.rcm(),
@@ -577,12 +579,28 @@ mod tests {
         let rho_inner = rho.into_inner();
         let value = NoteValue::from_raw(tv.note_v);
 
-        let cmx_old =
-            NoteCommitment::derive(g_d_bytes, pk_d_bytes, value, rho_inner, psi, rcm_old).unwrap();
+        let cmx_old = NoteCommitment::derive(
+            g_d_bytes,
+            pk_d_bytes,
+            value,
+            AssetBase::zatoshi(),
+            rho_inner,
+            psi,
+            rcm_old,
+        )
+        .unwrap();
         let cmx_old_bytes = ExtractedNoteCommitment::from(cmx_old).to_bytes();
 
-        let cmx_qr =
-            NoteCommitment::derive(g_d_bytes, pk_d_bytes, value, rho_inner, psi, rcm_new).unwrap();
+        let cmx_qr = NoteCommitment::derive(
+            g_d_bytes,
+            pk_d_bytes,
+            value,
+            AssetBase::zatoshi(),
+            rho_inner,
+            psi,
+            rcm_new,
+        )
+        .unwrap();
         let cmx_qr_bytes = ExtractedNoteCommitment::from(cmx_qr).to_bytes();
 
         QrRcmDerivation {
