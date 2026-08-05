@@ -137,6 +137,7 @@ impl CircuitVanilla {
         // spend that reaches circuit construction always carries its Merkle path.
         let merkle_path = spend
             .merkle_path
+            .clone()
             .expect("a spend used as a circuit witness carries a Merkle path");
 
         let psi_new = output_note.psi();
