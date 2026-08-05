@@ -693,9 +693,10 @@ mod tests {
         fn dummy_other_fields() -> (Anchor, ValueCommitment, Nullifier, ExtractedNoteCommitment) {
             let anchor = Anchor::from_bytes([6u8; 32]).unwrap();
             let cv_net = ValueCommitment::derive(
-                ValueSum::from_raw_inner(42),
+                ValueSum::from_raw(42),
                 ValueCommitTrapdoor::zero(),
-                AssetBase::zatoshi(),
+                // TODO ZSA
+                // AssetBase::zatoshi(),
             );
             let nf_old = Nullifier::from_bytes(&[1u8; 32]).unwrap();
             let cmx = ExtractedNoteCommitment::from_bytes(&[2u8; 32]).unwrap();

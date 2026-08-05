@@ -1026,7 +1026,8 @@ mod tests {
             Note::new(
                 sender_address,
                 spent_note.value(),
-                AssetBase::zatoshi(),
+                // TODO ZSA
+                // AssetBase::zatoshi(),
                 rho,
                 note_version,
                 &mut rng,
@@ -1043,7 +1044,12 @@ mod tests {
 
         let value = spent_note.value() - output_note.value();
         let rcv = ValueCommitTrapdoor::random(&mut rng);
-        let cv_net = ValueCommitment::derive(value, rcv.clone(), AssetBase::zatoshi());
+        let cv_net = ValueCommitment::derive(
+            value,
+            rcv.clone(),
+            // TODO ZSA
+            // AssetBase::zatoshi(),
+        );
 
         let path = MerklePath::dummy(&mut rng);
         let anchor = path.root(spent_note.commitment().into());
