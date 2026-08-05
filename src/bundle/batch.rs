@@ -28,7 +28,7 @@ pub enum BatchError {
     /// circuit version does not constrain the cross-address restriction (see
     /// [`OrchardCircuitVersion::supports_cross_address_restriction`]).
     ///
-    /// [`OrchardCircuitVersion::supports_cross_address_restriction`]: crate::circuit::OrchardCircuitVersion::supports_cross_address_restriction
+    /// [`OrchardCircuitVersion::supports_cross_address_restriction`]: crate::circuit_version::OrchardCircuitVersion::supports_cross_address_restriction
     RestrictionUnsupportedByKey,
 }
 
@@ -151,7 +151,8 @@ mod tests {
     use super::{BatchError, BatchValidator};
     use crate::{
         bundle::tests::{sample_authorized_bundle, with_cross_address_disabled},
-        circuit::{OrchardCircuitVersion, VerifyingKey},
+        circuit::VerifyingKey,
+        circuit_version::OrchardCircuitVersion,
     };
 
     #[test]

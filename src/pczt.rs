@@ -393,7 +393,8 @@ mod tests {
     use crate::{
         builder::{Builder, BundleMetadata, BundleType},
         bundle::{BundleVersion, Flags},
-        circuit::{OrchardCircuitVersion, ProvingKey, VerifyingKey},
+        circuit::{ProvingKey, VerifyingKey},
+        circuit_version::OrchardCircuitVersion,
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho},

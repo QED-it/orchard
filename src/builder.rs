@@ -32,7 +32,8 @@ use crate::{
 use {
     crate::{
         action::Action,
-        circuit::{Circuit, Instance, OrchardCircuitVersion, ProvingKey},
+        circuit::{Circuit, Instance, ProvingKey},
+        circuit_version::OrchardCircuitVersion,
     },
     nonempty::NonEmpty,
 };
@@ -1898,7 +1899,8 @@ pub mod testing {
     use crate::{
         address::testing::arb_address,
         bundle::{Authorized, Bundle, BundleVersion, TxVersion},
-        circuit::{OrchardCircuitVersion, ProvingKey},
+        circuit::ProvingKey,
+        circuit_version::OrchardCircuitVersion,
         keys::{
             testing::arb_spending_key, FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey,
         },
@@ -2184,7 +2186,8 @@ mod tests {
     use crate::{
         builder::{BundleType, SpendError},
         bundle::{Authorized, Bundle, BundleVersion, Flags, TxVersion},
-        circuit::{OrchardCircuitVersion, ProvingKey},
+        circuit::ProvingKey,
+        circuit_version::OrchardCircuitVersion,
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{
             FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey,

@@ -22,6 +22,7 @@ use crate::{
     action::Action,
     address::Address,
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
+    circuit_version::OrchardCircuitVersion,
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note, NoteVersion},
     note_encryption::BundleDomain,
@@ -32,7 +33,7 @@ use crate::{
 };
 
 #[cfg(feature = "circuit")]
-use crate::circuit::{Instance, OrchardCircuitVersion, VerifyingKey};
+use crate::circuit::{Instance, VerifyingKey};
 
 #[cfg(feature = "circuit")]
 impl<T> Action<T> {
@@ -129,7 +130,6 @@ impl BundleVersion {
     /// under [`ProtocolVersion::V3`] share the post-NU6.3 circuit, so build a key with
     /// `ProvingKey::build(bundle_version.circuit_version())` /
     /// `VerifyingKey::build(bundle_version.circuit_version())`.
-    #[cfg(feature = "circuit")]
     pub fn circuit_version(&self) -> OrchardCircuitVersion {
         match self.protocol_version {
             ProtocolVersion::InsecureV1 => OrchardCircuitVersion::InsecurePreNu6_2,
@@ -1047,7 +1047,7 @@ impl<V> Bundle<Authorized, V> {
     ///
     /// Also returns an error if proof verification fails.
     ///
-    /// [`OrchardCircuitVersion::PostNu6_3`]: crate::circuit::OrchardCircuitVersion::PostNu6_3
+    /// [`OrchardCircuitVersion::PostNu6_3`]: crate::circuit_version::OrchardCircuitVersion::PostNu6_3
     #[cfg(feature = "circuit")]
     pub fn verify_proof(&self, vk: &VerifyingKey) -> Result<(), halo2_proofs::plonk::Error> {
         self.authorization()
@@ -1833,8 +1833,8 @@ pub(crate) mod tests {
         let bundle = with_cross_address_disabled(sample_authorized_bundle(1));
 
         for circuit_version in [
-            crate::circuit::OrchardCircuitVersion::InsecurePreNu6_2,
-            crate::circuit::OrchardCircuitVersion::FixedPostNu6_2,
+            crate::circuit_version::OrchardCircuitVersion::InsecurePreNu6_2,
+            crate::circuit_version::OrchardCircuitVersion::FixedPostNu6_2,
         ] {
             let vk = crate::circuit::VerifyingKey::build(circuit_version);
 

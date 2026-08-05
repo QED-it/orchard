@@ -31,6 +31,7 @@ pub mod builder;
 pub mod bundle;
 #[cfg(feature = "circuit")]
 pub mod circuit;
+pub mod circuit_version;
 #[cfg(not(feature = "unstable-voting-circuits"))]
 mod constants;
 #[cfg(feature = "unstable-voting-circuits")]
@@ -51,7 +52,7 @@ pub mod zip32;
 #[cfg(test)]
 mod test_vectors;
 
-use crate::circuit::OrchardCircuitVersion;
+use crate::circuit_version::OrchardCircuitVersion;
 pub use action::{Action, ActionFromPartsError};
 pub use address::Address;
 pub use bundle::Bundle;
