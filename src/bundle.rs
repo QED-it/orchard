@@ -1540,6 +1540,48 @@ pub mod testing {
             .expect("fake proof has the canonical length and flags are representable")
         }
     }
+
+    prop_compose! {
+        /// Like [`arb_bundle`], but always draws the ZSA `BundleVersion`.
+        pub fn arb_bundle_zsa(n_actions: usize)
+        (
+            bundle_version in Just(BundleVersion::zsa()),
+            flags in arb_flags(),
+        )
+        (
+            acts in vec(arb_action_n(bundle_version.note_version(), n_actions, flags), n_actions),
+            anchor in arb_base().prop_map(Anchor::from),
+            sk in arb_binding_signing_key(),
+            rng_seed in prop::array::uniform32(prop::num::u8::ANY),
+            // A fake proof of the canonical length, so the bundle passes `try_from_parts`.
+            fake_proof in vec(
+                prop::num::u8::ANY,
+                Proof::expected_proof_size(bundle_version, n_actions),
+            ),
+            fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
+            flags in Just(flags),
+            burn in vec(arb_asset_to_burn(), 1usize..10),
+            bundle_version in Just(bundle_version),
+        ) -> Bundle<Authorized, ValueSum> {
+            let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
+            let rng = StdRng::from_seed(rng_seed);
+            let flags = flags_for_version(bundle_version, flags);
+
+            Bundle::try_from_parts(
+                NonEmpty::from_vec(actions).unwrap(),
+                flags,
+                balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
+                burn,
+                anchor,
+                Authorized {
+                    proof: Proof::new(fake_proof),
+                    binding_signature: OrchardBindingSig::new(OrchardSighashKind::AllEffecting, sk.sign(rng, &fake_sighash)),
+                },
+                bundle_version,
+            )
+            .expect("fake proof has the canonical length and flags are representable")
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1551,7 +1593,8 @@ pub(crate) mod tests {
     use zcash_note_encryption::note_bytes::NoteBytesData;
 
     use super::testing::{
-        arb_bundle, arb_bundle_vanilla, arb_flags, arb_flags_ironwood_post_nu6_3, flags_for_version,
+        arb_bundle, arb_bundle_vanilla, arb_bundle_zsa, arb_flags, arb_flags_ironwood_post_nu6_3,
+        flags_for_version,
     };
     use super::{
         Action, Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags, TxVersion,
@@ -1826,7 +1869,7 @@ pub(crate) mod tests {
         }
 
         #[test]
-        fn commitment_hashes_the_wire_flag_byte(bundle in arb_bundle(3)) {
+        fn commitment_hashes_the_wire_flag_byte(bundle in arb_bundle_vanilla(3)) {
             let actions = bundle.actions().clone();
             let anchor = *bundle.anchor();
             let authorization = bundle.authorization().clone();
@@ -1873,7 +1916,7 @@ pub(crate) mod tests {
         }
 
         #[test]
-        fn ironwood_rejects_v5_commitment_version(bundle in arb_bundle(3)) {
+        fn ironwood_rejects_v5_commitment_version(bundle in arb_bundle_vanilla(3)) {
             let bundle_version = BundleVersion::ironwood_v3();
             let flags = flags_for_version(bundle_version, *bundle.flags());
 
@@ -1911,7 +1954,7 @@ pub(crate) mod tests {
         /// one of the two digests. The v5 and v6 Orchard formats are also domain-separated, so
         /// the same bundle commits to distinct transaction-ID digests under each.
         #[test]
-        fn anchor_placement_follows_tx_version(bundle in arb_bundle(3)) {
+        fn anchor_placement_follows_tx_version(bundle in arb_bundle_vanilla(3)) {
             // Orchard post-NU6.3 cannot encode cross-address transfers, so clear the bit to keep
             // the flags representable in every version under test.
             let flags = Flags::from_parts(
@@ -2011,31 +2054,15 @@ pub(crate) mod tests {
 
         #[test]
         fn try_from_parts_rejects_mismatched_action_ciphertext_kind(
-            bundle in arb_bundle(3)
+            bundle in arb_bundle_zsa(3)
         ) {
-            // Give the first action a ZSA ciphertext, then build a bundle whose version doesn't
-            // permit ZSA.
-            let mut actions = bundle.actions().clone();
-            let first = actions.first().clone();
-            let mut encrypted_note = first.encrypted_note().clone();
-            encrypted_note.enc_ciphertext = NoteCiphertextBytes::Zsa(NoteBytesData(
-                [0u8; crate::note_encryption::ENC_CIPHERTEXT_SIZE_ZSA],
-            ));
-            *actions.first_mut() = Action::from_parts(
-                *first.nullifier(),
-                first.rk().clone(),
-                *first.cmx(),
-                encrypted_note,
-                first.cv_net().clone(),
-                first.authorization().clone(),
-            )
-            .unwrap();
-
+            // `bundle` is a ZSA bundle, so its actions carry ZSA ciphertexts. Building a bundle
+            // from those actions under a version that doesn't permit ZSA should be rejected.
             let bundle_version = BundleVersion::ironwood_v3();
-            let expected = Proof::expected_proof_size(bundle_version, actions.len());
+            let expected = Proof::expected_proof_size(bundle_version, bundle.actions.len());
 
             let result = Bundle::try_from_parts(
-                actions,
+                bundle.actions.clone(),
                 *bundle.flags(),
                 *bundle.value_balance(),
                 vec![],
@@ -2077,7 +2104,7 @@ pub(crate) mod tests {
 
         #[test]
         fn try_from_parts_checks_proof_size_with_cross_address_disabled(
-            bundle in arb_bundle(3)
+            bundle in arb_bundle_vanilla(3)
         ) {
             let bundle_version = BundleVersion::orchard_v3();
             let actions = bundle.actions().clone();
