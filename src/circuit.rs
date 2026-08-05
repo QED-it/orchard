@@ -689,7 +689,6 @@ mod tests {
         use pasta_curves::pallas;
 
         use super::super::Instance;
-        use crate::note::AssetBase;
         use crate::{
             bundle::Flags,
             note::{ExtractedNoteCommitment, Nullifier},

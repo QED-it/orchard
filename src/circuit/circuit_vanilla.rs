@@ -982,7 +982,7 @@ mod tests {
             SingleVerifier, VerifyingKey, K,
         },
         keys::SpendValidatingKey,
-        note::{AssetBase, Note, NoteVersion, Rho},
+        note::{Note, NoteVersion, Rho},
         tree::MerklePath,
         value::{ValueCommitTrapdoor, ValueCommitment},
     };
