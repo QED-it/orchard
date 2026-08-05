@@ -16,7 +16,7 @@ use pprof::criterion::{Output, PProfProfiler};
 
 mod utils;
 
-use utils::{Ironwood, Orchard, OrchardFlavorBench, Zsa};
+use utils::{IronwoodV3, OrchardFlavorBench, OrchardV2, Zsa};
 
 fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let rng = OsRng;
@@ -181,15 +181,15 @@ fn create_config() -> Criterion {
 }
 
 criterion_group! {
-    name = benches_orchard;
+    name = benches_orchard_v2;
     config = create_config();
-    targets = bench_note_decryption::<Orchard>
+    targets = bench_note_decryption::<OrchardV2>
 }
 
 criterion_group! {
-    name = benches_ironwood;
+    name = benches_ironwood_v3;
     config = create_config();
-    targets = bench_note_decryption::<Ironwood>
+    targets = bench_note_decryption::<IronwoodV3>
 }
 
 criterion_group! {
@@ -198,4 +198,4 @@ criterion_group! {
     targets = bench_note_decryption::<Zsa>
 }
 
-criterion_main!(benches_orchard, benches_ironwood, benches_zsa);
+criterion_main!(benches_orchard_v2, benches_ironwood_v3, benches_zsa);
