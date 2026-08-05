@@ -1,4 +1,5 @@
 //! Data structures used for note construction.
+use alloc::vec::Vec;
 use core::fmt;
 use memuse::DynamicUsage;
 
@@ -7,7 +8,7 @@ use ff::PrimeField;
 use group::GroupEncoding;
 use pasta_curves::pallas;
 use rand::RngCore;
-use subtle::CtOption;
+use subtle::{Choice, ConditionallySelectable, CtOption};
 
 use crate::{
     keys::{EphemeralSecretKey, FullViewingKey, Scope, SpendingKey},
@@ -234,6 +235,17 @@ impl RandomSeed {
     }
 }
 
+impl ConditionallySelectable for RandomSeed {
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        let result: Vec<u8> =
+            a.0.iter()
+                .zip(b.0.iter())
+                .map(|(a_i, b_i)| u8::conditional_select(a_i, b_i, choice))
+                .collect();
+        RandomSeed(<[u8; 32]>::try_from(result).unwrap())
+    }
+}
+
 /// A discrete amount of funds received by an address.
 #[derive(Debug, Copy, Clone)]
 pub struct Note {
@@ -241,6 +253,8 @@ pub struct Note {
     recipient: Address,
     /// The value of this note.
     value: NoteValue,
+    /// The asset of this note.
+    asset: AssetBase,
     /// A unique creation ID for this note.
     ///
     /// This is produced from the nullifier of the note that will be spent in the [`Action`] that
@@ -250,6 +264,10 @@ pub struct Note {
     rho: Rho,
     /// The seed randomness for various note components.
     rseed: RandomSeed,
+    /// The seed randomness for split notes.
+    ///
+    /// If it is not a split note, this field is `None`.
+    rseed_split_note: CtOption<RandomSeed>,
     /// The note plaintext version, determining rcm derivation strategy.
     version: NoteVersion,
 }
@@ -289,8 +307,11 @@ impl Note {
         let note = Note {
             recipient,
             value,
+            // TODO ZSA
+            asset: AssetBase::zatoshi(),
             rho,
             rseed,
+            rseed_split_note: CtOption::new(rseed, 0u8.into()),
             version,
         };
         CtOption::new(note, note.commitment_inner().is_some())
@@ -359,9 +380,19 @@ impl Note {
         self.value
     }
 
+    /// Returns the asset of this note.
+    pub fn asset(&self) -> AssetBase {
+        self.asset
+    }
+
     /// Returns the rseed value of this note.
     pub fn rseed(&self) -> &RandomSeed {
         &self.rseed
+    }
+
+    /// Returns the rseed_split_note value of this note.
+    pub(crate) fn rseed_split_note(&self) -> CtOption<RandomSeed> {
+        self.rseed_split_note
     }
 
     /// Derives the ephemeral secret key for this note.
@@ -472,8 +503,11 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::{
-        address::testing::arb_address, note::nullifier::testing::arb_nullifier, value::NoteValue,
+        address::testing::arb_address, note::nullifier::testing::arb_nullifier, note::AssetBase,
+        value::NoteValue,
     };
+
+    use subtle::CtOption;
 
     use super::{Note, NoteVersion, RandomSeed, Rho};
 
@@ -494,8 +528,11 @@ pub mod testing {
             Note {
                 recipient,
                 value,
+                // TODO ZSA
+                asset: AssetBase::zatoshi(),
                 rho,
                 rseed,
+                rseed_split_note: CtOption::new(rseed, 0u8.into()),
                 version,
             }
         }
