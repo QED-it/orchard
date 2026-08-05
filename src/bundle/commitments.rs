@@ -122,6 +122,25 @@ pub(crate) enum BundleCommitmentFormat {
     ZSA,
 }
 
+impl ValuePool {
+    // Unlike `BundleVersion::commitment_format`, there is no bundle here whose protocol
+    // version needs checking against tx_version. So the (value_pool, tx_version) pair alone is
+    // enough to pick the format for an empty bundle's digest.
+    fn commitment_format_used_for_empty_bundle(
+        self,
+        tx_version: TxVersion,
+    ) -> Result<BundleCommitmentFormat, CommitmentError> {
+        match (self, tx_version) {
+            (ValuePool::Orchard, TxVersion::V5) => Ok(BundleCommitmentFormat::OrchardV5),
+            (ValuePool::Orchard, TxVersion::V6) => Ok(BundleCommitmentFormat::OrchardV6),
+            (ValuePool::Orchard, TxVersion::ZSA) => Err(CommitmentError::InvalidTransactionVersion),
+            (ValuePool::Ironwood, TxVersion::V5) => Err(CommitmentError::InvalidTransactionVersion),
+            (ValuePool::Ironwood, TxVersion::V6) => Ok(BundleCommitmentFormat::IronwoodV6),
+            (ValuePool::Ironwood, TxVersion::ZSA) => Ok(BundleCommitmentFormat::ZSA),
+        }
+    }
+}
+
 impl BundleVersion {
     fn commitment_format(
         self,
@@ -321,16 +340,21 @@ pub(crate) fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
 }
 
 /// Construct the commitment for the absent bundle as defined in
-/// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+/// [ZIP-244: Transaction Identifier Non-Malleability][zip244] for Orchard V5, as defined in
+/// [ZIP-229: Version 6 Transaction Format][zip229] for Orchard V6 and Ironwood V6, and as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246] for ZSA, according to the
+/// (value_pool, tx_version) pair.
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
+/// [zip229]: https://zips.z.cash/zip-0229
+/// [zip246]: https://zips.z.cash/zip-0246
 pub fn hash_bundle_txid_empty(
-    bundle_version: BundleVersion,
+    value_pool: ValuePool,
     tx_version: TxVersion,
 ) -> Result<Blake2bHash, CommitmentError> {
     Ok(hasher(
-        bundle_version
-            .commitment_format(tx_version)?
+        value_pool
+            .commitment_format_used_for_empty_bundle(tx_version)?
             .personalizations()
             .bundle,
     )
@@ -443,17 +467,22 @@ pub(crate) fn hash_bundle_auth_data<V>(
     }
 }
 
-/// Construct the commitment for an absent bundle as defined in
-/// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
+/// Construct the commitment for the absent bundle as defined in
+/// [ZIP-244: Transaction Identifier Non-Malleability][zip244] for Orchard V5, as defined in
+/// [ZIP-229: Version 6 Transaction Format][zip229] for Orchard V6 and Ironwood V6, and as defined in
+/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246] for ZSA, according to the
+/// (value_pool, tx_version) pair.
 ///
 /// [zip244]: https://zips.z.cash/zip-0244
+/// [zip229]: https://zips.z.cash/zip-0229
+/// [zip246]: https://zips.z.cash/zip-0246
 pub fn hash_bundle_auth_empty(
-    bundle_version: BundleVersion,
+    value_pool: ValuePool,
     tx_version: TxVersion,
 ) -> Result<Blake2bHash, CommitmentError> {
     Ok(hasher(
-        bundle_version
-            .commitment_format(tx_version)?
+        value_pool
+            .commitment_format_used_for_empty_bundle(tx_version)?
             .personalizations()
             .auth,
     )

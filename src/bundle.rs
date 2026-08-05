@@ -1597,7 +1597,7 @@ pub(crate) mod tests {
     use super::{
         Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags, TxVersion,
     };
-    use crate::{sighash_kind::test_sighash_info_for_kind, Proof};
+    use crate::{sighash_kind::test_sighash_info_for_kind, Proof, ValuePool};
 
     #[cfg(feature = "circuit")]
     pub(crate) fn with_cross_address_disabled(
@@ -1804,10 +1804,10 @@ pub(crate) mod tests {
         // The three commitment formats — Orchard v5, Orchard v6, Ironwood v6 — use distinct
         // personalizations, so the absent-bundle digests are all different from one another.
         let formats = [
-            (BundleVersion::orchard_v3(), TxVersion::V5),
-            (BundleVersion::orchard_v3(), TxVersion::V6),
-            (BundleVersion::ironwood_v3(), TxVersion::V6),
-            (BundleVersion::zsa(), TxVersion::ZSA),
+            (ValuePool::Orchard, TxVersion::V5),
+            (ValuePool::Orchard, TxVersion::V6),
+            (ValuePool::Ironwood, TxVersion::V6),
+            (ValuePool::Ironwood, TxVersion::ZSA),
         ];
         for i in 0..formats.len() {
             for j in (i + 1)..formats.len() {
@@ -1825,11 +1825,11 @@ pub(crate) mod tests {
         }
 
         assert!(matches!(
-            hash_bundle_txid_empty(BundleVersion::ironwood_v3(), TxVersion::V5),
+            hash_bundle_txid_empty(ValuePool::Ironwood, TxVersion::V5),
             Err(CommitmentError::InvalidTransactionVersion)
         ));
         assert!(matches!(
-            hash_bundle_auth_empty(BundleVersion::ironwood_v3(), TxVersion::V5),
+            hash_bundle_auth_empty(ValuePool::Ironwood, TxVersion::V5),
             Err(CommitmentError::InvalidTransactionVersion)
         ));
     }
