@@ -117,12 +117,8 @@ impl CircuitZsa {
             common_witnesses,
             additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
                 psi_nf,
-                // TODO ZSA
-                // asset: spend.note.asset(),
-                asset: AssetBase::zatoshi(),
-                // TODO ZSA
-                // split_flag: spend.split_flag,
-                split_flag: false,
+                asset: spend.note.asset(),
+                split_flag: spend.split_flag,
             }),
         }
     }
