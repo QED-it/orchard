@@ -1590,18 +1590,14 @@ pub(crate) mod tests {
 
     use proptest::prelude::*;
 
-    use zcash_note_encryption::note_bytes::NoteBytesData;
-
     use super::testing::{
         arb_bundle, arb_bundle_vanilla, arb_bundle_zsa, arb_flags, arb_flags_ironwood_post_nu6_3,
         flags_for_version,
     };
     use super::{
-        Action, Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags, TxVersion,
+        Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags, TxVersion,
     };
-    use crate::{
-        note_encryption::NoteCiphertextBytes, sighash_kind::test_sighash_info_for_kind, Proof,
-    };
+    use crate::{sighash_kind::test_sighash_info_for_kind, Proof};
 
     #[cfg(feature = "circuit")]
     pub(crate) fn with_cross_address_disabled(
