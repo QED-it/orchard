@@ -22,6 +22,7 @@ use memuse::DynamicUsage;
 use crate::{
     action::Action,
     address::Address,
+    bundle::burn_validation::validate_burn,
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
     note::{AssetBase, Note, NoteVersion},
@@ -980,6 +981,8 @@ impl<V> Bundle<EffectsOnly, V> {
     /// - [`BundleError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`
     /// - [`BundleError::MismatchedActionCiphertextKind`] if some action's encrypted-note
     ///   ciphertext is not the kind `bundle_version` implies
+    /// - [`BundleError::BurnNotPermitted`] if `burn` is non-empty and `bundle_version` does not
+    ///   permit ZSA
     pub fn from_parts(
         actions: NonEmpty<Action<<EffectsOnly as Authorization>::SpendAuth>>,
         flags: Flags,
@@ -991,6 +994,7 @@ impl<V> Bundle<EffectsOnly, V> {
     ) -> Result<Self, BundleError> {
         validate_action_ciphertext_kind(&actions, bundle_version)?;
         validate_flags(&flags, bundle_version)?;
+        validate_burn(&burn, bundle_version)?;
         Ok(Bundle::from_parts_unchecked(
             actions,
             flags,
@@ -1066,6 +1070,11 @@ pub enum BundleError {
     /// or carrying the wrong variant for its `bundle_version`, cannot be committed to or verified
     /// correctly.
     MismatchedActionCiphertextKind,
+    /// A non-empty burn was provided for a bundle whose version does not permit ZSA.
+    ///
+    /// Burn instructions are only meaningful for the ZSA protocol; a bundle for a
+    /// version that does not permit ZSA must not carry any burn.
+    BurnNotPermitted,
 }
 
 impl fmt::Display for BundleError {
@@ -1081,6 +1090,9 @@ impl fmt::Display for BundleError {
             ),
             BundleError::MismatchedActionCiphertextKind => f.write_str(
                 "an action's encrypted-note ciphertext kind is inconsistent with the bundle's version",
+            ),
+            BundleError::BurnNotPermitted => f.write_str(
+                "a non-empty burn was provided for a bundle version that does not permit ZSA",
             ),
         }
     }
@@ -1136,6 +1148,8 @@ impl<V> Bundle<Authorized, V> {
     /// - [`BundleError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`
     /// - [`BundleError::MismatchedActionCiphertextKind`] if some action's encrypted-note
     ///   ciphertext is not the kind `bundle_version` implies
+    /// - [`BundleError::BurnNotPermitted`] if `burn` is non-empty and `bundle_version` does not
+    ///   permit ZSA
     pub fn try_from_parts(
         actions: NonEmpty<Action<<Authorized as Authorization>::SpendAuth>>,
         flags: Flags,
@@ -1150,6 +1164,7 @@ impl<V> Bundle<Authorized, V> {
         }
         validate_action_ciphertext_kind(&actions, bundle_version)?;
         validate_flags(&flags, bundle_version)?;
+        validate_burn(&burn, bundle_version)?;
         Ok(Bundle::from_parts_unchecked(
             actions,
             flags,
@@ -1480,7 +1495,13 @@ pub mod testing {
             ),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
             flags in Just(flags),
-            burn in vec(arb_asset_to_burn(), 1usize..10),
+            // Burn is only permitted under a `bundle_version` that permits ZSA; keep it empty
+            // otherwise, so `try_from_parts` doesn't reject it as `BurnNotPermitted`.
+            burn in if bundle_version.permits_zsa() {
+                vec(arb_asset_to_burn(), 1usize..10).boxed()
+            } else {
+                Just(alloc::vec![]).boxed()
+            },
             bundle_version in Just(bundle_version),
         ) -> Bundle<Authorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
@@ -1594,8 +1615,8 @@ pub(crate) mod tests {
     use proptest::prelude::*;
 
     use super::testing::{
-        arb_bundle, arb_bundle_vanilla, arb_bundle_zsa, arb_flags, arb_flags_ironwood_post_nu6_3,
-        flags_for_version,
+        arb_asset_to_burn, arb_bundle, arb_bundle_vanilla, arb_bundle_zsa, arb_flags,
+        arb_flags_ironwood_post_nu6_3, flags_for_version,
     };
     use super::{
         Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags, TxVersion,
@@ -2074,6 +2095,30 @@ pub(crate) mod tests {
                 bundle_version,
             );
             prop_assert_eq!(result.err(), Some(BundleError::MismatchedActionCiphertextKind));
+        }
+
+        #[test]
+        fn try_from_parts_rejects_burn_for_non_zsa_version(
+            // Attached a non-empty burn in a non-ZSA bundle should fail..
+            bundle in arb_bundle_vanilla(3),
+            burn_entry in arb_asset_to_burn(),
+        ) {
+            let bundle_version = bundle.bundle_version();
+            let expected = Proof::expected_proof_size(bundle_version, bundle.actions().len());
+
+            let result = Bundle::try_from_parts(
+                bundle.actions().clone(),
+                *bundle.flags(),
+                *bundle.value_balance(),
+                vec![burn_entry],
+                *bundle.anchor(),
+                Authorized::from_parts(
+                    Proof::new(vec![0u8; expected]),
+                    bundle.authorization().binding_signature().clone(),
+                ),
+                bundle_version,
+            );
+            prop_assert_eq!(result.err(), Some(BundleError::BurnNotPermitted));
         }
 
         #[test]

@@ -8,7 +8,13 @@ use core::fmt;
 use alloc::collections::BTreeMap;
 
 #[cfg(feature = "zsa-issuance")]
-use crate::{issuance::AssetRecord, note::AssetBase, value::NoteValue};
+use crate::issuance::AssetRecord;
+
+use crate::{
+    bundle::{BundleError, BundleVersion},
+    note::AssetBase,
+    value::NoteValue,
+};
 
 /// Maximum burn value.
 /// Burns must fit in both u64 and i64 for value balance calculations.
@@ -30,6 +36,11 @@ pub enum BurnError {
     AssetNotFoundInState,
     /// Insufficient supply for burn.
     InsufficientSupply,
+    /// A non-empty burn was provided for a bundle whose version does not permit ZSA.
+    ///
+    /// Burn instructions are only meaningful for the ZSA protocol; a bundle for a
+    /// version that does not permit ZSA must not carry any burn.
+    BurnNotPermitted,
 }
 
 impl fmt::Display for BurnError {
@@ -47,7 +58,27 @@ impl fmt::Display for BurnError {
                 write!(f, "Asset not found in global issuance state")
             }
             BurnError::InsufficientSupply => write!(f, "Insufficient supply for burn"),
+            BurnError::BurnNotPermitted => f.write_str(
+                "a non-empty burn was provided for a bundle version that does not permit ZSA",
+            ),
         }
+    }
+}
+
+/// Checks that a non-empty `burn` is only present when `bundle_version` permits ZSA.
+///
+/// Burn instructions are only meaningful for the ZSA protocol; a bundle whose version
+/// does not permit ZSA must not carry any burn.
+///
+/// Returns [`BundleError::BurnNotPermitted`] otherwise.
+pub(crate) fn validate_burn(
+    burn: &[(AssetBase, NoteValue)],
+    bundle_version: BundleVersion,
+) -> Result<(), BundleError> {
+    if burn.is_empty() || bundle_version.permits_zsa() {
+        Ok(())
+    } else {
+        Err(BundleError::BurnNotPermitted)
     }
 }
 

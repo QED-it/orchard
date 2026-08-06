@@ -1046,6 +1046,10 @@ impl Builder {
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
         use alloc::collections::btree_map::Entry;
 
+        if !self.bundle_version.permits_zsa() {
+            return Err(BuildError::Burn(BurnError::BurnNotPermitted));
+        }
+
         if asset.is_zatoshi().into() {
             return Err(BuildError::Burn(BurnError::ZatoshiAsset));
         }
