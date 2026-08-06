@@ -172,6 +172,12 @@ impl BundleCommitmentFormat {
         matches!(self, BundleCommitmentFormat::OrchardV5)
     }
 
+    /// Returns `true` if the anchor should be included in the authorizing digest
+    /// for this bundle commitment format.
+    ///
+    /// Note: for `ZSA`, this function is not used in `hash_bundle_auth_data_zsa`, since
+    /// the format is already known to be `ZSA` there, so the anchor is always
+    /// included unconditionally.
     fn includes_anchor_in_authorizing_digest(self) -> bool {
         matches!(
             self,
@@ -446,6 +452,7 @@ fn hash_bundle_auth_data_zsa<V>(
         bundle.authorization().binding_signature().sig(),
     ));
 
+    assert!(format.includes_anchor_in_authorizing_digest());
     h.update(&bundle.anchor().to_bytes());
 
     Ok(h.finalize())
