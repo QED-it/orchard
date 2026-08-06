@@ -2099,7 +2099,7 @@ pub(crate) mod tests {
 
         #[test]
         fn try_from_parts_rejects_burn_for_non_zsa_version(
-            // Attached a non-empty burn in a non-ZSA bundle should fail..
+            // Attaching a non-empty burn in a non-ZSA bundle should fail.
             bundle in arb_bundle_vanilla(3),
             burn_entry in arb_asset_to_burn(),
         ) {
