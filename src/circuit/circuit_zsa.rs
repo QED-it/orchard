@@ -48,7 +48,7 @@ use crate::{
 
 /// The ZSA-specific witnesses.
 #[derive(Clone, Debug)]
-pub struct AdditionalZsaWitnesses {
+pub(crate) struct AdditionalZsaWitnesses {
     pub(crate) psi_nf: pallas::Base,
     pub(crate) asset: AssetBase,
     pub(crate) split_flag: bool,

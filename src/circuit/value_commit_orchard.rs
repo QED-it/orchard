@@ -10,7 +10,7 @@ use halo2_gadgets::{
     utilities::lookup_range_check::PallasLookupRangeCheck,
 };
 
-pub struct ZsaValueCommitParams<Lookup: PallasLookupRangeCheck> {
+pub(in crate::circuit) struct ZsaValueCommitParams<Lookup: PallasLookupRangeCheck> {
     pub sinsemilla_chip:
         SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup>,
     pub asset_base: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
