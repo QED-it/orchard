@@ -1305,8 +1305,8 @@ pub mod testing {
         ]
     }
 
-    /// Returns `flags` with its `cross_address_enabled` bit forced to the value representable under
-    /// `bundle_version`, leaving the spend/output bits untouched.
+    /// Returns `flags` with its `cross_address_enabled` and its `zsa_enabled` bit forced to the
+    /// value representable under `bundle_version`, leaving the spend/output bits untouched.
     ///
     /// The arbitrary-bundle strategies generate flags independently of the version; this pairs them
     /// into a combination that a `Bundle` can actually be constructed from.
@@ -1314,7 +1314,10 @@ pub mod testing {
         Flags::from_parts(
             flags.spends_enabled(),
             flags.outputs_enabled(),
+            // `cross_address_enabled` is set according to the bundle version: true for all
+            // versions except Orchard V3.
             bundle_version.permits_cross_address_transfers(),
+            // `zsa_enabled` is set according to the bundle version: true only for ZSA version.
             bundle_version.permits_zsa(),
         )
     }
