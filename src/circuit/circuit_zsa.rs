@@ -1483,7 +1483,7 @@ mod tests {
                 let mut rng = OsRng;
 
                 let (circuit, instance) = generate_dummy_circuit_instance(OsRng);
-                let instances = &[instance.clone()];
+                let instances = core::slice::from_ref(&instance);
 
                 let pk = ProvingKey::build(OrchardCircuitVersion::ZSA);
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
@@ -1865,8 +1865,8 @@ mod tests {
             assert!(matches!(
                 Proof::create(
                     &mismatched_pk,
-                    &[circuit.clone()],
-                    &[instance.clone()],
+                    core::slice::from_ref(&circuit),
+                    core::slice::from_ref(&instance),
                     &mut rng
                 ),
                 Err(super::plonk::Error::Synthesis),

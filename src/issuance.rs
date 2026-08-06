@@ -213,7 +213,7 @@ impl IssueAction {
     /// * `IssueBundleIkMismatchAssetBase`: The provided `ik` is not used to derive the
     ///   `AssetBase` for **all** internal notes.
     /// * `AssetBaseCannotBeIdentityPoint`: The derived `AssetBase` is the identity point of the
-    ///    Pallas curve.
+    ///   Pallas curve.
     /// * `IssueActionWithoutNoteNotFinalized`: The `IssueAction` contains no notes and is not finalized.
     fn verify(&self, ik: &IssueValidatingKey<ZSASchnorr>) -> Result<(AssetBase, NoteValue), Error> {
         if self.notes.is_empty() && !self.is_finalized() {
