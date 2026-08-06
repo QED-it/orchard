@@ -429,6 +429,10 @@ fn hash_bundle_auth_data_zsa<V>(
     agh.update(bundle.authorization().proof().as_ref());
     let mut sash = hasher(zsa_personalizations.zsa_spend_auth);
     for action in bundle.actions().iter() {
+        assert_eq!(
+            *action.authorization().sighash_kind(),
+            OrchardSighashKind::AllEffecting
+        );
         let sighash_info = sighash_info_for_kind(action.authorization().sighash_kind());
         sash.update(&get_compact_size(sighash_info.len()));
         sash.update(sighash_info.as_slice());
@@ -437,6 +441,10 @@ fn hash_bundle_auth_data_zsa<V>(
     agh.update(sash.finalize().as_bytes());
     h.update(agh.finalize().as_bytes());
 
+    assert_eq!(
+        *bundle.authorization().binding_signature().sighash_kind(),
+        OrchardSighashKind::AllEffecting
+    );
     let sighash_info =
         sighash_info_for_kind(bundle.authorization().binding_signature().sighash_kind());
     h.update(&get_compact_size(sighash_info.len()));
