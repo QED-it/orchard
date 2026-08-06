@@ -53,9 +53,9 @@ const NOTE_PLAINTEXT_SIZE_VANILLA: usize = COMPACT_NOTE_SIZE_VANILLA + MEMO_SIZE
 /// The size of a ZSA note plaintext, including memo.
 const NOTE_PLAINTEXT_SIZE_ZSA: usize = COMPACT_NOTE_SIZE_ZSA + MEMO_SIZE;
 /// The size of a Vanilla encrypted note ciphertext, accounting for the AEAD tag.
-pub(crate) const ENC_CIPHERTEXT_SIZE_VANILLA: usize = NOTE_PLAINTEXT_SIZE_VANILLA + AEAD_TAG_SIZE;
+pub const ENC_CIPHERTEXT_SIZE_VANILLA: usize = NOTE_PLAINTEXT_SIZE_VANILLA + AEAD_TAG_SIZE;
 /// The size of a ZSA encrypted note ciphertext, accounting for the AEAD tag.
-pub(crate) const ENC_CIPHERTEXT_SIZE_ZSA: usize = NOTE_PLAINTEXT_SIZE_ZSA + AEAD_TAG_SIZE;
+pub const ENC_CIPHERTEXT_SIZE_ZSA: usize = NOTE_PLAINTEXT_SIZE_ZSA + AEAD_TAG_SIZE;
 
 /// Defined in [Zcash Protocol Spec § 5.4.2: Pseudo Random Functions][concreteprfs].
 ///
