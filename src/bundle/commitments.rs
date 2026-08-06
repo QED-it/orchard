@@ -250,7 +250,7 @@ fn hash_bundle_txid_data_vanilla<A: Authorization, V: Copy + Into<i64>>(
     Ok(h.finalize())
 }
 
-/// Evaluate `orchard_digest` for the ZSSA bundle as defined in
+/// Evaluate `orchard_digest` for the ZSA bundle as defined in
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
@@ -270,7 +270,6 @@ fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>>(
     let mut agh = hasher(zsa_personalizations.action_groups);
 
     let mut ch = hasher(personalizations.actions_compact);
-    // TODO Remove mh once new Memo Bundles are implemented (ZIP-231).
     let mut mh = hasher(personalizations.actions_memos);
     let mut nh = hasher(personalizations.actions_noncompact);
 
@@ -278,12 +277,8 @@ fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>>(
         ch.update(&action.nullifier().to_bytes());
         ch.update(&action.cmx().to_bytes());
         ch.update(&action.encrypted_note().epk_bytes);
-        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
         ch.update(&action.encrypted_note().enc_ciphertext.as_ref()[..COMPACT_NOTE_SIZE_ZSA]);
-        // TODO Uncomment once new Memo Bundles are implemented (ZIP-231).
-        // ch.update(&action.encrypted_note().enc_ciphertext.as_ref());
 
-        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
         mh.update(
             &action.encrypted_note().enc_ciphertext.as_ref()
                 [COMPACT_NOTE_SIZE_ZSA..COMPACT_NOTE_SIZE_ZSA + MEMO_SIZE],
@@ -291,7 +286,6 @@ fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>>(
 
         nh.update(&action.cv_net().to_bytes());
         nh.update(&<[u8; 32]>::from(action.rk()));
-        // TODO Remove once new Memo Bundles are implemented (ZIP-231).
         nh.update(
             &action.encrypted_note().enc_ciphertext.as_ref()[COMPACT_NOTE_SIZE_ZSA + MEMO_SIZE..],
         );
@@ -299,7 +293,6 @@ fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>>(
     }
 
     agh.update(ch.finalize().as_bytes());
-    // TODO Remove once new Memo Bundles are implemented (ZIP-231).
     agh.update(mh.finalize().as_bytes());
     agh.update(nh.finalize().as_bytes());
 
