@@ -74,7 +74,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 [0; 512],
             )
             .unwrap();
-        let bundle: ActionGroup<_, i64, FL> = builder.build(rng).unwrap().unwrap().0;
+        let bundle: ActionGroup<_, FL> = builder.build::<i64, FL>(rng).unwrap().unwrap().0;
         bundle
             .create_proof(&pk, rng)
             .unwrap()

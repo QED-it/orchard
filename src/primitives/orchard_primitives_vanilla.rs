@@ -25,7 +25,7 @@ use crate::{
         },
     },
     sighash_kind::OrchardSighashKind,
-    ActionGroup,
+    swap_bundle::Bundle,
 };
 
 impl OrchardPrimitives for OrchardVanilla {
@@ -53,7 +53,7 @@ impl OrchardPrimitives for OrchardVanilla {
     ///
     /// [zip244]: https://zips.z.cash/zip-0244
     fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
-        bundle: &ActionGroup<A, V, OrchardVanilla>,
+        bundle: &Bundle<A, V, OrchardVanilla>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
 
@@ -61,7 +61,10 @@ impl OrchardPrimitives for OrchardVanilla {
         let mut mh = hasher(ZCASH_ORCHARD_ACTIONS_MEMOS_HASH_PERSONALIZATION);
         let mut nh = hasher(ZCASH_ORCHARD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION);
 
-        for action in bundle.actions().iter() {
+        assert_eq!(bundle.action_groups().len(), 1);
+        let action_group = bundle.action_groups().first().unwrap();
+
+        for action in action_group.actions().iter() {
             ch.update(&action.nullifier().to_bytes());
             ch.update(&action.cmx().to_bytes());
             ch.update(&action.encrypted_note().epk_bytes);
@@ -85,9 +88,9 @@ impl OrchardPrimitives for OrchardVanilla {
         h.update(mh.finalize().as_bytes());
         h.update(nh.finalize().as_bytes());
 
-        h.update(&[bundle.flags().to_byte()]);
+        h.update(&[action_group.flags().to_byte()]);
         h.update(&(*bundle.value_balance()).into().to_le_bytes());
-        h.update(&bundle.anchor().to_bytes());
+        h.update(&action_group.anchor().to_bytes());
         h.finalize()
     }
 
@@ -102,12 +105,15 @@ impl OrchardPrimitives for OrchardVanilla {
     ///
     /// [zip244]: https://zips.z.cash/zip-0244
     fn hash_bundle_auth_data<V>(
-        bundle: &ActionGroup<Authorized, V, OrchardVanilla>,
+        bundle: &Bundle<Authorized, V, OrchardVanilla>,
         _sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
-        h.update(bundle.authorization().proof().as_ref());
-        for action in bundle.actions().iter() {
+
+        let action_group = bundle.action_groups().first().unwrap();
+
+        h.update(action_group.authorization().proof().as_ref());
+        for action in action_group.actions().iter() {
             assert_eq!(
                 *action.authorization().sighash_kind(),
                 OrchardSighashKind::AllEffecting
@@ -115,12 +121,10 @@ impl OrchardPrimitives for OrchardVanilla {
             h.update(&<[u8; 64]>::from(action.authorization().sig()));
         }
         assert_eq!(
-            *bundle.authorization().binding_signature().sighash_kind(),
+            *bundle.binding_signature().unwrap().sighash_kind(),
             OrchardSighashKind::AllEffecting
         );
-        h.update(&<[u8; 64]>::from(
-            bundle.authorization().binding_signature().sig(),
-        ));
+        h.update(&<[u8; 64]>::from(bundle.binding_signature().unwrap().sig()));
         h.finalize()
     }
 

@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use rand::{CryptoRng, RngCore};
 
 use crate::{
-    bundle::derive_bvk_raw, keys::SpendAuthorizingKey, primitives::redpallas,
+    swap_bundle::derive_bvk_raw, keys::SpendAuthorizingKey, primitives::redpallas,
     value::ValueCommitTrapdoor,
 };
 

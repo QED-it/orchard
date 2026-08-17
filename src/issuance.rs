@@ -928,6 +928,7 @@ mod tests {
     use pasta_curves::pallas;
     use rand::rngs::OsRng;
     use rand::RngCore;
+    use crate::swap_bundle::Bundle;
 
     #[test]
     fn issuance_flags_roundtrip() {
@@ -1932,10 +1933,13 @@ mod tests {
         builder
             .add_output(None, recipient, NoteValue::from_raw(5), asset1, [0u8; 512])
             .unwrap();
-        let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
-        let sighash = unauthorized.commitment().into();
+        let (unauthorized, value_balance, _) =
+            builder.build::<i64, OrchardZSA>(&mut rng).unwrap().unwrap();
+        let sighash = Bundle::from_parts(vec![unauthorized.clone()], value_balance, None)
+            .commitment()
+            .into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
-        let authorized: ActionGroup<_, i64, OrchardZSA> = proven
+        let authorized: ActionGroup<_, OrchardZSA> = proven
             .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
             .unwrap();
 

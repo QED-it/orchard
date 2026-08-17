@@ -7,8 +7,7 @@ use crate::{
     bundle::{Authorization, Authorized, ActionGroup},
     flavor::OrchardZSA,
     primitives::OrchardPrimitives,
-    sighash_kind::{OrchardBindingSig, OrchardSighashKind},
-    swap_bundle::ActionGroupAuthorized,
+    sighash_kind::OrchardSighashKind,
 };
 
 #[cfg(feature = "zsa-issuance")]
@@ -19,6 +18,7 @@ pub(crate) use issuance::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_da
 
 #[cfg(feature = "zsa-issuance")]
 pub use issuance::{hash_issue_bundle_auth_empty, hash_issue_bundle_txid_empty};
+use crate::swap_bundle::Bundle;
 
 // TODO remove
 const MEMO_SIZE: usize = 512;
@@ -58,7 +58,7 @@ pub(crate) fn hash_bundle_txid_data<
     V: Copy + Into<i64>,
     Pr: OrchardPrimitives,
 >(
-    bundle: &ActionGroup<A, V, Pr>,
+    bundle: &Bundle<A, V, Pr>,
 ) -> Blake2bHash {
     Pr::hash_bundle_txid_data(bundle)
 }
@@ -75,8 +75,8 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 /// [ZIP-228: Asset Swaps for Zcash Shielded Assets][zip228]
 ///
 /// [zip228]: https://zips.z.cash/zip-0228
-pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
-    action_group: &ActionGroup<A, V, OrchardZSA>,
+pub(crate) fn hash_action_group<A: Authorization>(
+    action_group: &ActionGroup<A, OrchardZSA>,
 ) -> Blake2bHash {
     let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION);
 
@@ -130,60 +130,6 @@ pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
     agh.finalize()
 }
 
-/// Construct the commitment for a swap bundle as defined in
-/// [ZIP-228: Asset Swaps for Zcash Shielded Assets][zip228]
-///
-/// [zip228]: https://zips.z.cash/zip-0228
-pub(crate) fn hash_swap_bundle<A: Authorization, V: Copy + Into<i64>>(
-    action_groups: Vec<&ActionGroup<A, V, OrchardZSA>>,
-    value_balance: V,
-) -> Blake2bHash {
-    let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
-
-    for action_group in action_groups {
-        h.update(hash_action_group(action_group).as_bytes());
-    }
-
-    h.update(&value_balance.into().to_le_bytes());
-    h.finalize()
-}
-
-/// Construct the `orchard_auth_digest` for a swap bundle, as defined in [ZIP-246][zip246].
-///
-/// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
-/// for a given [`OrchardSighashKind`].
-///
-/// [zip246]: https://zips.z.cash/zip-0246
-pub(crate) fn hash_swap_bundle_auth_data<V>(
-    action_groups: Vec<&ActionGroup<ActionGroupAuthorized, V, OrchardZSA>>, //TODO: can use SwapBundle here instead
-    binding_signature: &OrchardBindingSig,
-    sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
-) -> Blake2bHash {
-    let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
-
-    for action_group in action_groups {
-        let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION);
-        agh.update(action_group.authorization().proof().unwrap().as_ref());
-
-        let mut sash = hasher(ZCASH_ORCHARD_SPEND_AUTH_SIGS_HASH_PERSONALIZATION);
-        for action in action_group.actions().iter() {
-            let sighash_info = sighash_info_for_kind(action.authorization().sighash_kind());
-            sash.update(&get_compact_size(sighash_info.len()));
-            sash.update(sighash_info.as_slice());
-            sash.update(&<[u8; 64]>::from(action.authorization().sig()));
-        }
-        agh.update(sash.finalize().as_bytes());
-
-        h.update(agh.finalize().as_bytes());
-    }
-
-    let sighash_info = sighash_info_for_kind(binding_signature.sighash_kind());
-    h.update(&get_compact_size(sighash_info.len()));
-    h.update(sighash_info.as_slice());
-    h.update(&<[u8; 64]>::from(binding_signature.sig()));
-    h.finalize()
-}
-
 /// Construct the `orchard_auth_digest` commitment to the authorizing data of an
 /// authorized bundle as defined in
 /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
@@ -197,7 +143,7 @@ pub(crate) fn hash_swap_bundle_auth_data<V>(
 /// [zip244]: https://zips.z.cash/zip-0244
 /// [zip246]: https://zips.z.cash/zip-0246
 pub(crate) fn hash_bundle_auth_data<V, Pr: OrchardPrimitives>(
-    bundle: &ActionGroup<Authorized, V, Pr>,
+    bundle: &Bundle<Authorized, V, Pr>,
     sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
 ) -> Blake2bHash {
     Pr::hash_bundle_auth_data(bundle, sighash_info_for_kind)
@@ -229,10 +175,10 @@ pub fn get_compact_size(size: usize) -> Vec<u8> {
 #[cfg(all(test, feature = "circuit"))]
 mod tests {
     use crate::{
-        builder::{Builder, BundleType, UnauthorizedBundle},
+        builder::{Builder, BundleType},
         bundle::{
             commitments::{get_compact_size, hash_bundle_auth_data, hash_bundle_txid_data},
-            Authorized, ActionGroup,
+            Authorized,
         },
         circuit::ProvingKey,
         flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
@@ -243,8 +189,12 @@ mod tests {
         Anchor,
     };
     use rand::{rngs::StdRng, SeedableRng};
+    use crate::builder::{InProgress, Unauthorized, Unproven};
+    use crate::swap_bundle::Bundle;
 
-    fn generate_bundle<FL: OrchardFlavor>(bundle_type: BundleType) -> UnauthorizedBundle<i64, FL> {
+    fn generate_bundle<FL: OrchardFlavor>(
+        bundle_type: BundleType,
+    ) -> Bundle<InProgress<Unproven, Unauthorized>, i64, FL> {
         let rng = StdRng::seed_from_u64(5);
 
         let sk = SpendingKey::from_bytes([7; 32]).unwrap();
@@ -271,7 +221,9 @@ mod tests {
             )
             .unwrap();
 
-        builder.build::<i64, FL>(rng).unwrap().unwrap().0
+        let (action_group, value_balance, _) = builder.build::<i64, FL>(rng).unwrap().unwrap();
+
+        Bundle::from_parts(vec![action_group], value_balance, None)
     }
 
     /// Verifies that the hash for an Orchard Vanilla bundle matches a fixed reference value.
@@ -310,14 +262,38 @@ mod tests {
 
     fn generate_auth_bundle<FL: OrchardFlavor>(
         bundle_type: BundleType,
-    ) -> ActionGroup<Authorized, i64, FL> {
+    ) -> Bundle<Authorized, i64, FL> {
         let mut rng = StdRng::seed_from_u64(6);
         let pk = ProvingKey::build::<FL>();
-        let bundle = generate_bundle(bundle_type)
+        let unauth_bundle = generate_bundle(bundle_type);
+        let proven_action_group = unauth_bundle
+            .action_groups()
+            .first()
+            .unwrap()
+            .clone()
             .create_proof(&pk, &mut rng)
             .unwrap();
-        let sighash = bundle.commitment().into();
-        bundle.prepare(rng, sighash).finalize().unwrap()
+        let sighash = Bundle::from_parts(
+            vec![proven_action_group.clone()],
+            *unauth_bundle.value_balance(),
+            None,
+        )
+        .commitment()
+        .into();
+        let auth_action_group = proven_action_group
+            .prepare(rng, sighash)
+            .finalize()
+            .unwrap();
+
+        let binding_signature = auth_action_group
+            .authorization()
+            .binding_signature()
+            .clone();
+        Bundle::from_parts(
+            vec![auth_action_group],
+            *unauth_bundle.value_balance(),
+            Some(binding_signature),
+        )
     }
 
     /// Verifies that the authorizing data commitment for an Orchard Vanilla bundle matches a fixed

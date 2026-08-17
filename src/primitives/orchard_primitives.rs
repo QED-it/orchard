@@ -12,7 +12,8 @@ use crate::{
     note::AssetBase,
     primitives::zcash_note_encryption_domain::{Memo, MEMO_SIZE},
     sighash_kind::OrchardSighashKind,
-    ActionGroup, Note,
+    swap_bundle::Bundle,
+    Note,
 };
 
 /// Represents the Orchard protocol domain specifics required for commitment, note encryption and
@@ -51,7 +52,7 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
     /// [zip244]: https://zips.z.cash/zip-0244
     /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_txid_data<A: Authorization, V: Copy + Into<i64>>(
-        bundle: &ActionGroup<A, V, Self>,
+        bundle: &Bundle<A, V, Self>,
     ) -> Blake2bHash;
 
     /// Evaluate `orchard_auth_digest` for the bundle as defined in
@@ -66,7 +67,7 @@ pub trait OrchardPrimitives: fmt::Debug + Clone {
     /// [zip244]: https://zips.z.cash/zip-0244
     /// [zip246]: https://zips.z.cash/zip-0246
     fn hash_bundle_auth_data<V>(
-        bundle: &ActionGroup<Authorized, V, Self>,
+        bundle: &Bundle<Authorized, V, Self>,
         sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
     ) -> Blake2bHash;
 

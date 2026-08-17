@@ -93,40 +93,55 @@ fn build_and_sign_bundle(
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
-) -> ActionGroup<Authorized, i64, OrchardZSA> {
-    let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
-    let sighash = unauthorized.commitment().into();
+) -> Bundle<Authorized, i64, OrchardZSA> {
+    let (unauthorized, value_balance, _) =
+        builder.build::<i64, OrchardZSA>(&mut rng).unwrap().unwrap();
+    let sighash = Bundle::from_parts(vec![unauthorized.clone()], value_balance, None)
+        .commitment()
+        .into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
-    proven
+    let action_group = proven
         .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(sk)])
-        .unwrap()
+        .unwrap();
+    let binding_sig = action_group.authorization().binding_signature();
+
+    Bundle::from_parts(
+        vec![action_group.clone()],
+        value_balance,
+        Some(binding_sig.clone()),
+    )
 }
 
-fn build_and_sign_action_group(
+fn build_and_sign_for_swap(
     builder: Builder,
     timelimit: u32,
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
 ) -> (
-    ActionGroup<ActionGroupAuthorized, i64, OrchardZSA>,
-    SigningKey<Binding>,
+    (
+        ActionGroup<ActionGroupAuthorized, OrchardZSA>,
+        SigningKey<Binding>,
+    ),
+    i64,
 ) {
-    let unauthorized = builder
-        .build_action_group(&mut rng, timelimit)
+    let (unauthorized, value_balance, _) = builder
+        .build_action_group_check::<i64>(&mut rng, timelimit)
         .unwrap()
-        .unwrap()
-        .0;
+        .unwrap();
     let action_group_digest = unauthorized.action_group_commitment().into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
 
-    proven
-        .apply_signatures_for_action_group(
-            rng,
-            action_group_digest,
-            &[SpendAuthorizingKey::from(sk)],
-        )
-        .unwrap()
+    (
+        proven
+            .apply_signatures_for_action_group(
+                rng,
+                action_group_digest,
+                &[SpendAuthorizingKey::from(sk)],
+            )
+            .unwrap(),
+        value_balance,
+    )
 }
 
 fn build_merkle_paths(notes: Vec<&Note>) -> (Vec<MerklePath>, Anchor) {
@@ -232,7 +247,7 @@ fn issue_zsa_notes(
 fn create_zatoshi_note(keys: &Keychain) -> Note {
     let mut rng = OsRng;
 
-    let shielding_bundle: ActionGroup<_, i64, OrchardZSA> = {
+    let shielding_bundle: ActionGroup<_, OrchardZSA> = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -247,8 +262,11 @@ fn create_zatoshi_note(keys: &Keychain) -> Note {
             ),
             Ok(())
         );
-        let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
-        let sighash = unauthorized.commitment().into();
+        let (unauthorized, value_balance, _) =
+            builder.build::<i64, OrchardZSA>(&mut rng).unwrap().unwrap();
+        let sighash = Bundle::from_parts(vec![unauthorized.clone()], value_balance, None)
+            .commitment()
+            .into();
         let proven = unauthorized.create_proof(keys.pk(), &mut rng).unwrap();
         proven.apply_signatures(rng, sighash, &[]).unwrap()
     };
@@ -291,7 +309,7 @@ fn build_and_verify_bundle(
     keys: &Keychain,
 ) -> Result<(), String> {
     let rng = OsRng;
-    let shielded_bundle: ActionGroup<_, i64, OrchardZSA> = {
+    let shielded_bundle: Bundle<_, i64, OrchardZSA> = {
         let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
 
         spends
@@ -321,8 +339,18 @@ fn build_and_verify_bundle(
 
     // Verify the shielded bundle, currently without the proof.
     verify_bundle(&shielded_bundle, keys.vk, true);
-    assert_eq!(shielded_bundle.actions().len(), expected_num_actions);
-    assert!(verify_unique_spent_nullifiers(&shielded_bundle));
+    assert_eq!(
+        shielded_bundle
+            .action_groups()
+            .first()
+            .unwrap()
+            .actions()
+            .len(),
+        expected_num_actions
+    );
+    assert!(verify_unique_spent_nullifiers(
+        shielded_bundle.action_groups().first().unwrap()
+    ));
     Ok(())
 }
 
@@ -337,13 +365,14 @@ fn build_and_verify_action_group(
     keys: &Keychain,
 ) -> Result<
     (
-        ActionGroup<ActionGroupAuthorized, i64, OrchardZSA>,
+        ActionGroup<ActionGroupAuthorized, OrchardZSA>,
         SigningKey<Binding>,
+        i64,
     ),
     String,
 > {
     let rng = OsRng;
-    let (shielded_action_group, bsk) = {
+    let ((shielded_action_group, bsk), value_balance) = {
         let mut builder = Builder::new(BundleType::DEFAULT_ZSA, anchor);
 
         spends
@@ -369,18 +398,16 @@ fn build_and_verify_action_group(
             })
             .map_err(|err| err.to_string())?;
 
-        build_and_sign_action_group(builder, timelimit, rng, keys.pk(), keys.sk())
+        build_and_sign_for_swap(builder, timelimit, rng, keys.pk(), keys.sk())
     };
 
     verify_action_group(&shielded_action_group, keys.vk);
     assert_eq!(shielded_action_group.actions().len(), expected_num_actions);
     assert!(verify_unique_spent_nullifiers(&shielded_action_group));
-    Ok((shielded_action_group, bsk))
+    Ok((shielded_action_group, bsk, value_balance))
 }
 
-fn verify_unique_spent_nullifiers<A: Authorization>(
-    bundle: &ActionGroup<A, i64, OrchardZSA>,
-) -> bool {
+fn verify_unique_spent_nullifiers<A: Authorization>(bundle: &ActionGroup<A, OrchardZSA>) -> bool {
     let mut seen = HashSet::new();
     bundle
         .actions()
@@ -824,7 +851,7 @@ fn action_group_and_swap_bundle() {
 
     {
         // 1. Create and verify ActionGroup for user1
-        let (action_group1, bsk1) = build_and_verify_action_group(
+        let (action_group1, bsk1, bal1) = build_and_verify_action_group(
             vec![
                 &asset1_spend1,             // 40 asset1
                 &asset1_spend2,             // 2 asset1
@@ -864,7 +891,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 2. Create and verify ActionGroup for user2
-        let (action_group2, bsk2) = build_and_verify_action_group(
+        let (action_group2, bsk2, bal2) = build_and_verify_action_group(
             vec![
                 &asset2_spend1,             // 40 asset2
                 &asset2_spend2,             // 2 asset2
@@ -903,7 +930,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 3. Matcher fees action group
-        let (action_group_matcher, bsk_matcher) = build_and_verify_action_group(
+        let (action_group_matcher, bsk_matcher, bal_matcher) = build_and_verify_action_group(
             // The matcher spends nothing.
             vec![],
             // The matcher receives 5 ZEC as a fee from user1 and user2.
@@ -922,12 +949,14 @@ fn action_group_and_swap_bundle() {
         )
         .unwrap();
 
-        // 4. Create a SwapBundle from the three previous ActionGroups
-        let swap_bundle = Bundle::new(
-            OsRng,
+        let bundle = Bundle::from_parts(
             vec![action_group1, action_group2, action_group_matcher],
-            vec![bsk1, bsk2, bsk_matcher],
+            bal1 + bal2 + bal_matcher,
+            None,
         );
+
+        // 4. Create a SwapBundle from the three previous ActionGroups
+        let swap_bundle = bundle.compute_binding_signature(OsRng, vec![bsk1, bsk2, bsk_matcher]);
         verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
     }
 
@@ -945,7 +974,7 @@ fn action_group_and_swap_bundle() {
 
     {
         // 1. Create and verify ActionGroup for user1
-        let (action_group1, bsk1) = build_and_verify_action_group(
+        let (action_group1, bsk1, bal1) = build_and_verify_action_group(
             vec![
                 &asset1_spend1, // 40 asset1
                 &asset1_spend2, // 2 asset1
@@ -975,7 +1004,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 2. Create and verify ActionGroup for user2
-        let (action_group2, bsk2) = build_and_verify_action_group(
+        let (action_group2, bsk2, bal2) = build_and_verify_action_group(
             vec![
                 &user2_zatoshi_note1_spend, // 100 ZEC
                 &user2_zatoshi_note2_spend, // 100 ZEC
@@ -1006,7 +1035,7 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 3. Matcher fees action group
-        let (action_group_matcher, bsk_matcher) = build_and_verify_action_group(
+        let (action_group_matcher, bsk_matcher, bal_matcher) = build_and_verify_action_group(
             // The matcher spends nothing.
             vec![],
             // The matcher receives 10 ZEC as a fee from user2.
@@ -1025,12 +1054,14 @@ fn action_group_and_swap_bundle() {
         )
         .unwrap();
 
-        // 4. Create a SwapBundle from the three previous ActionGroups
-        let swap_bundle = Bundle::new(
-            OsRng,
+        let bundle = Bundle::from_parts(
             vec![action_group1, action_group2, action_group_matcher],
-            vec![bsk1, bsk2, bsk_matcher],
+            bal1 + bal2 + bal_matcher,
+            None,
         );
+
+        // 4. Create a SwapBundle from the three previous ActionGroups
+        let swap_bundle = bundle.compute_binding_signature(OsRng, vec![bsk1, bsk2, bsk_matcher]);
         verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
     }
 
@@ -1038,7 +1069,7 @@ fn action_group_and_swap_bundle() {
     // User1 would like to send 30 asset1 to User2
     {
         // 1. Create and verify ActionGroup
-        let (action_group, bsk1) = build_and_verify_action_group(
+        let (action_group, bsk1, bal1) = build_and_verify_action_group(
             vec![
                 &asset1_spend1, // 40 asset1
                 &asset1_spend2, // 2 asset1
@@ -1065,7 +1096,10 @@ fn action_group_and_swap_bundle() {
         .unwrap();
 
         // 2. Create a SwapBundle from the previous ActionGroup
-        let swap_bundle = Bundle::new(OsRng, vec![action_group], vec![bsk1]);
+
+        let bundle = Bundle::from_parts(vec![action_group.clone()], bal1, None);
+
+        let swap_bundle = bundle.compute_binding_signature(OsRng, vec![bsk1]);
         verify_swap_bundle(&swap_bundle, vec![&keys1.vk]);
     }
 }

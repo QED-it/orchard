@@ -21,16 +21,18 @@ use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
 
 pub fn verify_bundle<Pr: OrchardPrimitives>(
-    bundle: &ActionGroup<Authorized, i64, Pr>,
+    bundle: &Bundle<Authorized, i64, Pr>,
     vk: &VerifyingKey,
     verify_proof: bool,
 ) {
+    assert_eq!(bundle.action_groups().len(), 1);
+    let action_group = &bundle.action_groups()[0];
     if verify_proof {
-        assert!(matches!(bundle.verify_proof(vk), Ok(())));
+        assert!(matches!(action_group.verify_proof(vk), Ok(())));
     }
     let sighash: [u8; 32] = bundle.commitment().into();
     let bvk = bundle.binding_validating_key();
-    for action in bundle.actions() {
+    for action in action_group.actions() {
         assert_eq!(
             action.authorization().sighash_kind(),
             &OrchardSighashKind::AllEffecting,
@@ -41,7 +43,7 @@ pub fn verify_bundle<Pr: OrchardPrimitives>(
         );
     }
     assert_eq!(
-        bvk.verify(&sighash, bundle.authorization().binding_signature().sig()),
+        bvk.verify(&sighash, bundle.binding_signature().unwrap().sig()),
         Ok(())
     );
 }
@@ -50,7 +52,10 @@ pub fn verify_bundle<Pr: OrchardPrimitives>(
 // - verify each action group (its proof and for each action, the spend authorization signature)
 // - verify that bsk is None  for each action group
 // - verify the swap binding signature
-pub fn verify_swap_bundle(swap_bundle: &Bundle<i64>, vks: Vec<&VerifyingKey>) {
+pub fn verify_swap_bundle(
+    swap_bundle: &Bundle<ActionGroupAuthorized, i64, OrchardZSA>,
+    vks: Vec<&VerifyingKey>,
+) {
     assert_eq!(vks.len(), swap_bundle.action_groups().len());
     for (action_group, vk) in swap_bundle.action_groups().iter().zip(vks.iter()) {
         verify_action_group(action_group, vk);
@@ -59,7 +64,7 @@ pub fn verify_swap_bundle(swap_bundle: &Bundle<i64>, vks: Vec<&VerifyingKey>) {
     let sighash: [u8; 32] = swap_bundle.commitment().into();
     let bvk = swap_bundle.binding_validating_key();
     assert_eq!(
-        bvk.verify(&sighash, swap_bundle.binding_signature().sig()),
+        bvk.verify(&sighash, swap_bundle.binding_signature().unwrap().sig()),
         Ok(())
     );
 }
@@ -68,13 +73,13 @@ pub fn verify_swap_bundle(swap_bundle: &Bundle<i64>, vks: Vec<&VerifyingKey>) {
 // - verify the proof
 // - verify the signature on each action
 pub fn verify_action_group(
-    action_group_bundle: &ActionGroup<ActionGroupAuthorized, i64, OrchardZSA>,
+    action_group: &ActionGroup<ActionGroupAuthorized, OrchardZSA>,
     vk: &VerifyingKey,
 ) {
-    assert!(matches!(action_group_bundle.verify_proof(vk), Ok(())));
+    assert!(matches!(action_group.verify_proof(vk), Ok(())));
 
-    let action_group_digest: [u8; 32] = action_group_bundle.action_group_commitment().into();
-    for action in action_group_bundle.actions() {
+    let action_group_digest: [u8; 32] = action_group.action_group_commitment().into();
+    for action in action_group.actions() {
         assert_eq!(
             action
                 .rk()
@@ -134,7 +139,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     let recipient = fvk.address_at(0u32, Scope::External);
 
     // Create a shielding bundle.
-    let (shielding_bundle, orchard_digest_1): (ActionGroup<_, i64, FL>, [u8; 32]) = {
+    let (shielding_bundle, orchard_digest_1): (Bundle<_, i64, FL>, [u8; 32]) = {
         // Use the empty tree.
         let anchor = MerkleHashOrchard::empty_root(32.into()).into();
 
@@ -156,7 +161,8 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
             ),
             Ok(())
         );
-        let (unauthorized, bundle_meta) = builder.build(&mut rng).unwrap().unwrap();
+        let (unauthorized, value_balance, bundle_meta) =
+            builder.build::<i64, FL>(&mut rng).unwrap().unwrap();
 
         assert_eq!(
             unauthorized
@@ -170,10 +176,20 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
             Some(note_value)
         );
 
-        let sighash = unauthorized.commitment().into();
+        let sighash = Bundle::from_parts(vec![unauthorized.clone()], value_balance, None)
+            .commitment()
+            .into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
+
+        let action_group = proven.apply_signatures(rng.clone(), sighash, &[]).unwrap();
+        let binding_sig = action_group.authorization().binding_signature();
+
         (
-            proven.apply_signatures(rng.clone(), sighash, &[]).unwrap(),
+            Bundle::from_parts(
+                vec![action_group.clone()],
+                value_balance,
+                Some(binding_sig.clone()),
+            ),
             sighash,
         )
     };
@@ -184,6 +200,9 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     let note = {
         let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
         shielding_bundle
+            .action_groups()
+            .first()
+            .unwrap()
             .actions()
             .iter()
             .find_map(|action| {
@@ -214,7 +233,7 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     }
 
     // Create a shielded bundle spending the previous output.
-    let (shielded_bundle, orchard_digest_2): (ActionGroup<_, i64, FL>, [u8; 32]) = {
+    let (shielded_bundle, orchard_digest_2): (Bundle<_, i64, FL>, [u8; 32]) = {
         let (merkle_path, anchor) = build_merkle_path(&note);
 
         let mut builder = Builder::new(FL::DEFAULT_BUNDLE_TYPE, anchor);
@@ -229,13 +248,22 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
             ),
             Ok(())
         );
-        let (unauthorized, _) = builder.build(&mut rng).unwrap().unwrap();
-        let sighash = unauthorized.commitment().into();
+        let (unauthorized, value_balance, _) = builder.build::<i64, FL>(&mut rng).unwrap().unwrap();
+        let sighash = Bundle::from_parts(vec![unauthorized.clone()], value_balance, None)
+            .commitment()
+            .into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
+
+        let action_group = proven
+            .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
+            .unwrap();
+        let binding_sig = action_group.authorization().binding_signature();
         (
-            proven
-                .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
-                .unwrap(),
+            Bundle::from_parts(
+                vec![action_group.clone()],
+                value_balance,
+                Some(binding_sig.clone()),
+            ),
             sighash,
         )
     };

@@ -391,7 +391,8 @@ mod tests {
 
         assert_eq!(bundle.value_balance(), &(-5000));
         // We can successfully bind the bundle.
-        bundle.apply_binding_signature(sighash, rng).unwrap();
+        let action_group = bundle.action_groups().first().unwrap().clone();
+        action_group.apply_binding_signature(sighash, rng).unwrap();
     }
 
     #[test]
@@ -512,6 +513,7 @@ mod tests {
 
         assert_eq!(bundle.value_balance(), &0);
         // We can successfully bind the bundle.
-        bundle.apply_binding_signature(sighash, rng).unwrap();
+        let action_group = bundle.action_groups().first().unwrap().clone();
+        action_group.apply_binding_signature(sighash, rng).unwrap();
     }
 }
