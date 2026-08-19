@@ -17,7 +17,7 @@ impl super::Bundle {
     ///
     /// This is used by the Signer role to produce the transaction sighash.
     ///
-    /// [regular `Bundle`]: crate::Bundle
+    /// [regular `Bundle`]: crate::swap_bundle::Bundle
     pub fn extract_effects<V: TryFrom<i64>>(
         &self,
     ) -> Result<Option<crate::swap_bundle::Bundle<EffectsOnly, V, OrchardVanilla>>, TxExtractorError>

@@ -5,25 +5,24 @@ use crate::{
         commitments::{hash_bundle_txid_data, hash_bundle_auth_data},
         Authorized, Authorization, ActionGroup, BundleAuthorizingCommitment, BundleCommitment,
     },
+    flavor::OrchardZSA,
+    note::AssetBase,
     primitives::{
         redpallas::{self, Binding},
         OrchardPrimitives,
     },
     sighash_kind::{OrchardSighashKind, OrchardBindingSig, OrchardSpendAuthSig},
-    value::ValueCommitTrapdoor,
+    value::{NoteValue, Sign, ValueCommitment, ValueCommitTrapdoor, ValueSum},
     Action, Proof,
 };
 use alloc::vec::Vec;
-use memuse::DynamicUsage;
 use nonempty::NonEmpty;
 use rand_core::{CryptoRng, RngCore};
 #[cfg(feature = "circuit")]
-use crate::{
-    circuit::VerifyingKey,
-    note::AssetBase,
-    value::{NoteValue, Sign, ValueCommitment, ValueSum},
-};
-use crate::flavor::OrchardZSA;
+use memuse::DynamicUsage;
+
+#[cfg(feature = "circuit")]
+use crate::circuit::VerifyingKey;
 
 /// A bundle to be applied to the ledger.
 #[derive(Debug)]

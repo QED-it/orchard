@@ -21,7 +21,7 @@ use crate::{
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
-    swap_bundle::{ActionGroupAuthorized, Bundle},
+    swap_bundle::ActionGroupAuthorized,
     primitives::{OrchardDomain, OrchardPrimitives},
     sighash_kind::{OrchardBindingSig, OrchardSighashKind, OrchardSpendAuthSig},
     tree::{Anchor, MerklePath},
@@ -33,7 +33,7 @@ use crate::{
 use {
     crate::{
         action::Action,
-        swap_bundle::derive_bvk,
+        swap_bundle::{derive_bvk, Bundle},
         circuit::{Circuit, Instance, OrchardCircuit, ProvingKey, Witnesses},
         flavor::OrchardFlavor,
     },
@@ -894,6 +894,7 @@ impl Builder {
 
 /// Builds a bundle from the given action group. This is for the non-swap case, where
 /// the bundle is built from a single action group.
+#[cfg(feature = "circuit")]
 pub fn build_bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     action_group: ActionGroup<Authorized, FL>,
     value_balance: V,
