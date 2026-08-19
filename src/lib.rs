@@ -56,9 +56,9 @@ pub use constants::MERKLE_DEPTH_ORCHARD as NOTE_COMMITMENT_TREE_DEPTH;
 pub use note::Note;
 pub use tree::Anchor;
 
-/// A proof of the validity of an Orchard [`Bundle`].
+/// A proof of the validity of an Orchard [`ActionGroup`].
 ///
-/// [`Bundle`]: crate::bundle::ActionGroup
+/// [`ActionGroup`]: crate::bundle::ActionGroup
 #[derive(Clone)]
 pub struct Proof(Vec<u8>);
 

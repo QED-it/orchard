@@ -98,11 +98,11 @@ impl OrchardPrimitives for OrchardZSA {
             h.update(agh.finalize().as_bytes());
         }
 
-        let binding_signature = bundle.binding_signature();
-        let sighash_info = sighash_info_for_kind(binding_signature.unwrap().sighash_kind());
+        let binding_signature = bundle.binding_signature().unwrap();
+        let sighash_info = sighash_info_for_kind(binding_signature.sighash_kind());
         h.update(&get_compact_size(sighash_info.len()));
         h.update(sighash_info.as_slice());
-        h.update(&<[u8; 64]>::from(binding_signature.unwrap().sig()));
+        h.update(&<[u8; 64]>::from(binding_signature.sig()));
         h.finalize()
     }
 
