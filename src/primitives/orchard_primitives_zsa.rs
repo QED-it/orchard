@@ -8,7 +8,7 @@ use zcash_note_encryption::note_bytes::NoteBytesData;
 use crate::{
     bundle::{
         commitments::{
-            get_compact_size, hasher, hash_action_group,
+            get_compact_size, hash_action_group, hasher,
             ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION,
             ZCASH_ORCHARD_HASH_PERSONALIZATION, ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
             ZCASH_ORCHARD_SPEND_AUTH_SIGS_HASH_PERSONALIZATION,
@@ -25,8 +25,8 @@ use crate::{
         },
     },
     sighash_kind::OrchardSighashKind,
-    swap_bundle::Bundle,
 };
+use crate::bundle::Bundle;
 
 impl OrchardPrimitives for OrchardZSA {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_ZSA;

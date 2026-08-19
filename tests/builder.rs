@@ -10,15 +10,15 @@ use orchard::{
     note::{AssetBase, ExtractedNoteCommitment},
     primitives::{OrchardDomain, OrchardPrimitives},
     sighash_kind::OrchardSighashKind,
-    swap_bundle::{ActionGroupAuthorized, Bundle},
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
-    Anchor, ActionGroup, Note,
+    ActionGroup, Anchor, Note,
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
+use orchard::bundle::{ActionGroupAuthorized, Bundle};
 
 pub fn verify_bundle<Pr: OrchardPrimitives>(
     bundle: &Bundle<Authorized, i64, Pr>,

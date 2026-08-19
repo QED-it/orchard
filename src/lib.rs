@@ -41,7 +41,6 @@ pub mod pczt;
 pub mod primitives;
 pub mod sighash_kind;
 mod spec;
-pub mod swap_bundle;
 pub mod tree;
 pub mod value;
 pub mod zip32;

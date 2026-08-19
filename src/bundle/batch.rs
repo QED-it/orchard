@@ -5,14 +5,13 @@ use pasta_curves::vesta;
 use rand::{CryptoRng, RngCore};
 use tracing::debug;
 
-use super::Authorized;
+use super::{Authorized, Bundle};
 use crate::{
     circuit::VerifyingKey,
     primitives::{
         redpallas::{self, Binding, SpendAuth},
         OrchardPrimitives,
     },
-    swap_bundle::Bundle,
 };
 
 /// A signature within an authorized Orchard bundle.

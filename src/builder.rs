@@ -12,7 +12,7 @@ use zcash_note_encryption::NoteEncryption;
 
 use crate::{
     address::Address,
-    bundle::{burn_validation::BurnError, Authorization, Authorized, ActionGroup, Flags},
+    bundle::{burn_validation::BurnError, ActionGroup, Authorization, Authorized, Flags},
     constants::reference_keys::ReferenceKeys,
     flavor::OrchardVanilla,
     keys::{
@@ -21,7 +21,6 @@ use crate::{
     },
     note::{AssetBase, ExtractedNoteCommitment, Note, Nullifier, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
-    swap_bundle::ActionGroupAuthorized,
     primitives::{OrchardDomain, OrchardPrimitives},
     sighash_kind::{OrchardBindingSig, OrchardSighashKind, OrchardSpendAuthSig},
     tree::{Anchor, MerklePath},
@@ -33,12 +32,14 @@ use crate::{
 use {
     crate::{
         action::Action,
-        swap_bundle::{derive_bvk, Bundle},
         circuit::{Circuit, Instance, OrchardCircuit, ProvingKey, Witnesses},
         flavor::OrchardFlavor,
     },
     nonempty::NonEmpty,
 };
+use crate::bundle::{derive_bvk, ActionGroupAuthorized};
+#[cfg(feature = "circuit")]
+use crate::bundle::Bundle;
 #[cfg(feature = "circuit")]
 use crate::flavor::OrchardZSA;
 use crate::primitives::redpallas::SigningKey;
@@ -1683,11 +1684,11 @@ pub mod testing {
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::{testing::arb_note, AssetBase},
         primitives::OrchardPrimitives,
-        swap_bundle::Bundle,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
         value::{testing::arb_positive_note_value, NoteValue, MAX_NOTE_VALUE},
         Address, Note,
     };
+    use crate::bundle::Bundle;
     use super::{build_bundle, Builder, BundleType};
 
     /// An intermediate type used for construction of arbitrary

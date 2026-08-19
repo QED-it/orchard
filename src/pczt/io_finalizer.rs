@@ -4,11 +4,8 @@ use alloc::vec::Vec;
 
 use rand::{CryptoRng, RngCore};
 
-use crate::{
-    swap_bundle::derive_bvk_raw, keys::SpendAuthorizingKey, primitives::redpallas,
-    value::ValueCommitTrapdoor,
-};
-
+use crate::{keys::SpendAuthorizingKey, primitives::redpallas, value::ValueCommitTrapdoor};
+use crate::bundle::derive_bvk_raw;
 use super::SignerError;
 
 impl super::Bundle {

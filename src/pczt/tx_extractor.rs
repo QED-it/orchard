@@ -17,10 +17,10 @@ impl super::Bundle {
     ///
     /// This is used by the Signer role to produce the transaction sighash.
     ///
-    /// [regular `Bundle`]: crate::swap_bundle::Bundle
+    /// [regular `Bundle`]: crate::bundle::Bundle
     pub fn extract_effects<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::swap_bundle::Bundle<EffectsOnly, V, OrchardVanilla>>, TxExtractorError>
+    ) -> Result<Option<crate::bundle::Bundle<EffectsOnly, V, OrchardVanilla>>, TxExtractorError>
     {
         self.to_tx_data(|_| Ok(()), |_| Ok(EffectsOnly))
     }
@@ -32,8 +32,7 @@ impl super::Bundle {
     /// [regular `Bundle`]: crate::ActionGroup
     pub fn extract<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::swap_bundle::Bundle<Unbound, V, OrchardVanilla>>, TxExtractorError>
-    {
+    ) -> Result<Option<crate::bundle::Bundle<Unbound, V, OrchardVanilla>>, TxExtractorError> {
         self.to_tx_data(
             |action| {
                 action
@@ -62,7 +61,7 @@ impl super::Bundle {
         &self,
         action_auth: F,
         bundle_auth: G,
-    ) -> Result<Option<crate::swap_bundle::Bundle<A, V, OrchardVanilla>>, E>
+    ) -> Result<Option<crate::bundle::Bundle<A, V, OrchardVanilla>>, E>
     where
         A: Authorization,
         E: From<TxExtractorError>,
@@ -104,13 +103,11 @@ impl super::Bundle {
                 authorization,
             );
 
-            Some(
-                crate::swap_bundle::Bundle::<A, V, OrchardVanilla>::from_parts(
-                    vec![action_group],
-                    value_balance,
-                    None, //TODO: There doesn't seem to be a use of this to generate Authorized bundles. But consider fixing
-                ),
-            )
+            Some(crate::bundle::Bundle::<A, V, OrchardVanilla>::from_parts(
+                vec![action_group],
+                value_balance,
+                None, //TODO: There doesn't seem to be a use of this to generate Authorized bundles. But consider fixing
+            ))
         } else {
             None
         })

@@ -12,9 +12,9 @@ use crate::{
     note::AssetBase,
     primitives::zcash_note_encryption_domain::{Memo, MEMO_SIZE},
     sighash_kind::OrchardSighashKind,
-    swap_bundle::Bundle,
     Note,
 };
+use crate::bundle::Bundle;
 
 /// Represents the Orchard protocol domain specifics required for commitment, note encryption and
 /// decryption.

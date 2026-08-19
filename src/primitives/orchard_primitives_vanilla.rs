@@ -25,8 +25,8 @@ use crate::{
         },
     },
     sighash_kind::OrchardSighashKind,
-    swap_bundle::Bundle,
 };
+use crate::bundle::Bundle;
 
 impl OrchardPrimitives for OrchardVanilla {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_VANILLA;

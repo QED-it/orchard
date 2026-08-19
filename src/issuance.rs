@@ -928,7 +928,7 @@ mod tests {
     use pasta_curves::pallas;
     use rand::rngs::OsRng;
     use rand::RngCore;
-    use crate::swap_bundle::Bundle;
+    use crate::bundle::Bundle;
 
     #[test]
     fn issuance_flags_roundtrip() {

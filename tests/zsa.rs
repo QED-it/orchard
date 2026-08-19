@@ -5,7 +5,7 @@ mod builder;
 use crate::builder::{verify_action_group, verify_bundle, verify_swap_bundle};
 use orchard::{
     builder::{BuildError, Builder, BundleType},
-    bundle::{burn_validation::BurnError, Authorized, Authorization},
+    bundle::{burn_validation::BurnError, Authorization, Authorized},
     circuit::{ProvingKey, VerifyingKey},
     flavor::OrchardZSA,
     issuance::{
@@ -15,12 +15,11 @@ use orchard::{
     },
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, AssetId, ExtractedNoteCommitment, Nullifier},
-    primitives::OrchardDomain,
     primitives::redpallas::{Binding, SigningKey},
-    swap_bundle::{ActionGroupAuthorized, Bundle},
+    primitives::OrchardDomain,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
-    Address, Anchor, ActionGroup, Note,
+    ActionGroup, Address, Anchor, Note,
 };
 use rand::rngs::OsRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
@@ -28,6 +27,7 @@ use std::collections::HashSet;
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use nonempty::NonEmpty;
 use zcash_note_encryption::try_note_decryption;
+use orchard::bundle::{ActionGroupAuthorized, Bundle};
 
 #[derive(Debug)]
 struct Keychain<'a> {

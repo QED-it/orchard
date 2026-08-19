@@ -18,7 +18,7 @@ pub(crate) use issuance::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_da
 
 #[cfg(feature = "zsa-issuance")]
 pub use issuance::{hash_issue_bundle_auth_empty, hash_issue_bundle_txid_empty};
-use crate::swap_bundle::Bundle;
+use crate::bundle::Bundle;
 
 // TODO remove
 const MEMO_SIZE: usize = 512;
@@ -190,7 +190,7 @@ mod tests {
     };
     use rand::{rngs::StdRng, SeedableRng};
     use crate::builder::{InProgress, Unauthorized, Unproven};
-    use crate::swap_bundle::Bundle;
+    use crate::bundle::Bundle;
 
     fn generate_bundle<FL: OrchardFlavor>(
         bundle_type: BundleType,
