@@ -20,7 +20,9 @@ use crate::{
     builder::SpendInfo,
     bundle::Flags,
     circuit::{
-        commit_ivk::CommitIvkConfig, gadget::add_chip::AddConfig, note_commit::NoteCommitConfig,
+        commit_ivk::{CommitIvkChip, CommitIvkConfig},
+        gadget::add_chip::{AddChip, AddConfig},
+        note_commit::{NoteCommitChip, NoteCommitConfig},
     },
     circuit_version::OrchardCircuitVersion,
     constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
@@ -34,8 +36,11 @@ use halo2_gadgets::{
         chip::{EccChip, EccConfig},
         CircuitVersion, NonIdentityPoint,
     },
-    poseidon::Pow5Config as PoseidonConfig,
-    sinsemilla::{chip::SinsemillaConfig, merkle::chip::MerkleConfig},
+    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig},
+    sinsemilla::{
+        chip::{SinsemillaChip, SinsemillaConfig},
+        merkle::chip::{MerkleChip, MerkleConfig},
+    },
     utilities::lookup_range_check::PallasLookupRangeCheck,
 };
 
@@ -96,6 +101,185 @@ pub struct Config<Lookup: PallasLookupRangeCheck> {
     commit_ivk_config: CommitIvkConfig,
     old_note_commit_config: NoteCommitConfig<Lookup>,
     new_note_commit_config: NoteCommitConfig<Lookup>,
+}
+
+/// The lookup argument used by an Orchard circuit variation.
+///
+/// At configuration time, the two circuit variations differ only in their lookup
+/// argument and in the contents of the `q_orchard` gate; this trait carries both, so
+/// that [`configure_circuit`] can express the shared structure once.
+trait OrchardLookup: PallasLookupRangeCheck {
+    /// Whether this is the lookup argument of the ZSA circuit variation, which the
+    /// Sinsemilla and NoteCommit chips extend with ZSA-specific configuration.
+    const IS_ZSA: bool;
+
+    /// Creates the `q_orchard` gate checking this circuit variation's Orchard Action
+    /// statement, on the given selector.
+    fn configure_orchard_gate(
+        meta: &mut plonk::ConstraintSystem<pallas::Base>,
+        advices: [Column<Advice>; 10],
+        q_orchard: Selector,
+    );
+}
+
+/// Configures the Orchard Action circuit in the given constraint system.
+///
+/// Shared by both circuit variations; everything variation-specific comes from the
+/// [`OrchardLookup`] implementation.
+fn configure_circuit<Lookup: OrchardLookup>(
+    meta: &mut plonk::ConstraintSystem<pallas::Base>,
+) -> Config<Lookup> {
+    // Advice columns used in the Orchard circuit.
+    let advices = [
+        meta.advice_column(),
+        meta.advice_column(),
+        meta.advice_column(),
+        meta.advice_column(),
+        meta.advice_column(),
+        meta.advice_column(),
+        meta.advice_column(),
+        meta.advice_column(),
+        meta.advice_column(),
+        meta.advice_column(),
+    ];
+
+    let q_orchard = meta.selector();
+    Lookup::configure_orchard_gate(meta, advices, q_orchard);
+
+    // Addition of two field elements.
+    let add_config = AddChip::configure(meta, advices[7], advices[8], advices[6]);
+
+    // Fixed columns for the Sinsemilla generator lookup table
+    let table_idx = meta.lookup_table_column();
+    let lookup = (
+        table_idx,
+        meta.lookup_table_column(),
+        meta.lookup_table_column(),
+    );
+
+    // Instance column used for public inputs
+    let primary = meta.instance_column();
+    meta.enable_equality(primary);
+
+    // Permutation over all advice columns.
+    for advice in advices.iter() {
+        meta.enable_equality(*advice);
+    }
+
+    // Poseidon requires four advice columns, while ECC incomplete addition requires
+    // six, so we could choose to configure them in parallel. However, we only use a
+    // single Poseidon invocation, and we have the rows to accommodate it serially.
+    // Instead, we reduce the proof size by sharing fixed columns between the ECC and
+    // Poseidon chips.
+    let lagrange_coeffs = [
+        meta.fixed_column(),
+        meta.fixed_column(),
+        meta.fixed_column(),
+        meta.fixed_column(),
+        meta.fixed_column(),
+        meta.fixed_column(),
+        meta.fixed_column(),
+        meta.fixed_column(),
+    ];
+    let rc_a = lagrange_coeffs[2..5].try_into().unwrap();
+    let rc_b = lagrange_coeffs[5..8].try_into().unwrap();
+
+    // Also use the first Lagrange coefficient column for loading global constants.
+    // It's free real estate :)
+    meta.enable_constant(lagrange_coeffs[0]);
+
+    // We have a lot of free space in the right-most advice columns; use one of them
+    // for all of our range checks. (The ZSA lookup argument also allocates its
+    // extra tag table column here.)
+    let range_check = Lookup::configure(meta, advices[9], table_idx);
+
+    // Configuration for curve point operations.
+    // This uses 10 advice columns and spans the whole circuit.
+    let ecc_config = EccChip::<OrchardFixedBases, Lookup>::configure(
+        meta,
+        advices,
+        lagrange_coeffs,
+        range_check,
+    );
+
+    // Configuration for the Poseidon hash.
+    let poseidon_config = PoseidonChip::configure::<poseidon::P128Pow5T3>(
+        meta,
+        // We place the state columns after the partial_sbox column so that the
+        // pad-and-add region can be laid out more efficiently.
+        advices[6..9].try_into().unwrap(),
+        advices[5],
+        rc_a,
+        rc_b,
+    );
+
+    // Configuration for a Sinsemilla hash instantiation and a
+    // Merkle hash instantiation using this Sinsemilla instance.
+    // Since the Sinsemilla config uses only 5 advice columns,
+    // we can fit two instances side-by-side.
+    let (sinsemilla_config_1, merkle_config_1) = {
+        let sinsemilla_config_1 = SinsemillaChip::configure(
+            meta,
+            advices[..5].try_into().unwrap(),
+            advices[6],
+            lagrange_coeffs[0],
+            lookup,
+            range_check,
+            Lookup::IS_ZSA,
+        );
+        let merkle_config_1 = MerkleChip::configure(meta, sinsemilla_config_1.clone());
+
+        (sinsemilla_config_1, merkle_config_1)
+    };
+
+    // Configuration for a Sinsemilla hash instantiation and a
+    // Merkle hash instantiation using this Sinsemilla instance.
+    // Since the Sinsemilla config uses only 5 advice columns,
+    // we can fit two instances side-by-side.
+    let (sinsemilla_config_2, merkle_config_2) = {
+        let sinsemilla_config_2 = SinsemillaChip::configure(
+            meta,
+            advices[5..].try_into().unwrap(),
+            advices[7],
+            lagrange_coeffs[1],
+            lookup,
+            range_check,
+            Lookup::IS_ZSA,
+        );
+        let merkle_config_2 = MerkleChip::configure(meta, sinsemilla_config_2.clone());
+
+        (sinsemilla_config_2, merkle_config_2)
+    };
+
+    // Configuration to handle decomposition and canonicity checking
+    // for CommitIvk.
+    let commit_ivk_config = CommitIvkChip::configure(meta, advices);
+
+    // Configuration to handle decomposition and canonicity checking
+    // for NoteCommit_old.
+    let old_note_commit_config =
+        NoteCommitChip::configure(meta, advices, sinsemilla_config_1.clone(), Lookup::IS_ZSA);
+
+    // Configuration to handle decomposition and canonicity checking
+    // for NoteCommit_new.
+    let new_note_commit_config =
+        NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone(), Lookup::IS_ZSA);
+
+    Config {
+        primary,
+        q_orchard,
+        advices,
+        add_config,
+        ecc_config,
+        poseidon_config,
+        merkle_config_1,
+        merkle_config_2,
+        sinsemilla_config_1,
+        sinsemilla_config_2,
+        commit_ivk_config,
+        old_note_commit_config,
+        new_note_commit_config,
+    }
 }
 
 impl OrchardCircuitVersion {

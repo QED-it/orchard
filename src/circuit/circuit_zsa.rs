@@ -9,38 +9,30 @@ use group::Curve;
 use pasta_curves::{arithmetic::CurveAffine, pallas};
 
 use halo2_gadgets::{
-    ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
-    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
-    sinsemilla::{
-        chip::SinsemillaChip,
-        merkle::{chip::MerkleChip, MerklePath},
-    },
-    utilities::{
-        bool_check,
-        lookup_range_check::{LookupRangeCheck4_5BConfig, PallasLookupRangeCheck4_5BConfig},
-    },
+    ecc::{FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
+    sinsemilla::{chip::SinsemillaChip, merkle::MerklePath},
+    utilities::{bool_check, lookup_range_check::PallasLookupRangeCheck4_5BConfig},
 };
 
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
-    plonk::{self, Constraints, Expression},
+    plonk::{self, Advice, Column, Constraints, Expression, Selector},
     poly::Rotation,
 };
 
 use crate::{
     circuit::{
-        commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
+        commit_ivk::gadgets::commit_ivk,
+        configure_circuit,
         derive_nullifier::{gadgets::derive_nullifier, ZsaNullifierParams},
-        gadget::{
-            add_chip::AddChip, assign_free_advice, assign_is_zatoshi_asset, assign_split_flag,
-        },
-        note_commit::{gadgets::note_commit, NoteCommitChip, ZsaNoteCommitParams},
+        gadget::{assign_free_advice, assign_is_zatoshi_asset, assign_split_flag},
+        note_commit::{gadgets::note_commit, ZsaNoteCommitParams},
         value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
-        AddressPoints, CircuitVanilla, Config, OrchardCircuitVersion, ANCHOR, CMX, CV_NET_X,
-        CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X,
-        RK_Y,
+        AddressPoints, CircuitVanilla, Config, OrchardCircuitVersion, OrchardLookup, ANCHOR, CMX,
+        CV_NET_X, CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD,
+        RK_X, RK_Y,
     },
-    constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
+    constants::{OrchardFixedBasesFull, OrchardHashDomains},
     note::AssetBase,
 };
 
@@ -82,32 +74,16 @@ impl CircuitZsa {
             additional_zsa_witnesses: Value::unknown(),
         }
     }
-
 }
 
-impl plonk::Circuit<pallas::Base> for CircuitZsa {
-    type Config = Config<PallasLookupRangeCheck4_5BConfig>;
-    type FloorPlanner = floor_planner::V1;
+impl OrchardLookup for PallasLookupRangeCheck4_5BConfig {
+    const IS_ZSA: bool = true;
 
-    fn without_witnesses(&self) -> Self {
-        CircuitZsa::empty()
-    }
-
-    fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
-        // Advice columns used in the Orchard circuit.
-        let advices = [
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-        ];
-
+    fn configure_orchard_gate(
+        meta: &mut plonk::ConstraintSystem<pallas::Base>,
+        advices: [Column<Advice>; 10],
+        q_orchard: Selector,
+    ) {
         // The new or updated constraints for OrchardZSA are explained in
         // [ZIP-226: Transfer and Burn of Zcash Shielded Assets][circuitstatement].
         //
@@ -125,7 +101,6 @@ impl plonk::Circuit<pallas::Base> for CircuitZsa {
         // Constrain if disable_cross_address = 1, then split_flag = 0
         //
         // [circuitstatement]: https://zips.z.cash/zip-0226#circuit-statement
-        let q_orchard = meta.selector();
         meta.create_gate("Orchard circuit checks", |meta| {
             let q_orchard = meta.query_selector(q_orchard);
             let v_old = meta.query_advice(advices[0], Rotation::cur());
@@ -235,146 +210,19 @@ impl plonk::Circuit<pallas::Base> for CircuitZsa {
                 ],
             )
         });
+    }
+}
 
-        // Addition of two field elements.
-        let add_config = AddChip::configure(meta, advices[7], advices[8], advices[6]);
+impl plonk::Circuit<pallas::Base> for CircuitZsa {
+    type Config = Config<PallasLookupRangeCheck4_5BConfig>;
+    type FloorPlanner = floor_planner::V1;
 
-        // Fixed columns for the Sinsemilla generator lookup table
-        let table_idx = meta.lookup_table_column();
-        let table_range_check_tag = meta.lookup_table_column();
-        let lookup = (
-            table_idx,
-            meta.lookup_table_column(),
-            meta.lookup_table_column(),
-        );
+    fn without_witnesses(&self) -> Self {
+        CircuitZsa::empty()
+    }
 
-        // Instance column used for public inputs
-        let primary = meta.instance_column();
-        meta.enable_equality(primary);
-
-        // Permutation over all advice columns.
-        for advice in advices.iter() {
-            meta.enable_equality(*advice);
-        }
-
-        // Poseidon requires four advice columns, while ECC incomplete addition requires
-        // six, so we could choose to configure them in parallel. However, we only use a
-        // single Poseidon invocation, and we have the rows to accommodate it serially.
-        // Instead, we reduce the proof size by sharing fixed columns between the ECC and
-        // Poseidon chips.
-        let lagrange_coeffs = [
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-        ];
-        let rc_a = lagrange_coeffs[2..5].try_into().unwrap();
-        let rc_b = lagrange_coeffs[5..8].try_into().unwrap();
-
-        // Also use the first Lagrange coefficient column for loading global constants.
-        // It's free real estate :)
-        meta.enable_constant(lagrange_coeffs[0]);
-
-        // We have a lot of free space in the right-most advice columns; use one of them
-        // for all of our range checks.
-        let range_check = LookupRangeCheck4_5BConfig::configure_with_tag(
-            meta,
-            advices[9],
-            table_idx,
-            table_range_check_tag,
-        );
-
-        // Configuration for curve point operations.
-        // This uses 10 advice columns and spans the whole circuit.
-        let ecc_config = EccChip::<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>::configure(
-            meta,
-            advices,
-            lagrange_coeffs,
-            range_check,
-        );
-
-        // Configuration for the Poseidon hash.
-        let poseidon_config = PoseidonChip::configure::<poseidon::P128Pow5T3>(
-            meta,
-            // We place the state columns after the partial_sbox column so that the
-            // pad-and-add region can be laid out more efficiently.
-            advices[6..9].try_into().unwrap(),
-            advices[5],
-            rc_a,
-            rc_b,
-        );
-
-        // Configuration for a Sinsemilla hash instantiation and a
-        // Merkle hash instantiation using this Sinsemilla instance.
-        // Since the Sinsemilla config uses only 5 advice columns,
-        // we can fit two instances side-by-side.
-        let (sinsemilla_config_1, merkle_config_1) = {
-            let sinsemilla_config_1 = SinsemillaChip::configure(
-                meta,
-                advices[..5].try_into().unwrap(),
-                advices[6],
-                lagrange_coeffs[0],
-                lookup,
-                range_check,
-                true,
-            );
-            let merkle_config_1 = MerkleChip::configure(meta, sinsemilla_config_1.clone());
-
-            (sinsemilla_config_1, merkle_config_1)
-        };
-
-        // Configuration for a Sinsemilla hash instantiation and a
-        // Merkle hash instantiation using this Sinsemilla instance.
-        // Since the Sinsemilla config uses only 5 advice columns,
-        // we can fit two instances side-by-side.
-        let (sinsemilla_config_2, merkle_config_2) = {
-            let sinsemilla_config_2 = SinsemillaChip::configure(
-                meta,
-                advices[5..].try_into().unwrap(),
-                advices[7],
-                lagrange_coeffs[1],
-                lookup,
-                range_check,
-                true,
-            );
-            let merkle_config_2 = MerkleChip::configure(meta, sinsemilla_config_2.clone());
-
-            (sinsemilla_config_2, merkle_config_2)
-        };
-
-        // Configuration to handle decomposition and canonicity checking
-        // for CommitIvk.
-        let commit_ivk_config = CommitIvkChip::configure(meta, advices);
-
-        // Configuration to handle decomposition and canonicity checking
-        // for NoteCommit_old.
-        let old_note_commit_config =
-            NoteCommitChip::configure(meta, advices, sinsemilla_config_1.clone(), true);
-
-        // Configuration to handle decomposition and canonicity checking
-        // for NoteCommit_new.
-        let new_note_commit_config =
-            NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone(), true);
-
-        Config {
-            primary,
-            q_orchard,
-            advices,
-            add_config,
-            ecc_config,
-            poseidon_config,
-            merkle_config_1,
-            merkle_config_2,
-            sinsemilla_config_1,
-            sinsemilla_config_2,
-            commit_ivk_config,
-            old_note_commit_config,
-            new_note_commit_config,
-        }
+    fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
+        configure_circuit(meta)
     }
 
     #[allow(non_snake_case)]
