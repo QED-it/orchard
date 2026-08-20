@@ -1059,3 +1059,16 @@ fn synthesize_cross_address_checks(
 }
 
 // TODO ZSA: add tests once ZSA bundle is implemented
+
+#[cfg(test)]
+mod tests {
+    use crate::circuit::VerifyingKey;
+    use crate::circuit_version::OrchardCircuitVersion;
+
+    #[test]
+    fn zsa_keygen() {
+        // Exercises `CircuitZsa`'s full `configure` path, the only coverage of ZSA
+        // keygen until the round-trip tests above exist.
+        let _vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
+    }
+}
