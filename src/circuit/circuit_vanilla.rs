@@ -115,11 +115,12 @@ impl CircuitVanilla {
     /// - `rcv`: trapdoor for the action value commitment
     /// - `circuit_version`: the [`OrchardCircuitVersion`] selected for the circuit
     ///
-    /// This function returns also `psi_nf` which is only consumed by
-    /// [`CircuitZsa`], for its split-note handling.
+    /// This function returns also `psi_nf` which is only consumed by the ZSA-specific
+    /// witnesses of [`Circuit`], for the split-note handling of [`CircuitZsa`].
     ///
     /// [`SpendInfo`]: crate::builder::SpendInfo
     /// [`OrchardCircuitVersion`]: crate::circuit::OrchardCircuitVersion
+    /// [`Circuit`]: crate::circuit::Circuit
     /// [`CircuitZsa`]: crate::circuit::circuit_zsa::CircuitZsa
     pub(crate) fn from_action_context_common(
         spend: &SpendInfo,
@@ -171,41 +172,6 @@ impl CircuitVanilla {
             },
             psi_nf,
         )
-    }
-
-    /// Constructs a `CircuitVanilla` for the given `circuit_version` from the following
-    /// components:
-    /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
-    /// - `output_note`: a note created in scope of the action
-    /// - `alpha`: a scalar used for randomization of the action spend validating key
-    /// - `rcv`: trapdoor for the action value commitment
-    ///
-    /// # Panics
-    ///
-    /// Panics if
-    /// - if the spent note's asset is not zatoshi,
-    /// - if`spend.split_flag` is true, or
-    /// - if `circuit_version` is ZSA.
-    pub(crate) fn from_action_context_unchecked(
-        spend: SpendInfo,
-        output_note: Note,
-        alpha: pallas::Scalar,
-        rcv: ValueCommitTrapdoor,
-        circuit_version: OrchardCircuitVersion,
-    ) -> Self {
-        if !(bool::from(spend.note.asset().is_zatoshi())) {
-            panic!("asset must be zatoshi in OrchardVanilla circuit");
-        }
-        if spend.split_flag {
-            panic!("split_flag must be false in OrchardVanilla circuit");
-        }
-        if circuit_version.is_zsa() {
-            panic!("circuit version must not be ZSA in OrchardVanilla circuit");
-        }
-
-        let (circuit, _) =
-            Self::from_action_context_common(&spend, &output_note, alpha, rcv, circuit_version);
-        circuit
     }
 }
 
@@ -1049,28 +1015,31 @@ mod tests {
         let anchor = path.root(spent_note.commitment().into());
 
         (
-            Circuit::OrchardVanilla(CircuitVanilla {
-                circuit_version,
-                path: Value::known(path.auth_path()),
-                pos: Value::known(path.position()),
-                g_d_old: Value::known(sender_address.g_d()),
-                pk_d_old: Value::known(*sender_address.pk_d()),
-                v_old: Value::known(spent_note.value()),
-                rho_old: Value::known(spent_note.rho()),
-                psi_old: Value::known(spent_note.psi()),
-                rcm_old: Value::known(spent_note.rcm()),
-                cm_old: Value::known(spent_note.commitment()),
-                alpha: Value::known(alpha),
-                ak: Value::known(ak),
-                nk: Value::known(nk),
-                rivk: Value::known(rivk),
-                g_d_new: Value::known(output_note.recipient().g_d()),
-                pk_d_new: Value::known(*output_note.recipient().pk_d()),
-                v_new: Value::known(output_note.value()),
-                psi_new: Value::known(output_note.psi()),
-                rcm_new: Value::known(output_note.rcm()),
-                rcv: Value::known(rcv),
-            }),
+            Circuit {
+                common_witnesses: CircuitVanilla {
+                    circuit_version,
+                    path: Value::known(path.auth_path()),
+                    pos: Value::known(path.position()),
+                    g_d_old: Value::known(sender_address.g_d()),
+                    pk_d_old: Value::known(*sender_address.pk_d()),
+                    v_old: Value::known(spent_note.value()),
+                    rho_old: Value::known(spent_note.rho()),
+                    psi_old: Value::known(spent_note.psi()),
+                    rcm_old: Value::known(spent_note.rcm()),
+                    cm_old: Value::known(spent_note.commitment()),
+                    alpha: Value::known(alpha),
+                    ak: Value::known(ak),
+                    nk: Value::known(nk),
+                    rivk: Value::known(rivk),
+                    g_d_new: Value::known(output_note.recipient().g_d()),
+                    pk_d_new: Value::known(*output_note.recipient().pk_d()),
+                    v_new: Value::known(output_note.value()),
+                    psi_new: Value::known(output_note.psi()),
+                    rcm_new: Value::known(output_note.rcm()),
+                    rcv: Value::known(rcv),
+                },
+                additional_zsa_witnesses: Value::unknown(),
+            },
             Instance {
                 anchor,
                 cv_net,
@@ -1211,7 +1180,7 @@ mod tests {
         let mock_verify = |circuit: &Circuit, instance: &Instance| {
             MockProver::run(
                 K,
-                circuit.as_vanilla().unwrap(),
+                &circuit.common_witnesses,
                 instance
                     .to_halo2_instance()
                     .iter()
@@ -1282,7 +1251,7 @@ mod tests {
         super::plonk::create_proof(
             &pk.params,
             &pk.pk,
-            core::slice::from_ref(circuit.as_vanilla().unwrap()),
+            core::slice::from_ref(&circuit.common_witnesses),
             &raw_instances,
             &mut rng,
             &mut transcript,
@@ -1353,7 +1322,7 @@ mod tests {
             let circuit_cost =
                 halo2_proofs::dev::CircuitCost::<pasta_curves::vesta::Point, _>::measure(
                     K,
-                    circuits[0].as_vanilla().unwrap(),
+                    &circuits[0].common_witnesses,
                 );
             // These sizes are identical for every circuit version: the post-NU 6.3 circuit reuses the
             // existing Orchard checks gate on spare rows and adds no columns or
@@ -1376,7 +1345,7 @@ mod tests {
             assert_eq!(
                 MockProver::run(
                     K,
-                    circuit.as_vanilla().unwrap(),
+                    &circuit.common_witnesses,
                     instance
                         .to_halo2_instance()
                         .iter()

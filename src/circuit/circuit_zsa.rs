@@ -28,7 +28,6 @@ use halo2_proofs::{
 };
 
 use crate::{
-    builder::SpendInfo,
     circuit::{
         commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
         derive_nullifier::{gadgets::derive_nullifier, ZsaNullifierParams},
@@ -42,8 +41,7 @@ use crate::{
         RK_Y,
     },
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
-    note::{AssetBase, Note},
-    value::ValueCommitTrapdoor,
+    note::AssetBase,
 };
 
 /// The ZSA-specific witnesses.
@@ -85,43 +83,6 @@ impl CircuitZsa {
         }
     }
 
-    /// Constructs a `CircuitZsa` from the following components:
-    /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
-    /// - `output_note`: a note created in scope of the action
-    /// - `alpha`: a scalar used for randomization of the action spend validating key
-    /// - `rcv`: trapdoor for the action value commitment
-    ///
-    /// # Panics
-    ///
-    /// Panics if `circuit_version` is not ZSA.
-    pub(crate) fn from_action_context_unchecked(
-        spend: SpendInfo,
-        output_note: Note,
-        alpha: pallas::Scalar,
-        rcv: ValueCommitTrapdoor,
-        circuit_version: OrchardCircuitVersion,
-    ) -> Self {
-        if !circuit_version.is_zsa() {
-            panic!("circuit version must be ZSA in OrchardZSA circuit");
-        }
-
-        let (common_witnesses, psi_nf) = CircuitVanilla::from_action_context_common(
-            &spend,
-            &output_note,
-            alpha,
-            rcv,
-            circuit_version,
-        );
-
-        CircuitZsa {
-            common_witnesses,
-            additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
-                psi_nf,
-                asset: spend.note.asset(),
-                split_flag: spend.split_flag,
-            }),
-        }
-    }
 }
 
 impl plonk::Circuit<pallas::Base> for CircuitZsa {
