@@ -51,6 +51,7 @@ mod test_vectors;
 pub use action::Action;
 pub use address::Address;
 pub use bundle::ActionGroup;
+pub use bundle::Bundle;
 pub use constants::MERKLE_DEPTH_ORCHARD as NOTE_COMMITMENT_TREE_DEPTH;
 pub use note::Note;
 pub use tree::Anchor;
