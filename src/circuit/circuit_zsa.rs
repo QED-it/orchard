@@ -39,8 +39,9 @@ use crate::{
         note_commit::{gadgets::note_commit, NoteCommitChip, ZsaNoteCommitParams},
         unpack,
         value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
-        AdditionalZsaWitnesses, Config, OrchardCircuit, Witnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y,
-        ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
+        AdditionalZsaWitnesses, AddressPoints, Config, OrchardCircuit, OrchardCircuitVersion,
+        Witnesses, ANCHOR, CMX, CV_NET_X, CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT,
+        ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X, RK_Y,
     },
     constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
     flavor::OrchardZSA,
@@ -72,13 +73,14 @@ impl OrchardCircuit for OrchardZSA {
         // Constrain split_flag to be boolean
         // Constrain v_old * (1 - split_flag) - v_new = magnitude * sign
         // Constrain (v_old = 0 and is_zatoshi_asset = 1) or (calculated root = anchor)
-        // Constrain v_old = 0 or enable_spends = 1
-        // Constrain v_new = 0 or enable_outputs = 1
+        // Constrain v_old = 0 or enable_spend = 1
+        // Constrain v_new = 0 or enable_output = 1
         // Constrain is_zatoshi_asset to be boolean
-        // Constraint if is_zatoshi_asset = 1 then asset = zatoshi_asset else asset != zatoshi_asset
-        // Constraint if split_flag = 0 then psi_old = psi_nf
-        // Constraint if split_flag = 1, then is_zatoshi_asset = 0
-        // Constraint if enable_zsa = 0, then is_zatoshi_asset = 1
+        // Constrain if is_zatoshi_asset = 1 then asset = zatoshi_asset else asset != zatoshi_asset
+        // Constrain if split_flag = 0 then psi_old = psi_nf
+        // Constrain if split_flag = 1, then is_zatoshi_asset = 0
+        // Constrain if enable_zsa = 0, then is_zatoshi_asset = 1
+        // Constrain if disable_cross_address = 1, then split_flag = 0
         //
         // [circuitstatement]: https://zips.z.cash/zip-0226#circuit-statement
         let q_orchard = meta.selector();
@@ -92,8 +94,8 @@ impl OrchardCircuit for OrchardZSA {
             let root = meta.query_advice(advices[4], Rotation::cur());
             let anchor = meta.query_advice(advices[5], Rotation::cur());
 
-            let enable_spends = meta.query_advice(advices[6], Rotation::cur());
-            let enable_outputs = meta.query_advice(advices[7], Rotation::cur());
+            let enable_spend = meta.query_advice(advices[6], Rotation::cur());
+            let enable_output = meta.query_advice(advices[7], Rotation::cur());
 
             let split_flag = meta.query_advice(advices[8], Rotation::cur());
 
@@ -118,6 +120,7 @@ impl OrchardCircuit for OrchardZSA {
             let psi_nf = meta.query_advice(advices[5], Rotation::next());
 
             let enable_zsa = meta.query_advice(advices[6], Rotation::next());
+            let disable_cross_address = meta.query_advice(advices[7], Rotation::next());
 
             Constraints::with_selector(
                 q_orchard,
@@ -138,12 +141,12 @@ impl OrchardCircuit for OrchardZSA {
                         (v_old.clone() + one.clone() - is_zatoshi_asset.clone()) * (root - anchor),
                     ),
                     (
-                        "v_old = 0 or enable_spends = 1",
-                        v_old * (one.clone() - enable_spends),
+                        "v_old = 0 or enable_spend = 1",
+                        v_old * (one.clone() - enable_spend),
                     ),
                     (
-                        "v_new = 0 or enable_outputs = 1",
-                        v_new * (one.clone() - enable_outputs),
+                        "v_new = 0 or enable_output = 1",
+                        v_new * (one.clone() - enable_output),
                     ),
                     (
                         "bool_check is_zatoshi_asset",
@@ -174,11 +177,18 @@ impl OrchardCircuit for OrchardZSA {
                     ),
                     (
                         "(split_flag = 1) => (is_zatoshi_asset = 0)",
-                        split_flag * is_zatoshi_asset.clone(),
+                        split_flag.clone() * is_zatoshi_asset.clone(),
                     ),
                     (
                         "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
                         (one.clone() - enable_zsa) * (one - is_zatoshi_asset),
+                    ),
+                    // `split_flag` and `cross_address_disabled` cannot both be enabled at the
+                    // same time. A split note's output is forced to a negative net value, which
+                    // is not a meaningful self-transfer.
+                    (
+                        "(disable_cross_address = 1) => (split_flag = 0)",
+                        split_flag * disable_cross_address,
                     ),
                 ],
             )
@@ -331,6 +341,10 @@ impl OrchardCircuit for OrchardZSA {
         config: Self::Config,
         mut layouter: impl Layouter<pallas::Base>,
     ) -> Result<(), plonk::Error> {
+        if circuit.circuit_version != OrchardCircuitVersion::ZSA {
+            return Err(plonk::Error::Synthesis);
+        }
+
         // Prevent synthesis of insecure ZSA circuits.
         if circuit.circuit_version.halo2_version() == CircuitVersion::InsecureUnanchoredBase {
             return Err(plonk::Error::Synthesis);
@@ -658,33 +672,33 @@ impl OrchardCircuit for OrchardZSA {
             derived_cm_old.constrain_equal(layouter.namespace(|| "cm_old equality"), &cm_old)?;
         }
 
+        // Witness g_d_new
+        let g_d_new = {
+            let g_d_new = circuit.g_d_new.map(|g_d_new| g_d_new.to_affine());
+            NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "witness g_d_new_star"),
+                g_d_new,
+            )?
+        };
+
+        // Witness pk_d_new
+        let pk_d_new = {
+            let pk_d_new = circuit
+                .pk_d_new
+                .map(|pk_d_new| pk_d_new.inner().to_affine());
+            NonIdentityPoint::new(
+                ecc_chip.clone(),
+                layouter.namespace(|| "witness pk_d_new"),
+                pk_d_new,
+            )?
+        };
+
         // New note commitment integrity.
         // See [ZIP-226: Transfer and Burn of Zcash Shielded Assets][notecommit] for more details.
         //
         // [notecommit]: https://zips.z.cash/zip-0226#note-structure-commitment.
         {
-            // Witness g_d_new
-            let g_d_new = {
-                let g_d_new = circuit.g_d_new.map(|g_d_new| g_d_new.to_affine());
-                NonIdentityPoint::new(
-                    ecc_chip.clone(),
-                    layouter.namespace(|| "witness g_d_new_star"),
-                    g_d_new,
-                )?
-            };
-
-            // Witness pk_d_new
-            let pk_d_new = {
-                let pk_d_new = circuit
-                    .pk_d_new
-                    .map(|pk_d_new| pk_d_new.inner().to_affine());
-                NonIdentityPoint::new(
-                    ecc_chip.clone(),
-                    layouter.namespace(|| "witness pk_d_new"),
-                    pk_d_new,
-                )?
-            };
-
             // ρ^new = nf^old
             let rho_new = nf_old.inner().clone();
 
@@ -757,7 +771,7 @@ impl OrchardCircuit for OrchardZSA {
                 )?;
 
                 region.assign_advice_from_instance(
-                    || "enable spends",
+                    || "enable spend",
                     config.primary,
                     ENABLE_SPEND,
                     config.advices[6],
@@ -765,7 +779,7 @@ impl OrchardCircuit for OrchardZSA {
                 )?;
 
                 region.assign_advice_from_instance(
-                    || "enable outputs",
+                    || "enable output",
                     config.primary,
                     ENABLE_OUTPUT,
                     config.advices[7],
@@ -851,9 +865,26 @@ impl OrchardCircuit for OrchardZSA {
                     1,
                 )?;
 
+                region.assign_advice_from_instance(
+                    || "disable_cross_address",
+                    config.primary,
+                    DISABLE_CROSS_ADDRESS,
+                    config.advices[7],
+                    1,
+                )?;
+
                 config.q_orchard.enable(&mut region, 0)
             },
         )?;
+
+        let addrs = AddressPoints {
+            g_d_old,
+            pk_d_old,
+            g_d_new,
+            pk_d_new,
+        };
+
+        synthesize_cross_address_checks(&config, &mut layouter, &addrs)?;
 
         Ok(())
     }
@@ -869,6 +900,272 @@ impl OrchardCircuit for OrchardZSA {
             split_flag,
         })
     }
+}
+
+/// Enforces the ZSA cross-address restriction for one action: when
+/// `disableCrossAddress` is nonzero, the spent note and output note must be
+/// addressed to the same expanded receiver, meaning equal `(g_d, pk_d)`.
+///
+/// This reuses the existing "Orchard circuit checks" gate instead of adding a
+/// new gate. The gate already has a product constraint,
+/// `(v_old + 1 - is_zatoshi_asset) * (root - anchor) = 0`, with exactly the shape needed for
+/// `disableCrossAddress * (old_coord - new_coord) = 0` when `is_zatoshi_asset = 1`.
+///
+/// The ZSA circuit enables that gate on eight extra rows, two per affine coordinate of
+/// `(g_d, pk_d)`, with:
+///
+/// ```text
+/// First row:
+/// v_old            <- disableCrossAddress
+/// v_new            <- 0 (constant)
+/// magnitude        <- disableCrossAddress
+/// sign             <- 1 (constant)
+/// root             <- old coordinate
+/// anchor           <- new coordinate
+/// enable_spend     <- 1 (constant)
+/// enable_output    <- 1 (constant)
+/// split_flag       <- 0 (constant)
+/// is_zatoshi_asset <- 1 (constant)
+///
+/// Second row
+/// asset_x          <- zatoshi_asset.x()
+/// asset_y          <- zatoshi_asset.y()
+/// diff_asset_x_inv <- 0 (constant)
+/// diff_asset_y_inv <- 0 (constant)
+/// psi_old          <- 0 (constant)
+/// psi_nf           <- 0 (constant)
+/// enable_zsa       <- 1 (constant)
+/// disable_cross_address <- disableCrossAddress
+/// ```
+///
+/// With this layout, the gate constraints become:
+///
+/// ```text
+/// split_flag * (1 - split_flag) = 0
+///     ->  0 * (1-0) = 0
+/// v_old * (1 - split_flag) - v_new = magnitude * sign
+///     -> disableCrossAddress * (1-0) - 0 = disableCrossAddress * 1
+/// (v_old + 1 - is_zatoshi_asset) * (root - anchor) = 0
+///     ->  (disableCrossAddress + 1 - 1) * (old_coord - new_coord) = 0
+/// v_old * (1 - enable_spend) = 0
+///     ->  disableCrossAddress * (1 - 1) = 0
+/// v_new * (1 - enable_output) = 0
+///     ->  0 * (1 - 1) = 0
+/// is_zatoshi_asset * (1 - is_zatoshi_asset) = 0
+///     -> 1 * (1-1) = 0
+/// is_zatoshi_asset * diff_asset_x = 0
+///     -> 1 * (zatoshi_asset.x() - zatoshi_asset.x()) = 0
+/// is_zatoshi_asset * diff_asset_y = 0
+///     -> 1 * (zatoshi_asset_y() - zatoshi_asset.y()) = 0
+/// (1 - is_zatoshi_asset) * (diff_asset_x * diff_asset_x_inv - 1) * (diff_asset_y * diff_asset_y_inv - 1) = 0
+///     -> (1 - 1) * (diff_asset_x * 0 - 1) * (diff_asset_y * 0 - 1) = 0
+/// (1 - split_flag)*(psi_old - psi_nf) = 0
+///     -> (1 - 0) * (0 - 0) = 0
+/// split_flag * is_zatoshi_asset = 0
+///     -> 0 * 1 = 0
+/// (1 - enable_zsa) * (1 - is_zatoshi_asset) = 0
+///     -> (1 - 1) * (1 - 1) = 0
+/// disable_cross_address * split_flag = 0
+///     -> disableCrossAddress * 0 = 0
+/// ```
+///
+/// The second line is the actual cross-address check. Any nonzero
+/// `disableCrossAddress` value forces each old coordinate to equal the
+/// corresponding new coordinate. The public API encodes `disableCrossAddress`
+/// as 0 or 1, but this algebra does not rely on a boolean constraint.
+fn synthesize_cross_address_checks(
+    config: &Config<PallasLookupRangeCheck4_5BConfig>,
+    layouter: &mut impl Layouter<pallas::Base>,
+    addrs: &AddressPoints<PallasLookupRangeCheck4_5BConfig>,
+) -> Result<(), plonk::Error> {
+    let AddressPoints {
+        g_d_old,
+        pk_d_old,
+        g_d_new,
+        pk_d_new,
+    } = addrs;
+
+    layouter.assign_region(
+        || "ZSA cross-address checks",
+        |mut region| {
+            let coordinate_checks = [
+                ("g_d x", g_d_old.inner().x(), g_d_new.inner().x()),
+                ("g_d y", g_d_old.inner().y(), g_d_new.inner().y()),
+                ("pk_d x", pk_d_old.inner().x(), pk_d_new.inner().x()),
+                ("pk_d y", pk_d_old.inner().y(), pk_d_new.inner().y()),
+            ];
+
+            let mut offset = 0;
+
+            for (label, old_coord, new_coord) in coordinate_checks.into_iter() {
+                config.q_orchard.enable(&mut region, offset)?;
+
+                // Copy disableCrossAddress from the public input at
+                // primary[DISABLE_CROSS_ADDRESS] into advices[0] for this
+                // coordinate-check row.
+                let cross_address_disabled = region.assign_advice_from_instance(
+                    || "v_old <- disableCrossAddress",
+                    config.primary,
+                    DISABLE_CROSS_ADDRESS,
+                    config.advices[0],
+                    offset,
+                )?;
+
+                // Fill the v_new, magnitude, sign and split_flag cells so the reused
+                // value-balance constraint reads:
+                // disableCrossAddress * (1-0) - 0 = disableCrossAddress * 1.
+                region.assign_advice_from_constant(
+                    || "v_new <- zero",
+                    config.advices[1],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+                cross_address_disabled.copy_advice(
+                    || "magnitude <- disableCrossAddress",
+                    &mut region,
+                    config.advices[2],
+                    offset,
+                )?;
+                region.assign_advice_from_constant(
+                    || "sign <- one",
+                    config.advices[3],
+                    offset,
+                    pallas::Base::one(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "split_flag <- zero",
+                    config.advices[8],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+
+                // Copy the old coordinate into the gate's root cell and the
+                // new coordinate into its anchor cell for the equality check.
+                old_coord.copy_advice(
+                    || format!("root <- {label}"),
+                    &mut region,
+                    config.advices[4],
+                    offset,
+                )?;
+                new_coord.copy_advice(
+                    || format!("anchor <- {label}"),
+                    &mut region,
+                    config.advices[5],
+                    offset,
+                )?;
+
+                // Set both enable flags to one so the unrelated enable checks
+                // in q_orchard are neutralized on these rows.
+                region.assign_advice_from_constant(
+                    || "one (neutralize enable_spend check)",
+                    config.advices[6],
+                    offset,
+                    pallas::Base::one(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "one (neutralize enable_output check)",
+                    config.advices[7],
+                    offset,
+                    pallas::Base::one(),
+                )?;
+
+                // Set `is_zatoshi_asset` to 1.
+                region.assign_advice_from_constant(
+                    || "is_zatoshi_asset <- 1",
+                    config.advices[9],
+                    offset,
+                    pallas::Base::one(),
+                )?;
+
+                // Second row
+                offset += 1;
+
+                // Set `(asset_x, asset_y) = AssetBase::zatoshi()`.
+                let zatoshi_asset = AssetBase::zatoshi()
+                    .cv_base()
+                    .to_affine()
+                    .coordinates()
+                    .unwrap();
+                region.assign_advice_from_constant(
+                    || "asset_x <- zatoshi_asset.x()",
+                    config.advices[0],
+                    offset,
+                    *zatoshi_asset.x(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "asset_y <- zatoshi_asset.y()",
+                    config.advices[1],
+                    offset,
+                    *zatoshi_asset.y(),
+                )?;
+
+                // Set `diff_asset_x_inv` and `diff_asset_y_inv` to 0.
+                region.assign_advice_from_constant(
+                    || "diff_asset_x_inv <- 0",
+                    config.advices[2],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "diff_asset_y_inv <- 0",
+                    config.advices[3],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+
+                // Set `psi_old` and `psi_nf` to 0 to satisfy the following constraint (split_flag=0):
+                // (1 - split_flag)*(psi_old - psi_nf) = 0
+                region.assign_advice_from_constant(
+                    || "psi_old <- 0",
+                    config.advices[4],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+                region.assign_advice_from_constant(
+                    || "psi_nf <- 0",
+                    config.advices[5],
+                    offset,
+                    pallas::Base::zero(),
+                )?;
+
+                // Set `enable_zsa` to 1 to satisfy the following constraint:
+                // (1 - enable_zsa) * (1 - is_zatoshi_asset) = 0
+                region.assign_advice_from_constant(
+                    || "enable_zsa <- 1",
+                    config.advices[6],
+                    offset,
+                    pallas::Base::one(),
+                )?;
+
+                cross_address_disabled.copy_advice(
+                    || "disable_cross_address <- disableCrossAddress",
+                    &mut region,
+                    config.advices[7],
+                    offset,
+                )?;
+
+                // Occupy the otherwise-unused rightmost advice columns so the
+                // floor planner cannot lay out another region (and enable its
+                // gate) on these rows.
+                cross_address_disabled.copy_advice(
+                    || "disableCrossAddress padding",
+                    &mut region,
+                    config.advices[8],
+                    offset,
+                )?;
+                cross_address_disabled.copy_advice(
+                    || "disableCrossAddress padding",
+                    &mut region,
+                    config.advices[9],
+                    offset,
+                )?;
+
+                offset += 1;
+            }
+
+            Ok(())
+        },
+    )
 }
 
 #[cfg(test)]
@@ -892,14 +1189,17 @@ mod tests {
         },
         flavor::OrchardZSA,
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
-        note::{commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, Nullifier, Rho},
+        note::{
+            commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, NoteVersion,
+            Nullifier, Rho,
+        },
         primitives::redpallas::VerificationKey,
         tree::MerklePath,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
 
     fn generate_dummy_circuit_instance<R: RngCore>(mut rng: R) -> (Circuit<OrchardZSA>, Instance) {
-        let (_, fvk, spent_note) = Note::dummy(&mut rng, None);
+        let (_, fvk, spent_note) = Note::dummy(&mut rng, None, NoteVersion::ZSA);
 
         let sender_address = spent_note.recipient();
         let nk = *fvk.nk();
@@ -910,7 +1210,7 @@ mod tests {
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
 
-        let (_, _, output_note) = Note::dummy(&mut rng, Some(rho));
+        let (_, _, output_note) = Note::dummy(&mut rng, Some(rho), NoteVersion::ZSA);
         let cmx = output_note.commitment().into();
 
         let value = spent_note.value() - output_note.value();
@@ -925,7 +1225,7 @@ mod tests {
         (
             Circuit {
                 witnesses: Witnesses {
-                    circuit_version: OrchardCircuitVersion::FixedPostNu6_2,
+                    circuit_version: OrchardCircuitVersion::ZSA,
                     path: Value::known(path.auth_path()),
                     pos: Value::known(path.position()),
                     g_d_old: Value::known(sender_address.g_d()),
@@ -933,7 +1233,7 @@ mod tests {
                     v_old: Value::known(spent_note.value()),
                     rho_old: Value::known(spent_note.rho()),
                     psi_old: Value::known(psi_old),
-                    rcm_old: Value::known(spent_note.rseed().rcm(&spent_note.rho())),
+                    rcm_old: Value::known(spent_note.rcm()),
                     cm_old: Value::known(spent_note.commitment()),
                     alpha: Value::known(alpha),
                     ak: Value::known(ak),
@@ -943,7 +1243,7 @@ mod tests {
                     pk_d_new: Value::known(*output_note.recipient().pk_d()),
                     v_new: Value::known(output_note.value()),
                     psi_new: Value::known(output_note.rseed().psi(&output_note.rho())),
-                    rcm_new: Value::known(output_note.rseed().rcm(&output_note.rho())),
+                    rcm_new: Value::known(output_note.rcm()),
                     rcv: Value::known(rcv),
 
                     additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
@@ -962,6 +1262,7 @@ mod tests {
                 cmx,
                 enable_spend: true,
                 enable_output: true,
+                cross_address_disabled: false,
                 enable_zsa: false,
             },
         )
@@ -980,6 +1281,7 @@ mod tests {
         w.write_all(&[
             u8::from(instance.enable_spend()),
             u8::from(instance.enable_output()),
+            u8::from(instance.cross_address_disabled()),
             u8::from(instance.enable_zsa()),
         ])?;
         w.write_all(proof.as_ref())?;
@@ -1007,8 +1309,14 @@ mod tests {
         let cmx = crate::note::ExtractedNoteCommitment::from_bytes(&read_32_bytes(&mut r)).unwrap();
         let enable_spend = read_bool(&mut r);
         let enable_output = read_bool(&mut r);
+        let cross_address_disable = read_bool(&mut r);
         let enable_zsa = read_bool(&mut r);
-        let flags = Flags::from_parts(enable_spend, enable_output, enable_zsa);
+        let flags = Flags::from_parts(
+            enable_spend,
+            enable_output,
+            !cross_address_disable,
+            enable_zsa,
+        );
         let instance = Instance::from_parts(anchor, cv_net, nf_old, rk, cmx, flags)
             .expect("test vectors were generated with non-identity rk");
         let mut proof_bytes = vec![];
@@ -1026,7 +1334,7 @@ mod tests {
             .map(|()| generate_dummy_circuit_instance(&mut rng))
             .unzip();
 
-        let vk = VerifyingKey::build::<OrchardZSA>();
+        let vk = VerifyingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
 
         // Test that the pinned verification key (representing the circuit) is as expected.
         // Set ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF to regenerate it (and the proof below).
@@ -1082,7 +1390,7 @@ mod tests {
             );
         }
 
-        let pk = ProvingKey::build::<OrchardZSA>();
+        let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(&vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
@@ -1090,7 +1398,7 @@ mod tests {
 
     #[test]
     fn serialized_proof_test_case() {
-        let vk = VerifyingKey::build::<OrchardZSA>();
+        let vk = VerifyingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
 
         if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
             let create_proof = || -> std::io::Result<()> {
@@ -1099,7 +1407,7 @@ mod tests {
                 let (circuit, instance) = generate_dummy_circuit_instance(OsRng);
                 let instances = &[instance.clone()];
 
-                let pk = ProvingKey::build::<OrchardZSA>();
+                let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
                 let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
                 assert!(proof.verify(&vk, instances).is_ok());
 
@@ -1134,13 +1442,7 @@ mod tests {
             .titled("Orchard Action Circuit", ("sans-serif", 60))
             .unwrap();
 
-        let circuit = Circuit::<OrchardZSA> {
-            witnesses: Witnesses {
-                circuit_version: OrchardCircuitVersion::FixedPostNu6_2,
-                ..Default::default()
-            },
-            phantom: core::marker::PhantomData,
-        };
+        let circuit = Circuit::<OrchardZSA>::empty(OrchardCircuitVersion::ZSA);
         halo2_proofs::dev::CircuitLayout::default()
             .show_labels(false)
             .view_height(0..(1 << 11))
@@ -1171,10 +1473,45 @@ mod tests {
         }
     }
 
+    /// Generates a circuit and instance whose output note is addressed to an expanded
+    /// receiver distinct from the spent note's.
     fn generate_circuit_instance<R: CryptoRngCore>(
         is_zatoshi_asset: bool,
         split_flag: bool,
         orchard_circuit_version: OrchardCircuitVersion,
+        rng: R,
+    ) -> (Circuit<OrchardZSA>, Instance) {
+        generate_circuit_instance_inner(
+            is_zatoshi_asset,
+            split_flag,
+            orchard_circuit_version,
+            false,
+            rng,
+        )
+    }
+
+    /// Generates a circuit and instance whose output note is addressed to the spent
+    /// note's expanded receiver, as the cross-address restriction requires.
+    fn generate_self_transfer_circuit_instance<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        split_flag: bool,
+        orchard_circuit_version: OrchardCircuitVersion,
+        rng: R,
+    ) -> (Circuit<OrchardZSA>, Instance) {
+        generate_circuit_instance_inner(
+            is_zatoshi_asset,
+            split_flag,
+            orchard_circuit_version,
+            true,
+            rng,
+        )
+    }
+
+    fn generate_circuit_instance_inner<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        split_flag: bool,
+        orchard_circuit_version: OrchardCircuitVersion,
+        output_matches_spend: bool,
         mut rng: R,
     ) -> (Circuit<OrchardZSA>, Instance) {
         // We cannot create a split note with a zatoshi asset.
@@ -1199,6 +1536,7 @@ mod tests {
                 NoteValue::from_raw(40),
                 asset_base,
                 rho,
+                NoteVersion::ZSA,
                 &mut rng,
             );
             let spent_note = if split_flag {
@@ -1234,11 +1572,27 @@ mod tests {
         let rk = ak.randomize(&alpha);
 
         let output_note = {
-            let sk = SpendingKey::random(&mut rng);
-            let fvk: FullViewingKey = (&sk).into();
-            let sender_address = fvk.address_at(0u32, Scope::External);
+            let output_address = if output_matches_spend {
+                spent_note.recipient()
+            } else {
+                loop {
+                    let sk = SpendingKey::random(&mut rng);
+                    let fvk: FullViewingKey = (&sk).into();
+                    let addr = fvk.address_at(0u32, Scope::External);
+                    if addr != spent_note.recipient() {
+                        break addr;
+                    }
+                }
+            };
 
-            Note::new(sender_address, output_value, asset_base, rho, &mut rng)
+            Note::new(
+                output_address,
+                output_value,
+                asset_base,
+                rho,
+                NoteVersion::ZSA,
+                &mut rng,
+            )
         };
 
         let cmx = output_note.commitment().into();
@@ -1277,6 +1631,7 @@ mod tests {
                 cmx,
                 enable_spend: true,
                 enable_output: true,
+                cross_address_disabled: false,
                 enable_zsa: true,
             },
         )
@@ -1303,7 +1658,7 @@ mod tests {
             let (circuit, instance) = generate_circuit_instance(
                 is_zatoshi_asset,
                 split_flag,
-                OrchardCircuitVersion::FixedPostNu6_2,
+                OrchardCircuitVersion::ZSA,
                 &mut rng,
             );
 
@@ -1321,6 +1676,7 @@ mod tests {
                 cmx: instance.cmx,
                 enable_spend: instance.enable_spend,
                 enable_output: instance.enable_output,
+                cross_address_disabled: instance.cross_address_disabled,
                 enable_zsa: instance.enable_zsa,
             };
             check_proof_of_orchard_circuit(&circuit, &instance_wrong_cv_net, false);
@@ -1335,6 +1691,7 @@ mod tests {
                 cmx: instance.cmx,
                 enable_spend: instance.enable_spend,
                 enable_output: instance.enable_output,
+                cross_address_disabled: instance.cross_address_disabled,
                 enable_zsa: instance.enable_zsa,
             };
             check_proof_of_orchard_circuit(&circuit, &instance_wrong_rk, false);
@@ -1380,6 +1737,7 @@ mod tests {
                 cmx: random_note_commitment(&mut rng).into(),
                 enable_spend: instance.enable_spend,
                 enable_output: instance.enable_output,
+                cross_address_disabled: instance.cross_address_disabled,
                 enable_zsa: instance.enable_zsa,
             };
             check_proof_of_orchard_circuit(&circuit, &instance_wrong_cmx_pub, false);
@@ -1394,6 +1752,7 @@ mod tests {
                 cmx: instance.cmx,
                 enable_spend: instance.enable_spend,
                 enable_output: instance.enable_output,
+                cross_address_disabled: instance.cross_address_disabled,
                 enable_zsa: instance.enable_zsa,
             };
             check_proof_of_orchard_circuit(&circuit, &instance_wrong_nf_old_pub, false);
@@ -1449,6 +1808,7 @@ mod tests {
                     cmx: instance.cmx,
                     enable_spend: instance.enable_spend,
                     enable_output: instance.enable_output,
+                    cross_address_disabled: instance.cross_address_disabled,
                     enable_zsa: false,
                 };
                 check_proof_of_orchard_circuit(&circuit, &instance_wrong_enable_zsa, false);
@@ -1465,7 +1825,57 @@ mod tests {
             OrchardCircuitVersion::InsecurePreNu6_2,
             &mut rng,
         );
-        let pk = ProvingKey::build::<OrchardZSA>();
+        let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
         assert!(Proof::create(&pk, &[circuit], &[instance], &mut rng).is_err());
+    }
+
+    #[test]
+    fn zsa_cross_address_restriction_is_conditional() {
+        // An unrestricted cross-address statement is satisfiable...
+        let (circuit, mut instance) =
+            generate_circuit_instance(false, false, OrchardCircuitVersion::ZSA, OsRng);
+        check_proof_of_orchard_circuit(&circuit, &instance, true);
+
+        // ...but setting `disableCrossAddress` makes it unsatisfiable...
+        instance.cross_address_disabled = true;
+        check_proof_of_orchard_circuit(&circuit, &instance, false);
+
+        // ...while a restricted self-transfer statement is satisfiable...
+        let (circuit, mut instance) = generate_self_transfer_circuit_instance(
+            false,
+            false,
+            OrchardCircuitVersion::ZSA,
+            OsRng,
+        );
+        instance.cross_address_disabled = true;
+        check_proof_of_orchard_circuit(&circuit, &instance, true);
+
+        // ... but `split_flag` and `cross_address_disabled` cannot both be enabled at the same
+        // time. A split note's output is forced to a negative net value, which is not a meaningful
+        // self-transfer.
+        let (circuit, mut instance) =
+            generate_self_transfer_circuit_instance(false, true, OrchardCircuitVersion::ZSA, OsRng);
+        instance.cross_address_disabled = true;
+        check_proof_of_orchard_circuit(&circuit, &instance, false);
+    }
+
+    #[test]
+    fn zsa_restricted_statement_proves_and_verifies() {
+        let mut rng = OsRng;
+        let (circuit, mut instance) = generate_self_transfer_circuit_instance(
+            false,
+            false,
+            OrchardCircuitVersion::ZSA,
+            &mut rng,
+        );
+        instance.cross_address_disabled = true;
+
+        let pk = ProvingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
+        let vk = VerifyingKey::build::<OrchardZSA>(OrchardCircuitVersion::ZSA);
+
+        let instances = &[instance.clone()];
+
+        let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
+        assert!(proof.verify(&vk, instances).is_ok());
     }
 }
