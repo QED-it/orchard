@@ -1455,7 +1455,12 @@ pub mod testing {
             acts in vec(arb_unauthorized_action_n(bundle_version.note_version(), n_actions, flags), n_actions),
             anchor in arb_base().prop_map(Anchor::from),
             flags in Just(flags),
-            burn in vec(arb_asset_to_burn(), 1usize..10),
+            // `from_parts` rejects a burn under a version that does not permit ZSA.
+            burn in if bundle_version.permits_zsa() {
+                vec(arb_asset_to_burn(), 1usize..10).boxed()
+            } else {
+                Just(Vec::<(AssetBase, NoteValue)>::new()).boxed()
+            },
             bundle_version in Just(bundle_version),
         ) -> Bundle<Unauthorized, ValueSum> {
             let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
@@ -1470,7 +1475,7 @@ pub mod testing {
                 super::EffectsOnly,
                 bundle_version,
             )
-            .expect("flags are normalized to be representable under bundle_version")
+            .expect("flags are normalized and burn is empty unless the version permits ZSA")
         }
     }
 
