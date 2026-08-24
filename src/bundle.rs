@@ -1475,12 +1475,15 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary bundle with fake authorization data. This bundle does not
-        /// necessarily respect consensus rules; for that use
-        /// [`crate::builder::testing::arb_bundle`]
-        pub fn arb_bundle(n_actions: usize)
+        /// Generate an arbitrary bundle with fake authorization data, for a `bundle_version`
+        /// drawn from `versions`.
+        ///
+        /// `burn` is derived from the drawn version rather than drawn independently: it is
+        /// non-empty only when the version permits ZSA, since `try_from_parts` rejects a burn
+        /// under any other version as `BurnNotPermitted`.
+        fn arb_bundle_for_versions(n_actions: usize, versions: impl Strategy<Value = BundleVersion>)
         (
-            bundle_version in arb_bundle_version(),
+            bundle_version in versions,
             flags in arb_flags(),
         )
         (
@@ -1495,12 +1498,10 @@ pub mod testing {
             ),
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
             flags in Just(flags),
-            // Burn is only permitted under a `bundle_version` that permits ZSA; keep it empty
-            // otherwise, so `try_from_parts` doesn't reject it as `BurnNotPermitted`.
             burn in if bundle_version.permits_zsa() {
                 vec(arb_asset_to_burn(), 1usize..10).boxed()
             } else {
-                Just(alloc::vec![]).boxed()
+                Just(Vec::<(AssetBase, NoteValue)>::new()).boxed()
             },
             bundle_version in Just(bundle_version),
         ) -> Bundle<Authorized, ValueSum> {
@@ -1524,87 +1525,23 @@ pub mod testing {
         }
     }
 
-    prop_compose! {
-        /// Like [`arb_bundle`], but never draws the ZSA `BundleVersion`.
-        pub fn arb_bundle_vanilla(n_actions: usize)
-        (
-            bundle_version in arb_bundle_version_vanilla(),
-            flags in arb_flags(),
-        )
-        (
-            acts in vec(arb_action_n(bundle_version.note_version(), n_actions, flags), n_actions),
-            anchor in arb_base().prop_map(Anchor::from),
-            sk in arb_binding_signing_key(),
-            rng_seed in prop::array::uniform32(prop::num::u8::ANY),
-            // A fake proof of the canonical length, so the bundle passes `try_from_parts`.
-            fake_proof in vec(
-                prop::num::u8::ANY,
-                Proof::expected_proof_size(bundle_version, n_actions),
-            ),
-            fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
-            flags in Just(flags),
-            bundle_version in Just(bundle_version),
-        ) -> Bundle<Authorized, ValueSum> {
-            let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
-            let rng = StdRng::from_seed(rng_seed);
-            let flags = flags_for_version(bundle_version, flags);
-
-            Bundle::try_from_parts(
-                NonEmpty::from_vec(actions).unwrap(),
-                flags,
-                balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
-                vec![], // No burn for non-ZSA bundle
-                anchor,
-                Authorized {
-                    proof: Proof::new(fake_proof),
-                    binding_signature: OrchardBindingSig::new(OrchardSighashKind::AllEffecting, sk.sign(rng, &fake_sighash)),
-                },
-                bundle_version,
-            )
-            .expect("fake proof has the canonical length and flags are representable")
-        }
+    /// Generate an arbitrary bundle with fake authorization data. This bundle does not
+    /// necessarily respect consensus rules; for that use
+    /// [`crate::builder::testing::arb_bundle`]
+    pub fn arb_bundle(n_actions: usize) -> impl Strategy<Value = Bundle<Authorized, ValueSum>> {
+        arb_bundle_for_versions(n_actions, arb_bundle_version())
     }
 
-    prop_compose! {
-        /// Like [`arb_bundle`], but always draws the ZSA `BundleVersion`.
-        pub fn arb_bundle_zsa(n_actions: usize)
-        (
-            bundle_version in Just(BundleVersion::zsa()),
-            flags in arb_flags(),
-        )
-        (
-            acts in vec(arb_action_n(bundle_version.note_version(), n_actions, flags), n_actions),
-            anchor in arb_base().prop_map(Anchor::from),
-            sk in arb_binding_signing_key(),
-            rng_seed in prop::array::uniform32(prop::num::u8::ANY),
-            // A fake proof of the canonical length, so the bundle passes `try_from_parts`.
-            fake_proof in vec(
-                prop::num::u8::ANY,
-                Proof::expected_proof_size(bundle_version, n_actions),
-            ),
-            fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
-            flags in Just(flags),
-            burn in vec(arb_asset_to_burn(), 1usize..10),
-            bundle_version in Just(bundle_version),
-        ) -> Bundle<Authorized, ValueSum> {
-            let (balances, actions): (Vec<ValueSum>, Vec<Action<_>>) = acts.into_iter().unzip();
-            let rng = StdRng::from_seed(rng_seed);
-            let flags = flags_for_version(bundle_version, flags);
+    /// Like [`arb_bundle`], but never draws the ZSA `BundleVersion`.
+    pub fn arb_bundle_vanilla(
+        n_actions: usize,
+    ) -> impl Strategy<Value = Bundle<Authorized, ValueSum>> {
+        arb_bundle_for_versions(n_actions, arb_bundle_version_vanilla())
+    }
 
-            Bundle::try_from_parts(
-                NonEmpty::from_vec(actions).unwrap(),
-                flags,
-                balances.into_iter().sum::<Result<ValueSum, _>>().unwrap(),
-                burn,
-                anchor,
-                Authorized {
-                    proof: Proof::new(fake_proof),
-                    binding_signature: OrchardBindingSig::new(OrchardSighashKind::AllEffecting, sk.sign(rng, &fake_sighash)),
-                },
-                bundle_version,
-            )
-            .expect("fake proof has the canonical length and flags are representable")
-        }
+    /// Like [`arb_bundle`], but always draws the ZSA `BundleVersion`.
+    pub fn arb_bundle_zsa(n_actions: usize) -> impl Strategy<Value = Bundle<Authorized, ValueSum>> {
+        arb_bundle_for_versions(n_actions, Just(BundleVersion::zsa()))
     }
 }
 
