@@ -205,6 +205,8 @@ pub enum BuildError {
     UnrepresentableFlags,
     /// A coinbase bundle was requested with flags that enable spends.
     CoinbaseSpendsEnabled,
+    /// A burn was added under a [`BundleVersion`] that does not permit ZSA.
+    BurnNotPermitted,
 }
 
 impl fmt::Display for BuildError {
@@ -248,6 +250,9 @@ impl fmt::Display for BuildError {
             ),
             CoinbaseSpendsEnabled => {
                 f.write_str("A coinbase bundle was requested with flags that enable spends.")
+            }
+            BurnNotPermitted => {
+                f.write_str("A burn was added under a bundle version that does not permit ZSA.")
             }
         }
     }
@@ -1047,7 +1052,7 @@ impl Builder {
         use alloc::collections::btree_map::Entry;
 
         if !self.bundle_version.permits_zsa() {
-            return Err(BuildError::Burn(BurnError::BurnNotPermitted));
+            return Err(BuildError::BurnNotPermitted);
         }
 
         if asset.is_zatoshi().into() {
@@ -2471,6 +2476,27 @@ mod tests {
                 EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
             ),
             Err(BuildError::UnrepresentableFlags)
+        ));
+    }
+
+    #[test]
+    fn add_burn_rejects_non_zsa_version() {
+        // Burn is only encoded in the ZSA transaction format, so a non-ZSA builder must not
+        // accept one -- otherwise `derive_bvk` would fold in a burn that a wire-reparsed copy
+        // of the same bundle could not reproduce.
+        let mut rng = OsRng;
+        let bundle_version = BundleVersion::ironwood_v3();
+        let mut builder = Builder::new(
+            BundleType::DEFAULT,
+            bundle_version,
+            bundle_version.default_flags(),
+            EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            builder.add_burn(AssetBase::random(&mut rng), NoteValue::from_raw(1)),
+            Err(BuildError::BurnNotPermitted)
         ));
     }
 
