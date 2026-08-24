@@ -321,7 +321,13 @@ impl Circuit {
     }
 
     /// Returns the witnesses proved by the Vanilla circuit versions.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `additional_zsa_witnesses` is known: the Vanilla circuit versions must
+    /// never be asked to prove ZSA-specific witnesses.
     fn to_vanilla(&self) -> CircuitVanilla {
+        self.additional_zsa_witnesses.assert_if_known(|_| false);
         self.common_witnesses.clone()
     }
 
@@ -845,6 +851,46 @@ mod tests {
                 Instance::from_parts(anchor, cv_net, nf_old, rk.clone(), cmx, Flags::ENABLED)
                     .expect("non-identity rk must be accepted");
             assert_eq!(instance.rk(), &rk);
+        }
+    }
+
+    mod to_vanilla_zsa_witnesses_invariant {
+        use ff::Field;
+        use halo2_proofs::circuit::Value;
+        use pasta_curves::pallas;
+
+        use super::super::{
+            AdditionalZsaWitnesses, Circuit, CircuitVanilla, OrchardCircuitVersion,
+        };
+        use crate::note::AssetBase;
+
+        /// `Circuit::to_vanilla` must reject any `Circuit` that carries known ZSA-specific
+        /// witnesses for a non-ZSA `circuit_version`: the Vanilla circuit versions have no
+        /// way to prove them, so their presence indicates a construction bug rather than a
+        /// provable statement.
+        #[test]
+        #[should_panic]
+        fn panics_if_zsa_witnesses_are_known() {
+            let circuit = Circuit {
+                common_witnesses: CircuitVanilla::empty(OrchardCircuitVersion::FixedPostNu6_2),
+                additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
+                    psi_nf: pallas::Base::ZERO,
+                    asset: AssetBase::zatoshi(),
+                    split_flag: false,
+                }),
+            };
+
+            circuit.to_vanilla();
+        }
+
+        #[test]
+        fn accepts_unknown_zsa_witnesses() {
+            let circuit = Circuit {
+                common_witnesses: CircuitVanilla::empty(OrchardCircuitVersion::FixedPostNu6_2),
+                additional_zsa_witnesses: Value::unknown(),
+            };
+
+            circuit.to_vanilla();
         }
     }
 }
