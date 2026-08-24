@@ -175,9 +175,8 @@ impl BundleCommitmentFormat {
     /// Returns `true` if the anchor should be included in the authorizing digest
     /// for this bundle commitment format.
     ///
-    /// Note: for `ZSA`, this function is not used in `hash_bundle_auth_data_zsa`, since
-    /// the format is already known to be `ZSA` there, so the anchor is always
-    /// included unconditionally.
+    /// Only `hash_bundle_auth_data_vanilla` branches on this. `hash_bundle_auth_data_zsa`
+    /// appends the anchor unconditionally and just asserts this flag agrees.
     fn includes_anchor_in_authorizing_digest(self) -> bool {
         matches!(
             self,
