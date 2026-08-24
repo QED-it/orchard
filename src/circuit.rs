@@ -103,31 +103,15 @@ pub struct Config<Lookup: PallasLookupRangeCheck> {
     new_note_commit_config: NoteCommitConfig<Lookup>,
 }
 
-/// The lookup argument used by an Orchard circuit variation.
-///
-/// At configuration time, the two circuit variations differ only in their lookup
-/// argument and in the contents of the `q_orchard` gate; this trait carries both, so
-/// that [`configure_circuit`] can express the shared structure once.
-trait OrchardLookup: PallasLookupRangeCheck {
-    /// Whether this is the lookup argument of the ZSA circuit variation, which the
-    /// Sinsemilla and NoteCommit chips extend with ZSA-specific configuration.
-    const IS_ZSA: bool;
-
-    /// Creates the `q_orchard` gate checking this circuit variation's Orchard Action
-    /// statement, on the given selector.
-    fn configure_orchard_gate(
-        meta: &mut plonk::ConstraintSystem<pallas::Base>,
-        advices: [Column<Advice>; 10],
-        q_orchard: Selector,
-    );
-}
-
 /// Configures the Orchard Action circuit in the given constraint system.
 ///
-/// Shared by both circuit variations; everything variation-specific comes from the
-/// [`OrchardLookup`] implementation.
-fn configure_circuit<Lookup: OrchardLookup>(
+/// Shared by both circuit variations; `is_zsa` selects both the `q_orchard` gate
+/// ([`circuit_vanilla::configure_vanilla_orchard_gate`] or
+/// [`circuit_zsa::configure_zsa_orchard_gate`]) and the ZSA-specific configuration
+/// of the Sinsemilla and NoteCommit chips.
+fn configure_circuit<Lookup: PallasLookupRangeCheck>(
     meta: &mut plonk::ConstraintSystem<pallas::Base>,
+    is_zsa: bool,
 ) -> Config<Lookup> {
     // Advice columns used in the Orchard circuit.
     let advices = [
@@ -144,7 +128,11 @@ fn configure_circuit<Lookup: OrchardLookup>(
     ];
 
     let q_orchard = meta.selector();
-    Lookup::configure_orchard_gate(meta, advices, q_orchard);
+    if is_zsa {
+        circuit_zsa::configure_zsa_orchard_gate(meta, advices, q_orchard);
+    } else {
+        circuit_vanilla::configure_vanilla_orchard_gate(meta, advices, q_orchard);
+    }
 
     // Addition of two field elements.
     let add_config = AddChip::configure(meta, advices[7], advices[8], advices[6]);
@@ -225,7 +213,7 @@ fn configure_circuit<Lookup: OrchardLookup>(
             lagrange_coeffs[0],
             lookup,
             range_check,
-            Lookup::IS_ZSA,
+            is_zsa,
         );
         let merkle_config_1 = MerkleChip::configure(meta, sinsemilla_config_1.clone());
 
@@ -244,7 +232,7 @@ fn configure_circuit<Lookup: OrchardLookup>(
             lagrange_coeffs[1],
             lookup,
             range_check,
-            Lookup::IS_ZSA,
+            is_zsa,
         );
         let merkle_config_2 = MerkleChip::configure(meta, sinsemilla_config_2.clone());
 
@@ -258,12 +246,12 @@ fn configure_circuit<Lookup: OrchardLookup>(
     // Configuration to handle decomposition and canonicity checking
     // for NoteCommit_old.
     let old_note_commit_config =
-        NoteCommitChip::configure(meta, advices, sinsemilla_config_1.clone(), Lookup::IS_ZSA);
+        NoteCommitChip::configure(meta, advices, sinsemilla_config_1.clone(), is_zsa);
 
     // Configuration to handle decomposition and canonicity checking
     // for NoteCommit_new.
     let new_note_commit_config =
-        NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone(), Lookup::IS_ZSA);
+        NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone(), is_zsa);
 
     Config {
         primary,

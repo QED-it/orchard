@@ -23,8 +23,8 @@ use crate::{
         commit_ivk::gadgets::commit_ivk, configure_circuit,
         derive_nullifier::gadgets::derive_nullifier, gadget::assign_free_advice,
         note_commit::gadgets::note_commit, value_commit_orchard::gadgets::value_commit_orchard,
-        AddressPoints, Config, OrchardCircuitVersion, OrchardLookup, ANCHOR, CMX, CV_NET_X,
-        CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
+        AddressPoints, Config, OrchardCircuitVersion, ANCHOR, CMX, CV_NET_X, CV_NET_Y,
+        DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
     },
     constants::{OrchardFixedBasesFull, OrchardHashDomains, MERKLE_DEPTH_ORCHARD},
     keys::{
@@ -165,59 +165,57 @@ impl CircuitVanilla {
     }
 }
 
-impl OrchardLookup for PallasLookupRangeCheckConfig {
-    const IS_ZSA: bool = false;
+/// Creates the `q_orchard` gate checking the OrchardVanilla Action statement, on the
+/// given selector.
+pub(super) fn configure_vanilla_orchard_gate(
+    meta: &mut plonk::ConstraintSystem<pallas::Base>,
+    advices: [Column<Advice>; 10],
+    q_orchard: Selector,
+) {
+    // Constrain v_old - v_new = magnitude * sign    (https://p.z.cash/ZKS:action-cv-net-integrity?partial).
+    // Either v_old = 0, or calculated root = anchor (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
+    // Constrain v_old = 0 or enable_spend = 1       (https://p.z.cash/ZKS:action-enable-spend).
+    // Constrain v_new = 0 or enable_output = 1      (https://p.z.cash/ZKS:action-enable-output).
+    //
+    // This gate is also reused for the same-address check; see
+    // [`CircuitVanilla::synthesize_cross_address_checks`].
+    meta.create_gate("Orchard circuit checks", |meta| {
+        let q_orchard = meta.query_selector(q_orchard);
+        let v_old = meta.query_advice(advices[0], Rotation::cur());
+        let v_new = meta.query_advice(advices[1], Rotation::cur());
+        let magnitude = meta.query_advice(advices[2], Rotation::cur());
+        let sign = meta.query_advice(advices[3], Rotation::cur());
 
-    fn configure_orchard_gate(
-        meta: &mut plonk::ConstraintSystem<pallas::Base>,
-        advices: [Column<Advice>; 10],
-        q_orchard: Selector,
-    ) {
-        // Constrain v_old - v_new = magnitude * sign    (https://p.z.cash/ZKS:action-cv-net-integrity?partial).
-        // Either v_old = 0, or calculated root = anchor (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
-        // Constrain v_old = 0 or enable_spend = 1       (https://p.z.cash/ZKS:action-enable-spend).
-        // Constrain v_new = 0 or enable_output = 1      (https://p.z.cash/ZKS:action-enable-output).
-        //
-        // This gate is also reused for the same-address check; see
-        // [`CircuitVanilla::synthesize_cross_address_checks`].
-        meta.create_gate("Orchard circuit checks", |meta| {
-            let q_orchard = meta.query_selector(q_orchard);
-            let v_old = meta.query_advice(advices[0], Rotation::cur());
-            let v_new = meta.query_advice(advices[1], Rotation::cur());
-            let magnitude = meta.query_advice(advices[2], Rotation::cur());
-            let sign = meta.query_advice(advices[3], Rotation::cur());
+        let root = meta.query_advice(advices[4], Rotation::cur());
+        let anchor = meta.query_advice(advices[5], Rotation::cur());
 
-            let root = meta.query_advice(advices[4], Rotation::cur());
-            let anchor = meta.query_advice(advices[5], Rotation::cur());
+        let enable_spend = meta.query_advice(advices[6], Rotation::cur());
+        let enable_output = meta.query_advice(advices[7], Rotation::cur());
 
-            let enable_spend = meta.query_advice(advices[6], Rotation::cur());
-            let enable_output = meta.query_advice(advices[7], Rotation::cur());
+        let one = Expression::Constant(pallas::Base::one());
 
-            let one = Expression::Constant(pallas::Base::one());
-
-            Constraints::with_selector(
-                q_orchard,
-                [
-                    (
-                        "v_old - v_new = magnitude * sign",
-                        v_old.clone() - v_new.clone() - magnitude * sign,
-                    ),
-                    (
-                        "Either v_old = 0, or root = anchor",
-                        v_old.clone() * (root - anchor),
-                    ),
-                    (
-                        "v_old = 0 or enable_spend = 1",
-                        v_old * (one.clone() - enable_spend),
-                    ),
-                    (
-                        "v_new = 0 or enable_output = 1",
-                        v_new * (one - enable_output),
-                    ),
-                ],
-            )
-        });
-    }
+        Constraints::with_selector(
+            q_orchard,
+            [
+                (
+                    "v_old - v_new = magnitude * sign",
+                    v_old.clone() - v_new.clone() - magnitude * sign,
+                ),
+                (
+                    "Either v_old = 0, or root = anchor",
+                    v_old.clone() * (root - anchor),
+                ),
+                (
+                    "v_old = 0 or enable_spend = 1",
+                    v_old * (one.clone() - enable_spend),
+                ),
+                (
+                    "v_new = 0 or enable_output = 1",
+                    v_new * (one - enable_output),
+                ),
+            ],
+        )
+    });
 }
 
 impl plonk::Circuit<pallas::Base> for CircuitVanilla {
@@ -229,7 +227,7 @@ impl plonk::Circuit<pallas::Base> for CircuitVanilla {
     }
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
-        configure_circuit(meta)
+        configure_circuit(meta, false)
     }
 
     #[allow(non_snake_case)]
