@@ -7,36 +7,26 @@ use group::Curve;
 use pasta_curves::pallas;
 
 use halo2_gadgets::{
-    ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
-    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
-    sinsemilla::{
-        chip::SinsemillaChip,
-        merkle::{chip::MerkleChip, MerklePath},
-    },
-    utilities::lookup_range_check::{
-        LookupRangeCheck, LookupRangeCheckConfig, PallasLookupRangeCheckConfig,
-    },
+    ecc::{FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
+    sinsemilla::{chip::SinsemillaChip, merkle::MerklePath},
+    utilities::lookup_range_check::PallasLookupRangeCheckConfig,
 };
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
-    plonk::{self, Constraints, Expression},
+    plonk::{self, Advice, Column, Constraints, Expression, Selector},
     poly::Rotation,
 };
 
 use crate::{
     builder::SpendInfo,
     circuit::{
-        commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
-        derive_nullifier::gadgets::derive_nullifier,
-        gadget::{add_chip::AddChip, assign_free_advice},
-        note_commit::{gadgets::note_commit, NoteCommitChip},
-        value_commit_orchard::gadgets::value_commit_orchard,
+        commit_ivk::gadgets::commit_ivk, configure_circuit,
+        derive_nullifier::gadgets::derive_nullifier, gadget::assign_free_advice,
+        note_commit::gadgets::note_commit, value_commit_orchard::gadgets::value_commit_orchard,
         AddressPoints, Config, OrchardCircuitVersion, ANCHOR, CMX, CV_NET_X, CV_NET_Y,
         DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, NF_OLD, RK_X, RK_Y,
     },
-    constants::{
-        OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains, MERKLE_DEPTH_ORCHARD,
-    },
+    constants::{OrchardFixedBasesFull, OrchardHashDomains, MERKLE_DEPTH_ORCHARD},
     keys::{
         CommitIvkRandomness, DiversifiedTransmissionKey, NullifierDerivingKey, SpendValidatingKey,
     },
@@ -115,11 +105,12 @@ impl CircuitVanilla {
     /// - `rcv`: trapdoor for the action value commitment
     /// - `circuit_version`: the [`OrchardCircuitVersion`] selected for the circuit
     ///
-    /// This function returns also `psi_nf` which is only consumed by
-    /// [`CircuitZsa`], for its split-note handling.
+    /// This function returns also `psi_nf` which is only consumed by the ZSA-specific
+    /// witnesses of [`Circuit`], for the split-note handling of [`CircuitZsa`].
     ///
     /// [`SpendInfo`]: crate::builder::SpendInfo
     /// [`OrchardCircuitVersion`]: crate::circuit::OrchardCircuitVersion
+    /// [`Circuit`]: crate::circuit::Circuit
     /// [`CircuitZsa`]: crate::circuit::circuit_zsa::CircuitZsa
     pub(crate) fn from_action_context_common(
         spend: &SpendInfo,
@@ -172,41 +163,59 @@ impl CircuitVanilla {
             psi_nf,
         )
     }
+}
 
-    /// Constructs a `CircuitVanilla` for the given `circuit_version` from the following
-    /// components:
-    /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
-    /// - `output_note`: a note created in scope of the action
-    /// - `alpha`: a scalar used for randomization of the action spend validating key
-    /// - `rcv`: trapdoor for the action value commitment
-    ///
-    /// # Panics
-    ///
-    /// Panics if
-    /// - if the spent note's asset is not zatoshi,
-    /// - if`spend.split_flag` is true, or
-    /// - if `circuit_version` is ZSA.
-    pub(crate) fn from_action_context_unchecked(
-        spend: SpendInfo,
-        output_note: Note,
-        alpha: pallas::Scalar,
-        rcv: ValueCommitTrapdoor,
-        circuit_version: OrchardCircuitVersion,
-    ) -> Self {
-        if !(bool::from(spend.note.asset().is_zatoshi())) {
-            panic!("asset must be zatoshi in OrchardVanilla circuit");
-        }
-        if spend.split_flag {
-            panic!("split_flag must be false in OrchardVanilla circuit");
-        }
-        if circuit_version.is_zsa() {
-            panic!("circuit version must not be ZSA in OrchardVanilla circuit");
-        }
+/// Creates the `q_orchard` gate checking the OrchardVanilla Action statement, on the
+/// given selector.
+pub(super) fn configure_vanilla_orchard_gate(
+    meta: &mut plonk::ConstraintSystem<pallas::Base>,
+    advices: [Column<Advice>; 10],
+    q_orchard: Selector,
+) {
+    // Constrain v_old - v_new = magnitude * sign    (https://p.z.cash/ZKS:action-cv-net-integrity?partial).
+    // Either v_old = 0, or calculated root = anchor (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
+    // Constrain v_old = 0 or enable_spend = 1       (https://p.z.cash/ZKS:action-enable-spend).
+    // Constrain v_new = 0 or enable_output = 1      (https://p.z.cash/ZKS:action-enable-output).
+    //
+    // This gate is also reused for the same-address check; see
+    // [`CircuitVanilla::synthesize_cross_address_checks`].
+    meta.create_gate("Orchard circuit checks", |meta| {
+        let q_orchard = meta.query_selector(q_orchard);
+        let v_old = meta.query_advice(advices[0], Rotation::cur());
+        let v_new = meta.query_advice(advices[1], Rotation::cur());
+        let magnitude = meta.query_advice(advices[2], Rotation::cur());
+        let sign = meta.query_advice(advices[3], Rotation::cur());
 
-        let (circuit, _) =
-            Self::from_action_context_common(&spend, &output_note, alpha, rcv, circuit_version);
-        circuit
-    }
+        let root = meta.query_advice(advices[4], Rotation::cur());
+        let anchor = meta.query_advice(advices[5], Rotation::cur());
+
+        let enable_spend = meta.query_advice(advices[6], Rotation::cur());
+        let enable_output = meta.query_advice(advices[7], Rotation::cur());
+
+        let one = Expression::Constant(pallas::Base::one());
+
+        Constraints::with_selector(
+            q_orchard,
+            [
+                (
+                    "v_old - v_new = magnitude * sign",
+                    v_old.clone() - v_new.clone() - magnitude * sign,
+                ),
+                (
+                    "Either v_old = 0, or root = anchor",
+                    v_old.clone() * (root - anchor),
+                ),
+                (
+                    "v_old = 0 or enable_spend = 1",
+                    v_old * (one.clone() - enable_spend),
+                ),
+                (
+                    "v_new = 0 or enable_output = 1",
+                    v_new * (one - enable_output),
+                ),
+            ],
+        )
+    });
 }
 
 impl plonk::Circuit<pallas::Base> for CircuitVanilla {
@@ -218,195 +227,7 @@ impl plonk::Circuit<pallas::Base> for CircuitVanilla {
     }
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
-        // Advice columns used in the Orchard circuit.
-        let advices = [
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-        ];
-
-        // Constrain v_old - v_new = magnitude * sign    (https://p.z.cash/ZKS:action-cv-net-integrity?partial).
-        // Either v_old = 0, or calculated root = anchor (https://p.z.cash/ZKS:action-merkle-path-validity?partial).
-        // Constrain v_old = 0 or enable_spend = 1       (https://p.z.cash/ZKS:action-enable-spend).
-        // Constrain v_new = 0 or enable_output = 1      (https://p.z.cash/ZKS:action-enable-output).
-        //
-        // This gate is also reused for the same-address check; see
-        // [`Circuit::synthesize_cross_address_checks`].
-        let q_orchard = meta.selector();
-        meta.create_gate("Orchard circuit checks", |meta| {
-            let q_orchard = meta.query_selector(q_orchard);
-            let v_old = meta.query_advice(advices[0], Rotation::cur());
-            let v_new = meta.query_advice(advices[1], Rotation::cur());
-            let magnitude = meta.query_advice(advices[2], Rotation::cur());
-            let sign = meta.query_advice(advices[3], Rotation::cur());
-
-            let root = meta.query_advice(advices[4], Rotation::cur());
-            let anchor = meta.query_advice(advices[5], Rotation::cur());
-
-            let enable_spend = meta.query_advice(advices[6], Rotation::cur());
-            let enable_output = meta.query_advice(advices[7], Rotation::cur());
-
-            let one = Expression::Constant(pallas::Base::one());
-
-            Constraints::with_selector(
-                q_orchard,
-                [
-                    (
-                        "v_old - v_new = magnitude * sign",
-                        v_old.clone() - v_new.clone() - magnitude * sign,
-                    ),
-                    (
-                        "Either v_old = 0, or root = anchor",
-                        v_old.clone() * (root - anchor),
-                    ),
-                    (
-                        "v_old = 0 or enable_spend = 1",
-                        v_old * (one.clone() - enable_spend),
-                    ),
-                    (
-                        "v_new = 0 or enable_output = 1",
-                        v_new * (one - enable_output),
-                    ),
-                ],
-            )
-        });
-
-        // Addition of two field elements.
-        let add_config = AddChip::configure(meta, advices[7], advices[8], advices[6]);
-
-        // Fixed columns for the Sinsemilla generator lookup table
-        let table_idx = meta.lookup_table_column();
-        let lookup = (
-            table_idx,
-            meta.lookup_table_column(),
-            meta.lookup_table_column(),
-        );
-
-        // Instance column used for public inputs
-        let primary = meta.instance_column();
-        meta.enable_equality(primary);
-
-        // Permutation over all advice columns.
-        for advice in advices.iter() {
-            meta.enable_equality(*advice);
-        }
-
-        // Poseidon requires four advice columns, while ECC incomplete addition requires
-        // six, so we could choose to configure them in parallel. However, we only use a
-        // single Poseidon invocation, and we have the rows to accommodate it serially.
-        // Instead, we reduce the proof size by sharing fixed columns between the ECC and
-        // Poseidon chips.
-        let lagrange_coeffs = [
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-        ];
-        let rc_a = lagrange_coeffs[2..5].try_into().unwrap();
-        let rc_b = lagrange_coeffs[5..8].try_into().unwrap();
-
-        // Also use the first Lagrange coefficient column for loading global constants.
-        // It's free real estate :)
-        meta.enable_constant(lagrange_coeffs[0]);
-
-        // We have a lot of free space in the right-most advice columns; use one of them
-        // for all of our range checks.
-        let range_check = LookupRangeCheckConfig::configure(meta, advices[9], table_idx);
-
-        // Configuration for curve point operations.
-        // This uses 10 advice columns and spans the whole circuit.
-        let ecc_config =
-            EccChip::<OrchardFixedBases>::configure(meta, advices, lagrange_coeffs, range_check);
-
-        // Configuration for the Poseidon hash.
-        let poseidon_config = PoseidonChip::configure::<poseidon::P128Pow5T3>(
-            meta,
-            // We place the state columns after the partial_sbox column so that the
-            // pad-and-add region can be laid out more efficiently.
-            advices[6..9].try_into().unwrap(),
-            advices[5],
-            rc_a,
-            rc_b,
-        );
-
-        // Configuration for a Sinsemilla hash instantiation and a
-        // Merkle hash instantiation using this Sinsemilla instance.
-        // Since the Sinsemilla config uses only 5 advice columns,
-        // we can fit two instances side-by-side.
-        let (sinsemilla_config_1, merkle_config_1) = {
-            let sinsemilla_config_1 = SinsemillaChip::configure(
-                meta,
-                advices[..5].try_into().unwrap(),
-                advices[6],
-                lagrange_coeffs[0],
-                lookup,
-                range_check,
-                false,
-            );
-            let merkle_config_1 = MerkleChip::configure(meta, sinsemilla_config_1.clone());
-
-            (sinsemilla_config_1, merkle_config_1)
-        };
-
-        // Configuration for a Sinsemilla hash instantiation and a
-        // Merkle hash instantiation using this Sinsemilla instance.
-        // Since the Sinsemilla config uses only 5 advice columns,
-        // we can fit two instances side-by-side.
-        let (sinsemilla_config_2, merkle_config_2) = {
-            let sinsemilla_config_2 = SinsemillaChip::configure(
-                meta,
-                advices[5..].try_into().unwrap(),
-                advices[7],
-                lagrange_coeffs[1],
-                lookup,
-                range_check,
-                false,
-            );
-            let merkle_config_2 = MerkleChip::configure(meta, sinsemilla_config_2.clone());
-
-            (sinsemilla_config_2, merkle_config_2)
-        };
-
-        // Configuration to handle decomposition and canonicity checking
-        // for CommitIvk.
-        let commit_ivk_config = CommitIvkChip::configure(meta, advices);
-
-        // Configuration to handle decomposition and canonicity checking
-        // for NoteCommit_old.
-        let old_note_commit_config =
-            NoteCommitChip::configure(meta, advices, sinsemilla_config_1.clone(), false);
-
-        // Configuration to handle decomposition and canonicity checking
-        // for NoteCommit_new.
-        let new_note_commit_config =
-            NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone(), false);
-
-        Config {
-            primary,
-            q_orchard,
-            advices,
-            add_config,
-            ecc_config,
-            poseidon_config,
-            merkle_config_1,
-            merkle_config_2,
-            sinsemilla_config_1,
-            sinsemilla_config_2,
-            commit_ivk_config,
-            old_note_commit_config,
-            new_note_commit_config,
-        }
+        configure_circuit(meta, false)
     }
 
     #[allow(non_snake_case)]
@@ -1049,28 +870,31 @@ mod tests {
         let anchor = path.root(spent_note.commitment().into());
 
         (
-            Circuit::OrchardVanilla(CircuitVanilla {
-                circuit_version,
-                path: Value::known(path.auth_path()),
-                pos: Value::known(path.position()),
-                g_d_old: Value::known(sender_address.g_d()),
-                pk_d_old: Value::known(*sender_address.pk_d()),
-                v_old: Value::known(spent_note.value()),
-                rho_old: Value::known(spent_note.rho()),
-                psi_old: Value::known(spent_note.psi()),
-                rcm_old: Value::known(spent_note.rcm()),
-                cm_old: Value::known(spent_note.commitment()),
-                alpha: Value::known(alpha),
-                ak: Value::known(ak),
-                nk: Value::known(nk),
-                rivk: Value::known(rivk),
-                g_d_new: Value::known(output_note.recipient().g_d()),
-                pk_d_new: Value::known(*output_note.recipient().pk_d()),
-                v_new: Value::known(output_note.value()),
-                psi_new: Value::known(output_note.psi()),
-                rcm_new: Value::known(output_note.rcm()),
-                rcv: Value::known(rcv),
-            }),
+            Circuit {
+                common_witnesses: CircuitVanilla {
+                    circuit_version,
+                    path: Value::known(path.auth_path()),
+                    pos: Value::known(path.position()),
+                    g_d_old: Value::known(sender_address.g_d()),
+                    pk_d_old: Value::known(*sender_address.pk_d()),
+                    v_old: Value::known(spent_note.value()),
+                    rho_old: Value::known(spent_note.rho()),
+                    psi_old: Value::known(spent_note.psi()),
+                    rcm_old: Value::known(spent_note.rcm()),
+                    cm_old: Value::known(spent_note.commitment()),
+                    alpha: Value::known(alpha),
+                    ak: Value::known(ak),
+                    nk: Value::known(nk),
+                    rivk: Value::known(rivk),
+                    g_d_new: Value::known(output_note.recipient().g_d()),
+                    pk_d_new: Value::known(*output_note.recipient().pk_d()),
+                    v_new: Value::known(output_note.value()),
+                    psi_new: Value::known(output_note.psi()),
+                    rcm_new: Value::known(output_note.rcm()),
+                    rcv: Value::known(rcv),
+                },
+                additional_zsa_witnesses: Value::unknown(),
+            },
             Instance {
                 anchor,
                 cv_net,
@@ -1211,7 +1035,7 @@ mod tests {
         let mock_verify = |circuit: &Circuit, instance: &Instance| {
             MockProver::run(
                 K,
-                circuit.as_vanilla().unwrap(),
+                &circuit.common_witnesses,
                 instance
                     .to_halo2_instance()
                     .iter()
@@ -1282,7 +1106,7 @@ mod tests {
         super::plonk::create_proof(
             &pk.params,
             &pk.pk,
-            core::slice::from_ref(circuit.as_vanilla().unwrap()),
+            core::slice::from_ref(&circuit.common_witnesses),
             &raw_instances,
             &mut rng,
             &mut transcript,
@@ -1353,7 +1177,7 @@ mod tests {
             let circuit_cost =
                 halo2_proofs::dev::CircuitCost::<pasta_curves::vesta::Point, _>::measure(
                     K,
-                    circuits[0].as_vanilla().unwrap(),
+                    &circuits[0].common_witnesses,
                 );
             // These sizes are identical for every circuit version: the post-NU 6.3 circuit reuses the
             // existing Orchard checks gate on spare rows and adds no columns or
@@ -1376,7 +1200,7 @@ mod tests {
             assert_eq!(
                 MockProver::run(
                     K,
-                    circuit.as_vanilla().unwrap(),
+                    &circuit.common_witnesses,
                     instance
                         .to_halo2_instance()
                         .iter()

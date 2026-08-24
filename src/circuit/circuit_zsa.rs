@@ -9,41 +9,31 @@ use group::Curve;
 use pasta_curves::{arithmetic::CurveAffine, pallas};
 
 use halo2_gadgets::{
-    ecc::{chip::EccChip, FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
-    poseidon::{primitives as poseidon, Pow5Chip as PoseidonChip},
-    sinsemilla::{
-        chip::SinsemillaChip,
-        merkle::{chip::MerkleChip, MerklePath},
-    },
-    utilities::{
-        bool_check,
-        lookup_range_check::{LookupRangeCheck4_5BConfig, PallasLookupRangeCheck4_5BConfig},
-    },
+    ecc::{FixedPoint, NonIdentityPoint, Point, ScalarFixed, ScalarVar},
+    sinsemilla::{chip::SinsemillaChip, merkle::MerklePath},
+    utilities::{bool_check, lookup_range_check::PallasLookupRangeCheck4_5BConfig},
 };
 
 use halo2_proofs::{
     circuit::{floor_planner, Layouter, Value},
-    plonk::{self, Constraints, Expression},
+    plonk::{self, Advice, Column, Constraints, Expression, Selector},
     poly::Rotation,
 };
 
 use crate::{
-    builder::SpendInfo,
     circuit::{
-        commit_ivk::{gadgets::commit_ivk, CommitIvkChip},
+        commit_ivk::gadgets::commit_ivk,
+        configure_circuit,
         derive_nullifier::{gadgets::derive_nullifier, ZsaNullifierParams},
-        gadget::{
-            add_chip::AddChip, assign_free_advice, assign_is_zatoshi_asset, assign_split_flag,
-        },
-        note_commit::{gadgets::note_commit, NoteCommitChip, ZsaNoteCommitParams},
+        gadget::{assign_free_advice, assign_is_zatoshi_asset, assign_split_flag},
+        note_commit::{gadgets::note_commit, ZsaNoteCommitParams},
         value_commit_orchard::{gadgets::value_commit_orchard, ZsaValueCommitParams},
         AddressPoints, CircuitVanilla, Config, OrchardCircuitVersion, ANCHOR, CMX, CV_NET_X,
         CV_NET_Y, DISABLE_CROSS_ADDRESS, ENABLE_OUTPUT, ENABLE_SPEND, ENABLE_ZSA, NF_OLD, RK_X,
         RK_Y,
     },
-    constants::{OrchardFixedBases, OrchardFixedBasesFull, OrchardHashDomains},
-    note::{AssetBase, Note},
-    value::ValueCommitTrapdoor,
+    constants::{OrchardFixedBasesFull, OrchardHashDomains},
+    note::AssetBase,
 };
 
 /// The ZSA-specific witnesses.
@@ -84,44 +74,141 @@ impl CircuitZsa {
             additional_zsa_witnesses: Value::unknown(),
         }
     }
+}
 
-    /// Constructs a `CircuitZsa` from the following components:
-    /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
-    /// - `output_note`: a note created in scope of the action
-    /// - `alpha`: a scalar used for randomization of the action spend validating key
-    /// - `rcv`: trapdoor for the action value commitment
-    ///
-    /// # Panics
-    ///
-    /// Panics if `circuit_version` is not ZSA.
-    pub(crate) fn from_action_context_unchecked(
-        spend: SpendInfo,
-        output_note: Note,
-        alpha: pallas::Scalar,
-        rcv: ValueCommitTrapdoor,
-        circuit_version: OrchardCircuitVersion,
-    ) -> Self {
-        if !circuit_version.is_zsa() {
-            panic!("circuit version must be ZSA in OrchardZSA circuit");
-        }
+/// Creates the `q_orchard` gate checking the OrchardZSA Action statement, on the given
+/// selector.
+pub(super) fn configure_zsa_orchard_gate(
+    meta: &mut plonk::ConstraintSystem<pallas::Base>,
+    advices: [Column<Advice>; 10],
+    q_orchard: Selector,
+) {
+    // The new or updated constraints for OrchardZSA are explained in
+    // [ZIP-226: Transfer and Burn of Zcash Shielded Assets][circuitstatement].
+    //
+    // All OrchardZSA constraints:
+    // Constrain split_flag to be boolean
+    // Constrain v_old * (1 - split_flag) - v_new = magnitude * sign
+    // Constrain (v_old = 0 and is_zatoshi_asset = 1) or (calculated root = anchor)
+    // Constrain v_old = 0 or enable_spend = 1
+    // Constrain v_new = 0 or enable_output = 1
+    // Constrain is_zatoshi_asset to be boolean
+    // Constrain if is_zatoshi_asset = 1 then asset = zatoshi_asset else asset != zatoshi_asset
+    // Constrain if split_flag = 0 then psi_old = psi_nf
+    // Constrain if split_flag = 1, then is_zatoshi_asset = 0
+    // Constrain if enable_zsa = 0, then is_zatoshi_asset = 1
+    // Constrain if disable_cross_address = 1, then split_flag = 0
+    //
+    // [circuitstatement]: https://zips.z.cash/zip-0226#circuit-statement
+    meta.create_gate("Orchard circuit checks", |meta| {
+        let q_orchard = meta.query_selector(q_orchard);
+        let v_old = meta.query_advice(advices[0], Rotation::cur());
+        let v_new = meta.query_advice(advices[1], Rotation::cur());
+        let magnitude = meta.query_advice(advices[2], Rotation::cur());
+        let sign = meta.query_advice(advices[3], Rotation::cur());
 
-        let (common_witnesses, psi_nf) = CircuitVanilla::from_action_context_common(
-            &spend,
-            &output_note,
-            alpha,
-            rcv,
-            circuit_version,
-        );
+        let root = meta.query_advice(advices[4], Rotation::cur());
+        let anchor = meta.query_advice(advices[5], Rotation::cur());
 
-        CircuitZsa {
-            common_witnesses,
-            additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
-                psi_nf,
-                asset: spend.note.asset(),
-                split_flag: spend.split_flag,
-            }),
-        }
-    }
+        let enable_spend = meta.query_advice(advices[6], Rotation::cur());
+        let enable_output = meta.query_advice(advices[7], Rotation::cur());
+
+        let split_flag = meta.query_advice(advices[8], Rotation::cur());
+
+        let is_zatoshi_asset = meta.query_advice(advices[9], Rotation::cur());
+        let asset_x = meta.query_advice(advices[0], Rotation::next());
+        let asset_y = meta.query_advice(advices[1], Rotation::next());
+        let diff_asset_x_inv = meta.query_advice(advices[2], Rotation::next());
+        let diff_asset_y_inv = meta.query_advice(advices[3], Rotation::next());
+
+        let one = Expression::Constant(pallas::Base::one());
+
+        let zatoshi_asset = AssetBase::zatoshi()
+            .cv_base()
+            .to_affine()
+            .coordinates()
+            .unwrap();
+
+        let diff_asset_x = asset_x - Expression::Constant(*zatoshi_asset.x());
+        let diff_asset_y = asset_y - Expression::Constant(*zatoshi_asset.y());
+
+        let psi_old = meta.query_advice(advices[4], Rotation::next());
+        let psi_nf = meta.query_advice(advices[5], Rotation::next());
+
+        let enable_zsa = meta.query_advice(advices[6], Rotation::next());
+        let disable_cross_address = meta.query_advice(advices[7], Rotation::next());
+
+        Constraints::with_selector(
+            q_orchard,
+            [
+                ("bool_check split_flag", bool_check(split_flag.clone())),
+                (
+                    "v_old * (1 - split_flag) - v_new = magnitude * sign",
+                    v_old.clone() * (one.clone() - split_flag.clone())
+                        - v_new.clone()
+                        - magnitude * sign,
+                ),
+                // We already checked that
+                // * is_zatoshi_asset is boolean (just below), and
+                // * v_old is a 64 bit unsigned integer (in the note commitment evaluation).
+                // So, 1 - is_zatoshi_asset + v_old = 0 only when (is_zatoshi_asset = 1 and v_old = 0), no overflow can occur.
+                (
+                    "(v_old = 0 and is_zatoshi_asset = 1) or (root = anchor)",
+                    (v_old.clone() + one.clone() - is_zatoshi_asset.clone()) * (root - anchor),
+                ),
+                (
+                    "v_old = 0 or enable_spend = 1",
+                    v_old * (one.clone() - enable_spend),
+                ),
+                (
+                    "v_new = 0 or enable_output = 1",
+                    v_new * (one.clone() - enable_output),
+                ),
+                (
+                    "bool_check is_zatoshi_asset",
+                    bool_check(is_zatoshi_asset.clone()),
+                ),
+                (
+                    "(is_zatoshi_asset = 1) =>  (asset_x = zatoshi_asset_x)",
+                    is_zatoshi_asset.clone() * diff_asset_x.clone(),
+                ),
+                (
+                    "(is_zatoshi_asset = 1) => (asset_y = zatoshi_asset_y)",
+                    is_zatoshi_asset.clone() * diff_asset_y.clone(),
+                ),
+                // To prove that `asset` is not equal to `zatoshi_asset`, we will prove that at
+                // least one of `x(asset) - x(zatoshi_asset)` or `y(asset) - y(zatoshi_asset)` is
+                // not equal to zero.
+                // To prove that `x(asset) - x(zatoshi_asset)` (resp `y(asset) - y(zatoshi_asset)`)
+                // is not equal to zero, we will prove that it is invertible.
+                (
+                    "(is_zatoshi_asset = 0) => (asset != zatoshi_asset)",
+                    (one.clone() - is_zatoshi_asset.clone())
+                        * (diff_asset_x * diff_asset_x_inv - one.clone())
+                        * (diff_asset_y * diff_asset_y_inv - one.clone()),
+                ),
+                (
+                    "(split_flag = 0) => (psi_old = psi_nf)",
+                    (one.clone() - split_flag.clone()) * (psi_old - psi_nf),
+                ),
+                (
+                    "(split_flag = 1) => (is_zatoshi_asset = 0)",
+                    split_flag.clone() * is_zatoshi_asset.clone(),
+                ),
+                (
+                    "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
+                    (one.clone() - enable_zsa) * (one - is_zatoshi_asset),
+                ),
+                // `split_flag` and `cross_address_disabled` cannot both be enabled at the
+                // same time. A split note's output is forced to a negative net value, which
+                // is not a meaningful self-transfer.
+                (
+                    "(disable_cross_address = 1) => (split_flag = 0)",
+                    split_flag * disable_cross_address,
+                ),
+            ],
+        )
+    });
 }
 
 impl plonk::Circuit<pallas::Base> for CircuitZsa {
@@ -133,287 +220,7 @@ impl plonk::Circuit<pallas::Base> for CircuitZsa {
     }
 
     fn configure(meta: &mut plonk::ConstraintSystem<pallas::Base>) -> Self::Config {
-        // Advice columns used in the Orchard circuit.
-        let advices = [
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-            meta.advice_column(),
-        ];
-
-        // The new or updated constraints for OrchardZSA are explained in
-        // [ZIP-226: Transfer and Burn of Zcash Shielded Assets][circuitstatement].
-        //
-        // All OrchardZSA constraints:
-        // Constrain split_flag to be boolean
-        // Constrain v_old * (1 - split_flag) - v_new = magnitude * sign
-        // Constrain (v_old = 0 and is_zatoshi_asset = 1) or (calculated root = anchor)
-        // Constrain v_old = 0 or enable_spend = 1
-        // Constrain v_new = 0 or enable_output = 1
-        // Constrain is_zatoshi_asset to be boolean
-        // Constrain if is_zatoshi_asset = 1 then asset = zatoshi_asset else asset != zatoshi_asset
-        // Constrain if split_flag = 0 then psi_old = psi_nf
-        // Constrain if split_flag = 1, then is_zatoshi_asset = 0
-        // Constrain if enable_zsa = 0, then is_zatoshi_asset = 1
-        // Constrain if disable_cross_address = 1, then split_flag = 0
-        //
-        // [circuitstatement]: https://zips.z.cash/zip-0226#circuit-statement
-        let q_orchard = meta.selector();
-        meta.create_gate("Orchard circuit checks", |meta| {
-            let q_orchard = meta.query_selector(q_orchard);
-            let v_old = meta.query_advice(advices[0], Rotation::cur());
-            let v_new = meta.query_advice(advices[1], Rotation::cur());
-            let magnitude = meta.query_advice(advices[2], Rotation::cur());
-            let sign = meta.query_advice(advices[3], Rotation::cur());
-
-            let root = meta.query_advice(advices[4], Rotation::cur());
-            let anchor = meta.query_advice(advices[5], Rotation::cur());
-
-            let enable_spend = meta.query_advice(advices[6], Rotation::cur());
-            let enable_output = meta.query_advice(advices[7], Rotation::cur());
-
-            let split_flag = meta.query_advice(advices[8], Rotation::cur());
-
-            let is_zatoshi_asset = meta.query_advice(advices[9], Rotation::cur());
-            let asset_x = meta.query_advice(advices[0], Rotation::next());
-            let asset_y = meta.query_advice(advices[1], Rotation::next());
-            let diff_asset_x_inv = meta.query_advice(advices[2], Rotation::next());
-            let diff_asset_y_inv = meta.query_advice(advices[3], Rotation::next());
-
-            let one = Expression::Constant(pallas::Base::one());
-
-            let zatoshi_asset = AssetBase::zatoshi()
-                .cv_base()
-                .to_affine()
-                .coordinates()
-                .unwrap();
-
-            let diff_asset_x = asset_x - Expression::Constant(*zatoshi_asset.x());
-            let diff_asset_y = asset_y - Expression::Constant(*zatoshi_asset.y());
-
-            let psi_old = meta.query_advice(advices[4], Rotation::next());
-            let psi_nf = meta.query_advice(advices[5], Rotation::next());
-
-            let enable_zsa = meta.query_advice(advices[6], Rotation::next());
-            let disable_cross_address = meta.query_advice(advices[7], Rotation::next());
-
-            Constraints::with_selector(
-                q_orchard,
-                [
-                    ("bool_check split_flag", bool_check(split_flag.clone())),
-                    (
-                        "v_old * (1 - split_flag) - v_new = magnitude * sign",
-                        v_old.clone() * (one.clone() - split_flag.clone())
-                            - v_new.clone()
-                            - magnitude * sign,
-                    ),
-                    // We already checked that
-                    // * is_zatoshi_asset is boolean (just below), and
-                    // * v_old is a 64 bit unsigned integer (in the note commitment evaluation).
-                    // So, 1 - is_zatoshi_asset + v_old = 0 only when (is_zatoshi_asset = 1 and v_old = 0), no overflow can occur.
-                    (
-                        "(v_old = 0 and is_zatoshi_asset = 1) or (root = anchor)",
-                        (v_old.clone() + one.clone() - is_zatoshi_asset.clone()) * (root - anchor),
-                    ),
-                    (
-                        "v_old = 0 or enable_spend = 1",
-                        v_old * (one.clone() - enable_spend),
-                    ),
-                    (
-                        "v_new = 0 or enable_output = 1",
-                        v_new * (one.clone() - enable_output),
-                    ),
-                    (
-                        "bool_check is_zatoshi_asset",
-                        bool_check(is_zatoshi_asset.clone()),
-                    ),
-                    (
-                        "(is_zatoshi_asset = 1) =>  (asset_x = zatoshi_asset_x)",
-                        is_zatoshi_asset.clone() * diff_asset_x.clone(),
-                    ),
-                    (
-                        "(is_zatoshi_asset = 1) => (asset_y = zatoshi_asset_y)",
-                        is_zatoshi_asset.clone() * diff_asset_y.clone(),
-                    ),
-                    // To prove that `asset` is not equal to `zatoshi_asset`, we will prove that at
-                    // least one of `x(asset) - x(zatoshi_asset)` or `y(asset) - y(zatoshi_asset)` is
-                    // not equal to zero.
-                    // To prove that `x(asset) - x(zatoshi_asset)` (resp `y(asset) - y(zatoshi_asset)`)
-                    // is not equal to zero, we will prove that it is invertible.
-                    (
-                        "(is_zatoshi_asset = 0) => (asset != zatoshi_asset)",
-                        (one.clone() - is_zatoshi_asset.clone())
-                            * (diff_asset_x * diff_asset_x_inv - one.clone())
-                            * (diff_asset_y * diff_asset_y_inv - one.clone()),
-                    ),
-                    (
-                        "(split_flag = 0) => (psi_old = psi_nf)",
-                        (one.clone() - split_flag.clone()) * (psi_old - psi_nf),
-                    ),
-                    (
-                        "(split_flag = 1) => (is_zatoshi_asset = 0)",
-                        split_flag.clone() * is_zatoshi_asset.clone(),
-                    ),
-                    (
-                        "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
-                        (one.clone() - enable_zsa) * (one - is_zatoshi_asset),
-                    ),
-                    // `split_flag` and `cross_address_disabled` cannot both be enabled at the
-                    // same time. A split note's output is forced to a negative net value, which
-                    // is not a meaningful self-transfer.
-                    (
-                        "(disable_cross_address = 1) => (split_flag = 0)",
-                        split_flag * disable_cross_address,
-                    ),
-                ],
-            )
-        });
-
-        // Addition of two field elements.
-        let add_config = AddChip::configure(meta, advices[7], advices[8], advices[6]);
-
-        // Fixed columns for the Sinsemilla generator lookup table
-        let table_idx = meta.lookup_table_column();
-        let table_range_check_tag = meta.lookup_table_column();
-        let lookup = (
-            table_idx,
-            meta.lookup_table_column(),
-            meta.lookup_table_column(),
-        );
-
-        // Instance column used for public inputs
-        let primary = meta.instance_column();
-        meta.enable_equality(primary);
-
-        // Permutation over all advice columns.
-        for advice in advices.iter() {
-            meta.enable_equality(*advice);
-        }
-
-        // Poseidon requires four advice columns, while ECC incomplete addition requires
-        // six, so we could choose to configure them in parallel. However, we only use a
-        // single Poseidon invocation, and we have the rows to accommodate it serially.
-        // Instead, we reduce the proof size by sharing fixed columns between the ECC and
-        // Poseidon chips.
-        let lagrange_coeffs = [
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-            meta.fixed_column(),
-        ];
-        let rc_a = lagrange_coeffs[2..5].try_into().unwrap();
-        let rc_b = lagrange_coeffs[5..8].try_into().unwrap();
-
-        // Also use the first Lagrange coefficient column for loading global constants.
-        // It's free real estate :)
-        meta.enable_constant(lagrange_coeffs[0]);
-
-        // We have a lot of free space in the right-most advice columns; use one of them
-        // for all of our range checks.
-        let range_check = LookupRangeCheck4_5BConfig::configure_with_tag(
-            meta,
-            advices[9],
-            table_idx,
-            table_range_check_tag,
-        );
-
-        // Configuration for curve point operations.
-        // This uses 10 advice columns and spans the whole circuit.
-        let ecc_config = EccChip::<OrchardFixedBases, PallasLookupRangeCheck4_5BConfig>::configure(
-            meta,
-            advices,
-            lagrange_coeffs,
-            range_check,
-        );
-
-        // Configuration for the Poseidon hash.
-        let poseidon_config = PoseidonChip::configure::<poseidon::P128Pow5T3>(
-            meta,
-            // We place the state columns after the partial_sbox column so that the
-            // pad-and-add region can be laid out more efficiently.
-            advices[6..9].try_into().unwrap(),
-            advices[5],
-            rc_a,
-            rc_b,
-        );
-
-        // Configuration for a Sinsemilla hash instantiation and a
-        // Merkle hash instantiation using this Sinsemilla instance.
-        // Since the Sinsemilla config uses only 5 advice columns,
-        // we can fit two instances side-by-side.
-        let (sinsemilla_config_1, merkle_config_1) = {
-            let sinsemilla_config_1 = SinsemillaChip::configure(
-                meta,
-                advices[..5].try_into().unwrap(),
-                advices[6],
-                lagrange_coeffs[0],
-                lookup,
-                range_check,
-                true,
-            );
-            let merkle_config_1 = MerkleChip::configure(meta, sinsemilla_config_1.clone());
-
-            (sinsemilla_config_1, merkle_config_1)
-        };
-
-        // Configuration for a Sinsemilla hash instantiation and a
-        // Merkle hash instantiation using this Sinsemilla instance.
-        // Since the Sinsemilla config uses only 5 advice columns,
-        // we can fit two instances side-by-side.
-        let (sinsemilla_config_2, merkle_config_2) = {
-            let sinsemilla_config_2 = SinsemillaChip::configure(
-                meta,
-                advices[5..].try_into().unwrap(),
-                advices[7],
-                lagrange_coeffs[1],
-                lookup,
-                range_check,
-                true,
-            );
-            let merkle_config_2 = MerkleChip::configure(meta, sinsemilla_config_2.clone());
-
-            (sinsemilla_config_2, merkle_config_2)
-        };
-
-        // Configuration to handle decomposition and canonicity checking
-        // for CommitIvk.
-        let commit_ivk_config = CommitIvkChip::configure(meta, advices);
-
-        // Configuration to handle decomposition and canonicity checking
-        // for NoteCommit_old.
-        let old_note_commit_config =
-            NoteCommitChip::configure(meta, advices, sinsemilla_config_1.clone(), true);
-
-        // Configuration to handle decomposition and canonicity checking
-        // for NoteCommit_new.
-        let new_note_commit_config =
-            NoteCommitChip::configure(meta, advices, sinsemilla_config_2.clone(), true);
-
-        Config {
-            primary,
-            q_orchard,
-            advices,
-            add_config,
-            ecc_config,
-            poseidon_config,
-            merkle_config_1,
-            merkle_config_2,
-            sinsemilla_config_1,
-            sinsemilla_config_2,
-            commit_ivk_config,
-            old_note_commit_config,
-            new_note_commit_config,
-        }
+        configure_circuit(meta, true)
     }
 
     #[allow(non_snake_case)]
@@ -1250,3 +1057,16 @@ fn synthesize_cross_address_checks(
 }
 
 // TODO ZSA: add tests once ZSA bundle is implemented
+
+#[cfg(test)]
+mod tests {
+    use crate::circuit::VerifyingKey;
+    use crate::circuit_version::OrchardCircuitVersion;
+
+    #[test]
+    fn zsa_keygen() {
+        // Exercises `CircuitZsa`'s full `configure` path, the only coverage of ZSA
+        // keygen until the round-trip tests above exist.
+        let _vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
+    }
+}
