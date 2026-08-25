@@ -28,6 +28,7 @@
 /// [`ProvingKey`]: crate::circuit::ProvingKey
 /// [`VerifyingKey`]: crate::circuit::VerifyingKey
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum OrchardCircuitVersion {
     /// The insecure pre-NU6.2 circuit, in which the variable-base scalar-multiplication base
     /// is not anchored to the real base. For reconstructing the historical (NU5..NU6.2)
