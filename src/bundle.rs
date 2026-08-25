@@ -1461,6 +1461,13 @@ pub(crate) mod tests {
             );
         }
 
+        // Bit 3 (`zsa_enabled`) is reserved until some bundle version's `permits_zsa()`
+        // returns true; today no version does, so every value with bit 3 set is rejected.
+        for value in 0b1000..0b10000 {
+            assert_eq!(Flags::from_byte(value, BundleVersion::orchard_v3()), None);
+            assert_eq!(Flags::from_byte(value, BundleVersion::ironwood_v3()), None);
+        }
+
         // Bits 4.. are always reserved, in every NU6.3 pool.
         for value in 0b10000..=u8::MAX {
             assert_eq!(Flags::from_byte(value, BundleVersion::orchard_v3()), None);
