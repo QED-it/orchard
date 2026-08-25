@@ -54,7 +54,10 @@ use circuit_zsa::{AdditionalZsaWitnesses, CircuitZsa};
 pub(in crate::circuit) mod commit_ivk;
 #[cfg(feature = "unstable-voting-circuits")]
 pub mod commit_ivk;
+#[cfg(not(feature = "unstable-voting-circuits"))]
 pub(in crate::circuit) mod derive_nullifier;
+#[cfg(feature = "unstable-voting-circuits")]
+pub mod derive_nullifier;
 pub mod gadget;
 #[cfg(not(feature = "unstable-voting-circuits"))]
 pub(in crate::circuit) mod note_commit;

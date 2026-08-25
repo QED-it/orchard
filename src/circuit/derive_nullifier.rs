@@ -5,11 +5,16 @@ use halo2_gadgets::utilities::cond_swap::CondSwapChip;
 use halo2_proofs::circuit::AssignedCell;
 use pasta_curves::pallas;
 
+/// Parameters needed to derive a nullifier for a split note.
+#[derive(Debug)]
+#[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
 pub(super) struct ZsaNullifierParams {
     pub(super) cond_swap_chip: CondSwapChip<pallas::Base>,
     pub(super) split_flag: AssignedCell<pallas::Base, pallas::Base>,
 }
 
+/// Gadget functions for `DeriveNullifier` operations.
+#[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
 pub(in crate::circuit) mod gadgets {
     use super::*;
 
