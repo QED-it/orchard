@@ -1325,8 +1325,27 @@ mod tests {
         assert!(zsa_mock_verify(&circuit, &instance).is_err());
     }
 
+    // Set ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF to regenerate the pinned circuit description.
     #[test]
-    fn zsa_round_trip() {
+    fn zsa_pinned_circuit_description() {
+        let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
+
+        if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
+            std::fs::write(
+                "src/circuit_data/circuit_description_zsa",
+                format!("{:#?}\n", vk.vk.pinned()),
+            )
+            .expect("should be able to write new circuit description");
+        } else {
+            assert_eq!(
+                format!("{:#?}\n", vk.vk.pinned()),
+                include_str!("../circuit_data/circuit_description_zsa").replace("\r\n", "\n")
+            );
+        }
+    }
+
+    #[test]
+    fn zsa_prove_and_verify() {
         let mut rng = OsRng;
         let (circuits, instances): (Vec<_>, Vec<_>) = iter::once(())
             .map(|()| generate_circuit_instance(false, &mut rng))
