@@ -356,7 +356,7 @@ pub struct SpendInfo {
     pub(crate) scope: Scope,
     pub(crate) note: Note,
     pub(crate) merkle_path: Option<MerklePath>,
-    // A flag to indicate whether the value of the note will be counted in the `ValueSum` of the action.
+    // If `split_flag` is true, the spend note's value is not counted in the action's `ValueSum`.
     pub(crate) split_flag: bool,
 }
 
