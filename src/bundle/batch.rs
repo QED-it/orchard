@@ -24,11 +24,17 @@ struct BundleSignature {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum BatchError {
-    /// The bundle disables cross-address transfers, but the validator's verifying key's
-    /// circuit version does not constrain the cross-address restriction (see
-    /// [`OrchardCircuitVersion::supports_cross_address_restriction`]).
+    /// The bundle's flags require a circuit capability the validator's verifying key does
+    /// not provide. Returned in either of these cases:
+    ///
+    /// - the bundle disables cross-address transfers, but the key's circuit version does not
+    ///   constrain the cross-address restriction (see
+    ///   [`OrchardCircuitVersion::supports_cross_address_restriction`]);
+    /// - the bundle enables ZSA, but the key's circuit version is not
+    ///   [`OrchardCircuitVersion::ZSA`].
     ///
     /// [`OrchardCircuitVersion::supports_cross_address_restriction`]: crate::circuit_version::OrchardCircuitVersion::supports_cross_address_restriction
+    /// [`OrchardCircuitVersion::ZSA`]: crate::circuit_version::OrchardCircuitVersion::ZSA
     RestrictionUnsupportedByKey,
 }
 
