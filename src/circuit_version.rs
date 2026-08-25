@@ -40,7 +40,9 @@ pub enum OrchardCircuitVersion {
     /// The post-NU 6.3 circuit. This uses the fixed circuit with additional constraints
     /// enforcing the `disableCrossAddress` public input.
     PostNu6_3,
-    /// The ZSA circuit.
+    /// The OrchardZSA circuit, defined in [ZIP-226].
+    ///
+    /// [ZIP-226]: https://zips.z.cash/zip-0226
     ZSA,
 }
 
