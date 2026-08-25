@@ -12,9 +12,9 @@ use zip32::ChildIndex;
 
 use crate::{
     bundle::Flags,
+    flavor::OrchardVanilla,
     keys::{FullViewingKey, SpendingKey},
     note::{ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext},
-    orchard_flavor::OrchardVanilla,
     primitives::redpallas::{self, Binding, SpendAuth},
     tree::MerklePath,
     value::{NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -49,7 +49,7 @@ pub use tx_extractor::{TxExtractorError, Unbound};
 /// This struct is for representing Orchard in a partially-created transaction. If you
 /// have a fully-created transaction, use [the regular `Bundle` struct].
 ///
-/// [the regular `Bundle` struct]: crate::Bundle
+/// [the regular `Bundle` struct]: crate::ActionGroup
 #[derive(Debug, Getters)]
 #[getset(get = "pub")]
 pub struct Bundle {
@@ -331,7 +331,7 @@ impl Zip32Derivation {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "circuit"))]
 mod tests {
     use ff::{Field, PrimeField};
     use incrementalmerkletree::{Marking, Retention};
@@ -343,9 +343,9 @@ mod tests {
         builder::{Builder, BundleType},
         circuit::ProvingKey,
         constants::MERKLE_DEPTH_ORCHARD,
+        flavor::OrchardVanilla,
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
-        orchard_flavor::OrchardVanilla,
         pczt::Zip32Derivation,
         tree::{MerkleHashOrchard, EMPTY_ROOTS},
         value::NoteValue,
@@ -363,7 +363,7 @@ mod tests {
 
         // Run the Creator and Constructor roles.
         let mut builder = Builder::new(
-            BundleType::DEFAULT_VANILLA,
+            BundleType::DEFAULT,
             EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
         );
         builder
@@ -371,7 +371,7 @@ mod tests {
                 None,
                 recipient,
                 NoteValue::from_raw(5000),
-                AssetBase::native(),
+                AssetBase::zatoshi(),
                 [0u8; 512],
             )
             .unwrap();
@@ -391,7 +391,8 @@ mod tests {
 
         assert_eq!(bundle.value_balance(), &(-5000));
         // We can successfully bind the bundle.
-        bundle.apply_binding_signature(sighash, rng).unwrap();
+        let action_group = bundle.action_groups().first().unwrap().clone();
+        action_group.apply_binding_signature(sighash, rng).unwrap();
     }
 
     #[test]
@@ -414,7 +415,7 @@ mod tests {
                 if let Some(note) = Note::from_parts(
                     recipient,
                     value,
-                    AssetBase::native(),
+                    AssetBase::zatoshi(),
                     rho,
                     RandomSeed::random(&mut rng, &rho),
                 )
@@ -450,7 +451,7 @@ mod tests {
         };
 
         // Run the Creator and Constructor roles.
-        let mut builder = Builder::new(BundleType::DEFAULT_VANILLA, anchor);
+        let mut builder = Builder::new(BundleType::DEFAULT, anchor);
         builder
             .add_spend(fvk.clone(), note, merkle_path.into())
             .unwrap();
@@ -459,7 +460,7 @@ mod tests {
                 None,
                 recipient,
                 NoteValue::from_raw(10_000),
-                AssetBase::native(),
+                AssetBase::zatoshi(),
                 [0u8; 512],
             )
             .unwrap();
@@ -468,7 +469,7 @@ mod tests {
                 Some(fvk.to_ovk(Scope::Internal)),
                 fvk.address_at(0u32, Scope::Internal),
                 NoteValue::from_raw(5_000),
-                AssetBase::native(),
+                AssetBase::zatoshi(),
                 [0u8; 512],
             )
             .unwrap();
@@ -500,6 +501,10 @@ mod tests {
         for action in pczt_bundle.actions_mut() {
             if action.spend.zip32_derivation.as_ref() == Some(&zip32_derivation) {
                 action.sign(sighash, &ask, rng).unwrap();
+
+                // We can also apply the signature as an external signature.
+                let signature = action.spend().spend_auth_sig().clone().expect("signed");
+                action.apply_signature(sighash, signature).unwrap();
             }
         }
 
@@ -508,6 +513,7 @@ mod tests {
 
         assert_eq!(bundle.value_balance(), &0);
         // We can successfully bind the bundle.
-        bundle.apply_binding_signature(sighash, rng).unwrap();
+        let action_group = bundle.action_groups().first().unwrap().clone();
+        action_group.apply_binding_signature(sighash, rng).unwrap();
     }
 }

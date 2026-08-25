@@ -40,30 +40,33 @@ impl BatchValidator {
     }
 
     /// Adds the proof and RedPallas signatures from the given bundle to the validator.
-    pub fn add_bundle<V: Copy + Into<i64>, P: OrchardPrimitives>(
+    pub fn add_bundle<V: Copy + Into<i64>, Pr: OrchardPrimitives>(
         &mut self,
-        bundle: &Bundle<Authorized, V, P>,
+        bundle: &Bundle<Authorized, V, Pr>,
         sighash: [u8; 32],
     ) {
-        for action in bundle.actions().iter() {
-            self.signatures.push(BundleSignature {
-                signature: action
-                    .rk()
-                    .create_batch_item(action.authorization().sig().clone(), &sighash),
-            });
+        for action_group in bundle.action_groups() {
+            for action in action_group.actions().iter() {
+                self.signatures.push(BundleSignature {
+                    signature: action
+                        .rk()
+                        .create_batch_item(action.authorization().sig().clone(), &sighash),
+                });
+            }
         }
 
         self.signatures.push(BundleSignature {
-            signature: bundle.binding_validating_key().create_batch_item(
-                bundle.authorization().binding_signature().sig().clone(),
-                &sighash,
-            ),
+            signature: bundle
+                .binding_validating_key()
+                .create_batch_item(bundle.binding_signature().unwrap().sig().clone(), &sighash),
         });
 
-        bundle
-            .authorization()
-            .proof
-            .add_to_batch(&mut self.proofs, bundle.to_instances());
+        for action_group in bundle.action_groups() {
+            action_group
+                .authorization()
+                .proof
+                .add_to_batch(&mut self.proofs, action_group.to_instances());
+        }
     }
 
     /// Batch-validates the accumulated bundles.

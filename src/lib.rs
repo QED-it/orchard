@@ -32,17 +32,14 @@ pub mod bundle;
 #[cfg(feature = "circuit")]
 pub mod circuit;
 mod constants;
+pub mod flavor;
+#[cfg(feature = "zsa-issuance")]
 pub mod issuance;
-pub mod issuance_auth;
-pub mod issuance_sighash_versioning;
 pub mod keys;
 pub mod note;
-pub mod swap_bundle;
-
-pub mod orchard_flavor;
-pub mod orchard_sighash_versioning;
 pub mod pczt;
 pub mod primitives;
+pub mod sighash_kind;
 mod spec;
 pub mod tree;
 pub mod value;
@@ -53,18 +50,15 @@ mod test_vectors;
 
 pub use action::Action;
 pub use address::Address;
+pub use bundle::ActionGroup;
 pub use bundle::Bundle;
-pub use constants::reference_keys::ReferenceKeys;
 pub use constants::MERKLE_DEPTH_ORCHARD as NOTE_COMMITMENT_TREE_DEPTH;
-pub use note::{
-    commitment::{ExtractedNoteCommitment, NoteCommitment},
-    Note,
-};
+pub use note::Note;
 pub use tree::Anchor;
 
-/// A proof of the validity of an Orchard [`Bundle`].
+/// A proof of the validity of an Orchard [`ActionGroup`].
 ///
-/// [`Bundle`]: crate::bundle::Bundle
+/// [`ActionGroup`]: crate::bundle::ActionGroup
 #[derive(Clone)]
 pub struct Proof(Vec<u8>);
 

@@ -1,36 +1,41 @@
+#![cfg(feature = "circuit")]
+
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use orchard::{
     builder::{Builder, BundleType},
     bundle::{Authorized, Flags},
     circuit::{ProvingKey, VerifyingKey},
+    flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment},
-    orchard_flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
     primitives::{OrchardDomain, OrchardPrimitives},
-    swap_bundle::{ActionGroupAuthorized, SwapBundle},
+    sighash_kind::OrchardSighashKind,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
-    Anchor, Bundle, Note,
+    ActionGroup, Anchor, Note,
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use zcash_note_encryption::try_note_decryption;
+use orchard::bundle::{ActionGroupAuthorized, Bundle};
 
-pub fn verify_bundle<P: OrchardPrimitives>(
-    bundle: &Bundle<Authorized, i64, P>,
+pub fn verify_bundle<Pr: OrchardPrimitives>(
+    bundle: &Bundle<Authorized, i64, Pr>,
     vk: &VerifyingKey,
     verify_proof: bool,
 ) {
+    assert_eq!(bundle.action_groups().len(), 1);
+    let action_group = &bundle.action_groups()[0];
     if verify_proof {
-        assert!(matches!(bundle.verify_proof(vk), Ok(())));
+        assert!(matches!(action_group.verify_proof(vk), Ok(())));
     }
     let sighash: [u8; 32] = bundle.commitment().into();
     let bvk = bundle.binding_validating_key();
-    for action in bundle.actions() {
+    for action in action_group.actions() {
         assert_eq!(
-            action.authorization().version(),
-            &P::default_sighash_version()
+            action.authorization().sighash_kind(),
+            &OrchardSighashKind::AllEffecting,
         );
         assert_eq!(
             action.rk().verify(&sighash, action.authorization().sig()),
@@ -38,7 +43,7 @@ pub fn verify_bundle<P: OrchardPrimitives>(
         );
     }
     assert_eq!(
-        bvk.verify(&sighash, bundle.authorization().binding_signature().sig()),
+        bvk.verify(&sighash, bundle.binding_signature().unwrap().sig()),
         Ok(())
     );
 }
@@ -47,7 +52,10 @@ pub fn verify_bundle<P: OrchardPrimitives>(
 // - verify each action group (its proof and for each action, the spend authorization signature)
 // - verify that bsk is None  for each action group
 // - verify the swap binding signature
-pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>) {
+pub fn verify_swap_bundle(
+    swap_bundle: &Bundle<ActionGroupAuthorized, i64, OrchardZSA>,
+    vks: Vec<&VerifyingKey>,
+) {
     assert_eq!(vks.len(), swap_bundle.action_groups().len());
     for (action_group, vk) in swap_bundle.action_groups().iter().zip(vks.iter()) {
         verify_action_group(action_group, vk);
@@ -56,7 +64,7 @@ pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>
     let sighash: [u8; 32] = swap_bundle.commitment().into();
     let bvk = swap_bundle.binding_validating_key();
     assert_eq!(
-        bvk.verify(&sighash, swap_bundle.binding_signature().sig()),
+        bvk.verify(&sighash, swap_bundle.binding_signature().unwrap().sig()),
         Ok(())
     );
 }
@@ -65,13 +73,13 @@ pub fn verify_swap_bundle(swap_bundle: &SwapBundle<i64>, vks: Vec<&VerifyingKey>
 // - verify the proof
 // - verify the signature on each action
 pub fn verify_action_group(
-    action_group_bundle: &Bundle<ActionGroupAuthorized, i64, OrchardZSA>,
+    action_group: &ActionGroup<ActionGroupAuthorized, OrchardZSA>,
     vk: &VerifyingKey,
 ) {
-    assert!(matches!(action_group_bundle.verify_proof(vk), Ok(())));
+    assert!(matches!(action_group.verify_proof(vk), Ok(())));
 
-    let action_group_digest: [u8; 32] = action_group_bundle.action_group_commitment().into();
-    for action in action_group_bundle.actions() {
+    let action_group_digest: [u8; 32] = action_group.action_group_commitment().into();
+    for action in action_group.actions() {
         assert_eq!(
             action
                 .rk()
@@ -112,8 +120,8 @@ trait BundleOrchardFlavor: OrchardFlavor {
 }
 
 impl BundleOrchardFlavor for OrchardVanilla {
-    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT_VANILLA;
-    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED_WITHOUT_ZSA;
+    const DEFAULT_BUNDLE_TYPE: BundleType = BundleType::DEFAULT;
+    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED;
 }
 
 impl BundleOrchardFlavor for OrchardZSA {
@@ -144,10 +152,17 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
         );
         let note_value = NoteValue::from_raw(5000);
         assert_eq!(
-            builder.add_output(None, recipient, note_value, AssetBase::native(), [0u8; 512]),
+            builder.add_output(
+                None,
+                recipient,
+                note_value,
+                AssetBase::zatoshi(),
+                [0u8; 512]
+            ),
             Ok(())
         );
-        let (unauthorized, bundle_meta) = builder.build(&mut rng).unwrap();
+        let (unauthorized, value_balance, bundle_meta) =
+            builder.build::<i64, FL>(&mut rng).unwrap().unwrap();
 
         assert_eq!(
             unauthorized
@@ -161,10 +176,20 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
             Some(note_value)
         );
 
-        let sighash = unauthorized.commitment().into();
+        let sighash = Bundle::from_parts(vec![unauthorized.clone()], value_balance, None)
+            .commitment()
+            .into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
+
+        let action_group = proven.apply_signatures(rng.clone(), sighash, &[]).unwrap();
+        let binding_sig = action_group.authorization().binding_signature();
+
         (
-            proven.apply_signatures(rng.clone(), sighash, &[]).unwrap(),
+            Bundle::from_parts(
+                vec![action_group.clone()],
+                value_balance,
+                Some(binding_sig.clone()),
+            ),
             sighash,
         )
     };
@@ -175,6 +200,9 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
     let note = {
         let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
         shielding_bundle
+            .action_groups()
+            .first()
+            .unwrap()
             .actions()
             .iter()
             .find_map(|action| {
@@ -193,9 +221,9 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
 
         let mut builder = Builder::new(
             BundleType::Transactional {
-                // Intentionally testing with SPENDS_DISABLED_WITHOUT_ZSA as SPENDS_DISABLED_WITH_ZSA is already
+                // Intentionally testing with SPENDS_DISABLED as SPENDS_DISABLED_WITH_ZSA is already
                 // tested above (for OrchardZSA case). Both should work.
-                flags: Flags::SPENDS_DISABLED_WITHOUT_ZSA,
+                flags: Flags::SPENDS_DISABLED,
                 bundle_required: false,
             },
             anchor,
@@ -215,18 +243,27 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
                 None,
                 recipient,
                 NoteValue::from_raw(5000),
-                AssetBase::native(),
+                AssetBase::zatoshi(),
                 [0u8; 512]
             ),
             Ok(())
         );
-        let (unauthorized, _) = builder.build(&mut rng).unwrap();
-        let sighash = unauthorized.commitment().into();
+        let (unauthorized, value_balance, _) = builder.build::<i64, FL>(&mut rng).unwrap().unwrap();
+        let sighash = Bundle::from_parts(vec![unauthorized.clone()], value_balance, None)
+            .commitment()
+            .into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
+
+        let action_group = proven
+            .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
+            .unwrap();
+        let binding_sig = action_group.authorization().binding_signature();
         (
-            proven
-                .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
-                .unwrap(),
+            Bundle::from_parts(
+                vec![action_group.clone()],
+                value_balance,
+                Some(binding_sig.clone()),
+            ),
             sighash,
         )
     };
@@ -243,16 +280,16 @@ fn bundle_chain_vanilla() {
         orchard_digest_1,
         // Locks the `orchard_digest` for OrchardVanilla
         [
-            25, 143, 25, 148, 146, 133, 196, 243, 163, 122, 136, 217, 179, 122, 70, 233, 4, 4, 26,
-            170, 152, 243, 177, 199, 226, 241, 63, 143, 104, 77, 149, 254
+            165, 242, 106, 135, 168, 224, 110, 252, 175, 110, 63, 29, 78, 243, 33, 14, 152, 202,
+            209, 47, 68, 32, 138, 96, 79, 213, 218, 93, 45, 87, 221, 174
         ]
     );
     assert_eq!(
         orchard_digest_2,
         // Locks the `orchard_digest` for OrchardVanilla
         [
-            164, 197, 26, 212, 108, 232, 219, 47, 64, 35, 3, 171, 77, 191, 253, 173, 173, 0, 148,
-            119, 98, 210, 134, 196, 201, 205, 117, 10, 37, 72, 234, 3
+            74, 174, 42, 41, 68, 92, 171, 110, 10, 148, 217, 61, 68, 50, 49, 1, 1, 180, 221, 210,
+            97, 237, 25, 198, 195, 77, 19, 160, 186, 172, 8, 26
         ]
     );
 }
@@ -264,16 +301,16 @@ fn bundle_chain_zsa() {
         orchard_digest_1,
         // Locks the `orchard_digest` for OrchardZSA
         [
-            47, 247, 30, 9, 58, 47, 181, 208, 48, 162, 133, 51, 186, 54, 13, 82, 207, 227, 33, 48,
-            223, 31, 90, 129, 96, 166, 247, 156, 122, 125, 100, 190
+            176, 24, 152, 89, 60, 222, 215, 240, 176, 197, 147, 81, 4, 84, 61, 189, 163, 117, 43,
+            201, 63, 140, 116, 211, 133, 186, 54, 58, 171, 124, 192, 215
         ]
     );
     assert_eq!(
         orchard_digest_2,
         // Locks the `orchard_digest` for OrchardZSA
         [
-            40, 249, 161, 168, 11, 100, 205, 146, 11, 203, 210, 239, 51, 73, 208, 236, 47, 110, 49,
-            18, 132, 199, 179, 63, 140, 28, 106, 34, 155, 93, 111, 254
+            161, 158, 107, 122, 89, 77, 236, 178, 130, 85, 148, 101, 237, 1, 67, 119, 76, 126, 233,
+            123, 94, 240, 183, 227, 9, 245, 74, 51, 16, 12, 157, 60
         ]
     );
 }

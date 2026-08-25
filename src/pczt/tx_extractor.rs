@@ -1,12 +1,14 @@
+use core::fmt;
+
 use nonempty::NonEmpty;
 use rand::{CryptoRng, RngCore};
 
 use super::Action;
 use crate::{
     bundle::{Authorization, Authorized, EffectsOnly},
-    orchard_flavor::OrchardVanilla,
-    orchard_sighash_versioning::{OrchardSighashVersion, VerBindingSig, VerSpendAuthSig},
+    flavor::OrchardVanilla,
     primitives::redpallas::{self, Binding, SpendAuth},
+    sighash_kind::{OrchardBindingSig, OrchardSighashKind, OrchardSpendAuthSig},
     Proof,
 };
 
@@ -15,10 +17,11 @@ impl super::Bundle {
     ///
     /// This is used by the Signer role to produce the transaction sighash.
     ///
-    /// [regular `Bundle`]: crate::Bundle
+    /// [regular `Bundle`]: crate::bundle::Bundle
     pub fn extract_effects<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::Bundle<EffectsOnly, V, OrchardVanilla>>, TxExtractorError> {
+    ) -> Result<Option<crate::bundle::Bundle<EffectsOnly, V, OrchardVanilla>>, TxExtractorError>
+    {
         self.to_tx_data(|_| Ok(()), |_| Ok(EffectsOnly))
     }
 
@@ -26,10 +29,10 @@ impl super::Bundle {
     ///
     /// This is used by the Transaction Extractor role to produce the final transaction.
     ///
-    /// [regular `Bundle`]: crate::Bundle
+    /// [regular `Bundle`]: crate::ActionGroup
     pub fn extract<V: TryFrom<i64>>(
-        self,
-    ) -> Result<Option<crate::Bundle<Unbound, V, OrchardVanilla>>, TxExtractorError> {
+        &self,
+    ) -> Result<Option<crate::bundle::Bundle<Unbound, V, OrchardVanilla>>, TxExtractorError> {
         self.to_tx_data(
             |action| {
                 action
@@ -46,6 +49,7 @@ impl super::Bundle {
                         .ok_or(TxExtractorError::MissingProof)?,
                     bsk: bundle
                         .bsk
+                        .clone()
                         .ok_or(TxExtractorError::MissingBindingSignatureSigningKey)?,
                 })
             },
@@ -57,7 +61,7 @@ impl super::Bundle {
         &self,
         action_auth: F,
         bundle_auth: G,
-    ) -> Result<Option<crate::Bundle<A, V, OrchardVanilla>>, E>
+    ) -> Result<Option<crate::bundle::Bundle<A, V, OrchardVanilla>>, E>
     where
         A: Authorization,
         E: From<TxExtractorError>,
@@ -90,14 +94,19 @@ impl super::Bundle {
 
             let authorization = bundle_auth(self)?;
 
-            Some(crate::Bundle::from_parts(
+            let action_group = crate::ActionGroup::from_parts(
                 actions,
                 self.flags,
-                value_balance,
                 vec![], //No burn in PCZT V1
                 self.anchor,
                 0, // No expiry height in PCZT V1
                 authorization,
+            );
+
+            Some(crate::bundle::Bundle::<A, V, OrchardVanilla>::from_parts(
+                vec![action_group],
+                value_balance,
+                None, //TODO: There doesn't seem to be a use of this to generate Authorized bundles. But consider fixing
             ))
         } else {
             None
@@ -107,6 +116,7 @@ impl super::Bundle {
 
 /// Errors that can occur while extracting a regular Orchard bundle from a PCZT bundle.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum TxExtractorError {
     /// The Transaction Extractor role requires `bsk` to be set.
     MissingBindingSignatureSigningKey,
@@ -118,8 +128,32 @@ pub enum TxExtractorError {
     ValueSumOutOfRange,
 }
 
+impl fmt::Display for TxExtractorError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TxExtractorError::MissingBindingSignatureSigningKey => {
+                write!(f, "`bsk` must be set for the Transaction Extractor role")
+            }
+            TxExtractorError::MissingProof => write!(
+                f,
+                "Orchard `zkproof` must be set for the Transaction Extractor role"
+            ),
+            TxExtractorError::MissingSpendAuthSig => write!(
+                f,
+                "`spend_auth_sig` fields must all be set for the Transaction Extractor role"
+            ),
+            TxExtractorError::ValueSumOutOfRange => {
+                write!(f, "value sum does not fit into a `valueBalance`")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for TxExtractorError {}
+
 /// Authorizing data for a bundle of actions that is just missing a binding signature.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Unbound {
     proof: Proof,
     bsk: redpallas::SigningKey<Binding>,
@@ -133,7 +167,7 @@ impl Authorization for Unbound {
     }
 }
 
-impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
+impl crate::ActionGroup<Unbound, OrchardVanilla> {
     /// Verifies the given sighash with every `spend_auth_sig`, and then binds the bundle.
     ///
     /// Returns `None` if the given sighash does not validate against every `spend_auth_sig`.
@@ -141,7 +175,7 @@ impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
         self,
         sighash: [u8; 32],
         rng: R,
-    ) -> Option<crate::Bundle<Authorized, V, OrchardVanilla>> {
+    ) -> Option<crate::ActionGroup<Authorized, OrchardVanilla>> {
         if self
             .actions()
             .iter()
@@ -149,11 +183,14 @@ impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
         {
             Some(self.map_authorization(
                 &mut (),
-                |_, _, a| VerSpendAuthSig::new(OrchardSighashVersion::V0, a),
+                |_, _, a| OrchardSpendAuthSig::new(OrchardSighashKind::AllEffecting, a),
                 |_, Unbound { proof, bsk }| {
                     Authorized::from_parts(
                         proof,
-                        VerBindingSig::new(OrchardSighashVersion::V0, bsk.sign(rng, &sighash)),
+                        OrchardBindingSig::new(
+                            OrchardSighashKind::AllEffecting,
+                            bsk.sign(rng, &sighash),
+                        ),
                     )
                 },
             ))

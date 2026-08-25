@@ -7,14 +7,13 @@ use criterion::{BenchmarkId, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
 
 use orchard::{
-    builder::{Builder, BundleType},
-    bundle::Authorization,
+    builder::Builder,
     circuit::{ProvingKey, VerifyingKey},
+    flavor::{OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, Scope, SpendingKey},
     note::AssetBase,
-    orchard_flavor::{OrchardVanilla, OrchardZSA},
     value::NoteValue,
-    Anchor, Bundle,
+    Anchor, ActionGroup,
 };
 use rand::rngs::OsRng;
 
@@ -33,7 +32,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
 
     let create_bundle = |num_recipients| {
         let mut builder = Builder::new(
-            BundleType::DEFAULT_VANILLA,
+            FL::DEFAULT_BUNDLE_TYPE,
             Anchor::from_bytes([0; 32]).unwrap(),
         );
         for _ in 0..num_recipients {
@@ -42,12 +41,12 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                     None,
                     recipient,
                     NoteValue::from_raw(10),
-                    AssetBase::native(),
+                    AssetBase::zatoshi(),
                     [0; 512],
                 )
                 .unwrap();
         }
-        let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().0;
+        let bundle: ActionGroup<_, FL> = builder.build::<i64, FL>(rng).unwrap().unwrap().0;
 
         let instances: Vec<_> = bundle
             .actions()
@@ -87,13 +86,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 .unwrap();
             assert!(bundle.verify_proof(&vk).is_ok());
             group.bench_function(BenchmarkId::new("bundle", num_recipients), |b| {
-                b.iter(|| {
-                    bundle
-                        .authorization()
-                        .proof()
-                        .unwrap()
-                        .verify(&vk, &instances)
-                });
+                b.iter(|| bundle.authorization().proof().verify(&vk, &instances));
             });
         }
     }

@@ -1,3 +1,5 @@
+use core::fmt;
+
 use alloc::vec::Vec;
 
 use halo2_proofs::plonk;
@@ -6,8 +8,8 @@ use rand::{CryptoRng, RngCore};
 use crate::{
     builder::SpendInfo,
     circuit::{Circuit, Instance, ProvingKey, Witnesses},
+    flavor::OrchardVanilla,
     note::{AssetBase, Rho},
-    orchard_flavor::OrchardVanilla,
     Note, Proof,
 };
 
@@ -41,7 +43,7 @@ impl super::Bundle {
                         .recipient
                         .ok_or(ProverError::MissingRecipient)?,
                     action.spend.value.ok_or(ProverError::MissingValue)?,
-                    AssetBase::native(),
+                    AssetBase::zatoshi(),
                     action.spend.rho.ok_or(ProverError::MissingRho)?,
                     action.spend.rseed.ok_or(ProverError::MissingRandomSeed)?,
                 )
@@ -54,8 +56,8 @@ impl super::Bundle {
                     .clone()
                     .ok_or(ProverError::MissingWitness)?;
 
-                let spend = SpendInfo::new(fvk, note, merkle_path, false)
-                    .ok_or(ProverError::WrongFvkForNote)?;
+                let spend =
+                    SpendInfo::new(fvk, note, merkle_path).ok_or(ProverError::WrongFvkForNote)?;
 
                 let output_note = Note::from_parts(
                     action
@@ -63,7 +65,7 @@ impl super::Bundle {
                         .recipient
                         .ok_or(ProverError::MissingRecipient)?,
                     action.output.value.ok_or(ProverError::MissingValue)?,
-                    AssetBase::native(),
+                    AssetBase::zatoshi(),
                     Rho::from_nf_old(action.spend.nullifier),
                     action.output.rseed.ok_or(ProverError::MissingRandomSeed)?,
                 )
@@ -74,7 +76,10 @@ impl super::Bundle {
                     .spend
                     .alpha
                     .ok_or(ProverError::MissingSpendAuthRandomizer)?;
-                let rcv = action.rcv.ok_or(ProverError::MissingValueCommitTrapdoor)?;
+                let rcv = action
+                    .rcv
+                    .clone()
+                    .ok_or(ProverError::MissingValueCommitTrapdoor)?;
 
                 Witnesses::from_action_context::<OrchardVanilla>(spend, output_note, alpha, rcv)
                     .ok_or(ProverError::RhoMismatch)
@@ -111,6 +116,7 @@ impl super::Bundle {
 
 /// Errors that can occur while creating Orchard proofs for a PCZT.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ProverError {
     /// The output note's components do not produce a valid note commitment.
     InvalidOutputNote,
@@ -139,3 +145,40 @@ pub enum ProverError {
     /// The provided `fvk` does not own the spent note.
     WrongFvkForNote,
 }
+
+impl fmt::Display for ProverError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProverError::InvalidOutputNote => write!(f, "output note is invalid"),
+            ProverError::InvalidSpendNote => write!(f, "spent note is invalid"),
+            ProverError::MissingFullViewingKey => {
+                write!(f, "`fvk` must be set for the Prover role")
+            }
+            ProverError::MissingRandomSeed => {
+                write!(f, "`rseed` fields must be set for the Prover role")
+            }
+            ProverError::MissingRecipient => {
+                write!(f, "`recipient` fields must be set for the Prover role")
+            }
+            ProverError::MissingRho => write!(f, "`rho` must be set for the Prover role"),
+            ProverError::MissingSpendAuthRandomizer => {
+                write!(f, "`alpha` must be set for the Prover role")
+            }
+            ProverError::MissingValue => {
+                write!(f, "`value` fields must be set for the Prover role")
+            }
+            ProverError::MissingValueCommitTrapdoor => {
+                write!(f, "`rcv` must be set for the Prover role")
+            }
+            ProverError::MissingWitness => write!(f, "`witness` must be set for the Prover role"),
+            ProverError::ProofFailed(e) => write!(f, "Failed to create proof: {e}"),
+            ProverError::RhoMismatch => {
+                write!(f, "output's `rho` does not match spent note's nullifier")
+            }
+            ProverError::WrongFvkForNote => write!(f, "`fvk` does not own the action's spent note"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ProverError {}
