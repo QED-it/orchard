@@ -462,8 +462,7 @@ impl Flags {
         };
 
         // Bit 3 (`zsa_enabled`) can only be 1 for a bundle version that permits ZSA
-        // transfers (the Ironwood pool under `ProtocolVersion::ZSA`); it MUST be 0
-        // otherwise.
+        // transfers; it MUST be 0 otherwise.
         let bit3 = value & FLAG_ZSA_ENABLED != 0;
         if bit3 && !bundle_version.permits_zsa() {
             return None;

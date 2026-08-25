@@ -106,6 +106,183 @@ pub struct Config<Lookup: PallasLookupRangeCheck> {
     new_note_commit_config: NoteCommitConfig<Lookup>,
 }
 
+impl OrchardCircuitVersion {
+    /// Whether this circuit version enforces the `disableCrossAddress` public input.
+    ///
+    /// Statements with `disableCrossAddress = 1` can be proven and verified only with
+    /// keys for a circuit version that constrains the flag. [`PostNu6_3`] constrains it;
+    /// older circuit versions leave it unconstrained, so they cannot enforce — and must
+    /// not be asked to attest to — the restriction.
+    ///
+    /// [`PostNu6_3`]: OrchardCircuitVersion::PostNu6_3
+    pub fn supports_cross_address_restriction(self) -> bool {
+        match self {
+            OrchardCircuitVersion::InsecurePreNu6_2 | OrchardCircuitVersion::FixedPostNu6_2 => {
+                false
+            }
+            OrchardCircuitVersion::PostNu6_3 | OrchardCircuitVersion::ZSA => true,
+        }
+    }
+
+    /// The corresponding `halo2_gadgets` variable-base scalar-mul circuit version.
+    fn halo2_version(self) -> CircuitVersion {
+        match self {
+            OrchardCircuitVersion::InsecurePreNu6_2 => CircuitVersion::InsecureUnanchoredBase,
+            OrchardCircuitVersion::FixedPostNu6_2
+            | OrchardCircuitVersion::PostNu6_3
+            | OrchardCircuitVersion::ZSA => CircuitVersion::AnchoredBase,
+        }
+    }
+
+    pub(crate) fn is_zsa(self) -> bool {
+        self == OrchardCircuitVersion::ZSA
+    }
+}
+
+/// The Orchard Action circuit.
+///
+/// Carries the private witnesses of a single action for any [`OrchardCircuitVersion`].
+/// The ZSA-specific witnesses are populated only for [`OrchardCircuitVersion::ZSA`];
+/// the Vanilla circuit versions leave them unknown and do not prove them.
+#[derive(Clone, Debug)]
+pub struct Circuit {
+    pub(crate) common_witnesses: CircuitVanilla,
+    pub(crate) additional_zsa_witnesses: Value<AdditionalZsaWitnesses>,
+}
+
+impl Circuit {
+    /// Returns the [`OrchardCircuitVersion`] this circuit instance is configured for.
+    fn circuit_version(&self) -> OrchardCircuitVersion {
+        self.common_witnesses.circuit_version
+    }
+
+    /// Returns the witnesses proved by the Vanilla circuit versions.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `additional_zsa_witnesses` is known: the Vanilla circuit versions must
+    /// never be asked to prove ZSA-specific witnesses.
+    fn to_vanilla(&self) -> CircuitVanilla {
+        self.additional_zsa_witnesses.assert_if_known(|_| false);
+        self.common_witnesses.clone()
+    }
+
+    /// Returns the witnesses proved by the ZSA circuit version.
+    fn to_zsa(&self) -> CircuitZsa {
+        CircuitZsa {
+            common_witnesses: self.common_witnesses.clone(),
+            additional_zsa_witnesses: self.additional_zsa_witnesses.clone(),
+        }
+    }
+
+    /// This constructor is public to enable creation of custom builders.
+    /// If you are not creating a custom builder, use [`Builder`] to compose
+    /// and authorize a transaction.
+    ///
+    /// Constructs a `Circuit` for the given `circuit_version` from the following components:
+    /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
+    /// - `output_note`: a note created in scope of the action
+    /// - `alpha`: a scalar used for randomization of the action spend validating key
+    /// - `rcv`: trapdoor for the action value commitment
+    ///
+    /// Returns `None` if the `rho` of the `output_note` is not equal
+    /// to the nullifier of the spent note.
+    ///
+    /// [`SpendInfo`]: crate::builder::SpendInfo
+    /// [`Builder`]: crate::builder::Builder
+    pub fn from_action_context(
+        spend: SpendInfo,
+        output_note: Note,
+        alpha: pallas::Scalar,
+        rcv: ValueCommitTrapdoor,
+        circuit_version: OrchardCircuitVersion,
+    ) -> Option<Circuit> {
+        (Rho::from_nf_old(spend.note.nullifier(&spend.fvk)) == output_note.rho()).then(|| {
+            Self::from_action_context_unchecked(spend, output_note, alpha, rcv, circuit_version)
+        })
+    }
+
+    /// # Panics
+    ///
+    /// Panics for a Vanilla `circuit_version` if the spent note's asset is not zatoshi,
+    /// or if `spend.split_flag` is true: those statements exist only in the ZSA circuit,
+    /// so a Vanilla version cannot attest to them.
+    pub(crate) fn from_action_context_unchecked(
+        spend: SpendInfo,
+        output_note: Note,
+        alpha: pallas::Scalar,
+        rcv: ValueCommitTrapdoor,
+        circuit_version: OrchardCircuitVersion,
+    ) -> Circuit {
+        if !circuit_version.is_zsa() {
+            assert!(
+                bool::from(spend.note.asset().is_zatoshi()),
+                "asset must be zatoshi in OrchardVanilla circuit"
+            );
+            assert!(
+                !spend.split_flag,
+                "split_flag must be false in OrchardVanilla circuit"
+            );
+        }
+
+        let sender_address = spend.note.recipient();
+        let rho_old = spend.note.rho();
+        let psi_old = spend.note.psi();
+        let rcm_old = spend.note.rcm();
+        // Unwitnessed spends (a deferred-anchor bundle, ZIP 374) exist only in bundles
+        // that refuse in-memory building, and no public constructor produces one, so a
+        // spend that reaches circuit construction always carries its Merkle path.
+        let merkle_path = spend
+            .merkle_path
+            .clone()
+            .expect("a spend used as a circuit witness carries a Merkle path");
+
+        let psi_new = output_note.psi();
+        let rcm_new = output_note.rcm();
+
+        let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
+        let psi_nf = nf_rseed.psi(&rho_old);
+
+        let common_witnesses = CircuitVanilla {
+            path: Value::known(merkle_path.auth_path()),
+            pos: Value::known(merkle_path.position()),
+            g_d_old: Value::known(sender_address.g_d()),
+            pk_d_old: Value::known(*sender_address.pk_d()),
+            v_old: Value::known(spend.note.value()),
+            rho_old: Value::known(rho_old),
+            psi_old: Value::known(psi_old),
+            rcm_old: Value::known(rcm_old),
+            cm_old: Value::known(spend.note.commitment()),
+            alpha: Value::known(alpha),
+            ak: Value::known(spend.fvk.clone().into()),
+            nk: Value::known(*spend.fvk.nk()),
+            rivk: Value::known(spend.fvk.rivk(spend.scope)),
+            g_d_new: Value::known(output_note.recipient().g_d()),
+            pk_d_new: Value::known(*output_note.recipient().pk_d()),
+            v_new: Value::known(output_note.value()),
+            psi_new: Value::known(psi_new),
+            rcm_new: Value::known(rcm_new),
+            rcv: Value::known(rcv),
+            circuit_version,
+        };
+
+        let additional_zsa_witnesses = if circuit_version.is_zsa() {
+            Value::known(AdditionalZsaWitnesses {
+                psi_nf,
+                asset: spend.note.asset(),
+                split_flag: spend.split_flag,
+            })
+        } else {
+            Value::unknown()
+        };
+
+        Circuit {
+            common_witnesses,
+            additional_zsa_witnesses,
+        }
+    }
+}
+
 /// Configures the Orchard Action circuit in the given constraint system.
 ///
 /// Shared by both circuit variations; `is_zsa` selects both the `q_orchard` gate
@@ -270,150 +447,6 @@ fn configure_circuit<Lookup: PallasLookupRangeCheck>(
         commit_ivk_config,
         old_note_commit_config,
         new_note_commit_config,
-    }
-}
-
-impl OrchardCircuitVersion {
-    /// Whether this circuit version enforces the `disableCrossAddress` public input.
-    ///
-    /// Statements with `disableCrossAddress = 1` can be proven and verified only with
-    /// keys for a circuit version that constrains the flag. [`PostNu6_3`] constrains it;
-    /// older circuit versions leave it unconstrained, so they cannot enforce — and must
-    /// not be asked to attest to — the restriction.
-    ///
-    /// [`PostNu6_3`]: OrchardCircuitVersion::PostNu6_3
-    pub fn supports_cross_address_restriction(self) -> bool {
-        match self {
-            OrchardCircuitVersion::InsecurePreNu6_2 | OrchardCircuitVersion::FixedPostNu6_2 => {
-                false
-            }
-            OrchardCircuitVersion::PostNu6_3 | OrchardCircuitVersion::ZSA => true,
-        }
-    }
-
-    /// The corresponding `halo2_gadgets` variable-base scalar-mul circuit version.
-    fn halo2_version(self) -> CircuitVersion {
-        match self {
-            OrchardCircuitVersion::InsecurePreNu6_2 => CircuitVersion::InsecureUnanchoredBase,
-            OrchardCircuitVersion::FixedPostNu6_2
-            | OrchardCircuitVersion::PostNu6_3
-            | OrchardCircuitVersion::ZSA => CircuitVersion::AnchoredBase,
-        }
-    }
-
-    pub(crate) fn is_zsa(self) -> bool {
-        self == OrchardCircuitVersion::ZSA
-    }
-}
-
-/// The Orchard Action circuit.
-///
-/// Carries the private witnesses of a single action for any [`OrchardCircuitVersion`].
-/// The ZSA-specific witnesses are populated only for [`OrchardCircuitVersion::ZSA`];
-/// the Vanilla circuit versions leave them unknown and do not prove them.
-#[derive(Clone, Debug)]
-pub struct Circuit {
-    pub(crate) common_witnesses: CircuitVanilla,
-    pub(crate) additional_zsa_witnesses: Value<AdditionalZsaWitnesses>,
-}
-
-impl Circuit {
-    /// Returns the [`OrchardCircuitVersion`] this circuit instance is configured for.
-    fn circuit_version(&self) -> OrchardCircuitVersion {
-        self.common_witnesses.circuit_version
-    }
-
-    /// Returns the witnesses proved by the Vanilla circuit versions.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `additional_zsa_witnesses` is known: the Vanilla circuit versions must
-    /// never be asked to prove ZSA-specific witnesses.
-    fn to_vanilla(&self) -> CircuitVanilla {
-        self.additional_zsa_witnesses.assert_if_known(|_| false);
-        self.common_witnesses.clone()
-    }
-
-    /// Returns the witnesses proved by the ZSA circuit version.
-    fn to_zsa(&self) -> CircuitZsa {
-        CircuitZsa {
-            common_witnesses: self.common_witnesses.clone(),
-            additional_zsa_witnesses: self.additional_zsa_witnesses.clone(),
-        }
-    }
-
-    /// This constructor is public to enable creation of custom builders.
-    /// If you are not creating a custom builder, use [`Builder`] to compose
-    /// and authorize a transaction.
-    ///
-    /// Constructs a `Circuit` for the given `circuit_version` from the following components:
-    /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
-    /// - `output_note`: a note created in scope of the action
-    /// - `alpha`: a scalar used for randomization of the action spend validating key
-    /// - `rcv`: trapdoor for the action value commitment
-    ///
-    /// Returns `None` if the `rho` of the `output_note` is not equal
-    /// to the nullifier of the spent note.
-    ///
-    /// [`SpendInfo`]: crate::builder::SpendInfo
-    /// [`Builder`]: crate::builder::Builder
-    pub fn from_action_context(
-        spend: SpendInfo,
-        output_note: Note,
-        alpha: pallas::Scalar,
-        rcv: ValueCommitTrapdoor,
-        circuit_version: OrchardCircuitVersion,
-    ) -> Option<Circuit> {
-        (Rho::from_nf_old(spend.note.nullifier(&spend.fvk)) == output_note.rho()).then(|| {
-            Self::from_action_context_unchecked(spend, output_note, alpha, rcv, circuit_version)
-        })
-    }
-
-    /// # Panics
-    ///
-    /// Panics for a Vanilla `circuit_version` if the spent note's asset is not zatoshi,
-    /// or if `spend.split_flag` is true: those statements exist only in the ZSA circuit,
-    /// so a Vanilla version cannot attest to them.
-    pub(crate) fn from_action_context_unchecked(
-        spend: SpendInfo,
-        output_note: Note,
-        alpha: pallas::Scalar,
-        rcv: ValueCommitTrapdoor,
-        circuit_version: OrchardCircuitVersion,
-    ) -> Circuit {
-        if !circuit_version.is_zsa() {
-            assert!(
-                bool::from(spend.note.asset().is_zatoshi()),
-                "asset must be zatoshi in OrchardVanilla circuit"
-            );
-            assert!(
-                !spend.split_flag,
-                "split_flag must be false in OrchardVanilla circuit"
-            );
-        }
-
-        let (common_witnesses, psi_nf) = CircuitVanilla::from_action_context_common(
-            &spend,
-            &output_note,
-            alpha,
-            rcv,
-            circuit_version,
-        );
-
-        let additional_zsa_witnesses = if circuit_version.is_zsa() {
-            Value::known(AdditionalZsaWitnesses {
-                psi_nf,
-                asset: spend.note.asset(),
-                split_flag: spend.split_flag,
-            })
-        } else {
-            Value::unknown()
-        };
-
-        Circuit {
-            common_witnesses,
-            additional_zsa_witnesses,
-        }
     }
 }
 
@@ -690,7 +723,7 @@ impl Proof {
     ) -> Result<Self, plonk::Error> {
         if circuits
             .iter()
-            .any(|circuit| circuit.circuit_version() != pk.circuit_version)
+            .any(|c| c.circuit_version() != pk.circuit_version)
         {
             return Err(plonk::Error::Synthesis);
         }

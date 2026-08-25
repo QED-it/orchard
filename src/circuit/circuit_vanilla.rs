@@ -18,7 +18,6 @@ use halo2_proofs::{
 };
 
 use crate::{
-    builder::SpendInfo,
     circuit::{
         commit_ivk::gadgets::commit_ivk, configure_circuit,
         derive_nullifier::gadgets::derive_nullifier, gadget::assign_free_advice,
@@ -32,7 +31,7 @@ use crate::{
     },
     note::{
         commitment::{NoteCommitTrapdoor, NoteCommitment},
-        Note, Rho,
+        Rho,
     },
     spec::NonIdentityPallasPoint,
     tree::MerkleHashOrchard,
@@ -96,72 +95,6 @@ impl CircuitVanilla {
             rcv: Value::unknown(),
             circuit_version,
         }
-    }
-
-    /// Constructs a `CircuitVanilla` for the given `circuit_version` from the following components:
-    /// - `spend`: [`SpendInfo`] of the note spent in scope of the action
-    /// - `output_note`: a note created in scope of the action
-    /// - `alpha`: a scalar used for randomization of the action spend validating key
-    /// - `rcv`: trapdoor for the action value commitment
-    /// - `circuit_version`: the [`OrchardCircuitVersion`] selected for the circuit
-    ///
-    /// This function returns also `psi_nf` which is only consumed by the ZSA-specific
-    /// witnesses of [`Circuit`], for the split-note handling of [`CircuitZsa`].
-    ///
-    /// [`SpendInfo`]: crate::builder::SpendInfo
-    /// [`OrchardCircuitVersion`]: crate::circuit::OrchardCircuitVersion
-    /// [`Circuit`]: crate::circuit::Circuit
-    /// [`CircuitZsa`]: crate::circuit::circuit_zsa::CircuitZsa
-    pub(crate) fn from_action_context_common(
-        spend: &SpendInfo,
-        output_note: &Note,
-        alpha: pallas::Scalar,
-        rcv: ValueCommitTrapdoor,
-        circuit_version: OrchardCircuitVersion,
-    ) -> (Self, pallas::Base) {
-        let sender_address = spend.note.recipient();
-        let rho_old = spend.note.rho();
-        let psi_old = spend.note.psi();
-        let rcm_old = spend.note.rcm();
-        // Unwitnessed spends (a deferred-anchor bundle, ZIP 374) exist only in bundles
-        // that refuse in-memory building, and no public constructor produces one, so a
-        // spend that reaches circuit construction always carries its Merkle path.
-        let merkle_path = spend
-            .merkle_path
-            .clone()
-            .expect("a spend used as a circuit witness carries a Merkle path");
-
-        let psi_new = output_note.psi();
-        let rcm_new = output_note.rcm();
-
-        let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
-        let psi_nf = nf_rseed.psi(&rho_old);
-
-        (
-            CircuitVanilla {
-                path: Value::known(merkle_path.auth_path()),
-                pos: Value::known(merkle_path.position()),
-                g_d_old: Value::known(sender_address.g_d()),
-                pk_d_old: Value::known(*sender_address.pk_d()),
-                v_old: Value::known(spend.note.value()),
-                rho_old: Value::known(rho_old),
-                psi_old: Value::known(psi_old),
-                rcm_old: Value::known(rcm_old),
-                cm_old: Value::known(spend.note.commitment()),
-                alpha: Value::known(alpha),
-                ak: Value::known(spend.fvk.clone().into()),
-                nk: Value::known(*spend.fvk.nk()),
-                rivk: Value::known(spend.fvk.rivk(spend.scope)),
-                g_d_new: Value::known(output_note.recipient().g_d()),
-                pk_d_new: Value::known(*output_note.recipient().pk_d()),
-                v_new: Value::known(output_note.value()),
-                psi_new: Value::known(psi_new),
-                rcm_new: Value::known(rcm_new),
-                rcv: Value::known(rcv),
-                circuit_version,
-            },
-            psi_nf,
-        )
     }
 }
 
