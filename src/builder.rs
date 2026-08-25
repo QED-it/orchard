@@ -693,7 +693,18 @@ struct ActionInfo {
 }
 
 impl ActionInfo {
+    /// # Panics
+    ///
+    /// Panics if the spent and output notes do not have the same asset. The circuit
+    /// witnesses a single `asset`, used for both note commitments and for the value
+    /// commitment, so an action cannot mix assets.
     fn new(spend: SpendInfo, output: OutputInfo, rng: impl RngCore) -> Self {
+        assert_eq!(
+            spend.note.asset(),
+            output.asset,
+            "an action's spent and output notes must have the same asset"
+        );
+
         ActionInfo {
             spend,
             output,
@@ -720,7 +731,8 @@ impl ActionInfo {
         circuit_version: OrchardCircuitVersion,
     ) -> (Action<SigningMetadata>, Circuit) {
         let v_net = self.value_sum();
-        let cv_net = ValueCommitment::derive_with_asset(v_net, self.rcv.clone(), self.output.asset);
+        let cv_net =
+            ValueCommitment::derive_with_asset(v_net, self.rcv.clone(), self.spend.note.asset());
 
         let (nf_old, ak, alpha, rk) = self.spend.build(&mut rng);
         let (note, cmx, encrypted_note) = self.output.build(&cv_net, nf_old, &mut rng);
