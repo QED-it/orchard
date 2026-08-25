@@ -1056,17 +1056,317 @@ fn synthesize_cross_address_checks(
     )
 }
 
-// TODO ZSA: add tests once ZSA bundle is implemented
+// TODO ZSA: once ZSA bundle is implemented, extend the tests below to cover `split_flag = true`.
 
 #[cfg(test)]
 mod tests {
-    use crate::circuit::VerifyingKey;
-    use crate::circuit_version::OrchardCircuitVersion;
+    use alloc::vec::Vec;
+    use core::iter;
+
+    use ff::Field;
+    use group::GroupEncoding;
+    use halo2_proofs::{circuit::Value, dev::MockProver};
+    use pasta_curves::pallas;
+    use rand::rngs::OsRng;
+    use rand_core::CryptoRngCore;
+
+    use crate::{
+        circuit::circuit_zsa::AdditionalZsaWitnesses,
+        circuit::{Circuit, CircuitVanilla, Instance, Proof, ProvingKey, VerifyingKey, K},
+        circuit_version::OrchardCircuitVersion,
+        keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
+        note::{AssetBase, Note, NoteCommitment, NoteVersion, Nullifier, Rho},
+        tree::MerklePath,
+        value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
+    };
+
+    #[cfg(feature = "dev-graph")]
+    #[test]
+    fn print_action_circuit() {
+        use plotters::prelude::*;
+
+        let root =
+            BitMapBackend::new("action-circuit-layout-zsa.png", (1024, 768)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let root = root
+            .titled("Orchard Action Circuit", ("sans-serif", 60))
+            .unwrap();
+
+        let circuit = crate::circuit::CircuitZsa::empty();
+        halo2_proofs::dev::CircuitLayout::default()
+            .show_labels(false)
+            .view_height(0..(1 << 11))
+            .render(K, &circuit, &root)
+            .unwrap();
+    }
+
+    /// Derives the note commitment for `note`, as if it carried `asset`.
+    ///
+    /// `Note` doesn't yet support constructing notes for a non-zatoshi `asset`, so callers
+    /// build an ordinary (zatoshi) `Note` for its other fields and use this to get a
+    /// commitment consistent with the ZSA-specific `asset` witness under test.
+    ///
+    /// TODO ZSA: once it is possible to construct a note with a non-zatoshi asset, remove
+    /// this function
+    fn note_commitment(note: &Note, asset: AssetBase) -> NoteCommitment {
+        NoteCommitment::derive(
+            note.recipient().g_d().to_bytes(),
+            note.recipient().pk_d().inner().to_bytes(),
+            note.value(),
+            asset,
+            note.rho().into_inner(),
+            note.psi(),
+            note.rcm(),
+        )
+        .unwrap()
+    }
+
+    /// Generates a circuit and instance whose output note is addressed to an expanded
+    /// receiver distinct from the spent note's.
+    fn generate_circuit_instance<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        rng: R,
+    ) -> (Circuit, Instance) {
+        generate_circuit_instance_inner(is_zatoshi_asset, false, rng)
+    }
+
+    /// Generates a circuit and instance whose output note is addressed to the spent
+    /// note's expanded receiver, as the cross-address restriction requires.
+    fn generate_self_transfer_circuit_instance<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        rng: R,
+    ) -> (Circuit, Instance) {
+        generate_circuit_instance_inner(is_zatoshi_asset, true, rng)
+    }
+
+    fn generate_circuit_instance_inner<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        output_matches_spend: bool,
+        mut rng: R,
+    ) -> (Circuit, Instance) {
+        // TODO ZSA: note_version should be NoteVersion::ZSA, once that variant exists
+        // (`NoteVersion` currently only has `V2`/`V3`).
+        let note_version = NoteVersion::V3;
+
+        // Create asset
+        let asset_base = if is_zatoshi_asset {
+            AssetBase::zatoshi()
+        } else {
+            AssetBase::random(&mut rng)
+        };
+
+        let sk = SpendingKey::random(&mut rng);
+        let fvk: FullViewingKey = (&sk).into();
+        let sender_address = fvk.address_at(0u32, Scope::External);
+        let nk = *fvk.nk();
+        let rivk = fvk.rivk(fvk.scope_for_address(&sender_address).unwrap());
+        let ak: SpendValidatingKey = fvk.into();
+        let alpha = pallas::Scalar::random(&mut rng);
+        let rk = ak.randomize(&alpha);
+
+        let rho_old = Rho::from_nf_old(Nullifier::dummy(&mut rng));
+        let spent_note = Note::new(
+            sender_address,
+            NoteValue::from_raw(7),
+            rho_old,
+            note_version,
+            &mut rng,
+        );
+        let cm_old = note_commitment(&spent_note, asset_base);
+        let nf_old = Nullifier::derive(
+            &nk,
+            spent_note.rho().into_inner(),
+            spent_note.psi(),
+            cm_old.clone(),
+        );
+
+        let output_address = if output_matches_spend {
+            sender_address
+        } else {
+            loop {
+                let other_sk = SpendingKey::random(&mut rng);
+                let other_fvk: FullViewingKey = (&other_sk).into();
+                let candidate = other_fvk.address_at(0u32, Scope::External);
+                if !sender_address.same_expanded_receiver(&candidate) {
+                    break candidate;
+                }
+            }
+        };
+        let output_note = Note::new(
+            output_address,
+            NoteValue::from_raw(3),
+            Rho::from_nf_old(nf_old),
+            note_version,
+            &mut rng,
+        );
+        let cmx = note_commitment(&output_note, asset_base).into();
+
+        let value = spent_note.value() - output_note.value();
+        let rcv = ValueCommitTrapdoor::random(&mut rng);
+        let cv_net = ValueCommitment::derive_with_asset(value, rcv.clone(), asset_base);
+
+        let path = MerklePath::dummy(&mut rng);
+        let anchor = path.root(cm_old.clone().into());
+
+        (
+            Circuit {
+                common_witnesses: CircuitVanilla {
+                    circuit_version: OrchardCircuitVersion::ZSA,
+                    path: Value::known(path.auth_path()),
+                    pos: Value::known(path.position()),
+                    g_d_old: Value::known(sender_address.g_d()),
+                    pk_d_old: Value::known(*sender_address.pk_d()),
+                    v_old: Value::known(spent_note.value()),
+                    rho_old: Value::known(spent_note.rho()),
+                    psi_old: Value::known(spent_note.psi()),
+                    rcm_old: Value::known(spent_note.rcm()),
+                    cm_old: Value::known(cm_old),
+                    alpha: Value::known(alpha),
+                    ak: Value::known(ak),
+                    nk: Value::known(nk),
+                    rivk: Value::known(rivk),
+                    g_d_new: Value::known(output_note.recipient().g_d()),
+                    pk_d_new: Value::known(*output_note.recipient().pk_d()),
+                    v_new: Value::known(output_note.value()),
+                    psi_new: Value::known(output_note.psi()),
+                    rcm_new: Value::known(output_note.rcm()),
+                    rcv: Value::known(rcv),
+                },
+                additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
+                    psi_nf: spent_note.psi(),
+                    asset: asset_base,
+                    split_flag: false,
+                }),
+            },
+            Instance {
+                anchor,
+                cv_net,
+                nf_old,
+                rk,
+                cmx,
+                enable_spend: true,
+                enable_output: true,
+                cross_address_disabled: false,
+                enable_zsa: true,
+            },
+        )
+    }
+
+    /// Runs `MockProver` on the ZSA circuit for `circuit`/`instance`.
+    fn zsa_mock_verify(
+        circuit: &Circuit,
+        instance: &Instance,
+    ) -> Result<(), Vec<halo2_proofs::dev::VerifyFailure>> {
+        MockProver::run(
+            K,
+            &circuit.to_zsa(),
+            instance
+                .to_halo2_instance()
+                .iter()
+                .map(|p| p.to_vec())
+                .collect(),
+        )
+        .unwrap()
+        .verify()
+    }
 
     #[test]
-    fn zsa_keygen() {
-        // Exercises `CircuitZsa`'s full `configure` path, the only coverage of ZSA
-        // keygen until the round-trip tests above exist.
-        let _vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
+    fn zsa_mock_prover_zatoshi_asset() {
+        let (circuit, instance) = generate_circuit_instance(true, OsRng);
+        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
+    }
+
+    #[test]
+    fn zsa_mock_prover_non_zatoshi_asset() {
+        let (circuit, instance) = generate_circuit_instance(false, OsRng);
+        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
+    }
+
+    #[test]
+    fn zsa_cross_address_restriction_is_conditional() {
+        // An unrestricted cross-address statement is satisfiable...
+        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
+
+        // ...but setting `disableCrossAddress` makes it unsatisfiable...
+        instance.cross_address_disabled = true;
+        assert!(zsa_mock_verify(&circuit, &instance).is_err());
+
+        // ...while a restricted self-transfer statement is satisfiable.
+        let (circuit, mut instance) = generate_self_transfer_circuit_instance(false, OsRng);
+        instance.cross_address_disabled = true;
+        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_asset_mismatch() {
+        // The `asset` witness must match the asset baked into `cm_old`/`cv_net`.
+        let mut rng = OsRng;
+        let (mut circuit, instance) = generate_circuit_instance(false, &mut rng);
+        circuit.additional_zsa_witnesses = circuit.additional_zsa_witnesses.map(|mut w| {
+            let current_asset = w.asset;
+            let another_asset = loop {
+                let candidate = AssetBase::random(&mut rng);
+                if candidate != current_asset {
+                    break candidate;
+                }
+            };
+            w.asset = another_asset;
+            w
+        });
+        assert!(zsa_mock_verify(&circuit, &instance).is_err());
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_enable_zsa_false_for_non_zatoshi_asset() {
+        // `enable_zsa = 0` requires `is_zatoshi_asset = 1`; a non-zatoshi asset must be rejected.
+        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        instance.enable_zsa = false;
+        assert!(zsa_mock_verify(&circuit, &instance).is_err());
+    }
+
+    #[test]
+    fn zsa_round_trip() {
+        let mut rng = OsRng;
+        let (circuits, instances): (Vec<_>, Vec<_>) = iter::once(())
+            .map(|()| generate_circuit_instance(false, &mut rng))
+            .unzip();
+
+        let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
+
+        // Test that the proof size is as expected.
+        let expected_proof_size = {
+            let circuit_cost =
+                halo2_proofs::dev::CircuitCost::<pasta_curves::vesta::Point, _>::measure(
+                    K,
+                    &circuits[0].to_zsa(),
+                );
+            assert_eq!(usize::from(circuit_cost.proof_size(1)), 5120);
+            assert_eq!(usize::from(circuit_cost.proof_size(2)), 7392);
+            // The constants in `Proof::expected_proof_size` must track the circuit's actual
+            // proof size; this guards them against drift if the circuit ever changes.
+            assert_eq!(
+                Proof::expected_proof_size(OrchardCircuitVersion::ZSA, 1),
+                5120
+            );
+            assert_eq!(
+                Proof::expected_proof_size(OrchardCircuitVersion::ZSA, 2),
+                7392
+            );
+            assert_eq!(
+                Proof::expected_proof_size(OrchardCircuitVersion::ZSA, instances.len()),
+                usize::from(circuit_cost.proof_size(instances.len())),
+            );
+            usize::from(circuit_cost.proof_size(instances.len()))
+        };
+
+        for (circuit, instance) in circuits.iter().zip(instances.iter()) {
+            assert_eq!(zsa_mock_verify(circuit, instance), Ok(()));
+        }
+
+        let pk = ProvingKey::build(OrchardCircuitVersion::ZSA);
+        let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
+        assert!(proof.verify(&vk, &instances).is_ok());
+        assert_eq!(proof.0.len(), expected_proof_size);
     }
 }
