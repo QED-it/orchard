@@ -357,6 +357,7 @@ pub struct SpendInfo {
     pub(crate) note: Note,
     pub(crate) merkle_path: Option<MerklePath>,
     // If `split_flag` is true, the spend note's value is not counted in the action's `ValueSum`.
+    // TODO ZSA: `ActionInfo::value_sum` does not implement this yet.
     pub(crate) split_flag: bool,
 }
 
