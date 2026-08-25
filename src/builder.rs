@@ -752,6 +752,8 @@ impl ActionInfo {
     }
 
     fn build_for_pczt(self, mut rng: impl RngCore) -> crate::pczt::Action {
+        // ZSA notes are not yet supported by PCZT.
+        assert_eq!(self.spend.note.asset(), AssetBase::zatoshi());
         let v_net = self.value_sum();
         let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.spend.note.asset());
 
