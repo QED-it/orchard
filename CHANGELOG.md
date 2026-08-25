@@ -48,17 +48,24 @@ and this project adheres to Rust's notion of
   `orchard::bundle::BundleVersion::circuit_version` (the method that returns it) require the
   `circuit` feature anymore, so that `orchard::Proof::expected_proof_size` can take
   an `OrchardCircuitVersion` argument without pulling in the `circuit` feature.
-- `orchard::circuit::Circuit` is now an enum, `OrchardVanilla(CircuitVanilla)` or
-  `OrchardZSA(CircuitZsa)`, instead of a single struct. `Circuit` itself no longer implements
-  `halo2_proofs::plonk::Circuit` (that impl moved to `CircuitVanilla` and `CircuitZsa`
-  individually). `Proof::create`, `ProvingKey::build`, and `VerifyingKey::build` dispatch on
-  the right variant internally, so callers do not need to match on it themselves.
+- `OrchardCircuitVersion` is now `#[non_exhaustive]`: downstream crates matching on it must
+  add a wildcard arm. Without this, the new `ZSA` variant (listed under Added) and every
+  future circuit version would break exhaustive matches.
+- `orchard::circuit::Circuit` no longer implements `halo2_proofs::plonk::Circuit`. It still
+  carries the witnesses of a single action, but the `plonk::Circuit` implementations now live
+  on the crate-internal `CircuitVanilla` and `CircuitZsa` types, one per circuit variation.
+  `Proof::create`, `ProvingKey::build`, and `VerifyingKey::build` dispatch to the right one
+  internally, so callers do not need to select it themselves.
 - `orchard::circuit::Config` is now generic over the `halo2_gadgets` lookup-range-check
   strategy.
 - `unstable-voting-circuits`-only (not covered by the crate's semver guarantees):
   `orchard::circuit::note_commit::{NoteCommitConfig, NoteCommitChip}` are now generic over the
   same lookup-range-check strategy, and `NoteCommitChip::configure` takes an additional
   `is_zsa_circuit: bool` argument.
+- `unstable-voting-circuits`-only (not covered by the crate's semver guarantees):
+  `orchard::constants::OrchardHashDomains` is now `#[non_exhaustive]`. Both it and
+  `OrchardCommitDomains` gained a `NoteZsaCommit` variant (listed under Added), so matches on
+  `OrchardCommitDomains` must be extended.
 
 ## [0.15.5] - 2026-08-02
 
