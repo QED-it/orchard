@@ -234,14 +234,10 @@ impl Circuit {
         // spend that reaches circuit construction always carries its Merkle path.
         let merkle_path = spend
             .merkle_path
-            .clone()
             .expect("a spend used as a circuit witness carries a Merkle path");
 
         let psi_new = output_note.psi();
         let rcm_new = output_note.rcm();
-
-        let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
-        let psi_nf = nf_rseed.psi(&rho_old);
 
         let common_witnesses = CircuitVanilla {
             path: Value::known(merkle_path.auth_path()),
@@ -267,6 +263,8 @@ impl Circuit {
         };
 
         let additional_zsa_witnesses = if circuit_version.is_zsa() {
+            let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
+            let psi_nf = nf_rseed.psi(&rho_old);
             Value::known(AdditionalZsaWitnesses {
                 psi_nf,
                 asset: spend.note.asset(),
@@ -357,8 +355,8 @@ fn configure_circuit<Lookup: PallasLookupRangeCheck>(
     meta.enable_constant(lagrange_coeffs[0]);
 
     // We have a lot of free space in the right-most advice columns; use one of them
-    // for all of our range checks. (The ZSA lookup argument also allocates its
-    // extra tag table column here.)
+    // for all of our range checks.
+    // The ZSA lookup argument also allocates its extra tag table column here.
     let range_check = Lookup::configure(meta, advices[9], table_idx);
 
     // Configuration for curve point operations.
