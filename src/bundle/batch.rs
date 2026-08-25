@@ -75,7 +75,9 @@ impl<'a> BatchValidator<'a> {
     ///
     /// Returns [`BatchError::RestrictionUnsupportedByKey`] if the bundle disables cross-address
     /// transfers but the validator's verifying key's circuit version does not support the
-    /// cross-address restriction; in that case the bundle is not added to the batch.
+    /// cross-address restriction, or if the bundle enables ZSA but the validator's verifying
+    /// key's circuit version does not support ZSA; in either case the bundle is not added to
+    /// the batch.
     pub fn add_bundle<V: Copy + Into<i64>>(
         &mut self,
         bundle: &Bundle<Authorized, V>,
@@ -83,6 +85,10 @@ impl<'a> BatchValidator<'a> {
     ) -> Result<(), BatchError> {
         if !bundle.flags().cross_address_enabled() && !self.vk.supports_cross_address_restriction()
         {
+            return Err(BatchError::RestrictionUnsupportedByKey);
+        }
+
+        if bundle.flags().zsa_enabled() && !self.vk.circuit_version().is_zsa() {
             return Err(BatchError::RestrictionUnsupportedByKey);
         }
 

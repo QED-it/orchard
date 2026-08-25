@@ -298,7 +298,7 @@ impl OrchardCircuitVersion {
         }
     }
 
-    fn is_zsa(self) -> bool {
+    pub(crate) fn is_zsa(self) -> bool {
         self == OrchardCircuitVersion::ZSA
     }
 }
@@ -673,6 +673,10 @@ impl Proof {
     /// `disableCrossAddress = 1` and `pk` is not an
     /// [`OrchardCircuitVersion::PostNu6_3`] or an [`OrchardCircuitVersion::ZSA`] proving key.
     ///
+    /// Returns [`plonk::Error::InvalidInstances`] if any instance has
+    /// `enable_zsa = 1` and `pk` is not an
+    /// [`OrchardCircuitVersion::ZSA`] proving key.
+    ///
     /// All instances of a bundle carry the same `disableCrossAddress` value; that uniformity
     /// is the bundle layer's invariant, and is not checked here.
     pub fn create(
@@ -691,6 +695,10 @@ impl Proof {
         if instances.iter().any(Instance::cross_address_disabled)
             && !pk.supports_cross_address_restriction()
         {
+            return Err(plonk::Error::InvalidInstances);
+        }
+
+        if instances.iter().any(Instance::enable_zsa) && !pk.circuit_version.is_zsa() {
             return Err(plonk::Error::InvalidInstances);
         }
 
@@ -736,11 +744,19 @@ impl Proof {
     /// `disableCrossAddress = 1` and `vk` is not an
     /// [`OrchardCircuitVersion::PostNu6_3`] or an [`OrchardCircuitVersion::ZSA`] verifying key.
     ///
+    /// Returns [`plonk::Error::InvalidInstances`] if any instance has
+    /// `enable_zsa = 1` and `vk` is not an
+    /// [`OrchardCircuitVersion::ZSA`] verifying key.
+    ///
     /// Also returns an error if proof verification fails.
     pub fn verify(&self, vk: &VerifyingKey, instances: &[Instance]) -> Result<(), plonk::Error> {
         if instances.iter().any(Instance::cross_address_disabled)
             && !vk.supports_cross_address_restriction()
         {
+            return Err(plonk::Error::InvalidInstances);
+        }
+
+        if instances.iter().any(Instance::enable_zsa) && !vk.circuit_version.is_zsa() {
             return Err(plonk::Error::InvalidInstances);
         }
 
