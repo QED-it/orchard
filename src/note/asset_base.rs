@@ -1,5 +1,4 @@
 use core::cmp::Ordering;
-use core::hash::{Hash, Hasher};
 use group::{Group, GroupEncoding};
 use pasta_curves::{arithmetic::CurveExt, pallas};
 use subtle::{Choice, ConstantTimeEq, CtOption};
@@ -75,13 +74,6 @@ impl AssetBase {
             }
             return Self(random_point);
         }
-    }
-}
-
-impl Hash for AssetBase {
-    fn hash<H: Hasher>(&self, h: &mut H) {
-        h.write(&self.to_bytes());
-        let _ = h.finish();
     }
 }
 
