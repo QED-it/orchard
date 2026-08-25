@@ -373,7 +373,7 @@ mod tests {
                     asset: Value::known(asset),
                     split_flag: Value::known(split_flag),
                 });
-                let expected_cv_net = ValueCommitment::derive(v_net, rcv, asset);
+                let expected_cv_net = ValueCommitment::derive_with_asset(v_net, rcv, asset);
                 instances.push([[expected_cv_net.x(), expected_cv_net.y()]]);
             }
         }

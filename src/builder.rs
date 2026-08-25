@@ -720,7 +720,7 @@ impl ActionInfo {
         circuit_version: OrchardCircuitVersion,
     ) -> (Action<SigningMetadata>, Circuit) {
         let v_net = self.value_sum();
-        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.output.asset);
+        let cv_net = ValueCommitment::derive_with_asset(v_net, self.rcv.clone(), self.output.asset);
 
         let (nf_old, ak, alpha, rk) = self.spend.build(&mut rng);
         let (note, cmx, encrypted_note) = self.output.build(&cv_net, nf_old, &mut rng);
@@ -755,7 +755,8 @@ impl ActionInfo {
         // ZSA notes are not yet supported by PCZT.
         assert_eq!(self.spend.note.asset(), AssetBase::zatoshi());
         let v_net = self.value_sum();
-        let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.spend.note.asset());
+        let cv_net =
+            ValueCommitment::derive_with_asset(v_net, self.rcv.clone(), self.spend.note.asset());
 
         let spend = self.spend.into_pczt(&mut rng);
         let output = self.output.into_pczt(&cv_net, spend.nullifier, &mut rng);
@@ -1308,11 +1309,7 @@ fn finish_unauthorized_bundle<V: TryFrom<i64>, R: RngCore>(
 
     // Verify that bsk and bvk are consistent.
     let bvk = (actions.iter().map(|a| a.cv_net()).sum::<ValueCommitment>()
-        - ValueCommitment::derive(
-            value_balance,
-            ValueCommitTrapdoor::zero(),
-            AssetBase::zatoshi(),
-        ))
+        - ValueCommitment::derive(value_balance, ValueCommitTrapdoor::zero()))
     .into_bvk();
     assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
 

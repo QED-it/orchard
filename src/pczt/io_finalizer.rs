@@ -6,7 +6,6 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     keys::SpendAuthorizingKey,
-    note::AssetBase,
     primitives::redpallas,
     value::{ValueCommitTrapdoor, ValueCommitment},
 };
@@ -51,11 +50,7 @@ impl super::Bundle {
             .iter()
             .map(|a| a.cv_net())
             .sum::<ValueCommitment>()
-            - ValueCommitment::derive(
-                self.value_sum,
-                ValueCommitTrapdoor::zero(),
-                AssetBase::zatoshi(),
-            ))
+            - ValueCommitment::derive(self.value_sum, ValueCommitTrapdoor::zero()))
         .into_bvk();
         if redpallas::VerificationKey::from(&bsk) != bvk {
             return Err(IoFinalizerError::ValueCommitMismatch);

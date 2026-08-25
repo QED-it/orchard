@@ -820,7 +820,7 @@ mod tests {
         use super::super::Instance;
         use crate::{
             bundle::Flags,
-            note::{AssetBase, ExtractedNoteCommitment, Nullifier},
+            note::{ExtractedNoteCommitment, Nullifier},
             primitives::redpallas::{self, SpendAuth},
             tree::Anchor,
             value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -832,11 +832,8 @@ mod tests {
         /// consensus-level validity checks elsewhere in the pipeline.
         fn dummy_other_fields() -> (Anchor, ValueCommitment, Nullifier, ExtractedNoteCommitment) {
             let anchor = Anchor::from_bytes([6u8; 32]).unwrap();
-            let cv_net = ValueCommitment::derive(
-                ValueSum::from_raw(42),
-                ValueCommitTrapdoor::zero(),
-                AssetBase::zatoshi(),
-            );
+            let cv_net =
+                ValueCommitment::derive(ValueSum::from_raw(42), ValueCommitTrapdoor::zero());
             let nf_old = Nullifier::from_bytes(&[1u8; 32]).unwrap();
             let cmx = ExtractedNoteCommitment::from_bytes(&[2u8; 32]).unwrap();
             (anchor, cv_net, nf_old, cmx)

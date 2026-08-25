@@ -31,6 +31,8 @@ and this project adheres to Rust's notion of
     OrchardCommitDomains::NoteZsaCommit}` variants
   - `orchard::constants::nullifier_l` module, with the `NULLIFIER_L` constant used to derive a
     split note's nullifier
+- `orchard::value::ValueCommitment::derive_with_asset`, deriving a value commitment for an
+  arbitrary `AssetBase`.
 
 ### Changed
 - The following already-opaque public structs gained new private fields for future ZSA
@@ -39,9 +41,6 @@ and this project adheres to Rust's notion of
   - `orchard::builder::SpendInfo`: `split_flag`
   - `orchard::builder::OutputInfo`: `asset`
   - `orchard::circuit::Instance`: `enable_zsa`
-- `orchard::value::ValueCommitment::derive` now takes an additional `asset: AssetBase`
-  argument, deriving the commitment's value base from the asset instead of always using the
-  zatoshi base.
 - `orchard::Proof::expected_proof_size` now takes an `OrchardCircuitVersion` argument, since
   the ZSA circuit's proof size differs from the other circuit versions'.
 - `OrchardCircuitVersion` moved from `orchard::circuit::OrchardCircuitVersion` to

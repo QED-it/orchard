@@ -354,7 +354,17 @@ impl ValueCommitment {
     ///
     /// [concretehomomorphiccommit]: https://zips.z.cash/protocol/nu5.pdf#concretehomomorphiccommit
     #[allow(non_snake_case)]
-    pub fn derive(value: ValueSum, rcv: ValueCommitTrapdoor, asset: AssetBase) -> Self {
+    pub fn derive(value: ValueSum, rcv: ValueCommitTrapdoor) -> Self {
+        ValueCommitment::derive_with_asset(value, rcv, AssetBase::zatoshi())
+    }
+
+    /// Derives a `ValueCommitment` by $\mathsf{ValueCommit^{OrchardZSA}}$.
+    ///
+    /// Defined in [ZIP-226][zip226].
+    ///
+    /// [zip226]: https://zips.z.cash/zip-0226
+    #[allow(non_snake_case)]
+    pub fn derive_with_asset(value: ValueSum, rcv: ValueCommitTrapdoor, asset: AssetBase) -> Self {
         let hasher = pallas::Point::hash_to_curve(VALUE_COMMITMENT_PERSONALIZATION);
         let V = asset.cv_base();
         let R = hasher(&VALUE_COMMITMENT_R_BYTES);
@@ -476,7 +486,7 @@ mod tests {
         testing::{arb_note_value_bounded, arb_trapdoor, arb_value_sum_bounded},
         BalanceError, ValueCommitTrapdoor, ValueCommitment, ValueSum, MAX_NOTE_VALUE,
     };
-    use crate::{note::AssetBase, primitives::redpallas};
+    use crate::primitives::redpallas;
 
     proptest! {
         #[test]
@@ -501,9 +511,9 @@ mod tests {
 
             let bvk = (values
                 .into_iter()
-                .map(|(value, rcv)| ValueCommitment::derive(value, rcv, AssetBase::zatoshi()))
+                .map(|(value, rcv)| ValueCommitment::derive(value, rcv))
                 .sum::<ValueCommitment>()
-                - ValueCommitment::derive(value_balance, ValueCommitTrapdoor::zero(), AssetBase::zatoshi()))
+                - ValueCommitment::derive(value_balance, ValueCommitTrapdoor::zero()))
             .into_bvk();
 
             assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);

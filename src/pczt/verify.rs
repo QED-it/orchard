@@ -2,7 +2,7 @@ use core::fmt;
 
 use crate::{
     keys::{FullViewingKey, SpendValidatingKey},
-    note::{AssetBase, ExtractedNoteCommitment, Rho},
+    note::{ExtractedNoteCommitment, Rho},
     value::ValueCommitment,
     Note,
 };
@@ -60,7 +60,7 @@ impl super::Action {
             .clone()
             .ok_or(VerifyError::MissingValueCommitTrapdoor)?;
 
-        let cv_net = ValueCommitment::derive(spend_value - output_value, rcv, AssetBase::zatoshi());
+        let cv_net = ValueCommitment::derive(spend_value - output_value, rcv);
         if cv_net.to_bytes() == self.cv_net.to_bytes() {
             Ok(())
         } else {

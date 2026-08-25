@@ -235,7 +235,7 @@ pub(crate) mod testing {
             rng_seed in prop::array::uniform32(prop::num::u8::ANY),
         ) -> Action<()> {
             let cmx = ExtractedNoteCommitment::from(note.commitment());
-            let cv_net = ValueCommitment::derive(
+            let cv_net = ValueCommitment::derive_with_asset(
                 spend_value - output_value,
                 ValueCommitTrapdoor::zero(),
                 // TODO ZSA: asset should be a param, not hardcoded here
@@ -265,7 +265,7 @@ pub(crate) mod testing {
             fake_sighash in prop::array::uniform32(prop::num::u8::ANY),
         ) -> Action<redpallas::Signature<SpendAuth>> {
             let cmx = ExtractedNoteCommitment::from(note.commitment());
-            let cv_net = ValueCommitment::derive(
+            let cv_net = ValueCommitment::derive_with_asset(
                 spend_value - output_value,
                 ValueCommitTrapdoor::zero(),
                 // TODO ZSA: asset should be a param, not hardcoded here
@@ -297,7 +297,7 @@ mod tests {
 
     use super::{Action, ActionFromPartsError};
     use crate::{
-        note::{AssetBase, ExtractedNoteCommitment, Nullifier, TransmittedNoteCiphertext},
+        note::{ExtractedNoteCommitment, Nullifier, TransmittedNoteCiphertext},
         primitives::redpallas::{self, SpendAuth},
         value::{ValueCommitTrapdoor, ValueCommitment, ValueSum},
     };
@@ -341,11 +341,7 @@ mod tests {
             enc_ciphertext: [4u8; 580],
             out_ciphertext: [5u8; 80],
         };
-        let cv_net = ValueCommitment::derive(
-            ValueSum::from_raw(42),
-            ValueCommitTrapdoor::zero(),
-            AssetBase::zatoshi(),
-        );
+        let cv_net = ValueCommitment::derive(ValueSum::from_raw(42), ValueCommitTrapdoor::zero());
         (nf, cmx, encrypted_note, cv_net)
     }
 
