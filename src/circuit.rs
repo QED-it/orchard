@@ -272,10 +272,8 @@ impl Circuit {
         };
 
         let additional_zsa_witnesses = if circuit_version.is_zsa() {
-            let nf_rseed = spend.note.rseed_split_note().unwrap_or(*spend.note.rseed());
-            let psi_nf = nf_rseed.psi(&rho_old);
             Value::known(AdditionalZsaWitnesses {
-                psi_nf,
+                psi_nf: spend.note.psi_nf(),
                 asset: spend.note.asset(),
                 split_flag: spend.split_flag,
             })

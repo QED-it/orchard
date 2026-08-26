@@ -415,6 +415,14 @@ impl Note {
         self.rseed.psi(&self.rho())
     }
 
+    /// Derives the `psi_nf` value for this note.
+    ///
+    /// For a split note, this value comes from `rseed_split_note`. It is then different from
+    /// [`Self::psi`]. For all other notes, the two values are the same.
+    pub(crate) fn psi_nf(&self) -> pallas::Base {
+        self.rseed_split_note.unwrap_or(self.rseed).psi(&self.rho())
+    }
+
     /// Derives the note commitment trapdoor for this note.
     pub(crate) fn rcm(&self) -> commitment::NoteCommitTrapdoor {
         let rho = self.rho();
@@ -471,12 +479,10 @@ impl Note {
 
     /// Derives the nullifier for this note.
     pub fn nullifier(&self, fvk: &FullViewingKey) -> Nullifier {
-        let selected_rseed = self.rseed_split_note.unwrap_or(self.rseed);
-
         Nullifier::derive(
             fvk.nk(),
             self.rho.0,
-            selected_rseed.psi(&self.rho()),
+            self.psi_nf(),
             self.commitment(),
             self.rseed_split_note.is_some(),
         )
