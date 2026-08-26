@@ -72,9 +72,9 @@ and this project adheres to Rust's notion of
     - `gadget::note_commit` → `note_commit::gadgets::note_commit`, now generic over the
       lookup-range-check strategy, plus a trailing
       `zsa_params: Option<ZsaNoteCommitParams>` argument (`None` for vanilla behavior).
-  - `orchard::constants::OrchardHashDomains` is now `#[non_exhaustive]`. Both it and
-    `OrchardCommitDomains` gained a `NoteZsaCommit` variant (listed under Added), so matches on
-    `OrchardCommitDomains` must be extended.
+  - `orchard::constants::{OrchardHashDomains, OrchardCommitDomains}` both gained a
+    `NoteZsaCommit` variant (listed under Added) and are now `#[non_exhaustive]`, so downstream
+    matches on either must add a wildcard arm.
 
 ## [0.15.5] - 2026-08-02
 
