@@ -199,12 +199,10 @@ mod tests {
             .try_map_value_balance(i64::try_from)
             .expect("generated bundle value balance fits in i64");
         bundle.flags.zsa_enabled = true;
-        // Leave cross-address transfers enabled, so that ZSA is the only capability a
-        // verifying key can fail to support.
+        // Cross-address stays enabled, so ZSA is the only capability a key can lack.
         bundle.flags.cross_address_enabled = true;
 
-        // Only the ZSA circuit version constrains the ZSA statement, so every other key
-        // rejects the bundle at insertion.
+        // Only a ZSA key constrains the ZSA statement; every other key rejects at insertion.
         for circuit_version in [
             OrchardCircuitVersion::FixedPostNu6_2,
             OrchardCircuitVersion::PostNu6_3,
