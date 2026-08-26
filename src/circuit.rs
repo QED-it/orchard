@@ -210,6 +210,10 @@ impl Circuit {
     /// Panics for a Vanilla `circuit_version` if the spent note's asset is not zatoshi,
     /// or if `spend.split_flag` is true: those statements exist only in the ZSA circuit,
     /// so a Vanilla version cannot attest to them.
+    ///
+    /// Panics for any `circuit_version` if `spend.split_flag` disagrees with whether
+    /// `spend.note` carries a split seed: the note-derived public nullifier and the
+    /// `split_flag` witness would then describe different actions.
     pub(crate) fn from_action_context_unchecked(
         spend: SpendInfo,
         output_note: Note,
