@@ -228,6 +228,12 @@ impl Circuit {
             );
         }
 
+        assert_eq!(
+            spend.split_flag,
+            bool::from(spend.note.rseed_split_note().is_some()),
+            "split_flag must match the presence of the note's split seed"
+        );
+
         let sender_address = spend.note.recipient();
         let rho_old = spend.note.rho();
         let psi_old = spend.note.psi();
