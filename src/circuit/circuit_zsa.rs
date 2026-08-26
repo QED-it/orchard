@@ -1301,6 +1301,20 @@ mod tests {
         .verify()
     }
 
+    /// Asserts that the statement is rejected, and *only* because of `constraint`.
+    fn assert_zsa_rejected_by(circuit: &Circuit, instance: &Instance, constraint: &str) {
+        let failures = zsa_mock_verify(circuit, instance).expect_err("statement must be rejected");
+        let unrelated: Vec<_> = failures
+            .iter()
+            .map(|failure| alloc::format!("{failure}"))
+            .filter(|failure| !failure.contains(constraint))
+            .collect();
+        assert!(
+            unrelated.is_empty(),
+            "expected only `{constraint}` to fail, but also got: {unrelated:#?}"
+        );
+    }
+
     #[test]
     fn zsa_mock_prover_zatoshi_asset() {
         let (circuit, instance) = generate_circuit_instance(true, OsRng);
@@ -1347,26 +1361,32 @@ mod tests {
         // Replace the public nullifier by the one this note would have if it were not a split note.
         instance.nf_old =
             Nullifier::derive(&nk, rho_old.into_inner(), psi_nf, cm_old, Choice::from(0));
-        assert!(zsa_mock_verify(&circuit, &instance).is_err());
+
+        // The nullifier the circuit derives failing to equal the public one.
+        assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
     }
 
     #[test]
     fn zsa_mock_prover_rejects_split_note_with_zatoshi_asset() {
         // The circuit constrains `(split_flag = 1) => (is_zatoshi_asset = 0)`.
-        let (mut circuit, instance) = generate_split_note_circuit_instance(OsRng);
-        circuit.additional_zsa_witnesses = circuit.additional_zsa_witnesses.map(|mut w| {
-            w.asset = AssetBase::zatoshi();
-            w
-        });
-        assert!(zsa_mock_verify(&circuit, &instance).is_err());
+        let (circuit, instance) = generate_circuit_instance_inner(true, false, true, OsRng);
+        assert_zsa_rejected_by(
+            &circuit,
+            &instance,
+            "(split_flag = 1) => (is_zatoshi_asset = 0)",
+        );
     }
 
     #[test]
     fn zsa_mock_prover_rejects_split_note_with_cross_address_disabled() {
-        // The circuit constrains `(disable_cross_address = 1) => (split_flag = 0)`
-        let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
+        // The circuit constrains `(disable_cross_address = 1) => (split_flag = 0)`.
+        let (circuit, mut instance) = generate_circuit_instance_inner(false, true, true, OsRng);
         instance.cross_address_disabled = true;
-        assert!(zsa_mock_verify(&circuit, &instance).is_err());
+        assert_zsa_rejected_by(
+            &circuit,
+            &instance,
+            "(disable_cross_address = 1) => (split_flag = 0)",
+        );
     }
 
     #[test]
@@ -1385,15 +1405,21 @@ mod tests {
             w.asset = another_asset;
             w
         });
-        assert!(zsa_mock_verify(&circuit, &instance).is_err());
+        // The asset is bound into `cm_old`, `cmx` and `cv_net`, so a lie about it is caught by
+        // those equalities rather than by a gate constraint.
+        assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
     }
 
     #[test]
     fn zsa_mock_prover_rejects_enable_zsa_false_for_non_zatoshi_asset() {
-        // `enable_zsa = 0` requires `is_zatoshi_asset = 1`; a non-zatoshi asset must be rejected.
+        // The circuit constrains `(enable_zsa = 0) => (is_zatoshi_asset = 1)`.
         let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
         instance.enable_zsa = false;
-        assert!(zsa_mock_verify(&circuit, &instance).is_err());
+        assert_zsa_rejected_by(
+            &circuit,
+            &instance,
+            "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
+        );
     }
 
     // Set ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF to regenerate the pinned circuit description.
