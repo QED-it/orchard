@@ -1,9 +1,9 @@
 use core::cmp::Ordering;
 use group::{Group, GroupEncoding};
-use pasta_curves::{arithmetic::CurveExt, pallas};
+use pasta_curves::pallas;
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
-use crate::constants::fixed_bases::{VALUE_COMMITMENT_PERSONALIZATION, VALUE_COMMITMENT_V_BYTES};
+use crate::constants::zatoshi_asset_base::zatoshi_asset_base;
 
 #[cfg(test)]
 use rand_core::CryptoRngCore;
@@ -42,9 +42,7 @@ impl AssetBase {
 
     /// Note type for zatoshi, maintains backward compatibility with Orchard untyped notes.
     pub fn zatoshi() -> Self {
-        AssetBase(pallas::Point::hash_to_curve(
-            VALUE_COMMITMENT_PERSONALIZATION,
-        )(&VALUE_COMMITMENT_V_BYTES))
+        AssetBase(pallas::Point::from(zatoshi_asset_base()))
     }
 
     /// The base point used in value commitments.

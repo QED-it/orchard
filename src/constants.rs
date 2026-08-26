@@ -3,6 +3,7 @@ pub mod fixed_bases;
 pub mod nullifier_l;
 pub mod sinsemilla;
 pub mod util;
+pub mod zatoshi_asset_base;
 
 #[cfg(feature = "circuit")]
 pub use self::sinsemilla::{OrchardCommitDomains, OrchardHashDomains};
