@@ -33,6 +33,10 @@ and this project adheres to Rust's notion of
     OrchardCommitDomains::NoteZsaCommit}` variants
   - `orchard::constants::nullifier_l` module, with the `NULLIFIER_L` constant used to derive a
     split note's nullifier
+- `unstable-voting-circuits`-only (not covered by the crate's semver guarantees), the types
+  carrying the ZSA-specific inputs that the gadgets now take (see Changed):
+  - `orchard::circuit::derive_nullifier::ZsaNullifierParams`
+  - `orchard::circuit::note_commit::ZsaNoteCommitParams`
 
 ### Changed
 - The following already-opaque public structs gained new private fields for future ZSA
