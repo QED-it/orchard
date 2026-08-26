@@ -25,18 +25,17 @@ and this project adheres to Rust's notion of
   the ZSA Action circuit.
 - `orchard::value::ValueCommitment::derive_with_asset`, deriving a value commitment for an
   arbitrary `AssetBase`.
-- `unstable-voting-circuits`-only (not covered by the crate's semver guarantees), constants
-  backing the new ZSA note commitment domain and split-note nullifier derivation:
-  - `orchard::constants::fixed_bases::NOTE_ZSA_COMMITMENT_PERSONALIZATION`
-  - `orchard::constants::sinsemilla::Q_NOTE_ZSA_COMMITMENT_M_GENERATOR`
-  - `orchard::constants::sinsemilla::{OrchardHashDomains::NoteZsaCommit,
-    OrchardCommitDomains::NoteZsaCommit}` variants
-  - `orchard::constants::nullifier_l` module, with the `NULLIFIER_L` constant used to derive a
-    split note's nullifier
-- `unstable-voting-circuits`-only (not covered by the crate's semver guarantees), the types
-  carrying the ZSA-specific inputs that the gadgets now take (see Changed):
-  - `orchard::circuit::derive_nullifier::ZsaNullifierParams`
-  - `orchard::circuit::note_commit::ZsaNoteCommitParams`
+- `unstable-voting-circuits`-only (not covered by the crate's semver guarantees):
+  - Constants backing the new ZSA note commitment domain and split-note nullifier derivation:
+    - `orchard::constants::fixed_bases::NOTE_ZSA_COMMITMENT_PERSONALIZATION`
+    - `orchard::constants::sinsemilla::Q_NOTE_ZSA_COMMITMENT_M_GENERATOR`
+    - `orchard::constants::sinsemilla::{OrchardHashDomains::NoteZsaCommit,
+      OrchardCommitDomains::NoteZsaCommit}` variants
+    - `orchard::constants::nullifier_l` module, with the `NULLIFIER_L` constant used to derive
+      a split note's nullifier
+  - The types carrying the ZSA-specific inputs that the gadgets now take (see Changed):
+    - `orchard::circuit::derive_nullifier::ZsaNullifierParams`
+    - `orchard::circuit::note_commit::ZsaNoteCommitParams`
 
 ### Changed
 - The following already-opaque public structs gained new private fields for future ZSA
