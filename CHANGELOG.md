@@ -23,6 +23,8 @@ and this project adheres to Rust's notion of
 - `orchard::circuit_version` module, containing `OrchardCircuitVersion` (moved out of
   `orchard::circuit`; see Changed) with a new `OrchardCircuitVersion::ZSA` variant selecting
   the ZSA Action circuit.
+- `orchard::value::ValueCommitment::derive_with_asset`, deriving a value commitment for an
+  arbitrary `AssetBase`.
 - `unstable-voting-circuits`-only (not covered by the crate's semver guarantees), constants
   backing the new ZSA note commitment domain and split-note nullifier derivation:
   - `orchard::constants::fixed_bases::NOTE_ZSA_COMMITMENT_PERSONALIZATION`
@@ -31,8 +33,6 @@ and this project adheres to Rust's notion of
     OrchardCommitDomains::NoteZsaCommit}` variants
   - `orchard::constants::nullifier_l` module, with the `NULLIFIER_L` constant used to derive a
     split note's nullifier
-- `orchard::value::ValueCommitment::derive_with_asset`, deriving a value commitment for an
-  arbitrary `AssetBase`.
 
 ### Changed
 - The following already-opaque public structs gained new private fields for future ZSA
@@ -49,8 +49,7 @@ and this project adheres to Rust's notion of
   `circuit` feature anymore, so that `orchard::Proof::expected_proof_size` can take
   an `OrchardCircuitVersion` argument without pulling in the `circuit` feature.
 - `OrchardCircuitVersion` is now `#[non_exhaustive]`: downstream crates matching on it must
-  add a wildcard arm. Without this, the new `ZSA` variant (listed under Added) and every
-  future circuit version would break exhaustive matches.
+  add a wildcard arm.
 - `orchard::circuit::Circuit` no longer implements `halo2_proofs::plonk::Circuit`. It still
   carries the witnesses of a single action, but the `plonk::Circuit` implementations now live
   on the crate-internal `CircuitVanilla` and `CircuitZsa` types, one per circuit variation.
