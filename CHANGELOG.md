@@ -56,6 +56,10 @@ and this project adheres to Rust's notion of
   on the crate-internal `CircuitVanilla` and `CircuitZsa` types, one per circuit variation.
   `Proof::create`, `ProvingKey::build`, and `VerifyingKey::build` dispatch to the right one
   internally, so callers do not need to select it themselves.
+- `orchard::Note::nullifier` now implements the split-note nullifier derivation of ZIP 226: a
+  note carrying a split seed derives $\psi$ from that seed, and its nullifier is offset by
+  $\mathcal{L}^{\mathsf{Orchard}}$. No public constructor produces a note with a split seed,
+  so the nullifier of every note that can be built today is unchanged.
 - `orchard::circuit::Config` is now generic over the `halo2_gadgets` lookup-range-check
   strategy.
 - `unstable-voting-circuits`-only (not covered by the crate's semver guarantees):

@@ -471,7 +471,15 @@ impl Note {
 
     /// Derives the nullifier for this note.
     pub fn nullifier(&self, fvk: &FullViewingKey) -> Nullifier {
-        Nullifier::derive(fvk.nk(), self.rho.0, self.psi(), self.commitment())
+        let selected_rseed = self.rseed_split_note.unwrap_or(self.rseed);
+
+        Nullifier::derive(
+            fvk.nk(),
+            self.rho.0,
+            selected_rseed.psi(&self.rho()),
+            self.commitment(),
+            self.rseed_split_note.is_some(),
+        )
     }
 }
 

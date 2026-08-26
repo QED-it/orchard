@@ -1069,13 +1069,14 @@ mod tests {
     use pasta_curves::pallas;
     use rand::rngs::OsRng;
     use rand_core::CryptoRngCore;
+    use subtle::Choice;
 
     use crate::{
         circuit::circuit_zsa::AdditionalZsaWitnesses,
         circuit::{Circuit, CircuitVanilla, Instance, Proof, ProvingKey, VerifyingKey, K},
         circuit_version::OrchardCircuitVersion,
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
-        note::{AssetBase, Note, NoteCommitment, NoteVersion, Nullifier, Rho},
+        note::{AssetBase, Note, NoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho},
         tree::MerklePath,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
@@ -1127,7 +1128,7 @@ mod tests {
         is_zatoshi_asset: bool,
         rng: R,
     ) -> (Circuit, Instance) {
-        generate_circuit_instance_inner(is_zatoshi_asset, false, rng)
+        generate_circuit_instance_inner(is_zatoshi_asset, false, false, rng)
     }
 
     /// Generates a circuit and instance whose output note is addressed to the spent
@@ -1136,12 +1137,28 @@ mod tests {
         is_zatoshi_asset: bool,
         rng: R,
     ) -> (Circuit, Instance) {
-        generate_circuit_instance_inner(is_zatoshi_asset, true, rng)
+        generate_circuit_instance_inner(is_zatoshi_asset, true, false, rng)
+    }
+
+    /// Generates a circuit and instance spending a split note.
+    ///
+    /// The asset is necessarily non-zatoshi: the circuit constrains
+    /// `(split_flag = 1) => (is_zatoshi_asset = 0)`.
+    fn generate_split_note_circuit_instance<R: CryptoRngCore>(rng: R) -> (Circuit, Instance) {
+        generate_circuit_instance_inner(false, false, true, rng)
+    }
+
+    /// Extracts the contents of a `Value` that is known.
+    fn known<V: Clone>(value: &Value<V>) -> V {
+        let mut out = None;
+        value.clone().map(|v| out = Some(v));
+        out.expect("value is known")
     }
 
     fn generate_circuit_instance_inner<R: CryptoRngCore>(
         is_zatoshi_asset: bool,
         output_matches_spend: bool,
+        split_flag: bool,
         mut rng: R,
     ) -> (Circuit, Instance) {
         // TODO ZSA: note_version should be NoteVersion::ZSA, once that variant exists
@@ -1172,12 +1189,21 @@ mod tests {
             note_version,
             &mut rng,
         );
+        // A split note's nullifier is derived from a separate rseed, so `psi_nf` differs from
+        // `psi_old`. For a regular note the circuit constrains the two to be equal.
+        let psi_nf = if split_flag {
+            RandomSeed::random(&mut rng, &rho_old).psi(&rho_old)
+        } else {
+            spent_note.psi()
+        };
+
         let cm_old = note_commitment(&spent_note, asset_base);
         let nf_old = Nullifier::derive(
             &nk,
             spent_note.rho().into_inner(),
-            spent_note.psi(),
+            psi_nf,
             cm_old.clone(),
+            Choice::from(u8::from(split_flag)),
         );
 
         let output_address = if output_matches_spend {
@@ -1201,7 +1227,12 @@ mod tests {
         );
         let cmx = note_commitment(&output_note, asset_base).into();
 
-        let value = spent_note.value() - output_note.value();
+        // A split note contributes no value to the action: v_net = -v_new.
+        let value = if split_flag {
+            NoteValue::ZERO - output_note.value()
+        } else {
+            spent_note.value() - output_note.value()
+        };
         let rcv = ValueCommitTrapdoor::random(&mut rng);
         let cv_net = ValueCommitment::derive_with_asset(value, rcv.clone(), asset_base);
 
@@ -1233,9 +1264,9 @@ mod tests {
                     rcv: Value::known(rcv),
                 },
                 additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
-                    psi_nf: spent_note.psi(),
+                    psi_nf,
                     asset: asset_base,
-                    split_flag: false,
+                    split_flag,
                 }),
             },
             Instance {
@@ -1296,6 +1327,46 @@ mod tests {
         let (circuit, mut instance) = generate_self_transfer_circuit_instance(false, OsRng);
         instance.cross_address_disabled = true;
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
+    }
+
+    #[test]
+    fn zsa_mock_prover_split_note() {
+        let (circuit, instance) = generate_split_note_circuit_instance(OsRng);
+        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_non_split_nullifier_for_split_note() {
+        let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
+
+        let psi_nf = known(&circuit.additional_zsa_witnesses).psi_nf;
+        let cm_old = known(&circuit.common_witnesses.cm_old);
+        let nk = known(&circuit.common_witnesses.nk);
+        let rho_old = known(&circuit.common_witnesses.rho_old);
+
+        // Replace the public nullifier by the one this note would have if it were not a split note.
+        instance.nf_old =
+            Nullifier::derive(&nk, rho_old.into_inner(), psi_nf, cm_old, Choice::from(0));
+        assert!(zsa_mock_verify(&circuit, &instance).is_err());
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_split_note_with_zatoshi_asset() {
+        // The circuit constrains `(split_flag = 1) => (is_zatoshi_asset = 0)`.
+        let (mut circuit, instance) = generate_split_note_circuit_instance(OsRng);
+        circuit.additional_zsa_witnesses = circuit.additional_zsa_witnesses.map(|mut w| {
+            w.asset = AssetBase::zatoshi();
+            w
+        });
+        assert!(zsa_mock_verify(&circuit, &instance).is_err());
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_split_note_with_cross_address_disabled() {
+        // The circuit constrains `(disable_cross_address = 1) => (split_flag = 0)`
+        let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
+        instance.cross_address_disabled = true;
+        assert!(zsa_mock_verify(&circuit, &instance).is_err());
     }
 
     #[test]
