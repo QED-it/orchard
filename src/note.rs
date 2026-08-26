@@ -657,8 +657,8 @@ mod tests {
         }
     }
 
-    /// A split seed changes the nullifier: psi comes from that seed, and NULLIFIER_L is
-    /// added. No constructor sets the field yet, so the test sets it directly.
+    /// A split note takes its psi from the split seed, and adds NULLIFIER_L to its nullifier.
+    /// No constructor sets `rseed_split_note`, so this test sets it directly.
     #[test]
     fn split_note_nullifier() {
         let mut rng = rand::rngs::OsRng;
@@ -684,13 +684,13 @@ mod tests {
             )
         };
 
-        // The split seed's psi, the original commitment, and the offset.
+        // The split note uses the split seed's psi and adds NULLIFIER_L.
         assert_eq!(split_note.nullifier(&fvk), derive(psi_nf, true));
-        // The same psi without the offset gives a different nullifier.
+        // Without NULLIFIER_L  (is_split=false), the result is different.
         assert_ne!(split_note.nullifier(&fvk), derive(psi_nf, false));
-        // The psi is the split seed's, not the note's own.
+        // With the note's own psi, the result is different.
         assert_ne!(split_note.nullifier(&fvk), derive(note.psi(), true));
-        // The note without the split seed keeps its own psi and no offset.
+        // A note with no split seed uses its own psi and does not add NULLIFIER_L (is_split=false).
         assert_eq!(note.nullifier(&fvk), derive(note.psi(), false));
     }
 }
