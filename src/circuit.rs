@@ -63,7 +63,6 @@ pub mod gadget;
 pub(in crate::circuit) mod note_commit;
 #[cfg(feature = "unstable-voting-circuits")]
 pub mod note_commit;
-pub(in crate::circuit) mod orchard_sinsemilla_chip;
 pub(in crate::circuit) mod value_commit_orchard;
 
 pub use crate::Proof;
