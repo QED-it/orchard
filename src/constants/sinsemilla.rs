@@ -135,6 +135,7 @@ impl HashDomains<pallas::Affine> for OrchardHashDomains {
 
 /// The Sinsemilla commitment domains used in Orchard.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum OrchardCommitDomains {
     /// The `NoteCommit` commitment domain.
     NoteCommit,

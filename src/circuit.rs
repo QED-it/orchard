@@ -157,16 +157,20 @@ impl Circuit {
 
     /// Returns the witnesses proved by the Vanilla circuit versions.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `additional_zsa_witnesses` is known: the Vanilla circuit versions must
-    /// never be asked to prove ZSA-specific witnesses.
-    fn to_vanilla(&self) -> CircuitVanilla {
-        self.additional_zsa_witnesses.assert_if_known(|_| false);
-        self.common_witnesses.clone()
+    /// Returns [`plonk::Error::Synthesis`] if `additional_zsa_witnesses` is known: the
+    /// Vanilla circuit versions must never be asked to prove ZSA-specific witnesses.
+    fn to_vanilla(&self) -> Result<CircuitVanilla, plonk::Error> {
+        self.additional_zsa_witnesses.error_if_known_and(|_| true)?;
+        Ok(self.common_witnesses.clone())
     }
 
     /// Returns the witnesses proved by the ZSA circuit version.
+    ///
+    /// Needs no counterpart to [`Self::to_vanilla`]'s check: if
+    /// `additional_zsa_witnesses` is unknown, the prover rejects the unknown assignment
+    /// with [`plonk::Error::Synthesis`] itself.
     fn to_zsa(&self) -> CircuitZsa {
         CircuitZsa {
             common_witnesses: self.common_witnesses.clone(),
@@ -755,7 +759,10 @@ impl Proof {
                 &mut transcript,
             )?;
         } else {
-            let circuits: Vec<_> = circuits.iter().map(Circuit::to_vanilla).collect();
+            let circuits: Vec<_> = circuits
+                .iter()
+                .map(Circuit::to_vanilla)
+                .collect::<Result<_, _>>()?;
             plonk::create_proof(
                 &pk.params,
                 &pk.pk,
@@ -906,7 +913,7 @@ mod tests {
         use pasta_curves::pallas;
 
         use super::super::{
-            AdditionalZsaWitnesses, Circuit, CircuitVanilla, OrchardCircuitVersion,
+            plonk, AdditionalZsaWitnesses, Circuit, CircuitVanilla, OrchardCircuitVersion,
         };
         use crate::note::AssetBase;
 
@@ -915,8 +922,7 @@ mod tests {
         /// way to prove them, so their presence indicates a construction bug rather than a
         /// provable statement.
         #[test]
-        #[should_panic]
-        fn panics_if_zsa_witnesses_are_known() {
+        fn errors_if_zsa_witnesses_are_known() {
             let circuit = Circuit {
                 common_witnesses: CircuitVanilla::empty(OrchardCircuitVersion::FixedPostNu6_2),
                 additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
@@ -926,7 +932,7 @@ mod tests {
                 }),
             };
 
-            circuit.to_vanilla();
+            assert!(matches!(circuit.to_vanilla(), Err(plonk::Error::Synthesis)));
         }
 
         #[test]
@@ -936,7 +942,7 @@ mod tests {
                 additional_zsa_witnesses: Value::unknown(),
             };
 
-            circuit.to_vanilla();
+            assert!(circuit.to_vanilla().is_ok());
         }
     }
 }

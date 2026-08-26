@@ -194,6 +194,33 @@ mod tests {
     }
 
     #[test]
+    fn add_bundle_rejects_unsupported_zsa() {
+        let mut bundle = sample_authorized_bundle(1)
+            .try_map_value_balance(i64::try_from)
+            .expect("generated bundle value balance fits in i64");
+        bundle.flags.zsa_enabled = true;
+        // Cross-address stays enabled, so ZSA is the only capability a key can lack.
+        bundle.flags.cross_address_enabled = true;
+
+        // Only a ZSA key constrains the ZSA statement; every other key rejects at insertion.
+        for circuit_version in [
+            OrchardCircuitVersion::FixedPostNu6_2,
+            OrchardCircuitVersion::PostNu6_3,
+        ] {
+            let vk = VerifyingKey::build(circuit_version);
+            let mut validator = BatchValidator::new(&vk);
+            assert_eq!(
+                validator.add_bundle(&bundle, [0; 32]),
+                Err(BatchError::RestrictionUnsupportedByKey)
+            );
+        }
+
+        let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
+        let mut validator = BatchValidator::new(&vk);
+        assert_eq!(validator.add_bundle(&bundle, [0; 32]), Ok(()));
+    }
+
+    #[test]
     fn empty_batch_validates() {
         for circuit_version in [
             OrchardCircuitVersion::InsecurePreNu6_2,

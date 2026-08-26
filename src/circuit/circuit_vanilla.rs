@@ -1075,6 +1075,34 @@ mod tests {
         ));
     }
 
+    // Every Vanilla circuit version leaves instance row 10 (`enableZSA`) unconstrained, so
+    // only a ZSA key may prove or verify `enable_zsa = 1`.
+    #[test]
+    fn zsa_statement_requires_supporting_key() {
+        let mut rng = OsRng;
+        let (circuit, mut instance) =
+            generate_circuit_instance(&mut rng, OrchardCircuitVersion::PostNu6_3);
+        instance.enable_zsa = true;
+
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+        assert!(matches!(
+            Proof::create(
+                &pk,
+                core::slice::from_ref(&circuit),
+                core::slice::from_ref(&instance),
+                &mut rng,
+            ),
+            Err(super::plonk::Error::InvalidInstances),
+        ));
+
+        // The guard runs before the proof bytes are read, so an empty proof suffices.
+        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
+        assert!(matches!(
+            Proof::new(Vec::new()).verify(&vk, core::slice::from_ref(&instance)),
+            Err(super::plonk::Error::InvalidInstances),
+        ));
+    }
+
     // Set ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF to regenerate the pinned circuit description
     // for this version.
     fn pinned_circuit_description(

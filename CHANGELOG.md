@@ -59,13 +59,22 @@ and this project adheres to Rust's notion of
 - `orchard::circuit::Config` is now generic over the `halo2_gadgets` lookup-range-check
   strategy.
 - `unstable-voting-circuits`-only (not covered by the crate's semver guarantees):
-  `orchard::circuit::note_commit::{NoteCommitConfig, NoteCommitChip}` are now generic over the
-  same lookup-range-check strategy, and `NoteCommitChip::configure` takes an additional
-  `is_zsa_circuit: bool` argument.
-- `unstable-voting-circuits`-only (not covered by the crate's semver guarantees):
-  `orchard::constants::OrchardHashDomains` is now `#[non_exhaustive]`. Both it and
-  `OrchardCommitDomains` gained a `NoteZsaCommit` variant (listed under Added), so matches on
-  `OrchardCommitDomains` must be extended.
+  - `orchard::circuit::note_commit::{NoteCommitConfig, NoteCommitChip}` are now generic over the
+    same lookup-range-check strategy, and `NoteCommitChip::configure` takes an additional
+    `is_zsa_circuit: bool` argument.
+  - Three gadgets moved out of `orchard::circuit::gadget`, each into a module of its own. Their
+    behavior is unchanged, but the old paths no longer exist (paths below are relative to
+    `orchard::circuit`):
+    - `gadget::derive_nullifier` → `derive_nullifier::gadgets::derive_nullifier`, plus a trailing
+      `zsa_params: Option<ZsaNullifierParams>` argument (`None` for vanilla behavior).
+    - `gadget::commit_ivk` → `commit_ivk::gadgets::commit_ivk`, now generic over the
+      lookup-range-check strategy and the Sinsemilla chip.
+    - `gadget::note_commit` → `note_commit::gadgets::note_commit`, now generic over the
+      lookup-range-check strategy, plus a trailing
+      `zsa_params: Option<ZsaNoteCommitParams>` argument (`None` for vanilla behavior).
+  - `orchard::constants::{OrchardHashDomains, OrchardCommitDomains}` both gained a
+    `NoteZsaCommit` variant (listed under Added) and are now `#[non_exhaustive]`, so downstream
+    matches on either must add a wildcard arm.
 
 ## [0.15.5] - 2026-08-02
 
