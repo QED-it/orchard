@@ -23,6 +23,7 @@ pub const MAX_BURN_VALUE: u64 = (1u64 << 63) - 1;
 
 /// Possible errors that can occur during bundle burn validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum BurnError {
     /// Encountered a duplicate asset to burn.
     DuplicateAsset,
@@ -36,11 +37,6 @@ pub enum BurnError {
     AssetNotFoundInState,
     /// Insufficient supply for burn.
     InsufficientSupply,
-    /// A non-empty burn was provided for a bundle whose version does not permit ZSA.
-    ///
-    /// Burn instructions are only meaningful for the ZSA protocol; a bundle for a
-    /// version that does not permit ZSA must not carry any burn.
-    BurnNotPermitted,
 }
 
 impl fmt::Display for BurnError {
@@ -58,9 +54,6 @@ impl fmt::Display for BurnError {
                 write!(f, "Asset not found in global issuance state")
             }
             BurnError::InsufficientSupply => write!(f, "Insufficient supply for burn"),
-            BurnError::BurnNotPermitted => f.write_str(
-                "a non-empty burn was provided for a bundle version that does not permit ZSA",
-            ),
         }
     }
 }

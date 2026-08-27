@@ -35,13 +35,13 @@ const NOTE_VALUE_OFFSET: usize = NOTE_DIVERSIFIER_OFFSET + NOTE_DIVERSIFIER_SIZE
 const NOTE_RSEED_OFFSET: usize = NOTE_VALUE_OFFSET + NOTE_VALUE_SIZE;
 
 /// The size of a Vanilla compact note.
-pub(crate) const COMPACT_NOTE_SIZE_VANILLA: usize = NOTE_RSEED_OFFSET + NOTE_RSEED_SIZE;
+pub const COMPACT_NOTE_SIZE_VANILLA: usize = NOTE_RSEED_OFFSET + NOTE_RSEED_SIZE;
 
 /// The size of the encoding of a ZSA asset.
 const ZSA_ASSET_SIZE: usize = 32;
 
 /// The size of a ZSA compact note.
-pub(crate) const COMPACT_NOTE_SIZE_ZSA: usize = COMPACT_NOTE_SIZE_VANILLA + ZSA_ASSET_SIZE;
+pub const COMPACT_NOTE_SIZE_ZSA: usize = COMPACT_NOTE_SIZE_VANILLA + ZSA_ASSET_SIZE;
 
 /// The size of the memo.
 pub(crate) const MEMO_SIZE: usize = 512;

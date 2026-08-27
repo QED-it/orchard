@@ -34,7 +34,7 @@ impl OrchardFlavorBench for OrchardV2 {
         c: &'a mut Criterion<M>,
         group_name: &str,
     ) -> BenchmarkGroup<'a, M> {
-        c.benchmark_group(format!("[OrchardVanilla] {}", group_name))
+        c.benchmark_group(format!("[OrchardV2] {}", group_name))
     }
 }
 
@@ -46,7 +46,7 @@ impl OrchardFlavorBench for IronwoodV3 {
         c: &'a mut Criterion<M>,
         group_name: &str,
     ) -> BenchmarkGroup<'a, M> {
-        c.benchmark_group(format!("[OrchardVanilla] {}", group_name))
+        c.benchmark_group(format!("[Ironwood] {}", group_name))
     }
 }
 
