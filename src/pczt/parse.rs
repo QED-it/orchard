@@ -17,7 +17,7 @@ use crate::{
     note::{
         ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext,
     },
-    note_encryption::NoteCiphertextBytes,
+    note_encryption::{enc_ciphertext_size, NoteCiphertextBytes},
     primitives::redpallas::{self, SpendAuth},
     tree::{MerkleHashOrchard, MerklePath},
     value::{NoteValue, Sign, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -371,6 +371,13 @@ impl Output {
         let cmx = ExtractedNoteCommitment::from_bytes(&cmx)
             .into_option()
             .ok_or(ParseError::InvalidExtractedNoteCommitment)?;
+
+        // `NoteCiphertextBytes::from_slice` accepts either encoding, so pin the length to the
+        // one `note_version` implies. Otherwise a ciphertext of the wrong kind survives every
+        // PCZT role and is only rejected by `validate_action_ciphertext_kind` at extraction.
+        if enc_ciphertext.len() != enc_ciphertext_size(note_version) {
+            return Err(ParseError::InvalidEncCiphertext);
+        }
 
         let encrypted_note = TransmittedNoteCiphertext {
             epk_bytes: ephemeral_key,

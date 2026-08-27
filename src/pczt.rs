@@ -381,6 +381,7 @@ mod tests {
         constants::MERKLE_DEPTH_ORCHARD,
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{AssetBase, ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho},
+        note_encryption::{ENC_CIPHERTEXT_SIZE_VANILLA, ENC_CIPHERTEXT_SIZE_ZSA},
         pczt::{
             IoFinalizerError, ParseError, ProverError, SignerError, TxExtractorError, VerifyError,
             Zip32Derivation,
@@ -577,6 +578,46 @@ mod tests {
             .unwrap();
 
         assert!(bundle.verify_proof(&vk).is_ok());
+    }
+
+    #[test]
+    fn output_parse_ties_enc_ciphertext_length_to_note_version() {
+        // `NoteCiphertextBytes::from_slice` accepts either encoding, so `Output::parse` must
+        // pin the length to the one `note_version` implies. Otherwise a ciphertext of the wrong
+        // kind survives the Prover and Signer roles, and is only rejected by
+        // `validate_action_ciphertext_kind` in `to_tx_data`.
+        let mut rng = OsRng;
+        let cmx = pallas::Base::random(&mut rng).to_repr();
+        let out_ciphertext = alloc::vec![0u8; 80];
+
+        let mut parse = |enc_ciphertext_size: usize, note_version| {
+            super::Output::parse(
+                Nullifier::dummy(&mut rng),
+                cmx,
+                [0u8; 32],
+                alloc::vec![0u8; enc_ciphertext_size],
+                out_ciphertext.clone(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                note_version,
+                alloc::collections::BTreeMap::new(),
+            )
+        };
+
+        assert!(parse(ENC_CIPHERTEXT_SIZE_VANILLA, NoteVersion::V3).is_ok());
+        assert!(parse(ENC_CIPHERTEXT_SIZE_ZSA, NoteVersion::ZSA).is_ok());
+        assert!(matches!(
+            parse(ENC_CIPHERTEXT_SIZE_ZSA, NoteVersion::V3),
+            Err(ParseError::InvalidEncCiphertext)
+        ));
+        assert!(matches!(
+            parse(ENC_CIPHERTEXT_SIZE_VANILLA, NoteVersion::ZSA),
+            Err(ParseError::InvalidEncCiphertext)
+        ));
     }
 
     #[test]
