@@ -656,4 +656,41 @@ mod tests {
             );
         }
     }
+
+    /// A split note takes its psi from the split seed, and adds NULLIFIER_L to its nullifier.
+    /// No constructor sets `rseed_split_note`, so this test sets it directly.
+    #[test]
+    fn split_note_nullifier() {
+        let mut rng = rand::rngs::OsRng;
+        let (_, fvk, note) = Note::dummy(&mut rng, None, NoteVersion::V3);
+        let rho = note.rho();
+        let split_rseed = RandomSeed::random(&mut rng, &rho);
+        let split_note = Note {
+            rseed_split_note: CtOption::new(split_rseed, 1u8.into()),
+            ..note
+        };
+
+        let psi_nf = split_rseed.psi(&rho);
+        assert_eq!(split_note.psi_nf(), psi_nf);
+        assert_ne!(psi_nf, note.psi());
+
+        let derive = |psi, is_split: bool| {
+            Nullifier::derive(
+                fvk.nk(),
+                rho.into_inner(),
+                psi,
+                note.commitment(),
+                Choice::from(u8::from(is_split)),
+            )
+        };
+
+        // The split note uses the split seed's psi and adds NULLIFIER_L.
+        assert_eq!(split_note.nullifier(&fvk), derive(psi_nf, true));
+        // Without NULLIFIER_L  (is_split=false), the result is different.
+        assert_ne!(split_note.nullifier(&fvk), derive(psi_nf, false));
+        // With the note's own psi, the result is different.
+        assert_ne!(split_note.nullifier(&fvk), derive(note.psi(), true));
+        // A note with no split seed uses its own psi and does not add NULLIFIER_L (is_split=false).
+        assert_eq!(note.nullifier(&fvk), derive(note.psi(), false));
+    }
 }
