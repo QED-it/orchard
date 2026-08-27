@@ -2482,8 +2482,7 @@ mod tests {
     #[test]
     fn add_burn_rejects_non_zsa_version() {
         // Burn is only encoded in the ZSA transaction format, so a non-ZSA builder must not
-        // accept one -- otherwise `derive_bvk` would fold in a burn that a wire-reparsed copy
-        // of the same bundle could not reproduce.
+        // accept one.
         let mut rng = OsRng;
         let bundle_version = BundleVersion::ironwood_v3();
         let mut builder = Builder::new(

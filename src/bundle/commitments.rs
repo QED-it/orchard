@@ -32,8 +32,8 @@ const ZCASH_IRONWOOD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrnA
 const ZCASH_IRONWOOD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrnActNH_v6";
 const ZCASH_IRONWOOD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthIrnwdH_v6";
 
-// These are this fork's own strings, not ZIP-246's: ZIP-246 is withdrawn, and ZIP-229 does not
-// include the ZSA values yet.
+// These strings are specific to this fork. They are not the ZIP-246 strings,
+// because ZIP-246 is withdrawn. ZIP-229 does not specify the ZSA values at this time.
 //
 // TODO Re-derive these from the ZSA digest spec once published, and add its test vectors.
 // Changing any string here changes consensus-visible digests.
