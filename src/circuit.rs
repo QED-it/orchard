@@ -244,6 +244,11 @@ impl Circuit {
         })
     }
 
+    /// # Panics
+    ///
+    /// Panics for any `circuit_version` if `spend.split_flag` disagrees with whether
+    /// `spend.note` carries a split seed: the note-derived public nullifier and the
+    /// `split_flag` witness would then describe different actions.
     pub(crate) fn from_action_context_unchecked(
         spend: SpendInfo,
         output_note: Note,
@@ -251,6 +256,12 @@ impl Circuit {
         rcv: ValueCommitTrapdoor,
         circuit_version: OrchardCircuitVersion,
     ) -> Self {
+        assert_eq!(
+            spend.split_flag,
+            bool::from(spend.note.rseed_split_note().is_some()),
+            "split_flag must match the presence of the note's split seed"
+        );
+
         if circuit_version.is_zsa() {
             Circuit::OrchardZSA(CircuitZsa::from_action_context_unchecked(
                 spend,
