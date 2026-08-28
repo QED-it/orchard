@@ -1556,14 +1556,20 @@ pub(crate) mod tests {
 
     use proptest::prelude::*;
 
+    use zcash_note_encryption::note_bytes::NoteBytesData;
+
     use super::testing::{
-        arb_asset_to_burn, arb_bundle, arb_bundle_vanilla, arb_bundle_zsa, arb_flags,
+        arb_asset_to_burn, arb_bundle, arb_bundle_vanilla, arb_flags,
         arb_flags_ironwood_post_nu6_3, flags_for_version,
     };
     use super::{
-        Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags, TxVersion,
+        Action, Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags, TxVersion,
     };
-    use crate::{sighash_kind::test_sighash_info_for_kind, Proof, ValuePool};
+    use crate::{
+        note_encryption::{NoteCiphertextBytes, ENC_CIPHERTEXT_SIZE_ZSA},
+        sighash_kind::test_sighash_info_for_kind,
+        Proof, ValuePool,
+    };
 
     #[cfg(feature = "circuit")]
     pub(crate) fn with_cross_address_disabled(
@@ -2017,24 +2023,33 @@ pub(crate) mod tests {
 
         #[test]
         fn try_from_parts_rejects_mismatched_action_ciphertext_kind(
-            bundle in arb_bundle_zsa(3)
+            bundle in arb_bundle_vanilla(3)
         ) {
-            // `bundle` is a ZSA bundle, so its actions carry ZSA ciphertexts. Building a bundle
-            // from those actions under a version that doesn't permit ZSA should be rejected.
-            let bundle_version = BundleVersion::ironwood_v3();
-            let expected = Proof::expected_proof_size(bundle_version, bundle.actions.len());
+            // Keep the drawn bundle's own version, so flags, proof size and burn stay valid and the
+            // ciphertext kind of one action is the only violation, whatever order the checks run in.
+            let mut actions = bundle.actions().clone();
+            let first = actions.first().clone();
+            let mut encrypted_note = first.encrypted_note().clone();
+            encrypted_note.enc_ciphertext =
+                NoteCiphertextBytes::Zsa(NoteBytesData([0u8; ENC_CIPHERTEXT_SIZE_ZSA]));
+            *actions.first_mut() = Action::from_parts(
+                *first.nullifier(),
+                first.rk().clone(),
+                *first.cmx(),
+                encrypted_note,
+                first.cv_net().clone(),
+                first.authorization().clone(),
+            )
+            .unwrap();
 
             let result = Bundle::try_from_parts(
-                bundle.actions.clone(),
+                actions,
                 *bundle.flags(),
                 *bundle.value_balance(),
                 vec![],
                 *bundle.anchor(),
-                Authorized::from_parts(
-                    Proof::new(vec![0u8; expected]),
-                    bundle.authorization().binding_signature().clone(),
-                ),
-                bundle_version,
+                bundle.authorization().clone(),
+                bundle.bundle_version(),
             );
             prop_assert_eq!(result.err(), Some(BundleError::MismatchedActionCiphertextKind));
         }

@@ -37,6 +37,9 @@ const ZCASH_IRONWOOD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthIrnwdH_v6";
 //
 // TODO Re-derive these from the ZSA digest spec once published, and add its test vectors.
 // Changing any string here changes consensus-visible digests.
+//
+// TODO Settle the naming convention at the same time: the burn and auth strings below still say
+// `Orc`, and the suffixes mix `Hash` with `_v6`.
 const ZCASH_ZSA_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardZsaH";
 const ZCASH_ZSA_ACTION_GROUPS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdZsaActGHash";
 const ZCASH_ZSA_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdZsaActCHash";
@@ -412,6 +415,11 @@ fn hash_bundle_auth_data_vanilla<V>(
 ///
 /// The `sighash_info_for_kind` closure returns the `SighashInfo` encoding
 /// for a given [`OrchardSighashKind`].
+///
+/// # Panics
+///
+/// Panics if any signature in the bundle uses a sighash kind different from
+/// `OrchardSighashKind::AllEffecting`, which is currently the only defined kind.
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
 fn hash_bundle_auth_data_zsa<V>(

@@ -91,9 +91,13 @@ fn parse_note_plaintext_without_memo<F>(
 where
     F: FnOnce(&Diversifier) -> DiversifiedTransmissionKey,
 {
-    assert!(plaintext.as_ref().len() >= compact_note_size(note_version));
+    // The domain fixes `note_version` but the buffer's shape is a runtime variant, so pin the
+    // length: exact, since every domain accepts one version and the encoder always emits this size.
+    if plaintext.as_ref().len() != compact_note_size(note_version) {
+        return None;
+    }
 
-    // The unwraps below are guaranteed to succeed by the assertion above
+    // The unwraps below are guaranteed to succeed by the length check above
     let diversifier = Diversifier::from_bytes(
         plaintext.as_ref()[NOTE_DIVERSIFIER_OFFSET..NOTE_VALUE_OFFSET]
             .try_into()
@@ -425,9 +429,10 @@ fn extract_asset(note_version: NoteVersion, plaintext: &[u8]) -> Option<AssetBas
     match note_version {
         NoteVersion::V2 | NoteVersion::V3 => Some(AssetBase::zatoshi()),
         NoteVersion::ZSA => {
-            let bytes = plaintext[COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA]
+            let bytes = plaintext
+                .get(COMPACT_NOTE_SIZE_VANILLA..COMPACT_NOTE_SIZE_ZSA)?
                 .try_into()
-                .unwrap();
+                .ok()?;
             AssetBase::from_bytes(bytes).into()
         }
     }
@@ -998,9 +1003,10 @@ mod tests {
     };
 
     use super::{
-        parse_note_plaintext_without_memo, prf_ock_orchard, CompactAction, IronwoodDomain,
-        IronwoodNoteEncryption, NoteCiphertextBytes, OrchardDomain, OrchardNoteEncryption,
-        ZSADomain,
+        parse_note_plaintext_without_memo, prf_ock_orchard, CompactAction,
+        CompactNotePlaintextBytes, IronwoodDomain, IronwoodNoteEncryption, NoteCiphertextBytes,
+        OrchardDomain, OrchardNoteEncryption, ZSADomain, COMPACT_NOTE_SIZE_VANILLA,
+        COMPACT_NOTE_SIZE_ZSA,
     };
     use crate::note::AssetBase;
     use crate::{
@@ -1420,6 +1426,50 @@ mod tests {
         assert!(ironwood_domain
             .parse_note_plaintext_without_memo_ovk(pk_d, &compact_v2)
             .is_none());
+
+        // V2 and V3 are both Vanilla-shaped, so the pairs above never cross the Vanilla/ZSA buffer
+        // boundary. The lead-byte check runs first, so crossing it needs a buffer whose lead byte
+        // matches the domain while its length does not.
+        let note_zsa = Note::new(
+            recipient,
+            NoteValue::from_raw(5),
+            AssetBase::random(&mut rng),
+            rho,
+            NoteVersion::ZSA,
+            &mut rng,
+        );
+        let zsa_domain = ZSADomain::from_rho(rho);
+        let np_zsa = ZSADomain::note_plaintext_bytes(&note_zsa, &memo);
+        let (compact_zsa, _) = zsa_domain.split_plaintext_at_memo(&np_zsa).unwrap();
+
+        // ZSA lead byte, Vanilla-sized: the ZSA offsets run past the end (this used to panic).
+        let truncated = CompactNotePlaintextBytes::Vanilla(NoteBytesData(
+            compact_zsa.as_ref()[..COMPACT_NOTE_SIZE_VANILLA]
+                .try_into()
+                .unwrap(),
+        ));
+        assert!(zsa_domain
+            .parse_note_plaintext_without_memo_ovk(pk_d, &truncated)
+            .is_none());
+
+        // Vanilla lead byte, ZSA-sized: Vanilla offsets would parse fine while ignoring the 32
+        // trailing bytes where the asset lives.
+        let mut padded = [0u8; COMPACT_NOTE_SIZE_ZSA];
+        padded[..COMPACT_NOTE_SIZE_VANILLA].copy_from_slice(compact_v2.as_ref());
+        assert!(orchard_domain
+            .parse_note_plaintext_without_memo_ovk(
+                pk_d,
+                &CompactNotePlaintextBytes::Zsa(NoteBytesData(padded))
+            )
+            .is_none());
+
+        // The matched ZSA pair still parses, so the length check is not rejecting everything.
+        assert_eq!(
+            zsa_domain
+                .parse_note_plaintext_without_memo_ovk(pk_d, &compact_zsa)
+                .map(|(note, _)| note),
+            Some(note_zsa)
+        );
     }
 
     #[test]
