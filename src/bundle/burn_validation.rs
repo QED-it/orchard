@@ -179,7 +179,11 @@ mod burn_permission_tests {
 
         // Nor is the flag alone, on a version that cannot encode a burn.
         assert!(matches!(
-            validate_burn(&burn, &Flags::ENABLED_WITH_ZSA, BundleVersion::ironwood_v3()),
+            validate_burn(
+                &burn,
+                &Flags::ENABLED_WITH_ZSA,
+                BundleVersion::ironwood_v3()
+            ),
             Err(BundleError::BurnNotPermitted)
         ));
 
