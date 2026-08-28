@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn add_bundle_rejects_unsupported_zsa() {
-        let mut bundle = sample_authorized_bundle(1)
+        let mut bundle = sample_authorized_bundle_vanilla(1)
             .try_map_value_balance(i64::try_from)
             .expect("generated bundle value balance fits in i64");
         bundle.flags.zsa_enabled = true;
