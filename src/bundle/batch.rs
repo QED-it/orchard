@@ -164,8 +164,7 @@ mod tests {
     use super::{BatchError, BatchValidator};
     use crate::{
         bundle::tests::{
-            sample_authorized_bundle, sample_authorized_bundle_vanilla,
-            with_cross_address_disabled,
+            sample_authorized_bundle, sample_authorized_bundle_vanilla, with_cross_address_disabled,
         },
         circuit::{OrchardCircuitVersion, VerifyingKey},
     };
