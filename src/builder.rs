@@ -1048,10 +1048,15 @@ impl Builder {
     }
 
     /// Adds an instruction to burn a given amount of a specific asset.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BuildError::BurnNotPermitted`] if the builder's [`BundleVersion`] does not
+    /// permit ZSA, or if its flags do not enable ZSA.
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
         use alloc::collections::btree_map::Entry;
 
-        if !self.bundle_version.permits_zsa() {
+        if !self.bundle_version.permits_zsa() || !self.flags.zsa_enabled() {
             return Err(BuildError::BurnNotPermitted);
         }
 
@@ -1267,7 +1272,7 @@ fn pad_spend(
 /// Returns [`BuildError::UnrepresentableFlags`] if `flags` cannot be encoded under
 /// `bundle_version`, [`BuildError::CoinbaseSpendsEnabled`] if `bundle_type` is
 /// [`BundleType::Coinbase`] but `flags` enable spends, or [`BuildError::BurnNotPermitted`] if
-/// `burn` is non-empty but `bundle_version` does not permit ZSA.
+/// `burn` is non-empty but `bundle_version` does not permit ZSA or `flags` do not enable ZSA.
 #[allow(clippy::too_many_arguments)]
 #[cfg(feature = "circuit")]
 pub fn bundle<V: TryFrom<i64>>(
@@ -1387,7 +1392,7 @@ fn build_bundle<B, R: RngCore>(
     // Every build path funnels through here (the free `bundle` function, `Builder::build`, and
     // `Builder::build_for_pczt`), so validate the version-dependent invariants here rather than
     // trusting each caller: the flags must be encodable under the bundle version, a coinbase
-    // bundle must not enable spends, and a burn requires a version that permits ZSA.
+    // bundle must not enable spends, and a burn requires a version and flags that enable ZSA.
     // `Builder::new` and `Builder::add_burn` also enforce these up front, for fail-fast
     // construction.
     if flags.to_byte(bundle_version).is_none() {
@@ -1396,7 +1401,8 @@ fn build_bundle<B, R: RngCore>(
     if matches!(bundle_type, BundleType::Coinbase) && flags.spends_enabled() {
         return Err(BuildError::CoinbaseSpendsEnabled);
     }
-    if !burn.is_empty() && !bundle_version.permits_zsa() {
+    let burn_permitted = bundle_version.permits_zsa() && flags.zsa_enabled();
+    if !burn.is_empty() && !burn_permitted {
         return Err(BuildError::BurnNotPermitted);
     }
     let note_version = bundle_version.note_version();
@@ -2523,6 +2529,57 @@ mod tests {
             burn,
         );
         assert!(matches!(result, Err(BuildError::BurnNotPermitted)));
+    }
+
+    #[test]
+    fn burn_requires_the_zsa_flag_not_just_the_zsa_version() {
+        // `BundleVersion::zsa()` permits ZSA, but the flags still carry the `zsa_enabled` bit
+        // independently. With that bit cleared the circuit forces every asset to zatoshi, so a
+        // burn can never be balanced: `derive_bvk` would fold it in and `build` would trip its
+        // bvk/bsk assertion. Both the fail-fast path and the build path must reject it.
+        let mut rng = OsRng;
+        let anchor: Anchor = EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into();
+        let bundle_version = BundleVersion::zsa();
+        let flags = Flags::ENABLED; // representable under the ZSA version, but zsa_enabled = false
+        assert!(flags.to_byte(bundle_version).is_some());
+        assert!(!flags.zsa_enabled());
+
+        let mut builder = Builder::new(BundleType::DEFAULT, bundle_version, flags, anchor).unwrap();
+        assert!(matches!(
+            builder.add_burn(AssetBase::random(&mut rng), NoteValue::from_raw(1)),
+            Err(BuildError::BurnNotPermitted)
+        ));
+
+        let burn = BTreeMap::from([(AssetBase::random(&mut rng), NoteValue::from_raw(1))]);
+        let result = bundle::<i64>(
+            &mut rng,
+            BundleType::DEFAULT,
+            bundle_version,
+            flags,
+            anchor,
+            vec![],
+            vec![],
+            vec![],
+            burn,
+        );
+        assert!(matches!(result, Err(BuildError::BurnNotPermitted)));
+    }
+
+    #[test]
+    fn add_burn_accepts_the_zsa_version_with_the_zsa_flag() {
+        let mut rng = OsRng;
+        let bundle_version = BundleVersion::zsa();
+        let mut builder = Builder::new(
+            BundleType::DEFAULT,
+            bundle_version,
+            Flags::ENABLED_WITH_ZSA,
+            EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
+        )
+        .unwrap();
+
+        assert!(builder
+            .add_burn(AssetBase::random(&mut rng), NoteValue::from_raw(1))
+            .is_ok());
     }
 
     #[test]

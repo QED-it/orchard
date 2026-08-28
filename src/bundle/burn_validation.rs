@@ -11,7 +11,7 @@ use alloc::collections::BTreeMap;
 use crate::issuance::AssetRecord;
 
 use crate::{
-    bundle::{BundleError, BundleVersion},
+    bundle::{BundleError, BundleVersion, Flags},
     note::AssetBase,
     value::NoteValue,
 };
@@ -58,17 +58,21 @@ impl fmt::Display for BurnError {
     }
 }
 
-/// Checks that a non-empty `burn` is only present when `bundle_version` permits ZSA.
+/// Checks that a non-empty `burn` is only present when `bundle_version` permits ZSA and
+/// `flags` enable ZSA.
 ///
-/// Burn instructions are only meaningful for the ZSA protocol; a bundle whose version
-/// does not permit ZSA must not carry any burn.
+/// Burn instructions are only meaningful for the ZSA protocol, so both conditions are
+/// required. The version alone is not enough: a ZSA bundle may still be built with
+/// `zsa_enabled` cleared, and the circuit then forces every asset to zatoshi, so no burn
+/// can be balanced.
 ///
 /// Returns [`BundleError::BurnNotPermitted`] otherwise.
 pub(crate) fn validate_burn(
     burn: &[(AssetBase, NoteValue)],
+    flags: &Flags,
     bundle_version: BundleVersion,
 ) -> Result<(), BundleError> {
-    if burn.is_empty() || bundle_version.permits_zsa() {
+    if burn.is_empty() || (bundle_version.permits_zsa() && flags.zsa_enabled()) {
         Ok(())
     } else {
         Err(BundleError::BurnNotPermitted)
@@ -146,6 +150,42 @@ pub fn validate_bundle_burn(
     }
 
     Ok(new_records)
+}
+
+#[cfg(test)]
+mod burn_permission_tests {
+    use super::validate_burn;
+    use crate::{
+        bundle::{BundleError, BundleVersion, Flags},
+        note::AssetBase,
+        value::NoteValue,
+    };
+    use alloc::vec;
+    use rand_core::OsRng;
+
+    #[test]
+    fn burn_needs_both_a_zsa_version_and_the_zsa_flag() {
+        let mut rng = OsRng;
+        let burn = vec![(AssetBase::random(&mut rng), NoteValue::from_raw(1))];
+
+        // Both conditions hold: permitted.
+        assert!(validate_burn(&burn, &Flags::ENABLED_WITH_ZSA, BundleVersion::zsa()).is_ok());
+
+        // The ZSA version alone is not enough; `zsa_enabled` is a separate bit.
+        assert!(matches!(
+            validate_burn(&burn, &Flags::ENABLED, BundleVersion::zsa()),
+            Err(BundleError::BurnNotPermitted)
+        ));
+
+        // Nor is the flag alone, on a version that cannot encode a burn.
+        assert!(matches!(
+            validate_burn(&burn, &Flags::ENABLED_WITH_ZSA, BundleVersion::ironwood_v3()),
+            Err(BundleError::BurnNotPermitted)
+        ));
+
+        // An empty burn is always fine, whatever the version and flags.
+        assert!(validate_burn(&[], &Flags::ENABLED, BundleVersion::ironwood_v3()).is_ok());
+    }
 }
 
 #[cfg(feature = "zsa-issuance")]

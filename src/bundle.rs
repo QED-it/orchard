@@ -994,7 +994,7 @@ impl<V> Bundle<EffectsOnly, V> {
     ) -> Result<Self, BundleError> {
         validate_action_ciphertext_kind(&actions, bundle_version)?;
         validate_flags(&flags, bundle_version)?;
-        validate_burn(&burn, bundle_version)?;
+        validate_burn(&burn, &flags, bundle_version)?;
         Ok(Bundle::from_parts_unchecked(
             actions,
             flags,
@@ -1164,7 +1164,7 @@ impl<V> Bundle<Authorized, V> {
         }
         validate_action_ciphertext_kind(&actions, bundle_version)?;
         validate_flags(&flags, bundle_version)?;
-        validate_burn(&burn, bundle_version)?;
+        validate_burn(&burn, &flags, bundle_version)?;
         Ok(Bundle::from_parts_unchecked(
             actions,
             flags,
