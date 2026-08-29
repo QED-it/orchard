@@ -154,7 +154,8 @@ pub enum TxExtractorError {
     UnrepresentableFlags,
     /// Some action's encrypted-note ciphertext is not the kind the bundle's version implies.
     MismatchedActionCiphertextKind,
-    /// A non-empty burn was provided for a bundle whose version does not permit ZSA.
+    /// A non-empty burn was provided for a bundle whose version does not permit ZSA, or
+    /// whose flags do not enable ZSA.
     BurnNotPermitted,
 }
 
@@ -222,7 +223,8 @@ impl fmt::Display for TxExtractorError {
             ),
             TxExtractorError::BurnNotPermitted => write!(
                 f,
-                "a non-empty burn was provided for a bundle version that does not permit ZSA",
+                "a non-empty burn was provided for a bundle whose version does not permit ZSA, \
+                 or whose flags do not enable ZSA",
             ),
         }
     }

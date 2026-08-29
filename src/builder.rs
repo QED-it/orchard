@@ -205,7 +205,8 @@ pub enum BuildError {
     UnrepresentableFlags,
     /// A coinbase bundle was requested with flags that enable spends.
     CoinbaseSpendsEnabled,
-    /// A burn was added under a [`BundleVersion`] that does not permit ZSA.
+    /// A burn was added under a [`BundleVersion`] that does not permit ZSA, or with flags
+    /// that do not enable ZSA.
     BurnNotPermitted,
 }
 
@@ -251,9 +252,10 @@ impl fmt::Display for BuildError {
             CoinbaseSpendsEnabled => {
                 f.write_str("A coinbase bundle was requested with flags that enable spends.")
             }
-            BurnNotPermitted => {
-                f.write_str("A burn was added under a bundle version that does not permit ZSA.")
-            }
+            BurnNotPermitted => f.write_str(
+                "A burn was added under a bundle version that does not permit ZSA, or with \
+                 flags that do not enable ZSA.",
+            ),
         }
     }
 }
