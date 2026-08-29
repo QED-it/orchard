@@ -208,6 +208,8 @@ pub enum BuildError {
     /// A burn was added under a [`BundleVersion`] that does not permit ZSA, or with flags
     /// that do not enable ZSA.
     BurnNotPermitted,
+    /// A burn or a non-zatoshi asset was requested for a PCZT, which is zatoshi-only in V1.
+    ZsaUnsupportedByPczt,
 }
 
 impl fmt::Display for BuildError {
@@ -255,6 +257,9 @@ impl fmt::Display for BuildError {
             BurnNotPermitted => f.write_str(
                 "A burn was added under a bundle version that does not permit ZSA, or with \
                  flags that do not enable ZSA.",
+            ),
+            ZsaUnsupportedByPczt => f.write_str(
+                "A burn or a non-zatoshi asset cannot be carried in a PCZT V1 Orchard bundle.",
             ),
         }
     }
@@ -1162,10 +1167,25 @@ impl Builder {
 
     /// Builds a bundle containing the given spent notes and outputs along with their
     /// metadata, for inclusion in a PCZT.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BuildError::ZsaUnsupportedByPczt`] if this builder carries a burn or any
+    /// non-zatoshi asset.
     pub fn build_for_pczt(
         self,
         rng: impl RngCore,
     ) -> Result<(crate::pczt::Bundle, BundleMetadata), BuildError> {
+        // PCZT V1 is zatoshi-only: no burn field, and no asset base on spends and outputs.
+        let is_zsa_asset = |asset: AssetBase| !bool::from(asset.is_zatoshi());
+        if !self.burn.is_empty()
+            || self.spends.iter().any(|s| is_zsa_asset(s.note.asset()))
+            || self.outputs.iter().any(|o| is_zsa_asset(o.asset))
+            || self.changes.iter().any(|c| is_zsa_asset(c.output.asset))
+        {
+            return Err(BuildError::ZsaUnsupportedByPczt);
+        }
+
         build_bundle(
             rng,
             self.bundle_version,
@@ -2582,6 +2602,39 @@ mod tests {
         assert!(builder
             .add_burn(AssetBase::random(&mut rng), NoteValue::from_raw(1))
             .is_ok());
+    }
+
+    #[test]
+    fn build_for_pczt_rejects_zsa() {
+        // PCZT V1 carries neither a burn nor an asset base.
+        let mut rng = OsRng;
+        let asset = AssetBase::random(&mut rng);
+        let recipient =
+            FullViewingKey::from(&SpendingKey::random(&mut rng)).address_at(0u32, Scope::External);
+        let new_builder = || {
+            Builder::new(
+                BundleType::DEFAULT,
+                BundleVersion::ironwood_v3(),
+                Flags::ENABLED,
+                EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
+            )
+            .unwrap()
+        };
+
+        let mut with_burn = new_builder();
+        with_burn.burn.insert(asset, NoteValue::from_raw(1));
+
+        let mut with_zsa_output = new_builder();
+        with_zsa_output
+            .add_output(None, recipient, NoteValue::from_raw(1), asset, [0; 512])
+            .unwrap();
+
+        for builder in [with_burn, with_zsa_output] {
+            assert!(matches!(
+                builder.build_for_pczt(rng),
+                Err(BuildError::ZsaUnsupportedByPczt)
+            ));
+        }
     }
 
     #[test]
