@@ -12,7 +12,10 @@ use zcash_note_encryption::note_bytes::NoteBytes;
 
 use crate::{
     address::Address,
-    bundle::{burn_validation::BurnError, Authorization, Authorized, Bundle, BundleVersion, Flags},
+    bundle::{
+        burn_validation::{validate_burn_entry, BurnError},
+        Authorization, Authorized, Bundle, BundleVersion, Flags,
+    },
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
@@ -1067,18 +1070,7 @@ impl Builder {
             return Err(BuildError::BurnNotPermitted);
         }
 
-        if asset.is_zatoshi().into() {
-            return Err(BuildError::Burn(BurnError::ZatoshiAsset));
-        }
-
-        if value.inner() == 0 {
-            return Err(BuildError::Burn(BurnError::ZeroAmount));
-        }
-
-        // Check that the burn amount fits in u63
-        if value.inner() >= (1u64 << 63) {
-            return Err(BuildError::Burn(BurnError::InvalidAmount));
-        }
+        validate_burn_entry(asset, value).map_err(BuildError::Burn)?;
 
         match self.burn.entry(asset) {
             Entry::Occupied(_) => Err(BuildError::Burn(BurnError::DuplicateAsset)),
@@ -1414,7 +1406,8 @@ fn build_bundle<B, R: RngCore>(
     // Every build path funnels through here (the free `bundle` function, `Builder::build`, and
     // `Builder::build_for_pczt`), so validate the version-dependent invariants here rather than
     // trusting each caller: the flags must be encodable under the bundle version, a coinbase
-    // bundle must not enable spends, and a burn requires a version and flags that enable ZSA.
+    // bundle must not enable spends, and a burn requires a version and flags that enable ZSA
+    // plus entries that are burnable at all.
     // `Builder::new` and `Builder::add_burn` also enforce these up front, for fail-fast
     // construction.
     if flags.to_byte(bundle_version).is_none() {
@@ -1426,6 +1419,9 @@ fn build_bundle<B, R: RngCore>(
     let burn_permitted = bundle_version.permits_zsa() && flags.zsa_enabled();
     if !burn.is_empty() && !burn_permitted {
         return Err(BuildError::BurnNotPermitted);
+    }
+    for (asset, value) in &burn {
+        validate_burn_entry(*asset, *value).map_err(BuildError::Burn)?;
     }
     let note_version = bundle_version.note_version();
 
