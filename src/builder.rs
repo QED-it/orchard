@@ -1124,6 +1124,7 @@ impl Builder {
             .chain(
                 self.changes
                     .iter()
+                    .filter(|change| change.output.asset.is_zatoshi().into())
                     .map(|change| NoteValue::ZERO - change.output.value),
             )
             .try_fold(ValueSum::zero(), |acc, note_value| acc + note_value)
@@ -3059,7 +3060,7 @@ mod tests {
         // An owned recipient is accepted and counts as one of the bundle's outputs.
         builder
             .add_change_output(
-                fvk,
+                fvk.clone(),
                 None,
                 owned,
                 NoteValue::from_raw(5_000),
@@ -3068,6 +3069,20 @@ mod tests {
             )
             .unwrap();
         assert_eq!(builder.changes().len(), 1);
+
+        // A custom-asset change is an output too, but not part of the net zatoshi value.
+        builder
+            .add_change_output(
+                fvk,
+                None,
+                owned,
+                NoteValue::from_raw(200),
+                AssetBase::random(&mut rng),
+                [0u8; 512],
+            )
+            .unwrap();
+        assert_eq!(builder.changes().len(), 2);
+        assert_eq!(builder.value_balance::<i64>().unwrap(), -5_000);
     }
 
     #[test]
