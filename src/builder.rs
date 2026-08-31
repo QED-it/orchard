@@ -12,7 +12,10 @@ use zcash_note_encryption::note_bytes::NoteBytes;
 
 use crate::{
     address::Address,
-    bundle::{burn_validation::BurnError, Authorization, Authorized, Bundle, BundleVersion, Flags},
+    bundle::{
+        burn_validation::{validate_burn_entry, BurnError},
+        Authorization, Authorized, Bundle, BundleVersion, Flags,
+    },
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
@@ -205,8 +208,13 @@ pub enum BuildError {
     UnrepresentableFlags,
     /// A coinbase bundle was requested with flags that enable spends.
     CoinbaseSpendsEnabled,
-    /// A burn was added under a [`BundleVersion`] that does not permit ZSA.
+    /// A burn was added under a [`BundleVersion`] that does not permit ZSA, or with flags
+    /// that do not enable ZSA.
     BurnNotPermitted,
+    /// A burn or a non-zatoshi asset was requested for a PCZT, which is zatoshi-only in V1.
+    ZsaUnsupportedByPczt,
+    /// The bundle's actions do not balance: some asset's net value is not its burn.
+    BindingKeyMismatch,
 }
 
 impl fmt::Display for BuildError {
@@ -251,9 +259,16 @@ impl fmt::Display for BuildError {
             CoinbaseSpendsEnabled => {
                 f.write_str("A coinbase bundle was requested with flags that enable spends.")
             }
-            BurnNotPermitted => {
-                f.write_str("A burn was added under a bundle version that does not permit ZSA.")
-            }
+            BurnNotPermitted => f.write_str(
+                "A burn was added under a bundle version that does not permit ZSA, or with \
+                 flags that do not enable ZSA.",
+            ),
+            ZsaUnsupportedByPczt => f.write_str(
+                "A burn or a non-zatoshi asset cannot be carried in a PCZT V1 Orchard bundle.",
+            ),
+            BindingKeyMismatch => f.write_str(
+                "The bundle's actions do not balance: some asset's net value does not match its burn.",
+            ),
         }
     }
 }
@@ -1060,18 +1075,7 @@ impl Builder {
             return Err(BuildError::BurnNotPermitted);
         }
 
-        if asset.is_zatoshi().into() {
-            return Err(BuildError::Burn(BurnError::ZatoshiAsset));
-        }
-
-        if value.inner() == 0 {
-            return Err(BuildError::Burn(BurnError::ZeroAmount));
-        }
-
-        // Check that the burn amount fits in u63
-        if value.inner() >= (1u64 << 63) {
-            return Err(BuildError::Burn(BurnError::InvalidAmount));
-        }
+        validate_burn_entry(asset, value).map_err(BuildError::Burn)?;
 
         match self.burn.entry(asset) {
             Entry::Occupied(_) => Err(BuildError::Burn(BurnError::DuplicateAsset)),
@@ -1125,6 +1129,7 @@ impl Builder {
             .chain(
                 self.changes
                     .iter()
+                    .filter(|change| change.output.asset.is_zatoshi().into())
                     .map(|change| NoteValue::ZERO - change.output.value),
             )
             .try_fold(ValueSum::zero(), |acc, note_value| acc + note_value)
@@ -1160,10 +1165,25 @@ impl Builder {
 
     /// Builds a bundle containing the given spent notes and outputs along with their
     /// metadata, for inclusion in a PCZT.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BuildError::ZsaUnsupportedByPczt`] if this builder carries a burn or any
+    /// non-zatoshi asset.
     pub fn build_for_pczt(
         self,
         rng: impl RngCore,
     ) -> Result<(crate::pczt::Bundle, BundleMetadata), BuildError> {
+        // PCZT V1 is zatoshi-only: no burn field, and no asset base on spends and outputs.
+        let is_zsa_asset = |asset: AssetBase| !bool::from(asset.is_zatoshi());
+        if !self.burn.is_empty()
+            || self.spends.iter().any(|s| is_zsa_asset(s.note.asset()))
+            || self.outputs.iter().any(|o| is_zsa_asset(o.asset))
+            || self.changes.iter().any(|c| is_zsa_asset(c.output.asset))
+        {
+            return Err(BuildError::ZsaUnsupportedByPczt);
+        }
+
         build_bundle(
             rng,
             self.bundle_version,
@@ -1269,10 +1289,13 @@ fn pad_spend(
 ///
 /// # Errors
 ///
-/// Returns [`BuildError::UnrepresentableFlags`] if `flags` cannot be encoded under
-/// `bundle_version`, [`BuildError::CoinbaseSpendsEnabled`] if `bundle_type` is
-/// [`BundleType::Coinbase`] but `flags` enable spends, or [`BuildError::BurnNotPermitted`] if
-/// `burn` is non-empty but `bundle_version` does not permit ZSA or `flags` do not enable ZSA.
+/// Returns
+/// - [`BuildError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`,
+/// - [`BuildError::CoinbaseSpendsEnabled`] if `bundle_type` is [`BundleType::Coinbase`] but `flags`
+///   enable spends,
+/// - [`BuildError::BurnNotPermitted`] if `burn` is non-empty but `bundle_version` does not permit
+///   ZSA or `flags` do not enable ZSA,
+/// - [`BuildError::BindingKeyMismatch`] if some asset's net value does not match its `burn` entry.
 #[allow(clippy::too_many_arguments)]
 #[cfg(feature = "circuit")]
 pub fn bundle<V: TryFrom<i64>>(
@@ -1343,9 +1366,11 @@ fn finish_unauthorized_bundle<V: TryFrom<i64>, R: RngCore>(
         .map(|a| a.build(&mut rng, circuit_version))
         .unzip();
 
-    // Verify that bsk and bvk are consistent.
+    // Verify that bsk and bvk are consistent: each asset's net value must match its burn.
     let bvk = derive_bvk(&actions, zatoshi_value_balance, &burn_vec);
-    assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+    if redpallas::VerificationKey::from(&bsk) != bvk {
+        return Err(BuildError::BindingKeyMismatch);
+    }
 
     Ok(NonEmpty::from_vec(actions).map(|actions| {
         (
@@ -1392,7 +1417,8 @@ fn build_bundle<B, R: RngCore>(
     // Every build path funnels through here (the free `bundle` function, `Builder::build`, and
     // `Builder::build_for_pczt`), so validate the version-dependent invariants here rather than
     // trusting each caller: the flags must be encodable under the bundle version, a coinbase
-    // bundle must not enable spends, and a burn requires a version and flags that enable ZSA.
+    // bundle must not enable spends, and a burn requires a version and flags that enable ZSA
+    // plus entries that are burnable at all.
     // `Builder::new` and `Builder::add_burn` also enforce these up front, for fail-fast
     // construction.
     if flags.to_byte(bundle_version).is_none() {
@@ -1404,6 +1430,9 @@ fn build_bundle<B, R: RngCore>(
     let burn_permitted = bundle_version.permits_zsa() && flags.zsa_enabled();
     if !burn.is_empty() && !burn_permitted {
         return Err(BuildError::BurnNotPermitted);
+    }
+    for (asset, value) in &burn {
+        validate_burn_entry(*asset, *value).map_err(BuildError::Burn)?;
     }
     let note_version = bundle_version.note_version();
 
@@ -2583,6 +2612,39 @@ mod tests {
     }
 
     #[test]
+    fn build_for_pczt_rejects_zsa() {
+        // PCZT V1 carries neither a burn nor an asset base.
+        let mut rng = OsRng;
+        let asset = AssetBase::random(&mut rng);
+        let recipient =
+            FullViewingKey::from(&SpendingKey::random(&mut rng)).address_at(0u32, Scope::External);
+        let new_builder = || {
+            Builder::new(
+                BundleType::DEFAULT,
+                BundleVersion::ironwood_v3(),
+                Flags::ENABLED,
+                EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
+            )
+            .unwrap()
+        };
+
+        let mut with_burn = new_builder();
+        with_burn.burn.insert(asset, NoteValue::from_raw(1));
+
+        let mut with_zsa_output = new_builder();
+        with_zsa_output
+            .add_output(None, recipient, NoteValue::from_raw(1), asset, [0; 512])
+            .unwrap();
+
+        for builder in [with_burn, with_zsa_output] {
+            assert!(matches!(
+                builder.build_for_pczt(rng),
+                Err(BuildError::ZsaUnsupportedByPczt)
+            ));
+        }
+    }
+
+    #[test]
     fn cross_address_disabled_builder_pairs_actions() {
         let mut rng = OsRng;
         let spend_sk = SpendingKey::random(&mut rng);
@@ -3008,7 +3070,7 @@ mod tests {
         // An owned recipient is accepted and counts as one of the bundle's outputs.
         builder
             .add_change_output(
-                fvk,
+                fvk.clone(),
                 None,
                 owned,
                 NoteValue::from_raw(5_000),
@@ -3017,6 +3079,20 @@ mod tests {
             )
             .unwrap();
         assert_eq!(builder.changes().len(), 1);
+
+        // A custom-asset change is an output too, but not part of the net zatoshi value.
+        builder
+            .add_change_output(
+                fvk,
+                None,
+                owned,
+                NoteValue::from_raw(200),
+                AssetBase::random(&mut rng),
+                [0u8; 512],
+            )
+            .unwrap();
+        assert_eq!(builder.changes().len(), 2);
+        assert_eq!(builder.value_balance::<i64>().unwrap(), -5_000);
     }
 
     #[test]

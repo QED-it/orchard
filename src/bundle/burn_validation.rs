@@ -1,7 +1,5 @@
 //! Validating burn operations on asset bundles.
-//!
-//! The module provides a function `validate_bundle_burn` that can be used to validate the burn values for the bundle.
-//!
+
 use core::fmt;
 
 #[cfg(feature = "zsa-issuance")]
@@ -18,7 +16,6 @@ use crate::{
 
 /// Maximum burn value.
 /// Burns must fit in both u64 and i64 for value balance calculations.
-#[cfg(feature = "zsa-issuance")]
 pub const MAX_BURN_VALUE: u64 = (1u64 << 63) - 1;
 
 /// Possible errors that can occur during bundle burn validation.
@@ -79,6 +76,22 @@ pub(crate) fn validate_burn(
     }
 }
 
+/// Checks one burn entry: the asset must not be the native one, and the amount must be
+/// non-zero and at most [`MAX_BURN_VALUE`].
+///
+/// Uniqueness is a property of the whole set, so it is left to the caller collecting one.
+pub(crate) fn validate_burn_entry(asset: AssetBase, value: NoteValue) -> Result<(), BurnError> {
+    if asset.is_zatoshi().into() {
+        Err(BurnError::ZatoshiAsset)
+    } else if value.inner() == 0 {
+        Err(BurnError::ZeroAmount)
+    } else if value.inner() > MAX_BURN_VALUE {
+        Err(BurnError::InvalidAmount)
+    } else {
+        Ok(())
+    }
+}
+
 /// Validates burn operations for a bundle and returns updated issuance records for the affected assets.
 ///
 /// These issuance records correspond to entries in the “global issuance state” defined in ZIP-0227.
@@ -117,17 +130,9 @@ pub fn validate_bundle_burn(
     let mut new_records = BTreeMap::new();
 
     for (asset, amount) in burn {
-        if asset.is_zatoshi().into() {
-            return Err(BurnError::ZatoshiAsset);
-        }
+        validate_burn_entry(asset, amount)?;
 
         let burn_amount_raw = amount.inner();
-        if burn_amount_raw == 0 {
-            return Err(BurnError::ZeroAmount);
-        }
-        if burn_amount_raw > MAX_BURN_VALUE {
-            return Err(BurnError::InvalidAmount);
-        }
 
         if new_records.contains_key(&asset) {
             return Err(BurnError::DuplicateAsset);

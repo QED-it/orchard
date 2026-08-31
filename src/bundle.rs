@@ -981,8 +981,8 @@ impl<V> Bundle<EffectsOnly, V> {
     /// - [`BundleError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`
     /// - [`BundleError::MismatchedActionCiphertextKind`] if some action's encrypted-note
     ///   ciphertext is not the kind `bundle_version` implies
-    /// - [`BundleError::BurnNotPermitted`] if `burn` is non-empty and `bundle_version` does not
-    ///   permit ZSA
+    /// - [`BundleError::BurnNotPermitted`] if `burn` is non-empty and either `bundle_version`
+    ///   does not permit ZSA or `flags` do not enable ZSA
     pub fn from_parts(
         actions: NonEmpty<Action<<EffectsOnly as Authorization>::SpendAuth>>,
         flags: Flags,
@@ -1070,10 +1070,13 @@ pub enum BundleError {
     /// or carrying the wrong variant for its `bundle_version`, cannot be committed to or verified
     /// correctly.
     MismatchedActionCiphertextKind,
-    /// A non-empty burn was provided for a bundle whose version does not permit ZSA.
+    /// A non-empty burn was provided for a bundle whose version does not permit ZSA, or
+    /// whose flags do not enable ZSA.
     ///
-    /// Burn instructions are only meaningful for the ZSA protocol; a bundle for a
-    /// version that does not permit ZSA must not carry any burn.
+    /// Burn instructions are only meaningful for the ZSA protocol, so both conditions are
+    /// required. The version alone is not enough: a ZSA bundle may still carry `zsa_enabled`
+    /// cleared, and the circuit then forces every asset to zatoshi, so no burn can be
+    /// balanced.
     BurnNotPermitted,
 }
 
@@ -1092,7 +1095,8 @@ impl fmt::Display for BundleError {
                 "an action's encrypted-note ciphertext kind is inconsistent with the bundle's version",
             ),
             BundleError::BurnNotPermitted => f.write_str(
-                "a non-empty burn was provided for a bundle version that does not permit ZSA",
+                "a non-empty burn was provided for a bundle whose version does not permit ZSA, \
+                 or whose flags do not enable ZSA",
             ),
         }
     }
@@ -1148,8 +1152,8 @@ impl<V> Bundle<Authorized, V> {
     /// - [`BundleError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`
     /// - [`BundleError::MismatchedActionCiphertextKind`] if some action's encrypted-note
     ///   ciphertext is not the kind `bundle_version` implies
-    /// - [`BundleError::BurnNotPermitted`] if `burn` is non-empty and `bundle_version` does not
-    ///   permit ZSA
+    /// - [`BundleError::BurnNotPermitted`] if `burn` is non-empty and either `bundle_version`
+    ///   does not permit ZSA or `flags` do not enable ZSA
     pub fn try_from_parts(
         actions: NonEmpty<Action<<Authorized as Authorization>::SpendAuth>>,
         flags: Flags,
