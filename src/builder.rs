@@ -213,6 +213,8 @@ pub enum BuildError {
     BurnNotPermitted,
     /// A burn or a non-zatoshi asset was requested for a PCZT, which is zatoshi-only in V1.
     ZsaUnsupportedByPczt,
+    /// The bundle's actions do not balance: some asset's net value is not its burn.
+    BindingKeyMismatch,
 }
 
 impl fmt::Display for BuildError {
@@ -263,6 +265,9 @@ impl fmt::Display for BuildError {
             ),
             ZsaUnsupportedByPczt => f.write_str(
                 "A burn or a non-zatoshi asset cannot be carried in a PCZT V1 Orchard bundle.",
+            ),
+            BindingKeyMismatch => f.write_str(
+                "The bundle's actions do not balance: some asset's net value is not its burn.",
             ),
         }
     }
@@ -1358,9 +1363,11 @@ fn finish_unauthorized_bundle<V: TryFrom<i64>, R: RngCore>(
         .map(|a| a.build(&mut rng, circuit_version))
         .unzip();
 
-    // Verify that bsk and bvk are consistent.
+    // Verify that bsk and bvk are consistent: each asset's net value must be its burn.
     let bvk = derive_bvk(&actions, zatoshi_value_balance, &burn_vec);
-    assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+    if redpallas::VerificationKey::from(&bsk) != bvk {
+        return Err(BuildError::BindingKeyMismatch);
+    }
 
     Ok(NonEmpty::from_vec(actions).map(|actions| {
         (

@@ -90,16 +90,16 @@ fn build_and_sign_bundle(
     mut rng: OsRng,
     pk: &ProvingKey,
     sk: &SpendingKey,
-) -> Bundle<Authorized, i64> {
-    let unauthorized = builder.build(&mut rng).unwrap().unwrap().0;
+) -> Result<Bundle<Authorized, i64>, BuildError> {
+    let unauthorized = builder.build(&mut rng)?.unwrap().0;
     let sighash = unauthorized
         .commitment(TxVersion::ZSA)
         .expect("bundle flags are representable in this format")
         .into();
     let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
-    proven
+    Ok(proven
         .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(sk)])
-        .unwrap()
+        .unwrap())
 }
 
 fn build_merkle_paths(notes: Vec<&Note>) -> (Vec<MerklePath>, Anchor) {
@@ -304,7 +304,7 @@ fn build_and_verify_bundle(
             .into_iter()
             .try_for_each(|(asset, value)| builder.add_burn(asset, value))
             .map_err(|err| err.to_string())?;
-        build_and_sign_bundle(builder, rng, keys.pk(), keys.sk())
+        build_and_sign_bundle(builder, rng, keys.pk(), keys.sk()).map_err(|err| err.to_string())?
     };
 
     // Verify the shielded bundle, currently without the proof.
@@ -549,29 +549,26 @@ fn zsa_issue_and_transfer() {
     .unwrap();
 
     // 8. Same but wrong denomination
-    let result = std::panic::catch_unwind(|| {
-        build_and_verify_bundle(
-            vec![&zsa_spend_asset2, &zsa_spend2_asset1],
-            vec![
-                TestOutputInfo {
-                    value: NoteValue::from_raw(zsa_spend_asset2.note.value().inner() + delta_1),
-                    asset: asset2,
-                    recipient: keys2.recipient,
-                },
-                TestOutputInfo {
-                    value: NoteValue::from_raw(zsa_spend2_asset1.note.value().inner() - delta_1),
-                    asset: asset1,
-                    recipient: keys2.recipient,
-                },
-            ],
-            vec![],
-            anchor,
-            2,
-            &keys,
-        )
-        .unwrap();
-    });
-    assert!(result.is_err());
+    let result = build_and_verify_bundle(
+        vec![&zsa_spend_asset2, &zsa_spend2_asset1],
+        vec![
+            TestOutputInfo {
+                value: NoteValue::from_raw(zsa_spend_asset2.note.value().inner() + delta_1),
+                asset: asset2,
+                recipient: keys2.recipient,
+            },
+            TestOutputInfo {
+                value: NoteValue::from_raw(zsa_spend2_asset1.note.value().inner() - delta_1),
+                asset: asset1,
+                recipient: keys2.recipient,
+            },
+        ],
+        vec![],
+        anchor,
+        2,
+        &keys,
+    );
+    assert_eq!(result, Err(BuildError::BindingKeyMismatch.to_string()));
 
     // 9. Burn ZSA assets
     build_and_verify_bundle(
