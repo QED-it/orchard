@@ -280,7 +280,6 @@ impl plonk::Circuit<pallas::Base> for CircuitZsa {
 
         // Fixed columns for the Sinsemilla generator lookup table
         let table_idx = meta.lookup_table_column();
-        let table_range_check_tag = meta.lookup_table_column();
         let lookup = (
             table_idx,
             meta.lookup_table_column(),
@@ -320,6 +319,7 @@ impl plonk::Circuit<pallas::Base> for CircuitZsa {
 
         // We have a lot of free space in the right-most advice columns; use one of them
         // for all of our range checks.
+        let table_range_check_tag = meta.lookup_table_column();
         let range_check = LookupRangeCheck4_5BConfig::configure_with_tag(
             meta,
             advices[9],
