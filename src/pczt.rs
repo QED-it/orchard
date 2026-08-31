@@ -12,7 +12,6 @@ use zip32::ChildIndex;
 
 use crate::{
     bundle::{BundleVersion, Flags},
-    flavor::OrchardVanilla,
     keys::{FullViewingKey, SpendingKey},
     note::{ExtractedNoteCommitment, Nullifier, RandomSeed, Rho, TransmittedNoteCiphertext},
     primitives::redpallas::{self, Binding, SpendAuth},
@@ -254,7 +253,7 @@ pub struct Output {
     /// - `ephemeral_key`
     /// - `enc_ciphertext`
     /// - `out_ciphertext`
-    pub(crate) encrypted_note: TransmittedNoteCiphertext<OrchardVanilla>,
+    pub(crate) encrypted_note: TransmittedNoteCiphertext,
 
     /// The address that will receive the output.
     ///
@@ -380,9 +379,9 @@ mod tests {
         bundle::{BundleVersion, Flags},
         circuit::{OrchardCircuitVersion, ProvingKey, VerifyingKey},
         constants::MERKLE_DEPTH_ORCHARD,
-        flavor::OrchardVanilla,
         keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         note::{AssetBase, ExtractedNoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho},
+        note_encryption::{ENC_CIPHERTEXT_SIZE_VANILLA, ENC_CIPHERTEXT_SIZE_ZSA},
         pczt::{
             IoFinalizerError, ParseError, ProverError, SignerError, TxExtractorError, VerifyError,
             Zip32Derivation,
@@ -516,7 +515,7 @@ mod tests {
     #[test]
     fn shielding_bundle() {
         let bundle_version = BundleVersion::orchard_v2();
-        let pk = ProvingKey::build::<OrchardVanilla>(bundle_version.circuit_version());
+        let pk = ProvingKey::build(bundle_version.circuit_version());
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -561,8 +560,8 @@ mod tests {
 
     #[test]
     fn create_proof_uses_proving_key_circuit_version() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
-        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -582,10 +581,50 @@ mod tests {
     }
 
     #[test]
+    fn output_parse_ties_enc_ciphertext_length_to_note_version() {
+        // `NoteCiphertextBytes::from_slice` accepts either encoding, so `Output::parse` must
+        // pin the length to the one `note_version` implies. Otherwise a ciphertext of the wrong
+        // kind survives the Prover and Signer roles, and is only rejected by
+        // `validate_action_ciphertext_kind` in `to_tx_data`.
+        let mut rng = OsRng;
+        let cmx = pallas::Base::random(&mut rng).to_repr();
+        let out_ciphertext = alloc::vec![0u8; 80];
+
+        let mut parse = |enc_ciphertext_size: usize, note_version| {
+            super::Output::parse(
+                Nullifier::dummy(&mut rng),
+                cmx,
+                [0u8; 32],
+                alloc::vec![0u8; enc_ciphertext_size],
+                out_ciphertext.clone(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                note_version,
+                alloc::collections::BTreeMap::new(),
+            )
+        };
+
+        assert!(parse(ENC_CIPHERTEXT_SIZE_VANILLA, NoteVersion::V3).is_ok());
+        assert!(parse(ENC_CIPHERTEXT_SIZE_ZSA, NoteVersion::ZSA).is_ok());
+        assert!(matches!(
+            parse(ENC_CIPHERTEXT_SIZE_ZSA, NoteVersion::V3),
+            Err(ParseError::InvalidEncCiphertext)
+        ));
+        assert!(matches!(
+            parse(ENC_CIPHERTEXT_SIZE_VANILLA, NoteVersion::ZSA),
+            Err(ParseError::InvalidEncCiphertext)
+        ));
+    }
+
+    #[test]
     fn qr_output_version_checks_note_commitment() {
         let mut rng = OsRng;
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
-        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
 
         let sk = SpendingKey::random(&mut rng);
         let fvk = FullViewingKey::from(&sk);
@@ -643,7 +682,7 @@ mod tests {
 
     #[test]
     fn qr_spend_version_checks_nullifier_and_proves() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
         let mut rng = OsRng;
 
         let sk = SpendingKey::random(&mut rng);
@@ -744,7 +783,7 @@ mod tests {
     #[test]
     fn shielded_bundle() {
         let bundle_version = BundleVersion::orchard_v2();
-        let pk = ProvingKey::build::<OrchardVanilla>(bundle_version.circuit_version());
+        let pk = ProvingKey::build(bundle_version.circuit_version());
         let mut rng = OsRng;
 
         // Pretend we derived the spending key via ZIP 32.
@@ -1176,7 +1215,7 @@ mod tests {
 
     #[test]
     fn create_proof_rejects_identity_rk() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -1190,7 +1229,7 @@ mod tests {
 
     #[test]
     fn extract_rejects_identity_rk() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -1209,7 +1248,7 @@ mod tests {
 
     #[test]
     fn extract_rejects_non_canonical_proof() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
         let rng = OsRng;
 
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
@@ -1357,7 +1396,7 @@ mod tests {
             OrchardCircuitVersion::FixedPostNu6_2,
             OrchardCircuitVersion::PostNu6_3,
         ] {
-            let pk = ProvingKey::build::<OrchardVanilla>(circuit_version);
+            let pk = ProvingKey::build(circuit_version);
 
             let mut mismatched_pczt_bundle = minimal_finalized_pczt_bundle(rng);
             mismatched_pczt_bundle.flags = Flags::CROSS_ADDRESS_DISABLED;
@@ -1372,7 +1411,7 @@ mod tests {
 
         // A pre-NU 6.3 proving key rejects the structurally-conforming restricted
         // statement at the instance check, leaving the bundle unmodified.
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
         assert!(matches!(
             pczt_bundle.create_proof(&pk, rng),
             Err(ProverError::ProofFailed(
@@ -1383,7 +1422,7 @@ mod tests {
 
         // A post-NU 6.3 proving key proves the same statement, and the proof verifies
         // in the extracted bundle under the post-NU 6.3 verifying key.
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
         pczt_bundle.create_proof(&pk, rng).unwrap();
 
         pczt_bundle.actions_mut()[bundle_meta.spend_action_index(0).unwrap()]
@@ -1400,9 +1439,7 @@ mod tests {
             .apply_binding_signature(sighash, rng)
             .unwrap();
         bundle
-            .verify_proof(&VerifyingKey::build::<OrchardVanilla>(
-                OrchardCircuitVersion::PostNu6_3,
-            ))
+            .verify_proof(&VerifyingKey::build(OrchardCircuitVersion::PostNu6_3))
             .unwrap();
     }
 
@@ -1549,19 +1586,19 @@ mod tests {
     fn extract_preserves_cross_address_disabled() {
         let rng = OsRng;
 
+        let bundle_version = BundleVersion::orchard_v3();
         let mut pczt_bundle = minimal_finalized_pczt_bundle(rng);
         pczt_bundle.zkproof = Some(crate::Proof::new(vec![
             0;
-            crate::Proof::expected_proof_size::<
-                OrchardVanilla,
-            >(
+            crate::Proof::expected_proof_size(
+                bundle_version,
                 pczt_bundle.actions.len()
             )
         ]));
         // Cross-address-disabled flags are only representable from NU6.3 onward, and the Orchard
         // pool at NU6.3 mandates the restriction; that is the version under which an extracted
         // bundle can legitimately carry these flags.
-        pczt_bundle.bundle_version = BundleVersion::orchard_v3();
+        pczt_bundle.bundle_version = bundle_version;
         pczt_bundle.flags = Flags::CROSS_ADDRESS_DISABLED;
 
         let bundle = pczt_bundle.extract::<i64>().unwrap().unwrap();

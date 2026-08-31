@@ -12,8 +12,10 @@ use zcash_note_encryption::note_bytes::NoteBytes;
 
 use crate::{
     address::Address,
-    bundle::{burn_validation::BurnError, Authorization, Authorized, Bundle, BundleVersion, Flags},
-    flavor::OrchardVanilla,
+    bundle::{
+        burn_validation::{validate_burn_entry, BurnError},
+        Authorization, Authorized, Bundle, BundleVersion, Flags,
+    },
     keys::{
         FullViewingKey, OutgoingViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey,
         SpendingKey,
@@ -22,9 +24,10 @@ use crate::{
         AssetBase, ExtractedNoteCommitment, Note, NoteVersion, Nullifier, Rho,
         TransmittedNoteCiphertext,
     },
-    note_encryption::{NoteEncryptionDomain, OrchardVersion},
+    note_encryption::{
+        enc_ciphertext_size, NoteCiphertextBytes, NoteEncryptionDomain, OrchardVersion,
+    },
     primitives::redpallas::{self, Binding, SpendAuth},
-    primitives::OrchardPrimitives,
     sighash_kind::{OrchardBindingSig, OrchardSighashKind, OrchardSpendAuthSig},
     tree::{Anchor, MerklePath},
     value::{self, BalanceError, NoteValue, ValueCommitTrapdoor, ValueCommitment, ValueSum},
@@ -36,8 +39,7 @@ use {
     crate::{
         action::Action,
         bundle::derive_bvk,
-        circuit::{Circuit, Instance, OrchardCircuitVersion, ProvingKey, Witnesses},
-        flavor::OrchardFlavor,
+        circuit::{Circuit, Instance, OrchardCircuitVersion, ProvingKey},
     },
     nonempty::NonEmpty,
 };
@@ -206,8 +208,13 @@ pub enum BuildError {
     UnrepresentableFlags,
     /// A coinbase bundle was requested with flags that enable spends.
     CoinbaseSpendsEnabled,
-    /// The bundle version is incompatible with the flavor (OrchardVanilla or OrchardZSA)
-    InvalidBundleVersion,
+    /// A burn was added under a [`BundleVersion`] that does not permit ZSA, or with flags
+    /// that do not enable ZSA.
+    BurnNotPermitted,
+    /// A burn or a non-zatoshi asset was requested for a PCZT, which is zatoshi-only in V1.
+    ZsaUnsupportedByPczt,
+    /// The bundle's actions do not balance: some asset's net value is not its burn.
+    BindingKeyMismatch,
 }
 
 impl fmt::Display for BuildError {
@@ -252,9 +259,16 @@ impl fmt::Display for BuildError {
             CoinbaseSpendsEnabled => {
                 f.write_str("A coinbase bundle was requested with flags that enable spends.")
             }
-            InvalidBundleVersion => {
-                f.write_str("The bundle version is incompatible with the flavor (OrchardVanilla or OrchardZSA).")
-            }
+            BurnNotPermitted => f.write_str(
+                "A burn was added under a bundle version that does not permit ZSA, or with \
+                 flags that do not enable ZSA.",
+            ),
+            ZsaUnsupportedByPczt => f.write_str(
+                "A burn or a non-zatoshi asset cannot be carried in a PCZT V1 Orchard bundle.",
+            ),
+            BindingKeyMismatch => f.write_str(
+                "The bundle's actions do not balance: some asset's net value does not match its burn.",
+            ),
         }
     }
 }
@@ -558,12 +572,12 @@ impl OutputInfo {
     /// Defined in [Zcash Protocol Spec § 4.7.3: Sending Notes (Orchard)][orchardsend].
     ///
     /// [orchardsend]: https://zips.z.cash/protocol/nu5.pdf#orchardsend
-    fn build<Pr: OrchardPrimitives>(
+    fn build(
         &self,
         cv_net: &ValueCommitment,
         nf_old: Nullifier,
         mut rng: impl RngCore,
-    ) -> (Note, ExtractedNoteCommitment, TransmittedNoteCiphertext<Pr>) {
+    ) -> (Note, ExtractedNoteCommitment, TransmittedNoteCiphertext) {
         let rho = Rho::from_nf_old(nf_old);
         let note = Note::new(
             self.recipient,
@@ -576,11 +590,14 @@ impl OutputInfo {
         let cm_new = note.commitment();
         let cmx = cm_new.into();
 
-        // The Orchard and Ironwood encryptor aliases share encryption behavior;
+        // The Orchard, Ironwood and ZSA encryptor aliases share encryption behavior;
         // `Note::version()` selects the note plaintext lead byte.
-        let encryptor = zcash_note_encryption::NoteEncryption::<
-            NoteEncryptionDomain<OrchardVersion, Pr>,
-        >::new(self.ovk.clone(), note, self.memo);
+        let encryptor =
+            zcash_note_encryption::NoteEncryption::<NoteEncryptionDomain<OrchardVersion>>::new(
+                self.ovk.clone(),
+                note,
+                self.memo,
+            );
 
         // `encryptor` still supplies a valid non-identity `epk` and, because these outputs use
         // `ovk = None`, a random `out_ciphertext`. Only `enc_ciphertext` is replaced.
@@ -590,9 +607,9 @@ impl OutputInfo {
                 NoteValue::ZERO,
                 "a randomized note ciphertext must never stand in for a nonzero-valued note",
             );
-            let mut enc_ciphertext = alloc::vec![0u8; Pr::ENC_CIPHERTEXT_SIZE];
+            let mut enc_ciphertext = alloc::vec![0u8; enc_ciphertext_size(self.note_version)];
             rng.fill_bytes(&mut enc_ciphertext);
-            Pr::NoteCiphertextBytes::from_slice(&enc_ciphertext).unwrap()
+            NoteCiphertextBytes::from_slice(&enc_ciphertext).unwrap()
         } else {
             encryptor.encrypt_note_plaintext()
         };
@@ -614,7 +631,7 @@ impl OutputInfo {
     ) -> crate::pczt::Output {
         assert_eq!(self.asset, AssetBase::zatoshi());
 
-        let (note, cmx, encrypted_note) = self.build::<OrchardVanilla>(cv_net, nf_old, rng);
+        let (note, cmx, encrypted_note) = self.build(cv_net, nf_old, rng);
 
         crate::pczt::Output {
             cmx,
@@ -732,11 +749,11 @@ impl ActionInfo {
     ///
     /// [orchardsend]: https://zips.z.cash/protocol/nu5.pdf#orchardsend
     #[cfg(feature = "circuit")]
-    fn build<FL: OrchardFlavor>(
+    fn build(
         self,
         mut rng: impl RngCore,
         circuit_version: OrchardCircuitVersion,
-    ) -> (Action<SigningMetadata, FL>, Witnesses) {
+    ) -> (Action<SigningMetadata>, Circuit) {
         let v_net = self.value_sum();
         let cv_net = ValueCommitment::derive(v_net, self.rcv.clone(), self.output.asset);
 
@@ -759,7 +776,7 @@ impl ActionInfo {
                 "rk is non-identity (α was generated randomly) and epk is a \
                  valid non-identity point by construction",
             ),
-            Witnesses::from_action_context_unchecked::<FL>(
+            Circuit::from_action_context_unchecked(
                 self.spend,
                 note,
                 alpha,
@@ -789,7 +806,7 @@ impl ActionInfo {
 ///
 /// This is returned by [`Builder::build`].
 #[cfg(feature = "circuit")]
-pub type UnauthorizedBundle<V, Pr> = Bundle<InProgress<Unproven, Unauthorized>, V, Pr>;
+pub type UnauthorizedBundle<V> = Bundle<InProgress<Unproven, Unauthorized>, V>;
 
 /// Metadata about a bundle created by [`bundle`] or [`Builder::build`] that is not necessarily
 /// recoverable from the bundle itself.
@@ -850,7 +867,7 @@ impl BundleMetadata {
 
 /// A tuple containing an in-progress bundle with no proofs or signatures, and its associated metadata.
 #[cfg(feature = "circuit")]
-pub type UnauthorizedBundleWithMetadata<V, FL> = (UnauthorizedBundle<V, FL>, BundleMetadata);
+pub type UnauthorizedBundleWithMetadata<V> = (UnauthorizedBundle<V>, BundleMetadata);
 
 /// A builder for constructing an Orchard [`Bundle`] by specifying notes to spend, outputs to
 /// receive, and assets to burn.
@@ -1046,21 +1063,19 @@ impl Builder {
     }
 
     /// Adds an instruction to burn a given amount of a specific asset.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BuildError::BurnNotPermitted`] if the builder's [`BundleVersion`] does not
+    /// permit ZSA, or if its flags do not enable ZSA.
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
         use alloc::collections::btree_map::Entry;
 
-        if asset.is_zatoshi().into() {
-            return Err(BuildError::Burn(BurnError::ZatoshiAsset));
+        if !self.bundle_version.permits_zsa() || !self.flags.zsa_enabled() {
+            return Err(BuildError::BurnNotPermitted);
         }
 
-        if value.inner() == 0 {
-            return Err(BuildError::Burn(BurnError::ZeroAmount));
-        }
-
-        // Check that the burn amount fits in u63
-        if value.inner() >= (1u64 << 63) {
-            return Err(BuildError::Burn(BurnError::InvalidAmount));
-        }
+        validate_burn_entry(asset, value).map_err(BuildError::Burn)?;
 
         match self.burn.entry(asset) {
             Entry::Occupied(_) => Err(BuildError::Burn(BurnError::DuplicateAsset)),
@@ -1114,6 +1129,7 @@ impl Builder {
             .chain(
                 self.changes
                     .iter()
+                    .filter(|change| change.output.asset.is_zatoshi().into())
                     .map(|change| NoteValue::ZERO - change.output.value),
             )
             .try_fold(ValueSum::zero(), |acc, note_value| acc + note_value)
@@ -1130,10 +1146,10 @@ impl Builder {
     /// created with a [`ProvingKey`] for the circuit version consistent with the builder's
     /// bundle version.
     #[cfg(feature = "circuit")]
-    pub fn build<V: TryFrom<i64>, FL: OrchardFlavor>(
+    pub fn build<V: TryFrom<i64>>(
         self,
         rng: impl RngCore,
-    ) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
+    ) -> Result<Option<UnauthorizedBundleWithMetadata<V>>, BuildError> {
         bundle(
             rng,
             self.bundle_type,
@@ -1149,10 +1165,25 @@ impl Builder {
 
     /// Builds a bundle containing the given spent notes and outputs along with their
     /// metadata, for inclusion in a PCZT.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BuildError::ZsaUnsupportedByPczt`] if this builder carries a burn or any
+    /// non-zatoshi asset.
     pub fn build_for_pczt(
         self,
         rng: impl RngCore,
     ) -> Result<(crate::pczt::Bundle, BundleMetadata), BuildError> {
+        // PCZT V1 is zatoshi-only: no burn field, and no asset base on spends and outputs.
+        let is_zsa_asset = |asset: AssetBase| !bool::from(asset.is_zatoshi());
+        if !self.burn.is_empty()
+            || self.spends.iter().any(|s| is_zsa_asset(s.note.asset()))
+            || self.outputs.iter().any(|o| is_zsa_asset(o.asset))
+            || self.changes.iter().any(|c| is_zsa_asset(c.output.asset))
+        {
+            return Err(BuildError::ZsaUnsupportedByPczt);
+        }
+
         build_bundle(
             rng,
             self.bundle_version,
@@ -1258,12 +1289,16 @@ fn pad_spend(
 ///
 /// # Errors
 ///
-/// Returns [`BuildError::UnrepresentableFlags`] if `flags` cannot be encoded under
-/// `bundle_version`, or [`BuildError::CoinbaseSpendsEnabled`] if `bundle_type` is
-/// [`BundleType::Coinbase`] but `flags` enable spends.
+/// Returns
+/// - [`BuildError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`,
+/// - [`BuildError::CoinbaseSpendsEnabled`] if `bundle_type` is [`BundleType::Coinbase`] but `flags`
+///   enable spends,
+/// - [`BuildError::BurnNotPermitted`] if `burn` is non-empty but `bundle_version` does not permit
+///   ZSA or `flags` do not enable ZSA,
+/// - [`BuildError::BindingKeyMismatch`] if some asset's net value does not match its `burn` entry.
 #[allow(clippy::too_many_arguments)]
 #[cfg(feature = "circuit")]
-pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
+pub fn bundle<V: TryFrom<i64>>(
     rng: impl RngCore,
     bundle_type: BundleType,
     bundle_version: BundleVersion,
@@ -1273,11 +1308,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
     outputs: Vec<OutputInfo>,
     changes: Vec<ChangeInfo>,
     burn: BTreeMap<AssetBase, NoteValue>,
-) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
-    if !FL::is_valid_bundle_version(bundle_version) {
-        return Err(BuildError::InvalidBundleVersion);
-    }
-
+) -> Result<Option<UnauthorizedBundleWithMetadata<V>>, BuildError> {
     build_bundle(
         rng,
         bundle_version,
@@ -1305,7 +1336,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
 
 #[cfg(feature = "circuit")]
 #[allow(clippy::too_many_arguments)]
-fn finish_unauthorized_bundle<V: TryFrom<i64>, FL: OrchardFlavor, R: RngCore>(
+fn finish_unauthorized_bundle<V: TryFrom<i64>, R: RngCore>(
     pre_actions: Vec<ActionInfo>,
     flags: Flags,
     value_balance: ValueSum,
@@ -1314,7 +1345,7 @@ fn finish_unauthorized_bundle<V: TryFrom<i64>, FL: OrchardFlavor, R: RngCore>(
     mut rng: R,
     anchor: Anchor,
     bundle_version: BundleVersion,
-) -> Result<Option<UnauthorizedBundleWithMetadata<V, FL>>, BuildError> {
+) -> Result<Option<UnauthorizedBundleWithMetadata<V>>, BuildError> {
     let circuit_version = bundle_version.circuit_version();
 
     let zatoshi_value_balance: i64 = i64::try_from(value_balance).map_err(BuildError::ValueSum)?;
@@ -1330,14 +1361,16 @@ fn finish_unauthorized_bundle<V: TryFrom<i64>, FL: OrchardFlavor, R: RngCore>(
         .into_bsk();
 
     // Create the actions.
-    let (actions, witnesses): (Vec<_>, Vec<_>) = pre_actions
+    let (actions, circuits): (Vec<_>, Vec<_>) = pre_actions
         .into_iter()
         .map(|a| a.build(&mut rng, circuit_version))
         .unzip();
 
-    // Verify that bsk and bvk are consistent.
+    // Verify that bsk and bvk are consistent: each asset's net value must match its burn.
     let bvk = derive_bvk(&actions, zatoshi_value_balance, &burn_vec);
-    assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
+    if redpallas::VerificationKey::from(&bsk) != bvk {
+        return Err(BuildError::BindingKeyMismatch);
+    }
 
     Ok(NonEmpty::from_vec(actions).map(|actions| {
         (
@@ -1349,7 +1382,7 @@ fn finish_unauthorized_bundle<V: TryFrom<i64>, FL: OrchardFlavor, R: RngCore>(
                 anchor,
                 InProgress {
                     proof: Unproven {
-                        witnesses,
+                        circuits,
                         circuit_version,
                     },
                     sigs: Unauthorized { bsk },
@@ -1383,14 +1416,23 @@ fn build_bundle<B, R: RngCore>(
 ) -> Result<B, BuildError> {
     // Every build path funnels through here (the free `bundle` function, `Builder::build`, and
     // `Builder::build_for_pczt`), so validate the version-dependent invariants here rather than
-    // trusting each caller: the flags must be encodable under the bundle version, and a coinbase
-    // bundle must not enable spends. `Builder::new` also enforces both up front, for fail-fast
+    // trusting each caller: the flags must be encodable under the bundle version, a coinbase
+    // bundle must not enable spends, and a burn requires a version and flags that enable ZSA
+    // plus entries that are burnable at all.
+    // `Builder::new` and `Builder::add_burn` also enforce these up front, for fail-fast
     // construction.
     if flags.to_byte(bundle_version).is_none() {
         return Err(BuildError::UnrepresentableFlags);
     }
     if matches!(bundle_type, BundleType::Coinbase) && flags.spends_enabled() {
         return Err(BuildError::CoinbaseSpendsEnabled);
+    }
+    let burn_permitted = bundle_version.permits_zsa() && flags.zsa_enabled();
+    if !burn.is_empty() && !burn_permitted {
+        return Err(BuildError::BurnNotPermitted);
+    }
+    for (asset, value) in &burn {
+        validate_burn_entry(*asset, *value).map_err(BuildError::Burn)?;
     }
     let note_version = bundle_version.note_version();
 
@@ -1704,16 +1746,13 @@ impl<P: fmt::Debug, S: InProgressSignatures> Authorization for InProgress<P, S> 
 #[cfg(feature = "circuit")]
 #[derive(Clone, Debug)]
 pub struct Unproven {
-    witnesses: Vec<Witnesses>,
+    circuits: Vec<Circuit>,
     circuit_version: OrchardCircuitVersion,
 }
 
 #[cfg(feature = "circuit")]
 impl<S: InProgressSignatures> InProgress<Unproven, S> {
     /// Creates the proof for this bundle.
-    ///
-    /// The `OrchardCircuit` type parameter must match the circuit used when generating the witnesses
-    /// contained in this `Unproven` structure to ensure consistency and correctness of the proof.
     ///
     /// # Errors
     ///
@@ -1723,27 +1762,18 @@ impl<S: InProgressSignatures> InProgress<Unproven, S> {
     ///
     /// Also returns an error if `pk` does not match the circuit version this
     /// bundle's actions were built for, or if proof creation fails.
-    pub fn create_proof<C: crate::circuit::OrchardCircuit>(
+    pub fn create_proof(
         &self,
         pk: &ProvingKey,
         instances: &[Instance],
         rng: impl RngCore,
     ) -> Result<Proof, halo2_proofs::plonk::Error> {
-        let circuits = self
-            .proof
-            .witnesses
-            .iter()
-            .map(|witnesses| Circuit::<C> {
-                witnesses: witnesses.clone(),
-                phantom: core::marker::PhantomData,
-            })
-            .collect::<Vec<Circuit<C>>>();
-        Proof::create(pk, &circuits, instances, rng)
+        Proof::create(pk, &self.proof.circuits, instances, rng)
     }
 }
 
 #[cfg(feature = "circuit")]
-impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven, S>, V, FL> {
+impl<S: InProgressSignatures, V> Bundle<InProgress<Unproven, S>, V> {
     /// The circuit version this bundle's actions were built for, and that its proof must
     /// therefore be created against (with a matching [`ProvingKey`]).
     pub fn circuit_version(&self) -> OrchardCircuitVersion {
@@ -1765,7 +1795,7 @@ impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven, 
         self,
         pk: &ProvingKey,
         mut rng: impl RngCore,
-    ) -> Result<Bundle<InProgress<Proof, S>, V, FL>, BuildError> {
+    ) -> Result<Bundle<InProgress<Proof, S>, V>, BuildError> {
         let instances: Vec<_> = self
             .actions()
             .iter()
@@ -1775,7 +1805,7 @@ impl<S: InProgressSignatures, V, FL: OrchardFlavor> Bundle<InProgress<Unproven, 
             &mut (),
             |_, _, a| Ok(a),
             |_, auth| {
-                let proof = auth.create_proof::<FL>(pk, &instances, &mut rng)?;
+                let proof = auth.create_proof(pk, &instances, &mut rng)?;
                 Ok(InProgress {
                     proof,
                     sigs: auth.sigs,
@@ -1848,7 +1878,7 @@ impl MaybeSigned {
     }
 }
 
-impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, Unauthorized>, V, Pr> {
+impl<P: fmt::Debug, V> Bundle<InProgress<P, Unauthorized>, V> {
     /// Loads the sighash into this bundle, preparing it for signing.
     ///
     /// This API ensures that all signatures are created over the same sighash.
@@ -1856,7 +1886,7 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, Unauthorized>
         self,
         mut rng: R,
         sighash: [u8; 32],
-    ) -> Bundle<InProgress<P, PartiallyAuthorized>, V, Pr> {
+    ) -> Bundle<InProgress<P, PartiallyAuthorized>, V> {
         self.map_authorization(
             &mut rng,
             |rng, _, SigningMetadata { dummy_ask, parts }| {
@@ -1886,7 +1916,7 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, Unauthorized>
     }
 }
 
-impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, Pr> {
+impl<V> Bundle<InProgress<Proof, Unauthorized>, V> {
     /// Applies signatures to this bundle, in order to authorize it.
     ///
     /// This is a helper method that wraps [`Bundle::prepare`], [`Bundle::sign`], and
@@ -1896,7 +1926,7 @@ impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, Pr> {
         mut rng: R,
         sighash: [u8; 32],
         signing_keys: &[SpendAuthorizingKey],
-    ) -> Result<Bundle<Authorized, V, Pr>, BuildError> {
+    ) -> Result<Bundle<Authorized, V>, BuildError> {
         signing_keys
             .iter()
             .fold(self.prepare(&mut rng, sighash), |partial, ask| {
@@ -1906,7 +1936,7 @@ impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, Unauthorized>, V, Pr> {
     }
 }
 
-impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, PartiallyAuthorized>, V, Pr> {
+impl<P: fmt::Debug, V> Bundle<InProgress<P, PartiallyAuthorized>, V> {
     /// Signs this bundle with the given [`SpendAuthorizingKey`].
     ///
     /// This will apply signatures for all notes controlled by this spending key.
@@ -1971,11 +2001,11 @@ impl<P: fmt::Debug, V, Pr: OrchardPrimitives> Bundle<InProgress<P, PartiallyAuth
     }
 }
 
-impl<V, Pr: OrchardPrimitives> Bundle<InProgress<Proof, PartiallyAuthorized>, V, Pr> {
+impl<V> Bundle<InProgress<Proof, PartiallyAuthorized>, V> {
     /// Finalizes this bundle, enabling it to be included in a transaction.
     ///
     /// Returns an error if any signatures are missing.
-    pub fn finalize(self) -> Result<Bundle<Authorized, V, Pr>, BuildError> {
+    pub fn finalize(self) -> Result<Bundle<Authorized, V>, BuildError> {
         self.try_map_authorization(
             &mut (),
             |_, _, maybe| maybe.finalize(),
@@ -2045,10 +2075,8 @@ pub mod testing {
         address::testing::arb_address,
         bundle::{Authorized, Bundle, BundleVersion},
         circuit::{OrchardCircuitVersion, ProvingKey},
-        flavor::OrchardFlavor,
         keys::{testing::arb_spending_key, FullViewingKey, SpendAuthorizingKey, SpendingKey},
         note::{testing::arb_note, AssetBase},
-        primitives::OrchardPrimitives,
         tree::{Anchor, MerkleHashOrchard, MerklePath},
         value::{testing::arb_positive_note_value, NoteValue, MAX_NOTE_VALUE},
         Address, Note, NoteVersion,
@@ -2075,9 +2103,7 @@ pub mod testing {
 
     impl<R: RngCore + CryptoRng> ArbitraryBundleInputs<R> {
         /// Create a bundle from the set of arbitrary bundle inputs.
-        fn into_bundle<V: TryFrom<i64> + Copy + Into<i64>, FL: OrchardFlavor>(
-            mut self,
-        ) -> Bundle<Authorized, V, FL> {
+        fn into_bundle<V: TryFrom<i64>>(mut self) -> Bundle<Authorized, V> {
             let fvk = FullViewingKey::from(&self.sk);
             let bundle_version = BundleVersion::orchard_v2();
             let mut builder = Builder::new(
@@ -2101,7 +2127,7 @@ pub mod testing {
                     .unwrap();
             }
 
-            let pk = ProvingKey::build::<FL>(OrchardCircuitVersion::FixedPostNu6_2);
+            let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
             builder
                 .build(&mut self.rng)
                 .unwrap()
@@ -2116,79 +2142,69 @@ pub mod testing {
         }
     }
 
-    /// `BuilderArb` adapts `arb_...` functions for both Vanilla and ZSA Orchard protocol variations
-    /// in property-based testing, addressing proptest crate limitations.
-    #[derive(Debug)]
-    pub struct BuilderArb<Pr: OrchardPrimitives> {
-        phantom: core::marker::PhantomData<Pr>,
-    }
+    prop_compose! {
+        /// Produce a random valid Orchard bundle.
+        fn arb_bundle_inputs(sk: SpendingKey)
+        (
+            n_notes in 1usize..30,
+            n_outputs in 1..30,
+        )
+        (
+            // generate note values that we're certain won't exceed MAX_NOTE_VALUE in total
+            notes in vec(
+                arb_positive_note_value(MAX_NOTE_VALUE / n_notes as u64)
+                    .prop_flat_map(|value| arb_note(value, NoteVersion::V2)),
+                n_notes
+            ),
+            output_amounts in vec(
+                arb_address().prop_flat_map(move |a| {
+                    arb_positive_note_value(MAX_NOTE_VALUE / n_outputs as u64)
+                        .prop_map(move |v| {
+                            (a,v, AssetBase::zatoshi())
+                        })
+                }),
+                n_outputs as usize,
+            ),
+            rng_seed in prop::array::uniform32(prop::num::u8::ANY)
+        ) -> ArbitraryBundleInputs<StdRng> {
+            use crate::constants::MERKLE_DEPTH_ORCHARD;
+            let mut frontier = Frontier::<MerkleHashOrchard, { MERKLE_DEPTH_ORCHARD as u8 }>::empty();
+            let mut notes_and_auth_paths: Vec<(Note, MerklePath)> = Vec::new();
 
-    impl<FL: OrchardFlavor> BuilderArb<FL> {
-        prop_compose! {
-            /// Produce a random valid Orchard bundle.
-            fn arb_bundle_inputs(sk: SpendingKey)
-            (
-                n_notes in 1usize..30,
-                n_outputs in 1..30,
-            )
-            (
-                // generate note values that we're certain won't exceed MAX_NOTE_VALUE in total
-                notes in vec(
-                    arb_positive_note_value(MAX_NOTE_VALUE / n_notes as u64)
-                        .prop_flat_map(|value| arb_note(value, NoteVersion::V2)),
-                    n_notes
-                ),
-                output_amounts in vec(
-                    arb_address().prop_flat_map(move |a| {
-                        arb_positive_note_value(MAX_NOTE_VALUE / n_outputs as u64)
-                            .prop_map(move |v| {
-                                (a,v, AssetBase::zatoshi())
-                            })
-                    }),
-                    n_outputs as usize,
-                ),
-                rng_seed in prop::array::uniform32(prop::num::u8::ANY)
-            ) -> ArbitraryBundleInputs<StdRng> {
-                use crate::constants::MERKLE_DEPTH_ORCHARD;
-                let mut frontier = Frontier::<MerkleHashOrchard, { MERKLE_DEPTH_ORCHARD as u8 }>::empty();
-                let mut notes_and_auth_paths: Vec<(Note, MerklePath)> = Vec::new();
+            for note in notes.iter() {
+                let leaf = MerkleHashOrchard::from_cmx(&note.commitment().into());
+                frontier.append(leaf);
 
-                for note in notes.iter() {
-                    let leaf = MerkleHashOrchard::from_cmx(&note.commitment().into());
-                    frontier.append(leaf);
+                let path = frontier
+                    .witness(|addr| Some(<MerkleHashOrchard as Hashable>::empty_root(addr.level())))
+                    .ok()
+                    .flatten()
+                    .expect("we can always construct a correct Merkle path");
+                notes_and_auth_paths.push((*note, path.into()));
+            }
 
-                    let path = frontier
-                        .witness(|addr| Some(<MerkleHashOrchard as Hashable>::empty_root(addr.level())))
-                        .ok()
-                        .flatten()
-                        .expect("we can always construct a correct Merkle path");
-                    notes_and_auth_paths.push((*note, path.into()));
-                }
-
-                ArbitraryBundleInputs {
-                    rng: StdRng::from_seed(rng_seed),
-                    sk,
-                    anchor: frontier.root().into(),
-                    notes: notes_and_auth_paths,
-                    output_amounts
-                }
+            ArbitraryBundleInputs {
+                rng: StdRng::from_seed(rng_seed),
+                sk,
+                anchor: frontier.root().into(),
+                notes: notes_and_auth_paths,
+                output_amounts
             }
         }
+    }
 
-        /// Produce an arbitrary valid Orchard bundle using a random spending key.
-        pub fn arb_bundle<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
-        ) -> impl Strategy<Value = Bundle<Authorized, V, FL>> {
-            arb_spending_key()
-                .prop_flat_map(BuilderArb::<FL>::arb_bundle_inputs)
-                .prop_map(|inputs| inputs.into_bundle::<V, FL>())
-        }
+    /// Produce an arbitrary valid Orchard bundle using a random spending key.
+    pub fn arb_bundle<V: TryFrom<i64> + Debug>() -> impl Strategy<Value = Bundle<Authorized, V>> {
+        arb_spending_key()
+            .prop_flat_map(arb_bundle_inputs)
+            .prop_map(|inputs| inputs.into_bundle::<V>())
+    }
 
-        /// Produce an arbitrary valid Orchard bundle using a specified spending key.
-        pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug + Copy + Into<i64>>(
-            k: SpendingKey,
-        ) -> impl Strategy<Value = Bundle<Authorized, V, FL>> {
-            BuilderArb::<FL>::arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V, FL>())
-        }
+    /// Produce an arbitrary valid Orchard bundle using a specified spending key.
+    pub fn arb_bundle_with_key<V: TryFrom<i64> + Debug>(
+        k: SpendingKey,
+    ) -> impl Strategy<Value = Bundle<Authorized, V>> {
+        arb_bundle_inputs(k).prop_map(|inputs| inputs.into_bundle::<V>())
     }
 }
 
@@ -2207,7 +2223,6 @@ mod tests {
         bundle::{Authorized, Bundle, BundleVersion, Flags},
         circuit::{OrchardCircuitVersion, ProvingKey},
         constants::MERKLE_DEPTH_ORCHARD,
-        flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
         keys::{
             FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey,
         },
@@ -2375,15 +2390,15 @@ mod tests {
         builder
     }
 
-    fn shielding_bundle<FL: OrchardFlavor>(bundle_version: BundleVersion) {
-        let pk = ProvingKey::build::<FL>(bundle_version.circuit_version());
+    fn shielding_bundle(bundle_version: BundleVersion) {
+        let pk = ProvingKey::build(bundle_version.circuit_version());
         let mut rng = OsRng;
 
         let builder = output_only_builder(&mut rng, bundle_version, BundleType::DEFAULT);
         let balance: i64 = builder.value_balance().unwrap();
         assert_eq!(balance, -5000);
 
-        let bundle: Bundle<Authorized, i64, FL> = builder
+        let bundle: Bundle<Authorized, i64> = builder
             .build(&mut rng)
             .unwrap()
             .unwrap()
@@ -2398,17 +2413,17 @@ mod tests {
 
     #[test]
     fn shielding_bundle_orchard_v2() {
-        shielding_bundle::<OrchardVanilla>(BundleVersion::orchard_v2())
+        shielding_bundle(BundleVersion::orchard_v2())
     }
 
     #[test]
     fn shielding_bundle_ironwood_v3() {
-        shielding_bundle::<OrchardVanilla>(BundleVersion::ironwood_v3())
+        shielding_bundle(BundleVersion::ironwood_v3())
     }
 
     #[test]
     fn shielding_bundle_zsa() {
-        shielding_bundle::<OrchardZSA>(BundleVersion::zsa())
+        shielding_bundle(BundleVersion::zsa())
     }
 
     #[test]
@@ -2424,7 +2439,7 @@ mod tests {
             output_only_builder(&mut rng, BundleVersion::ironwood_v3(), BundleType::Coinbase);
 
         let (bundle, _) = builder
-            .build::<i64, OrchardVanilla>(&mut rng)
+            .build::<i64>(&mut rng)
             .expect("coinbase bundles build under the post-NU 6.3 circuit version")
             .expect("a bundle is produced for the requested output");
         assert_eq!(bundle.actions().len(), 1);
@@ -2475,7 +2490,7 @@ mod tests {
         // The coinbase-spends invariant is enforced on every build path, not just at
         // `Builder::new`: a direct caller of the free `bundle` function cannot silently produce a
         // coinbase bundle with `enableSpends` set.
-        let result = bundle::<i64, OrchardVanilla>(
+        let result = bundle::<i64>(
             &mut rng,
             BundleType::Coinbase,
             bundle_version,
@@ -2502,6 +2517,131 @@ mod tests {
             ),
             Err(BuildError::UnrepresentableFlags)
         ));
+    }
+
+    #[test]
+    fn add_burn_rejects_non_zsa_version() {
+        // Burn is only encoded in the ZSA transaction format, so a non-ZSA builder must not
+        // accept one.
+        let mut rng = OsRng;
+        let bundle_version = BundleVersion::ironwood_v3();
+        let mut builder = Builder::new(
+            BundleType::DEFAULT,
+            bundle_version,
+            bundle_version.default_flags(),
+            EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            builder.add_burn(AssetBase::random(&mut rng), NoteValue::from_raw(1)),
+            Err(BuildError::BurnNotPermitted)
+        ));
+    }
+
+    #[test]
+    fn free_bundle_rejects_burn_under_non_zsa_version() {
+        let mut rng = OsRng;
+        let anchor: Anchor = EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into();
+        let bundle_version = BundleVersion::ironwood_v3();
+        let burn = BTreeMap::from([(AssetBase::random(&mut rng), NoteValue::from_raw(1))]);
+
+        let result = bundle::<i64>(
+            &mut rng,
+            BundleType::DEFAULT,
+            bundle_version,
+            bundle_version.default_flags(),
+            anchor,
+            vec![],
+            vec![],
+            vec![],
+            burn,
+        );
+        assert!(matches!(result, Err(BuildError::BurnNotPermitted)));
+    }
+
+    #[test]
+    fn burn_requires_the_zsa_flag_not_just_the_zsa_version() {
+        // `BundleVersion::zsa()` permits ZSA, but the flags still carry the `zsa_enabled` bit
+        // independently. With that bit cleared the circuit forces every asset to zatoshi, so a
+        // burn can never be balanced: `derive_bvk` would fold it in and `build` would trip its
+        // bvk/bsk assertion. Both the fail-fast path and the build path must reject it.
+        let mut rng = OsRng;
+        let anchor: Anchor = EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into();
+        let bundle_version = BundleVersion::zsa();
+        let flags = Flags::ENABLED; // representable under the ZSA version, but zsa_enabled = false
+        assert!(flags.to_byte(bundle_version).is_some());
+        assert!(!flags.zsa_enabled());
+
+        let mut builder = Builder::new(BundleType::DEFAULT, bundle_version, flags, anchor).unwrap();
+        assert!(matches!(
+            builder.add_burn(AssetBase::random(&mut rng), NoteValue::from_raw(1)),
+            Err(BuildError::BurnNotPermitted)
+        ));
+
+        let burn = BTreeMap::from([(AssetBase::random(&mut rng), NoteValue::from_raw(1))]);
+        let result = bundle::<i64>(
+            &mut rng,
+            BundleType::DEFAULT,
+            bundle_version,
+            flags,
+            anchor,
+            vec![],
+            vec![],
+            vec![],
+            burn,
+        );
+        assert!(matches!(result, Err(BuildError::BurnNotPermitted)));
+    }
+
+    #[test]
+    fn add_burn_accepts_the_zsa_version_with_the_zsa_flag() {
+        let mut rng = OsRng;
+        let bundle_version = BundleVersion::zsa();
+        let mut builder = Builder::new(
+            BundleType::DEFAULT,
+            bundle_version,
+            Flags::ENABLED_WITH_ZSA,
+            EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
+        )
+        .unwrap();
+
+        assert!(builder
+            .add_burn(AssetBase::random(&mut rng), NoteValue::from_raw(1))
+            .is_ok());
+    }
+
+    #[test]
+    fn build_for_pczt_rejects_zsa() {
+        // PCZT V1 carries neither a burn nor an asset base.
+        let mut rng = OsRng;
+        let asset = AssetBase::random(&mut rng);
+        let recipient =
+            FullViewingKey::from(&SpendingKey::random(&mut rng)).address_at(0u32, Scope::External);
+        let new_builder = || {
+            Builder::new(
+                BundleType::DEFAULT,
+                BundleVersion::ironwood_v3(),
+                Flags::ENABLED,
+                EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
+            )
+            .unwrap()
+        };
+
+        let mut with_burn = new_builder();
+        with_burn.burn.insert(asset, NoteValue::from_raw(1));
+
+        let mut with_zsa_output = new_builder();
+        with_zsa_output
+            .add_output(None, recipient, NoteValue::from_raw(1), asset, [0; 512])
+            .unwrap();
+
+        for builder in [with_burn, with_zsa_output] {
+            assert!(matches!(
+                builder.build_for_pczt(rng),
+                Err(BuildError::ZsaUnsupportedByPczt)
+            ));
+        }
     }
 
     #[test]
@@ -2710,7 +2850,7 @@ mod tests {
         let bundle_version = BundleVersion::orchard_v3();
 
         assert!(matches!(
-            bundle::<i64, OrchardVanilla>(
+            bundle::<i64>(
                 &mut rng,
                 transactional(false),
                 bundle_version,
@@ -2741,7 +2881,7 @@ mod tests {
             [0u8; 512],
         )
         .unwrap();
-        let (bundle, bundle_meta) = bundle::<i64, OrchardVanilla>(
+        let (bundle, bundle_meta) = bundle::<i64>(
             &mut rng,
             transactional(false),
             bundle_version,
@@ -2790,7 +2930,7 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            bundle::<i64, OrchardVanilla>(
+            bundle::<i64>(
                 &mut rng,
                 bundle_type,
                 bundle_version,
@@ -2836,7 +2976,7 @@ mod tests {
             mismatched_note_version,
         );
         let spend = SpendInfo::new(fvk.clone(), note, merkle_path).unwrap();
-        assert!(bundle::<i64, OrchardVanilla>(
+        assert!(bundle::<i64>(
             &mut rng,
             BundleType::DEFAULT,
             bundle_version,
@@ -2858,7 +2998,7 @@ mod tests {
             [0u8; 512],
         );
         assert!(matches!(
-            bundle::<i64, OrchardVanilla>(
+            bundle::<i64>(
                 &mut rng,
                 BundleType::DEFAULT,
                 bundle_version,
@@ -2883,7 +3023,7 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(
-            bundle::<i64, OrchardVanilla>(
+            bundle::<i64>(
                 &mut rng,
                 BundleType::DEFAULT,
                 bundle_version,
@@ -2930,7 +3070,7 @@ mod tests {
         // An owned recipient is accepted and counts as one of the bundle's outputs.
         builder
             .add_change_output(
-                fvk,
+                fvk.clone(),
                 None,
                 owned,
                 NoteValue::from_raw(5_000),
@@ -2939,6 +3079,20 @@ mod tests {
             )
             .unwrap();
         assert_eq!(builder.changes().len(), 1);
+
+        // A custom-asset change is an output too, but not part of the net zatoshi value.
+        builder
+            .add_change_output(
+                fvk,
+                None,
+                owned,
+                NoteValue::from_raw(200),
+                AssetBase::random(&mut rng),
+                [0u8; 512],
+            )
+            .unwrap();
+        assert_eq!(builder.changes().len(), 2);
+        assert_eq!(builder.value_balance::<i64>().unwrap(), -5_000);
     }
 
     #[test]
@@ -3019,14 +3173,10 @@ mod tests {
             )
             .unwrap();
 
-        let bundle = builder
-            .build::<i64, OrchardVanilla>(&mut rng)
-            .unwrap()
-            .unwrap()
-            .0;
+        let bundle = builder.build::<i64>(&mut rng).unwrap().unwrap().0;
 
         fn num_unsigned<P: core::fmt::Debug>(
-            bundle: &Bundle<super::InProgress<P, super::PartiallyAuthorized>, i64, OrchardVanilla>,
+            bundle: &Bundle<super::InProgress<P, super::PartiallyAuthorized>, i64>,
         ) -> usize {
             bundle
                 .actions()
@@ -3066,7 +3216,7 @@ mod tests {
             .unwrap();
 
         let bundle = builder
-            .build::<i64, OrchardVanilla>(&mut rng)
+            .build::<i64>(&mut rng)
             .unwrap()
             .unwrap()
             .0
@@ -3080,7 +3230,7 @@ mod tests {
 
     #[test]
     fn restricted_pczt_structural_checks_reject_tampering() {
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
         let mut rng = OsRng;
         let spend_sk = SpendingKey::random(&mut rng);
         let spend_fvk = FullViewingKey::from(&spend_sk);
@@ -3155,21 +3305,21 @@ mod tests {
                 EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into(),
             )
             .unwrap()
-            .build::<i64, OrchardVanilla>(rng)
+            .build::<i64>(rng)
             .unwrap()
             .unwrap()
             .0
         };
 
         let mut rng = OsRng;
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::FixedPostNu6_2);
+        let pk = ProvingKey::build(OrchardCircuitVersion::FixedPostNu6_2);
         let bundle = build_restricted(&mut rng);
         assert!(matches!(
             bundle.create_proof(&pk, &mut rng),
             Err(BuildError::Proof(halo2_proofs::plonk::Error::Synthesis)),
         ));
 
-        let pk = ProvingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let pk = ProvingKey::build(OrchardCircuitVersion::PostNu6_3);
         let bundle = build_restricted(&mut rng);
         bundle.create_proof(&pk, &mut rng).unwrap();
     }

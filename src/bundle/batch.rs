@@ -9,10 +9,7 @@ use tracing::debug;
 use super::{Authorized, Bundle};
 use crate::{
     circuit::VerifyingKey,
-    primitives::{
-        redpallas::{self, Binding, SpendAuth},
-        OrchardPrimitives,
-    },
+    primitives::redpallas::{self, Binding, SpendAuth},
 };
 
 /// A signature within an authorized Orchard bundle.
@@ -27,11 +24,17 @@ struct BundleSignature {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum BatchError {
-    /// The bundle disables cross-address transfers, but the validator's verifying key's
-    /// circuit version does not constrain the cross-address restriction (see
-    /// [`OrchardCircuitVersion::supports_cross_address_restriction`]).
+    /// The bundle's flags require a circuit capability the validator's verifying key does
+    /// not provide. Returned in either of these cases:
+    ///
+    /// - the bundle disables cross-address transfers, but the key's circuit version does not
+    ///   constrain the cross-address restriction (see
+    ///   [`OrchardCircuitVersion::supports_cross_address_restriction`]);
+    /// - the bundle enables ZSA, but the key's circuit version is not
+    ///   [`OrchardCircuitVersion::ZSA`].
     ///
     /// [`OrchardCircuitVersion::supports_cross_address_restriction`]: crate::circuit::OrchardCircuitVersion::supports_cross_address_restriction
+    /// [`OrchardCircuitVersion::ZSA`]: crate::circuit::OrchardCircuitVersion::ZSA
     RestrictionUnsupportedByKey,
 }
 
@@ -78,14 +81,20 @@ impl<'a> BatchValidator<'a> {
     ///
     /// Returns [`BatchError::RestrictionUnsupportedByKey`] if the bundle disables cross-address
     /// transfers but the validator's verifying key's circuit version does not support the
-    /// cross-address restriction; in that case the bundle is not added to the batch.
-    pub fn add_bundle<V: Copy + Into<i64>, Pr: OrchardPrimitives>(
+    /// cross-address restriction, or if the bundle enables ZSA but the validator's verifying
+    /// key's circuit version does not support ZSA; in either case the bundle is not added to
+    /// the batch.
+    pub fn add_bundle<V: Copy + Into<i64>>(
         &mut self,
-        bundle: &Bundle<Authorized, V, Pr>,
+        bundle: &Bundle<Authorized, V>,
         sighash: [u8; 32],
     ) -> Result<(), BatchError> {
         if !bundle.flags().cross_address_enabled() && !self.vk.supports_cross_address_restriction()
         {
+            return Err(BatchError::RestrictionUnsupportedByKey);
+        }
+
+        if bundle.flags().zsa_enabled() && !self.vk.circuit_version().is_zsa() {
             return Err(BatchError::RestrictionUnsupportedByKey);
         }
 
@@ -154,14 +163,15 @@ mod tests {
 
     use super::{BatchError, BatchValidator};
     use crate::{
-        bundle::tests::{sample_authorized_bundle, with_cross_address_disabled},
+        bundle::tests::{sample_authorized_bundle_vanilla, with_cross_address_disabled},
         circuit::{OrchardCircuitVersion, VerifyingKey},
-        flavor::OrchardVanilla,
     };
 
     #[test]
     fn add_bundle_rejects_unsupported_cross_address_restriction() {
-        let bundle = with_cross_address_disabled(sample_authorized_bundle(1))
+        // A vanilla draw keeps `zsa_enabled` false, so the cross-address restriction is the
+        // only capability a key can lack here.
+        let bundle = with_cross_address_disabled(sample_authorized_bundle_vanilla(1))
             .try_map_value_balance(i64::try_from)
             .expect("generated bundle value balance fits in i64");
 
@@ -171,7 +181,7 @@ mod tests {
             OrchardCircuitVersion::InsecurePreNu6_2,
             OrchardCircuitVersion::FixedPostNu6_2,
         ] {
-            let vk = VerifyingKey::build::<OrchardVanilla>(circuit_version);
+            let vk = VerifyingKey::build(circuit_version);
             let mut validator = BatchValidator::new(&vk);
             assert_eq!(
                 validator.add_bundle(&bundle, [0; 32]),
@@ -180,7 +190,34 @@ mod tests {
         }
 
         // The post-NU 6.3 key supports the restriction, so the bundle is accepted.
-        let vk = VerifyingKey::build::<OrchardVanilla>(OrchardCircuitVersion::PostNu6_3);
+        let vk = VerifyingKey::build(OrchardCircuitVersion::PostNu6_3);
+        let mut validator = BatchValidator::new(&vk);
+        assert_eq!(validator.add_bundle(&bundle, [0; 32]), Ok(()));
+    }
+
+    #[test]
+    fn add_bundle_rejects_unsupported_zsa() {
+        let mut bundle = sample_authorized_bundle_vanilla(1)
+            .try_map_value_balance(i64::try_from)
+            .expect("generated bundle value balance fits in i64");
+        bundle.flags.zsa_enabled = true;
+        // Cross-address stays enabled, so ZSA is the only capability a key can lack.
+        bundle.flags.cross_address_enabled = true;
+
+        // Only a ZSA key constrains the ZSA statement; every other key rejects at insertion.
+        for circuit_version in [
+            OrchardCircuitVersion::FixedPostNu6_2,
+            OrchardCircuitVersion::PostNu6_3,
+        ] {
+            let vk = VerifyingKey::build(circuit_version);
+            let mut validator = BatchValidator::new(&vk);
+            assert_eq!(
+                validator.add_bundle(&bundle, [0; 32]),
+                Err(BatchError::RestrictionUnsupportedByKey)
+            );
+        }
+
+        let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
         let mut validator = BatchValidator::new(&vk);
         assert_eq!(validator.add_bundle(&bundle, [0; 32]), Ok(()));
     }
@@ -192,7 +229,7 @@ mod tests {
             OrchardCircuitVersion::FixedPostNu6_2,
             OrchardCircuitVersion::PostNu6_3,
         ] {
-            let vk = VerifyingKey::build::<OrchardVanilla>(circuit_version);
+            let vk = VerifyingKey::build(circuit_version);
             assert!(BatchValidator::new(&vk).validate(OsRng));
         }
     }

@@ -213,7 +213,7 @@ impl IssueAction {
     /// * `IssueBundleIkMismatchAssetBase`: The provided `ik` is not used to derive the
     ///   `AssetBase` for **all** internal notes.
     /// * `AssetBaseCannotBeIdentityPoint`: The derived `AssetBase` is the identity point of the
-    ///    Pallas curve.
+    ///   Pallas curve.
     /// * `IssueActionWithoutNoteNotFinalized`: The `IssueAction` contains no notes and is not finalized.
     fn verify(&self, ik: &IssueValidatingKey<ZSASchnorr>) -> Result<(AssetBase, NoteValue), Error> {
         if self.notes.is_empty() && !self.is_finalized() {
@@ -1902,7 +1902,6 @@ mod tests {
             builder::{Builder, BundleType},
             bundle::{BundleVersion, TxVersion},
             circuit::ProvingKey,
-            flavor::OrchardZSA,
             keys::SpendAuthorizingKey,
             note::ExtractedNoteCommitment,
             tree::{MerkleHashOrchard, MerklePath},
@@ -1916,7 +1915,7 @@ mod tests {
         let bundle_version = BundleVersion::zsa();
 
         // Setup keys
-        let pk = ProvingKey::build::<OrchardZSA>(bundle_version.circuit_version());
+        let pk = ProvingKey::build(bundle_version.circuit_version());
         let sk = SpendingKey::from_bytes([1; 32]).unwrap();
         let fvk = FullViewingKey::from(&sk);
         let recipient = fvk.address_at(0u32, Scope::External);
@@ -1974,14 +1973,10 @@ mod tests {
         builder
             .add_output(None, recipient, NoteValue::from_raw(5), asset1, [0u8; 512])
             .unwrap();
-        let unauthorized = builder
-            .build::<i64, OrchardZSA>(&mut rng)
-            .unwrap()
-            .unwrap()
-            .0;
+        let unauthorized = builder.build::<i64>(&mut rng).unwrap().unwrap().0;
         let sighash = unauthorized.commitment(TxVersion::ZSA).unwrap().into();
         let proven = unauthorized.create_proof(&pk, &mut rng).unwrap();
-        let authorized: Bundle<_, i64, OrchardZSA> = proven
+        let authorized: Bundle<_, i64> = proven
             .apply_signatures(rng, sighash, &[SpendAuthorizingKey::from(&sk)])
             .unwrap();
 

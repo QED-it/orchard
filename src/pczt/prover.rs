@@ -7,8 +7,7 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     builder::SpendInfo,
-    circuit::{Circuit, Instance, ProvingKey, Witnesses},
-    flavor::OrchardVanilla,
+    circuit::{Circuit, Instance, ProvingKey},
     note::{AssetBase, Rho},
     Note, Proof,
 };
@@ -116,18 +115,8 @@ impl super::Bundle {
                     .clone()
                     .ok_or(ProverError::MissingValueCommitTrapdoor)?;
 
-                Witnesses::from_action_context::<OrchardVanilla>(
-                    spend,
-                    output_note,
-                    alpha,
-                    rcv,
-                    pk.circuit_version(),
-                )
-                .ok_or(ProverError::RhoMismatch)
-                .map(|witnesses| Circuit::<OrchardVanilla> {
-                    witnesses,
-                    phantom: core::marker::PhantomData,
-                })
+                Circuit::from_action_context(spend, output_note, alpha, rcv, pk.circuit_version())
+                    .ok_or(ProverError::RhoMismatch)
             })
             .collect::<Result<Vec<_>, ProverError>>()?;
 

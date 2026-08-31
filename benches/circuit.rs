@@ -9,7 +9,6 @@ use pprof::criterion::{Output, PProfProfiler};
 use orchard::{
     builder::{Builder, BundleType},
     circuit::{ProvingKey, VerifyingKey},
-    flavor::{OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, Scope, SpendingKey},
     note::AssetBase,
     value::NoteValue,
@@ -19,7 +18,7 @@ use rand::rngs::OsRng;
 
 mod utils;
 
-use utils::OrchardFlavorBench;
+use utils::{IronwoodV3, OrchardFlavorBench, OrchardV2, Zsa};
 
 fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let rng = OsRng;
@@ -29,8 +28,8 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
 
     let bundle_version = FL::DEFAULT_BUNDLE_VERSION;
 
-    let vk = VerifyingKey::build::<FL>(bundle_version.circuit_version());
-    let pk = ProvingKey::build::<FL>(bundle_version.circuit_version());
+    let vk = VerifyingKey::build(bundle_version.circuit_version());
+    let pk = ProvingKey::build(bundle_version.circuit_version());
 
     let create_bundle = |num_recipients| {
         let mut builder = Builder::new(
@@ -51,7 +50,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 )
                 .unwrap();
         }
-        let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().unwrap().0;
+        let bundle: Bundle<_, i64> = builder.build(rng).unwrap().unwrap().0;
 
         let instances: Vec<_> = bundle
             .actions()
@@ -73,7 +72,7 @@ fn criterion_benchmark<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 b.iter(|| {
                     bundle
                         .authorization()
-                        .create_proof::<FL>(&pk, &instances, rng)
+                        .create_proof(&pk, &instances, rng)
                         .unwrap()
                 });
             });
@@ -108,15 +107,21 @@ fn create_config() -> Criterion {
 }
 
 criterion_group! {
-    name = benches_vanilla;
+    name = benches_orchard_v2;
     config = create_config();
-    targets = criterion_benchmark::<OrchardVanilla>
+    targets = criterion_benchmark::<OrchardV2>
+}
+
+criterion_group! {
+    name = benches_ironwood_v3;
+    config = create_config();
+    targets = criterion_benchmark::<IronwoodV3>
 }
 
 criterion_group! {
     name = benches_zsa;
     config = create_config();
-    targets = criterion_benchmark::<OrchardZSA>
+    targets = criterion_benchmark::<Zsa>
 }
 
-criterion_main!(benches_vanilla, benches_zsa);
+criterion_main!(benches_orchard_v2, benches_ironwood_v3, benches_zsa);

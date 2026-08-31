@@ -2,7 +2,6 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use orchard::{
     builder::{Builder, BundleType},
     circuit::ProvingKey,
-    flavor::{OrchardVanilla, OrchardZSA},
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey},
     note::AssetBase,
     note_encryption::{CompactAction, NoteEncryptionDomain},
@@ -17,7 +16,7 @@ use pprof::criterion::{Output, PProfProfiler};
 
 mod utils;
 
-use utils::OrchardFlavorBench;
+use utils::{IronwoodV3, OrchardFlavorBench, OrchardV2, Zsa};
 
 fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let rng = OsRng;
@@ -28,7 +27,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     let valid_ivk = PreparedIncomingViewingKey::new(&valid_ivk);
 
     let bundle_version = FL::DEFAULT_BUNDLE_VERSION;
-    let pk = ProvingKey::build::<FL>(bundle_version.circuit_version());
+    let pk = ProvingKey::build(bundle_version.circuit_version());
 
     // Compact actions don't have the full AEAD ciphertext, so ZIP 307 trial-decryption
     // relies on an invalid ivk resulting in random noise for which the note commitment
@@ -79,7 +78,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
                 [0; 512],
             )
             .unwrap();
-        let bundle: Bundle<_, i64, FL> = builder.build(rng).unwrap().unwrap().0;
+        let bundle: Bundle<_, i64> = builder.build(rng).unwrap().unwrap().0;
         bundle
             .create_proof(&pk, rng)
             .unwrap()
@@ -88,7 +87,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
     };
     let action = bundle.actions().first();
 
-    let domain = NoteEncryptionDomain::<FL::DomainVersion, FL>::for_action(action);
+    let domain = NoteEncryptionDomain::<FL::DomainVersion>::for_action(action);
 
     let compact = {
         let mut group = FL::benchmark_group(c, "note-decryption");
@@ -131,7 +130,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
         let actions: Vec<_> = (0..100)
             .map(|_| {
                 (
-                    NoteEncryptionDomain::<FL::DomainVersion, FL>::for_action(action),
+                    NoteEncryptionDomain::<FL::DomainVersion>::for_action(action),
                     action.clone(),
                 )
             })
@@ -139,7 +138,7 @@ fn bench_note_decryption<FL: OrchardFlavorBench>(c: &mut Criterion) {
         let compact: Vec<_> = (0..100)
             .map(|_| {
                 (
-                    NoteEncryptionDomain::<FL::DomainVersion, FL>::for_action(action),
+                    NoteEncryptionDomain::<FL::DomainVersion>::for_action(action),
                     CompactAction::from(action),
                 )
             })
@@ -182,15 +181,21 @@ fn create_config() -> Criterion {
 }
 
 criterion_group! {
-    name = benches_vanilla;
+    name = benches_orchard_v2;
     config = create_config();
-    targets = bench_note_decryption::<OrchardVanilla>
+    targets = bench_note_decryption::<OrchardV2>
+}
+
+criterion_group! {
+    name = benches_ironwood_v3;
+    config = create_config();
+    targets = bench_note_decryption::<IronwoodV3>
 }
 
 criterion_group! {
     name = benches_zsa;
     config = create_config();
-    targets = bench_note_decryption::<OrchardZSA>
+    targets = bench_note_decryption::<Zsa>
 }
 
-criterion_main!(benches_vanilla, benches_zsa);
+criterion_main!(benches_orchard_v2, benches_ironwood_v3, benches_zsa);
