@@ -267,7 +267,7 @@ impl fmt::Display for BuildError {
                 "A burn or a non-zatoshi asset cannot be carried in a PCZT V1 Orchard bundle.",
             ),
             BindingKeyMismatch => f.write_str(
-                "The bundle's actions do not balance: some asset's net value is not its burn.",
+                "The bundle's actions do not balance: some asset's net value does not match its burn.",
             ),
         }
     }
@@ -1289,10 +1289,13 @@ fn pad_spend(
 ///
 /// # Errors
 ///
-/// Returns [`BuildError::UnrepresentableFlags`] if `flags` cannot be encoded under
-/// `bundle_version`, [`BuildError::CoinbaseSpendsEnabled`] if `bundle_type` is
-/// [`BundleType::Coinbase`] but `flags` enable spends, or [`BuildError::BurnNotPermitted`] if
-/// `burn` is non-empty but `bundle_version` does not permit ZSA or `flags` do not enable ZSA.
+/// Returns
+/// - [`BuildError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`,
+/// - [`BuildError::CoinbaseSpendsEnabled`] if `bundle_type` is [`BundleType::Coinbase`] but `flags`
+///   enable spends,
+/// - [`BuildError::BurnNotPermitted`] if `burn` is non-empty but `bundle_version` does not permit
+///   ZSA or `flags` do not enable ZSA,
+/// - [`BuildError::BindingKeyMismatch`] if some asset's net value does not match its `burn` entry.
 #[allow(clippy::too_many_arguments)]
 #[cfg(feature = "circuit")]
 pub fn bundle<V: TryFrom<i64>>(
@@ -1363,7 +1366,7 @@ fn finish_unauthorized_bundle<V: TryFrom<i64>, R: RngCore>(
         .map(|a| a.build(&mut rng, circuit_version))
         .unzip();
 
-    // Verify that bsk and bvk are consistent: each asset's net value must be its burn.
+    // Verify that bsk and bvk are consistent: each asset's net value must match its burn.
     let bvk = derive_bvk(&actions, zatoshi_value_balance, &burn_vec);
     if redpallas::VerificationKey::from(&bsk) != bvk {
         return Err(BuildError::BindingKeyMismatch);
