@@ -672,7 +672,7 @@ mod tests {
             hash_bundle_auth_data(&bundle, TxVersion::ZSA, test_sighash_info_for_kind).unwrap();
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            "0d02a52fc118c191b8aee7e2e5c8f26ffd3d72b7d8d9858187e75734e0cfa610"
+            "513b374610187ca97bed30ce40665a53f3c52c501db0ece373bf168535a142c5"
         );
     }
 
