@@ -33,8 +33,8 @@ pub enum BatchError {
     /// - the bundle enables ZSA, but the key's circuit version is not
     ///   [`OrchardCircuitVersion::ZSA`].
     ///
-    /// [`OrchardCircuitVersion::supports_cross_address_restriction`]: crate::circuit::OrchardCircuitVersion::supports_cross_address_restriction
-    /// [`OrchardCircuitVersion::ZSA`]: crate::circuit::OrchardCircuitVersion::ZSA
+    /// [`OrchardCircuitVersion::supports_cross_address_restriction`]: crate::circuit_version::OrchardCircuitVersion::supports_cross_address_restriction
+    /// [`OrchardCircuitVersion::ZSA`]: crate::circuit_version::OrchardCircuitVersion::ZSA
     RestrictionUnsupportedByKey,
 }
 
@@ -164,7 +164,8 @@ mod tests {
     use super::{BatchError, BatchValidator};
     use crate::{
         bundle::tests::{sample_authorized_bundle_vanilla, with_cross_address_disabled},
-        circuit::{OrchardCircuitVersion, VerifyingKey},
+        circuit::VerifyingKey,
+        circuit_version::OrchardCircuitVersion,
     };
 
     #[test]

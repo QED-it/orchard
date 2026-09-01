@@ -251,7 +251,7 @@ pub(crate) mod testing {
             memo in prop::collection::vec(prop::num::u8::ANY, 512),
         ) -> Action<()> {
             let cmx = ExtractedNoteCommitment::from(note.commitment());
-            let cv_net = ValueCommitment::derive(
+            let cv_net = ValueCommitment::derive_with_asset(
                 spend_value - output_value,
                 ValueCommitTrapdoor::zero(),
                 asset
@@ -285,7 +285,7 @@ pub(crate) mod testing {
             memo in prop::collection::vec(prop::num::u8::ANY, 512),
         ) -> Action<OrchardSpendAuthSig> {
             let cmx = ExtractedNoteCommitment::from(note.commitment());
-            let cv_net = ValueCommitment::derive(
+            let cv_net = ValueCommitment::derive_with_asset(
                 spend_value - output_value,
                 ValueCommitTrapdoor::zero(),
                 asset
@@ -316,7 +316,7 @@ mod tests {
 
     use super::{Action, ActionFromPartsError};
     use crate::{
-        note::{AssetBase, ExtractedNoteCommitment, Nullifier, TransmittedNoteCiphertext},
+        note::{ExtractedNoteCommitment, Nullifier, TransmittedNoteCiphertext},
         note_encryption::{
             NoteCiphertextBytes, ENC_CIPHERTEXT_SIZE_VANILLA, ENC_CIPHERTEXT_SIZE_ZSA,
         },
@@ -366,11 +366,8 @@ mod tests {
                 .expect("correct size"),
             out_ciphertext: [5u8; 80],
         };
-        let cv_net = ValueCommitment::derive(
-            ValueSum::from_raw_inner(42),
-            ValueCommitTrapdoor::zero(),
-            AssetBase::zatoshi(),
-        );
+        let cv_net =
+            ValueCommitment::derive(ValueSum::from_raw_inner(42), ValueCommitTrapdoor::zero());
         (nf, cmx, encrypted_note, cv_net)
     }
 
