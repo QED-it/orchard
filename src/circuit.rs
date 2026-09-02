@@ -141,12 +141,12 @@ impl OrchardCircuitVersion {
 /// The Orchard Action circuit.
 ///
 /// Carries the private witnesses of a single action for any [`OrchardCircuitVersion`].
-/// The ZSA-specific witnesses are populated only for [`OrchardCircuitVersion::ZSA`];
-/// the Vanilla circuit versions leave them unknown and do not prove them.
+/// The ZSA-specific witnesses are present only for [`OrchardCircuitVersion::ZSA`];
+/// the Vanilla circuit versions leave them absent and do not prove them.
 #[derive(Clone, Debug)]
 pub struct Circuit {
     pub(crate) common_witnesses: CircuitVanilla,
-    pub(crate) additional_zsa_witnesses: Value<AdditionalZsaWitnesses>,
+    pub(crate) additional_zsa_witnesses: Option<AdditionalZsaWitnesses>,
 }
 
 impl Circuit {
@@ -159,23 +159,29 @@ impl Circuit {
     ///
     /// # Errors
     ///
-    /// Returns [`plonk::Error::Synthesis`] if `additional_zsa_witnesses` is known: the
+    /// Returns [`plonk::Error::Synthesis`] if `additional_zsa_witnesses` is present: the
     /// Vanilla circuit versions must never be asked to prove ZSA-specific witnesses.
     fn to_vanilla(&self) -> Result<CircuitVanilla, plonk::Error> {
-        self.additional_zsa_witnesses.error_if_known_and(|_| true)?;
+        if self.additional_zsa_witnesses.is_some() {
+            return Err(plonk::Error::Synthesis);
+        }
         Ok(self.common_witnesses.clone())
     }
 
     /// Returns the witnesses proved by the ZSA circuit version.
     ///
-    /// Needs no counterpart to [`Self::to_vanilla`]'s check: if
-    /// `additional_zsa_witnesses` is unknown, the prover rejects the unknown assignment
-    /// with [`plonk::Error::Synthesis`] itself.
-    fn to_zsa(&self) -> CircuitZsa {
-        CircuitZsa {
+    /// # Errors
+    ///
+    /// Returns [`plonk::Error::Synthesis`] if `additional_zsa_witnesses` is absent: the ZSA
+    /// circuit version cannot be proved without the ZSA-specific witnesses.
+    fn to_zsa(&self) -> Result<CircuitZsa, plonk::Error> {
+        Ok(CircuitZsa {
             common_witnesses: self.common_witnesses.clone(),
-            additional_zsa_witnesses: self.additional_zsa_witnesses.clone(),
-        }
+            additional_zsa_witnesses: self
+                .additional_zsa_witnesses
+                .clone()
+                .ok_or(plonk::Error::Synthesis)?,
+        })
     }
 
     /// This constructor is public to enable creation of custom builders.
@@ -276,13 +282,13 @@ impl Circuit {
         };
 
         let additional_zsa_witnesses = if circuit_version.is_zsa() {
-            Value::known(AdditionalZsaWitnesses {
-                psi_nf: spend.note.psi_nf(),
-                asset: spend.note.asset(),
-                split_flag: spend.split_flag,
+            Some(AdditionalZsaWitnesses {
+                psi_nf: Value::known(spend.note.psi_nf()),
+                asset: Value::known(spend.note.asset()),
+                split_flag: Value::known(spend.split_flag),
             })
         } else {
-            Value::unknown()
+            None
         };
 
         Circuit {
@@ -757,7 +763,10 @@ impl Proof {
         let mut transcript = Blake2bWrite::<_, vesta::Affine, _>::init(vec![]);
 
         if pk.circuit_version.is_zsa() {
-            let circuits: Vec<_> = circuits.iter().map(Circuit::to_zsa).collect();
+            let circuits: Vec<_> = circuits
+                .iter()
+                .map(Circuit::to_zsa)
+                .collect::<Result<_, _>>()?;
             plonk::create_proof(
                 &pk.params,
                 &pk.pk,
@@ -915,7 +924,7 @@ mod tests {
         }
     }
 
-    mod to_vanilla_zsa_witnesses_invariant {
+    mod zsa_witnesses_invariant {
         use ff::Field;
         use halo2_proofs::circuit::Value;
         use pasta_curves::pallas;
@@ -925,18 +934,18 @@ mod tests {
         };
         use crate::note::AssetBase;
 
-        /// `Circuit::to_vanilla` must reject any `Circuit` that carries known ZSA-specific
+        /// `Circuit::to_vanilla` must reject any `Circuit` that carries ZSA-specific
         /// witnesses for a non-ZSA `circuit_version`: the Vanilla circuit versions have no
         /// way to prove them, so their presence indicates a construction bug rather than a
         /// provable statement.
         #[test]
-        fn errors_if_zsa_witnesses_are_known() {
+        fn to_vanilla_errors_if_zsa_witnesses_are_present() {
             let circuit = Circuit {
                 common_witnesses: CircuitVanilla::empty(OrchardCircuitVersion::FixedPostNu6_2),
-                additional_zsa_witnesses: Value::known(AdditionalZsaWitnesses {
-                    psi_nf: pallas::Base::ZERO,
-                    asset: AssetBase::zatoshi(),
-                    split_flag: false,
+                additional_zsa_witnesses: Some(AdditionalZsaWitnesses {
+                    psi_nf: Value::known(pallas::Base::ZERO),
+                    asset: Value::known(AssetBase::zatoshi()),
+                    split_flag: Value::known(false),
                 }),
             };
 
@@ -944,13 +953,39 @@ mod tests {
         }
 
         #[test]
-        fn accepts_unknown_zsa_witnesses() {
+        fn to_vanilla_accepts_absent_zsa_witnesses() {
             let circuit = Circuit {
                 common_witnesses: CircuitVanilla::empty(OrchardCircuitVersion::FixedPostNu6_2),
-                additional_zsa_witnesses: Value::unknown(),
+                additional_zsa_witnesses: None,
             };
 
             assert!(circuit.to_vanilla().is_ok());
+        }
+
+        /// `Circuit::to_zsa` must reject a `Circuit` that carries no ZSA-specific witnesses,
+        /// since the ZSA circuit version cannot prove its statement without them.
+        #[test]
+        fn to_zsa_errors_if_zsa_witnesses_are_absent() {
+            let circuit = Circuit {
+                common_witnesses: CircuitVanilla::empty(OrchardCircuitVersion::ZSA),
+                additional_zsa_witnesses: None,
+            };
+
+            assert!(matches!(circuit.to_zsa(), Err(plonk::Error::Synthesis)));
+        }
+
+        #[test]
+        fn to_zsa_accepts_present_zsa_witnesses() {
+            let circuit = Circuit {
+                common_witnesses: CircuitVanilla::empty(OrchardCircuitVersion::ZSA),
+                additional_zsa_witnesses: Some(AdditionalZsaWitnesses {
+                    psi_nf: Value::unknown(),
+                    asset: Value::unknown(),
+                    split_flag: Value::unknown(),
+                }),
+            };
+
+            assert!(circuit.to_zsa().is_ok());
         }
     }
 }

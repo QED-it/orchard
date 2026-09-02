@@ -826,7 +826,7 @@ mod tests {
                     rcm_new: Value::known(output_note.rcm()),
                     rcv: Value::known(rcv),
                 },
-                additional_zsa_witnesses: Value::unknown(),
+                additional_zsa_witnesses: None,
             },
             Instance {
                 anchor,
