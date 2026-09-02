@@ -304,14 +304,35 @@ impl Note {
         rseed: RandomSeed,
         version: NoteVersion,
     ) -> CtOption<Self> {
-        let note = Note {
+        Self::from_parts_internal(
             recipient,
             value,
             // TODO ZSA: asset should be a param, not hardcoded here
-            asset: AssetBase::zatoshi(),
+            AssetBase::zatoshi(),
             rho,
             rseed,
-            rseed_split_note: CtOption::new(rseed, 0u8.into()),
+            CtOption::new(rseed, 0u8.into()),
+            version,
+        )
+    }
+
+    /// Creates a `Note` from all its component parts (rseed_split_note included).
+    pub(crate) fn from_parts_internal(
+        recipient: Address,
+        value: NoteValue,
+        asset: AssetBase,
+        rho: Rho,
+        rseed: RandomSeed,
+        rseed_split_note: CtOption<RandomSeed>,
+        version: NoteVersion,
+    ) -> CtOption<Self> {
+        let note = Note {
+            recipient,
+            value,
+            asset,
+            rho,
+            rseed,
+            rseed_split_note,
             version,
         };
         CtOption::new(note, note.commitment_inner().is_some())

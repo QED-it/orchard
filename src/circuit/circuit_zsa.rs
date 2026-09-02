@@ -1052,104 +1052,34 @@ fn synthesize_cross_address_checks(
     )
 }
 
-// TODO ZSA: once ZSA bundle is implemented, extend the tests below to cover `split_flag = true`.
-
 #[cfg(test)]
 mod tests {
     use alloc::vec::Vec;
     use core::iter;
-
     use ff::Field;
-    use group::GroupEncoding;
+    use group::{Curve, Group, GroupEncoding};
     use halo2_proofs::{circuit::Value, dev::MockProver};
     use pasta_curves::pallas;
     use rand::rngs::OsRng;
     use rand_core::CryptoRngCore;
-    use subtle::Choice;
+    use subtle::{Choice, CtOption};
 
     use crate::{
-        circuit::circuit_zsa::AdditionalZsaWitnesses,
-        circuit::{Circuit, CircuitVanilla, Instance, Proof, ProvingKey, VerifyingKey, K},
+        bundle::Flags,
+        circuit::{
+            circuit_zsa::AdditionalZsaWitnesses, Circuit, CircuitVanilla, Instance, Proof,
+            ProvingKey, VerifyingKey, K,
+        },
         circuit_version::OrchardCircuitVersion,
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
-        note::{AssetBase, Note, NoteCommitment, NoteVersion, Nullifier, RandomSeed, Rho},
+        note::{
+            commitment::NoteCommitTrapdoor, AssetBase, Note, NoteCommitment, NoteVersion,
+            Nullifier, RandomSeed, Rho,
+        },
+        primitives::redpallas::VerificationKey,
         tree::MerklePath,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
-
-    #[cfg(feature = "dev-graph")]
-    #[test]
-    fn print_action_circuit() {
-        use plotters::prelude::*;
-
-        let root =
-            BitMapBackend::new("action-circuit-layout-zsa.png", (1024, 768)).into_drawing_area();
-        root.fill(&WHITE).unwrap();
-        let root = root
-            .titled("Orchard Action Circuit", ("sans-serif", 60))
-            .unwrap();
-
-        let circuit = crate::circuit::CircuitZsa::empty();
-        halo2_proofs::dev::CircuitLayout::default()
-            .show_labels(false)
-            .view_height(0..(1 << 11))
-            .render(K, &circuit, &root)
-            .unwrap();
-    }
-
-    /// Derives the note commitment for `note`, as if it carried `asset`.
-    ///
-    /// `Note` doesn't yet support constructing notes for a non-zatoshi `asset`, so callers
-    /// build an ordinary (zatoshi) `Note` for its other fields and use this to get a
-    /// commitment consistent with the ZSA-specific `asset` witness under test.
-    ///
-    /// TODO ZSA: once it is possible to construct a note with a non-zatoshi asset, remove
-    /// this function
-    fn note_commitment(note: &Note, asset: AssetBase) -> NoteCommitment {
-        NoteCommitment::derive(
-            note.recipient().g_d().to_bytes(),
-            note.recipient().pk_d().inner().to_bytes(),
-            note.value(),
-            asset,
-            note.rho().into_inner(),
-            note.psi(),
-            note.rcm(),
-        )
-        .unwrap()
-    }
-
-    /// Generates a circuit and instance whose output note is addressed to an expanded
-    /// receiver distinct from the spent note's.
-    fn generate_circuit_instance<R: CryptoRngCore>(
-        is_zatoshi_asset: bool,
-        rng: R,
-    ) -> (Circuit, Instance) {
-        generate_circuit_instance_inner(is_zatoshi_asset, false, false, rng)
-    }
-
-    /// Generates a circuit and instance whose output note is addressed to the spent
-    /// note's expanded receiver, as the cross-address restriction requires.
-    fn generate_self_transfer_circuit_instance<R: CryptoRngCore>(
-        is_zatoshi_asset: bool,
-        rng: R,
-    ) -> (Circuit, Instance) {
-        generate_circuit_instance_inner(is_zatoshi_asset, true, false, rng)
-    }
-
-    /// Generates a circuit and instance spending a split note.
-    ///
-    /// The asset is necessarily non-zatoshi: the circuit constrains
-    /// `(split_flag = 1) => (is_zatoshi_asset = 0)`.
-    fn generate_split_note_circuit_instance<R: CryptoRngCore>(rng: R) -> (Circuit, Instance) {
-        generate_circuit_instance_inner(false, false, true, rng)
-    }
-
-    /// Extracts the contents of a `Value` that is known.
-    fn known<V: Clone>(value: &Value<V>) -> V {
-        let mut out = None;
-        value.clone().map(|v| out = Some(v));
-        out.expect("value is known")
-    }
 
     fn generate_circuit_instance_inner<R: CryptoRngCore>(
         is_zatoshi_asset: bool,
@@ -1171,36 +1101,35 @@ mod tests {
         let sk = SpendingKey::random(&mut rng);
         let fvk: FullViewingKey = (&sk).into();
         let sender_address = fvk.address_at(0u32, Scope::External);
-        let nk = *fvk.nk();
-        let rivk = fvk.rivk(fvk.scope_for_address(&sender_address).unwrap());
-        let ak: SpendValidatingKey = fvk.into();
+
+        let ak: SpendValidatingKey = fvk.clone().into();
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
 
         let rho_old = Rho::from_nf_old(Nullifier::dummy(&mut rng));
-        let spent_note = Note::new(
-            sender_address,
-            NoteValue::from_raw(7),
-            rho_old,
-            note_version,
-            &mut rng,
-        );
-        // A split note's nullifier is derived from a separate rseed, so `psi_nf` differs from
-        // `psi_old`. For a regular note the circuit constrains the two to be equal.
-        let psi_nf = if split_flag {
-            RandomSeed::random(&mut rng, &rho_old).psi(&rho_old)
-        } else {
-            spent_note.psi()
+        let spent_note = loop {
+            let rseed = RandomSeed::random(&mut rng, &rho_old);
+            let rseed_split_note = if split_flag {
+                CtOption::new(RandomSeed::random(&mut rng, &rho_old), 1u8.into())
+            } else {
+                CtOption::new(rseed, 0u8.into())
+            };
+            let spent_note = Note::from_parts_internal(
+                sender_address,
+                NoteValue::from_raw(7),
+                asset_base,
+                rho_old,
+                rseed,
+                rseed_split_note,
+                note_version,
+            );
+            if spent_note.is_some().into() {
+                break spent_note.unwrap();
+            }
         };
 
-        let cm_old = note_commitment(&spent_note, asset_base);
-        let nf_old = Nullifier::derive(
-            &nk,
-            spent_note.rho().into_inner(),
-            psi_nf,
-            cm_old.clone(),
-            Choice::from(u8::from(split_flag)),
-        );
+        let cm_old: NoteCommitment = spent_note.commitment();
+        let nf_old = spent_note.nullifier(&fvk);
 
         let output_address = if output_matches_spend {
             sender_address
@@ -1214,14 +1143,23 @@ mod tests {
                 }
             }
         };
-        let output_note = Note::new(
-            output_address,
-            NoteValue::from_raw(3),
-            Rho::from_nf_old(nf_old),
-            note_version,
-            &mut rng,
-        );
-        let cmx = note_commitment(&output_note, asset_base).into();
+        let output_note = loop {
+            let rho_new = Rho::from_nf_old(nf_old);
+            let rseed = RandomSeed::random(&mut rng, &rho_new);
+            let output_note = Note::from_parts_internal(
+                output_address,
+                NoteValue::from_raw(3),
+                asset_base,
+                rho_new,
+                rseed,
+                CtOption::new(rseed, 0u8.into()),
+                note_version,
+            );
+            if output_note.is_some().into() {
+                break output_note.unwrap();
+            }
+        };
+        let cmx = output_note.commitment().into();
 
         // A split note contributes no value to the action: v_net = -v_new.
         let value = if split_flag {
@@ -1250,8 +1188,8 @@ mod tests {
                     cm_old: Value::known(cm_old),
                     alpha: Value::known(alpha),
                     ak: Value::known(ak),
-                    nk: Value::known(nk),
-                    rivk: Value::known(rivk),
+                    nk: Value::known(*fvk.nk()),
+                    rivk: Value::known(fvk.rivk(fvk.scope_for_address(&sender_address).unwrap())),
                     g_d_new: Value::known(output_note.recipient().g_d()),
                     pk_d_new: Value::known(*output_note.recipient().pk_d()),
                     v_new: Value::known(output_note.value()),
@@ -1260,7 +1198,7 @@ mod tests {
                     rcv: Value::known(rcv),
                 },
                 additional_zsa_witnesses: Some(AdditionalZsaWitnesses {
-                    psi_nf: Value::known(psi_nf),
+                    psi_nf: Value::known(spent_note.psi_nf()),
                     asset: Value::known(asset_base),
                     split_flag: Value::known(split_flag),
                 }),
@@ -1279,6 +1217,52 @@ mod tests {
         )
     }
 
+    /// Generates a circuit and instance whose output note is addressed to an expanded
+    /// receiver distinct from the spent note's.
+    fn generate_circuit_instance<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        rng: R,
+    ) -> (Circuit, Instance) {
+        generate_circuit_instance_inner(is_zatoshi_asset, false, false, rng)
+    }
+
+    /// Generates a circuit and instance whose output note is addressed to the spent
+    /// note's expanded receiver, as the cross-address restriction requires.
+    fn generate_self_transfer_circuit_instance<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        rng: R,
+    ) -> (Circuit, Instance) {
+        generate_circuit_instance_inner(is_zatoshi_asset, true, false, rng)
+    }
+
+    /// Generates a circuit and instance spending a split note.
+    ///
+    /// The asset is necessarily non-zatoshi: the circuit constrains
+    /// `(split_flag = 1) => (is_zatoshi_asset = 0)`.
+    fn generate_split_note_circuit_instance<R: CryptoRngCore>(rng: R) -> (Circuit, Instance) {
+        generate_circuit_instance_inner(false, false, true, rng)
+    }
+
+    fn random_note_commitment(mut rng: impl CryptoRngCore) -> NoteCommitment {
+        NoteCommitment::derive(
+            pallas::Point::random(&mut rng).to_affine().to_bytes(),
+            pallas::Point::random(&mut rng).to_affine().to_bytes(),
+            NoteValue::from_raw(rng.next_u64()),
+            AssetBase::random(&mut rng),
+            pallas::Base::random(&mut rng),
+            pallas::Base::random(&mut rng),
+            NoteCommitTrapdoor::new(pallas::Scalar::random(&mut rng)),
+        )
+        .unwrap()
+    }
+
+    /// Extracts the contents of a `Value` that is known.
+    fn known<V: Clone>(value: &Value<V>) -> V {
+        let mut out = None;
+        value.clone().map(|v| out = Some(v));
+        out.expect("value is known")
+    }
+
     /// Runs `MockProver` on the ZSA circuit for `circuit`/`instance`.
     fn zsa_mock_verify(
         circuit: &Circuit,
@@ -1286,7 +1270,7 @@ mod tests {
     ) -> Result<(), Vec<halo2_proofs::dev::VerifyFailure>> {
         MockProver::run(
             K,
-            &circuit.to_zsa().expect("ZSA witnesses are known"),
+            &circuit.to_zsa().unwrap(),
             instance
                 .to_halo2_instance()
                 .iter()
@@ -1311,6 +1295,19 @@ mod tests {
         );
     }
 
+    // Like `assert_zsa_rejected_by`, for a witness that the circuit binds several ways: a wrong
+    // value breaks one constraint and cascades into the copy constraints that share the cell, so
+    // `constraint` is only required to be among the failures.
+    fn assert_zsa_rejects_with(circuit: &Circuit, instance: &Instance, constraint: &str) {
+        let failures = zsa_mock_verify(circuit, instance).expect_err("statement must be rejected");
+        assert!(
+            failures
+                .iter()
+                .any(|failure| alloc::format!("{failure}").contains(constraint)),
+            "expected `{constraint}` among the failures, but got: {failures:#?}"
+        );
+    }
+
     #[test]
     fn zsa_mock_prover_zatoshi_asset() {
         let (circuit, instance) = generate_circuit_instance(true, OsRng);
@@ -1324,42 +1321,31 @@ mod tests {
     }
 
     #[test]
-    fn zsa_cross_address_restriction_is_conditional() {
-        // An unrestricted cross-address statement is satisfiable...
-        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
-        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
-
-        // ...but setting `disableCrossAddress` makes it unsatisfiable...
-        instance.cross_address_disabled = true;
-        assert!(zsa_mock_verify(&circuit, &instance).is_err());
-
-        // ...while a restricted self-transfer statement is satisfiable.
-        let (circuit, mut instance) = generate_self_transfer_circuit_instance(false, OsRng);
-        instance.cross_address_disabled = true;
-        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
-    }
-
-    #[test]
     fn zsa_mock_prover_split_note() {
         let (circuit, instance) = generate_split_note_circuit_instance(OsRng);
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
     }
 
     #[test]
-    fn zsa_mock_prover_rejects_non_split_nullifier_for_split_note() {
-        let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
+    fn zsa_cross_address_restriction_is_conditional() {
+        // An unrestricted cross-address statement is satisfiable...
+        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
 
-        let psi_nf = known(&circuit.additional_zsa_witnesses.as_ref().unwrap().psi_nf);
-        let cm_old = known(&circuit.common_witnesses.cm_old);
-        let nk = known(&circuit.common_witnesses.nk);
-        let rho_old = known(&circuit.common_witnesses.rho_old);
+        // ...but setting `disableCrossAddress` makes it unsatisfiable.
+        instance.cross_address_disabled = true;
+        assert_zsa_rejected_by(
+            &circuit,
+            &instance,
+            // The coordinate equality reuses the gate's `root = anchor` constraint, with the old and
+            // new coordinates copied into those cells and `disableCrossAddress` as the multiplier.
+            "(v_old = 0 and is_zatoshi_asset = 1) or (root = anchor)",
+        );
 
-        // Replace the public nullifier by the one this note would have if it were not a split note.
-        instance.nf_old =
-            Nullifier::derive(&nk, rho_old.into_inner(), psi_nf, cm_old, Choice::from(0));
-
-        // The nullifier the circuit derives failing to equal the public one.
-        assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
+        // ...while a restricted self-transfer statement is satisfiable.
+        let (circuit, mut instance) = generate_self_transfer_circuit_instance(false, OsRng);
+        instance.cross_address_disabled = true;
+        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
     }
 
     #[test]
@@ -1386,6 +1372,91 @@ mod tests {
     }
 
     #[test]
+    fn zsa_mock_prover_rejects_enable_zsa_false_for_non_zatoshi_asset() {
+        // The circuit constrains `(enable_zsa = 0) => (is_zatoshi_asset = 1)`.
+        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        instance.enable_zsa = false;
+        assert_zsa_rejected_by(
+            &circuit,
+            &instance,
+            "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
+        );
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_wrong_psi_nf() {
+        let mut rng = OsRng;
+        // The circuit constrains `(split_flag = 0) => (psi_old = psi_nf)`.
+        let (circuit, instance) = generate_circuit_instance(false, &mut rng);
+        let circuit = Circuit {
+            additional_zsa_witnesses: circuit.additional_zsa_witnesses.clone().map(|zsa_values| {
+                AdditionalZsaWitnesses {
+                    psi_nf: Value::known(pallas::Base::random(&mut rng)),
+                    ..zsa_values
+                }
+            }),
+            ..circuit
+        };
+        // `psi_nf` also feeds the nullifier derivation, whose copy constraint fails alongside.
+        assert_zsa_rejects_with(
+            &circuit,
+            &instance,
+            "(split_flag = 0) => (psi_old = psi_nf)",
+        );
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_wrong_cm_old() {
+        let mut rng = OsRng;
+        let (circuit, instance) = generate_circuit_instance(false, &mut rng);
+        let circuit = Circuit {
+            common_witnesses: CircuitVanilla {
+                cm_old: Value::known(random_note_commitment(&mut rng)),
+                ..circuit.common_witnesses.clone()
+            },
+            ..circuit
+        };
+        // `cm_old` is the Merkle leaf, so a wrong witness makes the computed root differ from
+        // the public anchor. It also feeds the derived note commitment and `nf_old`, whose copy
+        // constraints fail alongside.
+        assert_zsa_rejects_with(
+            &circuit,
+            &instance,
+            "(v_old = 0 and is_zatoshi_asset = 1) or (root = anchor)",
+        );
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_zero_cv_net() {
+        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        instance.cv_net = ValueCommitment::from_bytes(&[0u8; 32]).unwrap();
+        assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_wrong_rk() {
+        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        instance.rk = VerificationKey::dummy();
+        assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_wrong_cmx() {
+        let mut rng = OsRng;
+        let (circuit, mut instance) = generate_circuit_instance(false, &mut rng);
+        instance.cmx = random_note_commitment(&mut rng).into();
+        assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_wrong_nf_old() {
+        let mut rng = OsRng;
+        let (circuit, mut instance) = generate_circuit_instance(false, &mut rng);
+        instance.nf_old = Nullifier::dummy(&mut rng);
+        assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
+    }
+
+    #[test]
     fn zsa_mock_prover_rejects_asset_mismatch() {
         // The `asset` witness must match the asset baked into `cm_old`/`cv_net`.
         let mut rng = OsRng;
@@ -1407,34 +1478,35 @@ mod tests {
     }
 
     #[test]
-    fn zsa_mock_prover_rejects_enable_zsa_false_for_non_zatoshi_asset() {
-        // The circuit constrains `(enable_zsa = 0) => (is_zatoshi_asset = 1)`.
-        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
-        instance.enable_zsa = false;
-        assert_zsa_rejected_by(
-            &circuit,
-            &instance,
-            "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
-        );
+    fn zsa_mock_prover_rejects_non_split_nullifier_for_split_note() {
+        let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
+
+        let psi_nf = known(&circuit.additional_zsa_witnesses.as_ref().unwrap().psi_nf);
+        let cm_old = known(&circuit.common_witnesses.cm_old);
+        let nk = known(&circuit.common_witnesses.nk);
+        let rho_old = known(&circuit.common_witnesses.rho_old);
+
+        // Replace the public nullifier by the one this note would have if it were not a split note.
+        instance.nf_old =
+            Nullifier::derive(&nk, rho_old.into_inner(), psi_nf, cm_old, Choice::from(0));
+
+        // The nullifier the circuit derives failing to equal the public one.
+        assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
     }
 
-    // Set ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF to regenerate the pinned circuit description.
     #[test]
-    fn zsa_pinned_circuit_description() {
+    fn zsa_restricted_statement_proves_and_verifies() {
+        let mut rng = OsRng;
+        let (circuit, mut instance) = generate_self_transfer_circuit_instance(false, &mut rng);
+        instance.cross_address_disabled = true;
+
+        let pk = ProvingKey::build(OrchardCircuitVersion::ZSA);
         let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
 
-        if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
-            std::fs::write(
-                "src/circuit_data/circuit_description_zsa",
-                format!("{:#?}\n", vk.vk.pinned()),
-            )
-            .expect("should be able to write new circuit description");
-        } else {
-            assert_eq!(
-                format!("{:#?}\n", vk.vk.pinned()),
-                include_str!("../circuit_data/circuit_description_zsa").replace("\r\n", "\n")
-            );
-        }
+        let instances = &[instance.clone()];
+
+        let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
+        assert!(proof.verify(&vk, instances).is_ok());
     }
 
     #[test]
@@ -1451,7 +1523,7 @@ mod tests {
             let circuit_cost =
                 halo2_proofs::dev::CircuitCost::<pasta_curves::vesta::Point, _>::measure(
                     K,
-                    &circuits[0].to_zsa().expect("ZSA witnesses are known"),
+                    &circuits[0].to_zsa().unwrap(),
                 );
             assert_eq!(usize::from(circuit_cost.proof_size(1)), 5120);
             assert_eq!(usize::from(circuit_cost.proof_size(2)), 7392);
@@ -1480,5 +1552,170 @@ mod tests {
         let proof = Proof::create(&pk, &circuits, &instances, &mut rng).unwrap();
         assert!(proof.verify(&vk, &instances).is_ok());
         assert_eq!(proof.0.len(), expected_proof_size);
+    }
+
+    // Proving a ZSA circuit with a proving key for a different circuit version is a misuse: the
+    // proving key and circuits must agree (see `Proof::create`). Confirm `create` rejects it with
+    // `plonk::Error::Synthesis` rather than emitting an unverifiable proof.
+    #[test]
+    fn create_rejects_mismatched_proving_key_version() {
+        let mut rng = OsRng;
+
+        let (circuit, instance) = generate_circuit_instance(true, &mut rng);
+
+        for pk_version in [
+            OrchardCircuitVersion::InsecurePreNu6_2,
+            OrchardCircuitVersion::FixedPostNu6_2,
+            OrchardCircuitVersion::PostNu6_3,
+        ] {
+            let mismatched_pk = ProvingKey::build(pk_version);
+
+            assert!(matches!(
+                Proof::create(
+                    &mismatched_pk,
+                    core::slice::from_ref(&circuit),
+                    core::slice::from_ref(&instance),
+                    &mut rng
+                ),
+                Err(super::plonk::Error::Synthesis),
+            ));
+        }
+    }
+
+    fn write_test_case<W: std::io::Write>(
+        mut w: W,
+        instance: &Instance,
+        proof: &Proof,
+    ) -> std::io::Result<()> {
+        w.write_all(&instance.anchor().to_bytes())?;
+        w.write_all(&instance.cv_net().to_bytes())?;
+        w.write_all(&instance.nf_old().to_bytes())?;
+        w.write_all(&<[u8; 32]>::from(instance.rk()))?;
+        w.write_all(&instance.cmx().to_bytes())?;
+        w.write_all(&[
+            u8::from(instance.enable_spend()),
+            u8::from(instance.enable_output()),
+            u8::from(instance.cross_address_disabled()),
+            u8::from(instance.enable_zsa()),
+        ])?;
+        w.write_all(proof.as_ref())?;
+        Ok(())
+    }
+
+    fn read_test_case<R: std::io::Read>(mut r: R) -> std::io::Result<(Instance, Proof)> {
+        let read_32_bytes = |r: &mut R| {
+            let mut ret = [0u8; 32];
+            r.read_exact(&mut ret).unwrap();
+            ret
+        };
+        let read_bool = |r: &mut R| {
+            let mut byte = [0u8; 1];
+            r.read_exact(&mut byte).unwrap();
+            match byte {
+                [0] => false,
+                [1] => true,
+                _ => panic!("Unexpected non-boolean byte"),
+            }
+        };
+        let anchor = crate::Anchor::from_bytes(read_32_bytes(&mut r)).unwrap();
+        let cv_net = ValueCommitment::from_bytes(&read_32_bytes(&mut r)).unwrap();
+        let nf_old = crate::note::Nullifier::from_bytes(&read_32_bytes(&mut r)).unwrap();
+        let rk = read_32_bytes(&mut r).try_into().unwrap();
+        let cmx = crate::note::ExtractedNoteCommitment::from_bytes(&read_32_bytes(&mut r)).unwrap();
+        let enable_spend = read_bool(&mut r);
+        let enable_output = read_bool(&mut r);
+        let cross_address_disable = read_bool(&mut r);
+        let enable_zsa = read_bool(&mut r);
+        let flags = Flags::from_parts(
+            enable_spend,
+            enable_output,
+            !cross_address_disable,
+            // TODO ZSA: add enable_zsa once Flags::from_parts has enable_zsa as parameter
+            //enable_zsa,
+        );
+        let mut instance = Instance::from_parts(anchor, cv_net, nf_old, rk, cmx, flags)
+            .expect("test vectors were generated with non-identity rk");
+        // TODO ZSA: remove this flag once Flags::from_parts has enable_zsa as parameter
+        if enable_zsa {
+            instance.enable_zsa = true;
+        }
+        let mut proof_bytes = vec![];
+        r.read_to_end(&mut proof_bytes)?;
+        let proof = Proof::new(proof_bytes);
+        Ok((instance, proof))
+    }
+
+    #[test]
+    fn serialized_proof_test_case() {
+        let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
+
+        if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
+            let create_proof = || -> std::io::Result<()> {
+                let mut rng = OsRng;
+
+                let (circuit, instance) = generate_circuit_instance(false, &mut rng);
+                let instances = core::slice::from_ref(&instance);
+
+                let pk = ProvingKey::build(OrchardCircuitVersion::ZSA);
+                let proof = Proof::create(&pk, &[circuit], instances, &mut rng).unwrap();
+                assert!(proof.verify(&vk, instances).is_ok());
+
+                let file =
+                    std::fs::File::create("src/circuit_data/circuit_proof_test_case_zsa.bin")?;
+                write_test_case(file, &instance, &proof)
+            };
+            create_proof().expect("should be able to write new proof");
+            // Regeneration only writes the fixture; the non-generate run below embeds and
+            // verifies it.
+            return;
+        }
+
+        // Parse the hardcoded proof test case.
+        let (instance, proof) = {
+            let test_case_bytes = include_bytes!("../circuit_data/circuit_proof_test_case_zsa.bin");
+            read_test_case(&test_case_bytes[..]).expect("proof must be valid")
+        };
+        assert_eq!(proof.0.len(), 5120);
+
+        assert!(proof.verify(&vk, &[instance]).is_ok());
+    }
+
+    // Set ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF to regenerate the pinned circuit description.
+    #[test]
+    fn zsa_pinned_circuit_description() {
+        let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
+
+        if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
+            std::fs::write(
+                "src/circuit_data/circuit_description_zsa",
+                format!("{:#?}\n", vk.vk.pinned()),
+            )
+            .expect("should be able to write new circuit description");
+        } else {
+            assert_eq!(
+                format!("{:#?}\n", vk.vk.pinned()),
+                include_str!("../circuit_data/circuit_description_zsa").replace("\r\n", "\n")
+            );
+        }
+    }
+
+    #[cfg(feature = "dev-graph")]
+    #[test]
+    fn print_action_circuit() {
+        use plotters::prelude::*;
+
+        let root =
+            BitMapBackend::new("action-circuit-layout-zsa.png", (1024, 768)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let root = root
+            .titled("Orchard Action Circuit", ("sans-serif", 60))
+            .unwrap();
+
+        let circuit = crate::circuit::CircuitZsa::empty();
+        halo2_proofs::dev::CircuitLayout::default()
+            .show_labels(false)
+            .view_height(0..(1 << 11))
+            .render(K, &circuit, &root)
+            .unwrap();
     }
 }
