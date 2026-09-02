@@ -562,10 +562,9 @@ impl ProvingKey {
 
 /// Public inputs to the Orchard Action circuit.
 ///
-/// The `enable_zsa` field was introduced with the ZSA feature; it did not exist before.
-/// In vanilla Orchard, `enable_zsa` is always false, so this method always appends a zero to the
-/// instance vector. Since halo2_proofs pads instance values with zero, old proofs (without this
-/// extra entry) and new proofs behave identically.
+/// Adding a public input whose default value is zero is backwards-compatible: halo2_proofs
+/// zero-pads instance values, so a statement that leaves the public input zero encodes exactly
+/// as it did before the public input existed.
 ///
 /// # Invariants
 ///
@@ -674,11 +673,9 @@ impl Instance {
         self.enable_zsa
     }
 
-    /// Note: Before the ZSA feature was introduced, this method returned a 10-element instance slice.
-    /// With ZSA, it now returns 11 elements, the last one corresponding to `enable_zsa`.
-    /// In vanilla Orchard, `enable_zsa` is always false, so this extra element is always zero.
-    /// Since halo2_proofs pads instance values with zero, old proofs (without this element)
-    /// and new proofs behave identically.
+    /// Adding a public input whose default value is zero is backwards-compatible:
+    /// halo2_proofs zero-pads instance values, so a statement that leaves the public input
+    /// zero encodes exactly as it did before the public input existed.
     fn to_halo2_instance(&self) -> [[vesta::Scalar; 11]; 1] {
         let mut instance = [vesta::Scalar::zero(); 11];
 
@@ -698,11 +695,6 @@ impl Instance {
         instance[CMX] = self.cmx.inner();
         instance[ENABLE_SPEND] = vesta::Scalar::from(u64::from(self.enable_spend));
         instance[ENABLE_OUTPUT] = vesta::Scalar::from(u64::from(self.enable_output));
-        // Instance columns are zero-padded over the evaluation domain, so for statements
-        // where this flag is false, this encoding is commitment-identical to the historical
-        // nine-row encoding. Pre-NU 6.3 circuits leave this row unconstrained, which is why
-        // restricted statements must never reach those keys (see `Proof::create` and
-        // `Proof::verify`).
         instance[DISABLE_CROSS_ADDRESS] =
             vesta::Scalar::from(u64::from(self.cross_address_disabled));
         instance[ENABLE_ZSA] = vesta::Scalar::from(u64::from(self.enable_zsa));
