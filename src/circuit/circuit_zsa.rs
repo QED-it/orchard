@@ -1349,7 +1349,7 @@ mod tests {
     fn zsa_mock_prover_rejects_non_split_nullifier_for_split_note() {
         let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
 
-        let psi_nf = known(&circuit.additional_zsa_witnesses.clone().unwrap().psi_nf);
+        let psi_nf = known(&circuit.additional_zsa_witnesses.as_ref().unwrap().psi_nf);
         let cm_old = known(&circuit.common_witnesses.cm_old);
         let nk = known(&circuit.common_witnesses.nk);
         let rho_old = known(&circuit.common_witnesses.rho_old);
