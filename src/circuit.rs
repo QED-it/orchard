@@ -695,6 +695,8 @@ impl Instance {
         instance[CMX] = self.cmx.inner();
         instance[ENABLE_SPEND] = vesta::Scalar::from(u64::from(self.enable_spend));
         instance[ENABLE_OUTPUT] = vesta::Scalar::from(u64::from(self.enable_output));
+        // Pre-NU 6.3 circuits leave this row unconstrained, which is why restricted statements
+        // must never reach those keys (see `Proof::create` and `Proof::verify`).
         instance[DISABLE_CROSS_ADDRESS] =
             vesta::Scalar::from(u64::from(self.cross_address_disabled));
         instance[ENABLE_ZSA] = vesta::Scalar::from(u64::from(self.enable_zsa));
