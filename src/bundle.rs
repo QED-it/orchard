@@ -1696,6 +1696,19 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn only_orchard_zsa_permits_zsa() {
+        assert!(BundleVersion::zsa().permits_zsa());
+        for bundle_version in [
+            BundleVersion::orchard_insecure_v1(),
+            BundleVersion::orchard_v2(),
+            BundleVersion::orchard_v3(),
+            BundleVersion::ironwood_v3(),
+        ] {
+            assert!(!bundle_version.permits_zsa());
+        }
+    }
+
+    #[test]
     fn pre_nu6_3_flags_parsing_rejects_reserved_bits() {
         for value in 0b100..=u8::MAX {
             assert_eq!(Flags::from_byte(value, BundleVersion::orchard_v2()), None);
@@ -1731,6 +1744,38 @@ pub(crate) mod tests {
         for value in 0b10000..=u8::MAX {
             assert_eq!(Flags::from_byte(value, BundleVersion::orchard_v3()), None);
             assert_eq!(Flags::from_byte(value, BundleVersion::ironwood_v3()), None);
+        }
+    }
+
+    #[test]
+    fn zsa_flags_parsing_handles_the_zsa_bit() {
+        for value in 0b1000..=0b1111 {
+            // Bit 3 (`enableZSA`) is reserved for every version that does not permit ZSA.
+            assert_eq!(Flags::from_byte(value, BundleVersion::orchard_v2()), None);
+            assert_eq!(Flags::from_byte(value, BundleVersion::orchard_v3()), None);
+            assert_eq!(Flags::from_byte(value, BundleVersion::ironwood_v3()), None);
+
+            // The ZSA version recognizes it as `zsa_enabled` and round-trips.
+            let flags = Flags::from_byte(value, BundleVersion::zsa()).unwrap();
+            assert!(flags.zsa_enabled());
+            assert_eq!(flags.to_byte(BundleVersion::zsa()), Some(value));
+
+            // No other version can encode the flag back.
+            assert_eq!(flags.to_byte(BundleVersion::orchard_v2()), None);
+            assert_eq!(flags.to_byte(BundleVersion::orchard_v3()), None);
+            assert_eq!(flags.to_byte(BundleVersion::ironwood_v3()), None);
+        }
+
+        // With bit 3 clear, the ZSA version parses `zsa_enabled` as false.
+        for value in 0b000..=0b111 {
+            let flags = Flags::from_byte(value, BundleVersion::zsa()).unwrap();
+            assert!(!flags.zsa_enabled());
+            assert_eq!(flags.to_byte(BundleVersion::zsa()), Some(value));
+        }
+
+        // Bits 4.. stay reserved for the ZSA version too.
+        for value in 0b10000..=u8::MAX {
+            assert_eq!(Flags::from_byte(value, BundleVersion::zsa()), None);
         }
     }
 
