@@ -1067,10 +1067,7 @@ mod tests {
     use crate::{
         builder::SpendInfo,
         bundle::Flags,
-        circuit::{
-            circuit_zsa::AdditionalZsaWitnesses, Circuit, CircuitVanilla, Instance, Proof,
-            ProvingKey, VerifyingKey, K,
-        },
+        circuit::{Circuit, Instance, Proof, ProvingKey, VerifyingKey, K},
         circuit_version::OrchardCircuitVersion,
         keys::{FullViewingKey, Scope, SpendValidatingKey, SpendingKey},
         note::{
@@ -1399,16 +1396,12 @@ mod tests {
     fn zsa_mock_prover_rejects_wrong_psi_nf() {
         let mut rng = OsRng;
         // The circuit constrains `(split_flag = 0) => (psi_old = psi_nf)`.
-        let (circuit, instance) = generate_circuit_instance(false, &mut rng);
-        let circuit = Circuit {
-            additional_zsa_witnesses: circuit.additional_zsa_witnesses.clone().map(|zsa_values| {
-                AdditionalZsaWitnesses {
-                    psi_nf: Value::known(pallas::Base::random(&mut rng)),
-                    ..zsa_values
-                }
-            }),
-            ..circuit
-        };
+        let (mut circuit, instance) = generate_circuit_instance(false, &mut rng);
+        circuit
+            .additional_zsa_witnesses
+            .as_mut()
+            .expect("ZSA witnesses are present")
+            .psi_nf = Value::known(pallas::Base::random(&mut rng));
         // `psi_nf` also feeds the nullifier derivation, whose copy constraint fails alongside.
         assert_zsa_rejects_with(
             &circuit,
@@ -1420,14 +1413,8 @@ mod tests {
     #[test]
     fn zsa_mock_prover_rejects_wrong_cm_old() {
         let mut rng = OsRng;
-        let (circuit, instance) = generate_circuit_instance(false, &mut rng);
-        let circuit = Circuit {
-            common_witnesses: CircuitVanilla {
-                cm_old: Value::known(random_note_commitment(&mut rng)),
-                ..circuit.common_witnesses.clone()
-            },
-            ..circuit
-        };
+        let (mut circuit, instance) = generate_circuit_instance(false, &mut rng);
+        circuit.common_witnesses.cm_old = Value::known(random_note_commitment(&mut rng));
         // `cm_old` is the Merkle leaf, so a wrong witness makes the computed root differ from
         // the public anchor. It also feeds the derived note commitment and `nf_old`, whose copy
         // constraints fail alongside.
