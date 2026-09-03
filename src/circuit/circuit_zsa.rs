@@ -1278,7 +1278,7 @@ mod tests {
     ) -> Result<(), Vec<halo2_proofs::dev::VerifyFailure>> {
         MockProver::run(
             K,
-            &circuit.to_zsa().expect("ZSA witnesses are known"),
+            &circuit.to_zsa().expect("ZSA witnesses are present"),
             instance
                 .to_halo2_instance()
                 .iter()
@@ -1470,18 +1470,6 @@ mod tests {
     }
 
     #[test]
-    fn zsa_mock_prover_rejects_enable_zsa_false_for_non_zatoshi_asset() {
-        // The circuit constrains `(enable_zsa = 0) => (is_zatoshi_asset = 1)`.
-        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
-        instance.enable_zsa = false;
-        assert_zsa_rejected_by(
-            &circuit,
-            &instance,
-            "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
-        );
-    }
-
-    #[test]
     fn zsa_mock_prover_rejects_asset_mismatch() {
         // The `asset` witness must match the asset baked into `cm_old`/`cv_net`.
         let mut rng = OsRng;
@@ -1500,6 +1488,18 @@ mod tests {
         // The asset is bound into `cm_old`, `cmx` and `cv_net`, so a lie about it is caught by
         // those equalities rather than by a gate constraint.
         assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_enable_zsa_false_for_non_zatoshi_asset() {
+        // The circuit constrains `(enable_zsa = 0) => (is_zatoshi_asset = 1)`.
+        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        instance.enable_zsa = false;
+        assert_zsa_rejected_by(
+            &circuit,
+            &instance,
+            "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
+        );
     }
 
     #[test]
@@ -1531,7 +1531,7 @@ mod tests {
             let circuit_cost =
                 halo2_proofs::dev::CircuitCost::<pasta_curves::vesta::Point, _>::measure(
                     K,
-                    &circuits[0].to_zsa().unwrap(),
+                    &circuits[0].to_zsa().expect("ZSA witnesses are present"),
                 );
             assert_eq!(usize::from(circuit_cost.proof_size(1)), 5120);
             assert_eq!(usize::from(circuit_cost.proof_size(2)), 7392);
