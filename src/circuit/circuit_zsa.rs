@@ -1637,12 +1637,12 @@ mod tests {
             enable_spend,
             enable_output,
             !cross_address_disable,
-            // TODO ZSA: add enable_zsa once Flags::from_parts has enable_zsa as parameter
+            // TODO ZSA: add enable_zsa once Flags::from_parts has enable_zsa as a parameter
             //enable_zsa,
         );
         let mut instance = Instance::from_parts(anchor, cv_net, nf_old, rk, cmx, flags)
             .expect("test vectors were generated with non-identity rk");
-        // TODO ZSA: remove this flag once Flags::from_parts has enable_zsa as parameter
+        // TODO ZSA: remove this override once Flags::from_parts has enable_zsa as a parameter
         if enable_zsa {
             instance.enable_zsa = true;
         }
