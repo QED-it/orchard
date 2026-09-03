@@ -1060,7 +1060,6 @@ mod tests {
     use group::{Curve, Group, GroupEncoding};
     use halo2_proofs::{circuit::Value, dev::MockProver};
     use pasta_curves::pallas;
-    use plotters::prelude::WHITE;
     use rand::rngs::OsRng;
     use rand_core::CryptoRngCore;
     use subtle::{Choice, CtOption};
