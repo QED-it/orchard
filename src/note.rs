@@ -319,30 +319,22 @@ impl Note {
         rseed: RandomSeed,
         version: NoteVersion,
     ) -> CtOption<Self> {
-        Self::from_parts_internal(
+        let note = Note {
             recipient,
             value,
             asset,
-            rho,
+            rho: Some(rho),
             rseed,
-            CtOption::new(rseed, 0u8.into()),
+            rseed_split_note: CtOption::new(rseed, 0u8.into()),
             version,
-        )
+        };
+        CtOption::new(note, note.commitment_inner().is_some())
     }
 
-    /// Creates a `Note` from its component parts.
+    /// Creates a `Note` from all its component parts (rseed_split_note included).
     ///
-    /// This additionally permits constructing a [Split Input note], which is necessary
-    /// for constructing certain patterns of bundles containing ZSA outputs. It is used by
-    /// the PCZT code, which is the only place where these notes are serialized.
-    ///
-    /// Returns `None` if a valid [`NoteCommitment`] cannot be derived from the note.
-    ///
-    /// # Caveats
-    ///
-    /// See [`Self::from_parts`].
-    ///
-    /// [Split Input note]: https://zips.z.cash/zip-0226#split-notes
+    /// This function is only used in tests.
+    #[cfg(test)]
     pub(crate) fn from_parts_internal(
         recipient: Address,
         value: NoteValue,
