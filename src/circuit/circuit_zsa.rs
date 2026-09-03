@@ -1278,7 +1278,7 @@ mod tests {
     ) -> Result<(), Vec<halo2_proofs::dev::VerifyFailure>> {
         MockProver::run(
             K,
-            &circuit.to_zsa().unwrap(),
+            &circuit.to_zsa().expect("ZSA witnesses are known"),
             instance
                 .to_halo2_instance()
                 .iter()
@@ -1334,7 +1334,7 @@ mod tests {
         let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
 
-        // ...but setting `disableCrossAddress` makes it unsatisfiable.
+        // ...but setting `disableCrossAddress` makes it unsatisfiable...
         instance.cross_address_disabled = true;
         assert_zsa_rejected_by(
             &circuit,
@@ -1393,18 +1393,6 @@ mod tests {
             &circuit,
             &instance,
             "(disable_cross_address = 1) => (split_flag = 0)",
-        );
-    }
-
-    #[test]
-    fn zsa_mock_prover_rejects_enable_zsa_false_for_non_zatoshi_asset() {
-        // The circuit constrains `(enable_zsa = 0) => (is_zatoshi_asset = 1)`.
-        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
-        instance.enable_zsa = false;
-        assert_zsa_rejected_by(
-            &circuit,
-            &instance,
-            "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
         );
     }
 
@@ -1479,6 +1467,18 @@ mod tests {
         let (circuit, mut instance) = generate_circuit_instance(false, &mut rng);
         instance.nf_old = Nullifier::dummy(&mut rng);
         assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_enable_zsa_false_for_non_zatoshi_asset() {
+        // The circuit constrains `(enable_zsa = 0) => (is_zatoshi_asset = 1)`.
+        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        instance.enable_zsa = false;
+        assert_zsa_rejected_by(
+            &circuit,
+            &instance,
+            "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
+        );
     }
 
     #[test]
