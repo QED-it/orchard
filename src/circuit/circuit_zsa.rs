@@ -1060,6 +1060,7 @@ mod tests {
     use group::{Curve, Group, GroupEncoding};
     use halo2_proofs::{circuit::Value, dev::MockProver};
     use pasta_curves::pallas;
+    use plotters::prelude::WHITE;
     use rand::rngs::OsRng;
     use rand_core::CryptoRngCore;
     use subtle::{Choice, CtOption};
@@ -1081,6 +1082,59 @@ mod tests {
         tree::MerklePath,
         value::{NoteValue, ValueCommitTrapdoor, ValueCommitment},
     };
+
+    #[cfg(feature = "dev-graph")]
+    #[test]
+    fn print_action_circuit() {
+        use plotters::prelude::*;
+
+        let root =
+            BitMapBackend::new("action-circuit-layout-zsa.png", (1024, 768)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let root = root
+            .titled("Orchard Action Circuit", ("sans-serif", 60))
+            .unwrap();
+
+        let circuit = crate::circuit::CircuitZsa::empty();
+        halo2_proofs::dev::CircuitLayout::default()
+            .show_labels(false)
+            .view_height(0..(1 << 11))
+            .render(K, &circuit, &root)
+            .unwrap();
+    }
+
+    /// Generates a circuit and instance whose output note is addressed to an expanded
+    /// receiver distinct from the spent note's.
+    fn generate_circuit_instance<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        rng: R,
+    ) -> (Circuit, Instance) {
+        generate_circuit_instance_inner(is_zatoshi_asset, false, false, rng)
+    }
+
+    /// Generates a circuit and instance whose output note is addressed to the spent
+    /// note's expanded receiver, as the cross-address restriction requires.
+    fn generate_self_transfer_circuit_instance<R: CryptoRngCore>(
+        is_zatoshi_asset: bool,
+        rng: R,
+    ) -> (Circuit, Instance) {
+        generate_circuit_instance_inner(is_zatoshi_asset, true, false, rng)
+    }
+
+    /// Generates a circuit and instance spending a split note.
+    ///
+    /// The asset is necessarily non-zatoshi: the circuit constrains
+    /// `(split_flag = 1) => (is_zatoshi_asset = 0)`.
+    fn generate_split_note_circuit_instance<R: CryptoRngCore>(rng: R) -> (Circuit, Instance) {
+        generate_circuit_instance_inner(false, false, true, rng)
+    }
+
+    /// Extracts the contents of a `Value` that is known.
+    fn known<V: Clone>(value: &Value<V>) -> V {
+        let mut out = None;
+        value.clone().map(|v| out = Some(v));
+        out.expect("value is known")
+    }
 
     fn generate_circuit_instance_inner<R: CryptoRngCore>(
         is_zatoshi_asset: bool,
@@ -1204,32 +1258,6 @@ mod tests {
         )
     }
 
-    /// Generates a circuit and instance whose output note is addressed to an expanded
-    /// receiver distinct from the spent note's.
-    fn generate_circuit_instance<R: CryptoRngCore>(
-        is_zatoshi_asset: bool,
-        rng: R,
-    ) -> (Circuit, Instance) {
-        generate_circuit_instance_inner(is_zatoshi_asset, false, false, rng)
-    }
-
-    /// Generates a circuit and instance whose output note is addressed to the spent
-    /// note's expanded receiver, as the cross-address restriction requires.
-    fn generate_self_transfer_circuit_instance<R: CryptoRngCore>(
-        is_zatoshi_asset: bool,
-        rng: R,
-    ) -> (Circuit, Instance) {
-        generate_circuit_instance_inner(is_zatoshi_asset, true, false, rng)
-    }
-
-    /// Generates a circuit and instance spending a split note.
-    ///
-    /// The asset is necessarily non-zatoshi: the circuit constrains
-    /// `(split_flag = 1) => (is_zatoshi_asset = 0)`.
-    fn generate_split_note_circuit_instance<R: CryptoRngCore>(rng: R) -> (Circuit, Instance) {
-        generate_circuit_instance_inner(false, false, true, rng)
-    }
-
     fn random_note_commitment(mut rng: impl CryptoRngCore) -> NoteCommitment {
         NoteCommitment::derive(
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
@@ -1241,13 +1269,6 @@ mod tests {
             NoteCommitTrapdoor::new(pallas::Scalar::random(&mut rng)),
         )
         .unwrap()
-    }
-
-    /// Extracts the contents of a `Value` that is known.
-    fn known<V: Clone>(value: &Value<V>) -> V {
-        let mut out = None;
-        value.clone().map(|v| out = Some(v));
-        out.expect("value is known")
     }
 
     /// Runs `MockProver` on the ZSA circuit for `circuit`/`instance`.
@@ -1684,25 +1705,5 @@ mod tests {
                 include_str!("../circuit_data/circuit_description_zsa").replace("\r\n", "\n")
             );
         }
-    }
-
-    #[cfg(feature = "dev-graph")]
-    #[test]
-    fn print_action_circuit() {
-        use plotters::prelude::*;
-
-        let root =
-            BitMapBackend::new("action-circuit-layout-zsa.png", (1024, 768)).into_drawing_area();
-        root.fill(&WHITE).unwrap();
-        let root = root
-            .titled("Orchard Action Circuit", ("sans-serif", 60))
-            .unwrap();
-
-        let circuit = crate::circuit::CircuitZsa::empty();
-        halo2_proofs::dev::CircuitLayout::default()
-            .show_labels(false)
-            .view_height(0..(1 << 11))
-            .render(K, &circuit, &root)
-            .unwrap();
     }
 }
