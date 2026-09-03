@@ -1160,27 +1160,36 @@ mod tests {
         let alpha = pallas::Scalar::random(&mut rng);
         let rk = ak.randomize(&alpha);
 
-        let rho_old = Rho::from_nf_old(Nullifier::dummy(&mut rng));
-        let spent_note = loop {
-            let rseed = RandomSeed::random(&mut rng, &rho_old);
-            let rseed_split_note = if split_flag {
-                CtOption::new(RandomSeed::random(&mut rng, &rho_old), 1u8.into())
+        // A note carrying `asset_base`, resampled until valid; `split` adds a split-note seed.
+        let random_note = |recipient, value, rho: Rho, split: bool, rng: &mut R| loop {
+            let rseed = RandomSeed::random(rng, &rho);
+            let rseed_split_note = if split {
+                CtOption::new(RandomSeed::random(rng, &rho), 1u8.into())
             } else {
                 CtOption::new(rseed, 0u8.into())
             };
-            let spent_note = Note::from_parts_internal(
-                sender_address,
-                NoteValue::from_raw(7),
+            let note = Note::from_parts_internal(
+                recipient,
+                value,
                 asset_base,
-                rho_old,
+                rho,
                 rseed,
                 rseed_split_note,
                 note_version,
             );
-            if spent_note.is_some().into() {
-                break spent_note.unwrap();
+            if note.is_some().into() {
+                break note.unwrap();
             }
         };
+
+        let rho_old = Rho::from_nf_old(Nullifier::dummy(&mut rng));
+        let spent_note = random_note(
+            sender_address,
+            NoteValue::from_raw(7),
+            rho_old,
+            split_flag,
+            &mut rng,
+        );
 
         let nf_old = spent_note.nullifier(&fvk);
 
@@ -1196,22 +1205,13 @@ mod tests {
                 }
             }
         };
-        let output_note = loop {
-            let rho_new = Rho::from_nf_old(nf_old);
-            let rseed = RandomSeed::random(&mut rng, &rho_new);
-            let output_note = Note::from_parts_internal(
-                output_address,
-                NoteValue::from_raw(3),
-                asset_base,
-                rho_new,
-                rseed,
-                CtOption::new(rseed, 0u8.into()),
-                note_version,
-            );
-            if output_note.is_some().into() {
-                break output_note.unwrap();
-            }
-        };
+        let output_note = random_note(
+            output_address,
+            NoteValue::from_raw(3),
+            Rho::from_nf_old(nf_old),
+            false,
+            &mut rng,
+        );
         let cmx = output_note.commitment().into();
 
         // A split note contributes no value to the action: v_net = -v_new.
