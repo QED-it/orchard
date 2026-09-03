@@ -1329,12 +1329,6 @@ mod tests {
     }
 
     #[test]
-    fn zsa_mock_prover_split_note() {
-        let (circuit, instance) = generate_split_note_circuit_instance(OsRng);
-        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
-    }
-
-    #[test]
     fn zsa_cross_address_restriction_is_conditional() {
         // An unrestricted cross-address statement is satisfiable...
         let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
@@ -1354,6 +1348,29 @@ mod tests {
         let (circuit, mut instance) = generate_self_transfer_circuit_instance(false, OsRng);
         instance.cross_address_disabled = true;
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
+    }
+
+    #[test]
+    fn zsa_mock_prover_split_note() {
+        let (circuit, instance) = generate_split_note_circuit_instance(OsRng);
+        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
+    }
+
+    #[test]
+    fn zsa_mock_prover_rejects_non_split_nullifier_for_split_note() {
+        let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
+
+        let psi_nf = known(&circuit.additional_zsa_witnesses.as_ref().unwrap().psi_nf);
+        let cm_old = known(&circuit.common_witnesses.cm_old);
+        let nk = known(&circuit.common_witnesses.nk);
+        let rho_old = known(&circuit.common_witnesses.rho_old);
+
+        // Replace the public nullifier by the one this note would have if it were not a split note.
+        instance.nf_old =
+            Nullifier::derive(&nk, rho_old.into_inner(), psi_nf, cm_old, Choice::from(0));
+
+        // The nullifier the circuit derives failing to equal the public one.
+        assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
     }
 
     #[test]
@@ -1482,23 +1499,6 @@ mod tests {
         });
         // The asset is bound into `cm_old`, `cmx` and `cv_net`, so a lie about it is caught by
         // those equalities rather than by a gate constraint.
-        assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
-    }
-
-    #[test]
-    fn zsa_mock_prover_rejects_non_split_nullifier_for_split_note() {
-        let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
-
-        let psi_nf = known(&circuit.additional_zsa_witnesses.as_ref().unwrap().psi_nf);
-        let cm_old = known(&circuit.common_witnesses.cm_old);
-        let nk = known(&circuit.common_witnesses.nk);
-        let rho_old = known(&circuit.common_witnesses.rho_old);
-
-        // Replace the public nullifier by the one this note would have if it were not a split note.
-        instance.nf_old =
-            Nullifier::derive(&nk, rho_old.into_inner(), psi_nf, cm_old, Choice::from(0));
-
-        // The nullifier the circuit derives failing to equal the public one.
         assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
     }
 
