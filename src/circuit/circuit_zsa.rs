@@ -1065,6 +1065,7 @@ mod tests {
     use subtle::{Choice, CtOption};
 
     use crate::{
+        builder::SpendInfo,
         bundle::Flags,
         circuit::{
             circuit_zsa::AdditionalZsaWitnesses, Circuit, CircuitVanilla, Instance, Proof,
@@ -1128,7 +1129,6 @@ mod tests {
             }
         };
 
-        let cm_old: NoteCommitment = spent_note.commitment();
         let nf_old = spent_note.nullifier(&fvk);
 
         let output_address = if output_matches_spend {
@@ -1171,38 +1171,25 @@ mod tests {
         let cv_net = ValueCommitment::derive_with_asset(value, rcv.clone(), asset_base);
 
         let path = MerklePath::dummy(&mut rng);
-        let anchor = path.root(cm_old.clone().into());
+        let anchor = path.root(spent_note.commitment().into());
+
+        let spend_info = SpendInfo {
+            dummy_sk: None,
+            scope: fvk.scope_for_address(&sender_address).unwrap(),
+            fvk,
+            note: spent_note,
+            merkle_path: Some(path),
+            split_flag,
+        };
 
         (
-            Circuit {
-                common_witnesses: CircuitVanilla {
-                    circuit_version: OrchardCircuitVersion::ZSA,
-                    path: Value::known(path.auth_path()),
-                    pos: Value::known(path.position()),
-                    g_d_old: Value::known(sender_address.g_d()),
-                    pk_d_old: Value::known(*sender_address.pk_d()),
-                    v_old: Value::known(spent_note.value()),
-                    rho_old: Value::known(spent_note.rho()),
-                    psi_old: Value::known(spent_note.psi()),
-                    rcm_old: Value::known(spent_note.rcm()),
-                    cm_old: Value::known(cm_old),
-                    alpha: Value::known(alpha),
-                    ak: Value::known(ak),
-                    nk: Value::known(*fvk.nk()),
-                    rivk: Value::known(fvk.rivk(fvk.scope_for_address(&sender_address).unwrap())),
-                    g_d_new: Value::known(output_note.recipient().g_d()),
-                    pk_d_new: Value::known(*output_note.recipient().pk_d()),
-                    v_new: Value::known(output_note.value()),
-                    psi_new: Value::known(output_note.psi()),
-                    rcm_new: Value::known(output_note.rcm()),
-                    rcv: Value::known(rcv),
-                },
-                additional_zsa_witnesses: Some(AdditionalZsaWitnesses {
-                    psi_nf: Value::known(spent_note.psi_nf()),
-                    asset: Value::known(asset_base),
-                    split_flag: Value::known(split_flag),
-                }),
-            },
+            Circuit::from_action_context_unchecked(
+                spend_info,
+                output_note,
+                alpha,
+                rcv,
+                OrchardCircuitVersion::ZSA,
+            ),
             Instance {
                 anchor,
                 cv_net,
