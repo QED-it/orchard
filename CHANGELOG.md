@@ -5,7 +5,152 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.15.0] 2026-07-09
+## [Unreleased]
+
+### Added
+- `orchard::note::AssetBase`, the ZSA note type identifier:
+  - `AssetBase::zatoshi`, the asset used by every Orchard note built through this crate's
+    public APIs today.
+  - `AssetBase::{from_bytes, to_bytes}`, (de)serializing an `AssetBase`.
+  - `AssetBase::is_zatoshi`, testing whether it is the zatoshi asset.
+  - `AssetBase::cv_base`, the base point used to derive a value commitment for notes of this
+    asset.
+- `orchard::Note::asset`, returning a note's `AssetBase` (currently always
+  `AssetBase::zatoshi()`).
+- `impl subtle::ConditionallySelectable for orchard::note::RandomSeed`.
+- `orchard::bundle::Flags::zsa_enabled`, the accessor for the new ZSA flag bit. No public
+  constructor can currently set it to `true`.
+- `orchard::circuit_version` module, containing `OrchardCircuitVersion` (moved out of
+  `orchard::circuit`; see Changed) with a new `OrchardCircuitVersion::ZSA` variant selecting
+  the ZSA Action circuit.
+- `orchard::value::ValueCommitment::derive_with_asset`, deriving a value commitment for an
+  arbitrary `AssetBase`.
+- `unstable-voting-circuits`-only (not covered by the crate's semver guarantees):
+  - Constants backing the new ZSA note commitment domain and split-note nullifier derivation:
+    - `orchard::constants::fixed_bases::NOTE_ZSA_COMMITMENT_PERSONALIZATION`
+    - `orchard::constants::sinsemilla::Q_NOTE_ZSA_COMMITMENT_M_GENERATOR`
+    - `orchard::constants::sinsemilla::{OrchardHashDomains::NoteZsaCommit,
+      OrchardCommitDomains::NoteZsaCommit}` variants
+    - `orchard::constants::nullifier_l` module, with the `NULLIFIER_L` constant used to derive
+      a split note's nullifier
+  - The types carrying the ZSA-specific inputs that the gadgets now take (see Changed):
+    - `orchard::circuit::derive_nullifier::ZsaNullifierParams`
+    - `orchard::circuit::note_commit::ZsaNoteCommitParams`
+
+### Changed
+- The following already-opaque public structs gained new private fields for future ZSA
+  support (none has a public accessor beyond `Note::asset`, listed under Added):
+  - `orchard::note::Note`: `asset`, `rseed_split_note`
+  - `orchard::builder::SpendInfo`: `split_flag`
+  - `orchard::builder::OutputInfo`: `asset`
+  - `orchard::circuit::Instance`: `enable_zsa`
+- `orchard::Proof::expected_proof_size` now takes an `OrchardCircuitVersion` argument, since
+  the ZSA circuit's proof size differs from the other circuit versions'.
+- `OrchardCircuitVersion` moved from `orchard::circuit::OrchardCircuitVersion` to
+  `orchard::circuit_version::OrchardCircuitVersion`. Neither it nor
+  `orchard::bundle::BundleVersion::circuit_version` (the method that returns it) require the
+  `circuit` feature anymore, so that `orchard::Proof::expected_proof_size` can take
+  an `OrchardCircuitVersion` argument without pulling in the `circuit` feature.
+- `OrchardCircuitVersion` is now `#[non_exhaustive]`: downstream crates matching on it must
+  add a wildcard arm.
+- `orchard::circuit::Circuit` no longer implements `halo2_proofs::plonk::Circuit`. It still
+  carries the witnesses of a single action, but the `plonk::Circuit` implementations now live
+  on the crate-internal `CircuitVanilla` and `CircuitZsa` types, one per circuit variation.
+  `Proof::create`, `ProvingKey::build`, and `VerifyingKey::build` dispatch to the right one
+  internally, so callers do not need to select it themselves.
+- `orchard::Note::nullifier` now implements the split-note nullifier derivation of ZIP 226: a
+  note carrying a split seed derives $\psi$ from that seed, and its nullifier is offset by
+  $\mathcal{L}^{\mathsf{Orchard}}$. No public constructor produces a note with a split seed,
+  so the nullifier of every note that can be built today is unchanged.
+- `orchard::circuit::Config` is now generic over the `halo2_gadgets` lookup-range-check
+  strategy.
+- `unstable-voting-circuits`-only (not covered by the crate's semver guarantees):
+  - `orchard::circuit::note_commit::{NoteCommitConfig, NoteCommitChip}` are now generic over the
+    same lookup-range-check strategy, and `NoteCommitChip::configure` takes an additional
+    `is_zsa_circuit: bool` argument.
+  - Three gadgets moved out of `orchard::circuit::gadget`, each into a module of its own. Their
+    behavior is unchanged, but the old paths no longer exist (paths below are relative to
+    `orchard::circuit`):
+    - `gadget::derive_nullifier` → `derive_nullifier::gadgets::derive_nullifier`, plus a trailing
+      `zsa_params: Option<ZsaNullifierParams>` argument (`None` for vanilla behavior).
+    - `gadget::commit_ivk` → `commit_ivk::gadgets::commit_ivk`, now generic over the
+      lookup-range-check strategy and the Sinsemilla chip.
+    - `gadget::note_commit` → `note_commit::gadgets::note_commit`, now generic over the
+      lookup-range-check strategy, plus a trailing
+      `zsa_params: Option<ZsaNoteCommitParams>` argument (`None` for vanilla behavior).
+  - `orchard::constants::{OrchardHashDomains, OrchardCommitDomains}` both gained a
+    `NoteZsaCommit` variant (listed under Added) and are now `#[non_exhaustive]`, so downstream
+    matches on either must add a wildcard arm.
+
+## [0.15.5] - 2026-08-02
+
+### Changed
+- The minimum `halo2_proofs` version is now 0.3.5, which provides the
+  match-only fixture exporter used by the random `verifier-fingerprint`
+  captures.
+
+## [0.15.4] - 2026-07-23
+
+### Changed
+- Batched trial decryption (the `zcash_note_encryption::batch` APIs) is
+  significantly faster. Ephemeral keys are now prepared with GLV endomorphism
+  windows built across the whole batch with a single shared normalization, and
+  each viewing key's GLV decomposition is computed once per batch and reused
+  against every ephemeral key. The GLV primitive lives in `pasta_curves::glv`
+  (`Table` / `Decomposed` / `Table::mul_decomposed`); orchard consumes it
+  through the `BatchDomain::batch_ka_agree_dec` hook added in
+  `zcash_note_encryption` 0.4.2. Shared secrets are unchanged (byte-identical
+  to the per-item path), and the per-output decryption entry points are
+  unaffected. Like the existing `group::Wnaf`-based preparation, the new path
+  is variable-time with respect to the (wallet-local) viewing key scalar.
+- MSRV-compatible bump: the minimum `zcash_note_encryption` version is now 0.4.2.
+- MSRV-compatible bump: the minimum `pasta_curves` version is now 0.5.2, and its
+  `glv` feature is now enabled (providing `pasta_curves::glv`).
+
+## [0.15.3] - 2026-07-22
+
+### Changed
+- The `verifier-fingerprint` fixture export now derives each Lean instance
+  commitment from the verifier's public inputs instead of exporting it as an
+  opaque verifying-key field (requires `halo2_proofs 0.3.4`).
+
+## [0.15.2] - 2026-07-21
+
+### Added
+- `orchard::builder::Builder::new_with_anchor_deferred`, constructing a builder whose bundle
+  anchor — and every real spend's Merkle witness — is deferred to proving time, per
+  [ZIP 374](https://zips.z.cash/zip-0374). Spends are added without witnesses via the new
+  `orchard::builder::Builder::add_spend_unwitnessed`; the built PCZT bundle reports the
+  deferral through the new `orchard::pczt::Bundle::anchor_deferred` accessor (its `anchor`
+  field then carries the empty-tree root purely as a placeholder that a PCZT serializer
+  must emit as absent, and the real spends' `witness` fields are `None`), and the real
+  anchor and witnesses are installed through the PCZT Updater role after signing. Only
+  supported for bundle formats whose txid digest — and hence every signature — excludes
+  the anchor (the V6 formats); only `Builder::build_for_pczt` can build such a bundle.
+- `orchard::builder::testing::arb_shared_anchor_notes`, a proptest strategy generating
+  multiple spendable Orchard notes (one per supplied value) witnessed to a single shared
+  anchor, for building shared-anchor multi-spend fixtures. It is the multi-note counterpart
+  to `orchard::builder::testing::arb_spendable_note`.
+- `orchard::builder::BuildError::{AnchorRequired, AnchorDeferralUnsupported}`
+- `orchard::builder::SpendError::{AnchorDeferred, WitnessRequired}`
+- `orchard::pczt::Updater::set_anchor` and
+  `orchard::pczt::ActionUpdater::set_spend_witness`, the PCZT Updater-role setters that
+  install the real bundle anchor and the per-spend Merkle witnesses that a deferred-anchor
+  bundle ([ZIP 374](https://zips.z.cash/zip-0374)) is built without. `set_anchor` replaces
+  the empty-tree placeholder and clears the deferral so the Prover proves against the real
+  anchor; `set_spend_witness` supplies the witness the Prover requires
+  (`orchard::pczt::ProverError::MissingWitness`). The Prover now rejects a bundle whose
+  anchor is still deferred with the new `orchard::pczt::ProverError::AnchorDeferred`.
+
+## [0.15.1] - 2026-07-20
+
+### Added
+- The `verifier-fingerprint` feature flag, enabling
+  `halo2_proofs/unstable-verifier-fingerprint`. It gates test-only capture of
+  canonical Post-NU6.3 verifier fixtures (and Rust-only rejection checks) for
+  cross-checking downstream verifier models, and adds no public API.
+
+## [0.15.0] - 2026-07-09
 
 This release introduces `orchard::bundle::BundleVersion`, the `(value pool, protocol
 version)` of an Orchard bundle, built from the new `orchard::ValuePool` and

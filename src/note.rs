@@ -319,30 +319,22 @@ impl Note {
         rseed: RandomSeed,
         version: NoteVersion,
     ) -> CtOption<Self> {
-        Self::from_parts_internal(
+        let note = Note {
             recipient,
             value,
             asset,
-            rho,
+            rho: Some(rho),
             rseed,
-            CtOption::new(rseed, 0u8.into()),
+            rseed_split_note: CtOption::new(rseed, 0u8.into()),
             version,
-        )
+        };
+        CtOption::new(note, note.commitment_inner().is_some())
     }
 
-    /// Creates a `Note` from its component parts.
+    /// Creates a `Note` from all its component parts (rseed_split_note included).
     ///
-    /// This additionally permits constructing a [Split Input note], which is necessary
-    /// for constructing certain patterns of bundles containing ZSA outputs. It is used by
-    /// the PCZT code, which is the only place where these notes are serialized.
-    ///
-    /// Returns `None` if a valid [`NoteCommitment`] cannot be derived from the note.
-    ///
-    /// # Caveats
-    ///
-    /// See [`Self::from_parts`].
-    ///
-    /// [Split Input note]: https://zips.z.cash/zip-0226#split-notes
+    /// This function is only used in tests.
+    #[cfg(test)]
     pub(crate) fn from_parts_internal(
         recipient: Address,
         value: NoteValue,
@@ -500,6 +492,14 @@ impl Note {
         self.rseed.psi(&self.rho())
     }
 
+    /// Derives the `psi_nf` value for this note.
+    ///
+    /// For a split note, this value comes from `rseed_split_note`. It is then different from
+    /// [`Self::psi`]. For all other notes, the two values are the same.
+    pub(crate) fn psi_nf(&self) -> pallas::Base {
+        self.rseed_split_note.unwrap_or(self.rseed).psi(&self.rho())
+    }
+
     /// Derives the note commitment trapdoor for this note.
     pub(crate) fn rcm(&self) -> commitment::NoteCommitTrapdoor {
         let rho = self.rho();
@@ -556,12 +556,10 @@ impl Note {
 
     /// Derives the nullifier for this note.
     pub fn nullifier(&self, fvk: &FullViewingKey) -> Nullifier {
-        let selected_rseed = self.rseed_split_note.unwrap_or(self.rseed);
-
         Nullifier::derive(
             fvk.nk(),
             self.rho().0,
-            selected_rseed.psi(&self.rho()),
+            self.psi_nf(),
             self.commitment(),
             self.rseed_split_note.is_some(),
         )
@@ -845,6 +843,43 @@ mod tests {
                 "vector {i}: cmx_qr mismatch"
             );
         }
+    }
+
+    /// A split note takes its psi from the split seed, and adds NULLIFIER_L to its nullifier.
+    /// No constructor sets `rseed_split_note`, so this test sets it directly.
+    #[test]
+    fn split_note_nullifier() {
+        let mut rng = rand::rngs::OsRng;
+        let (_, fvk, note) = Note::dummy(&mut rng, None, NoteVersion::V3);
+        let rho = note.rho();
+        let split_rseed = RandomSeed::random(&mut rng, &rho);
+        let split_note = Note {
+            rseed_split_note: CtOption::new(split_rseed, 1u8.into()),
+            ..note
+        };
+
+        let psi_nf = split_rseed.psi(&rho);
+        assert_eq!(split_note.psi_nf(), psi_nf);
+        assert_ne!(psi_nf, note.psi());
+
+        let derive = |psi, is_split: bool| {
+            Nullifier::derive(
+                fvk.nk(),
+                rho.into_inner(),
+                psi,
+                note.commitment(),
+                Choice::from(u8::from(is_split)),
+            )
+        };
+
+        // The split note uses the split seed's psi and adds NULLIFIER_L.
+        assert_eq!(split_note.nullifier(&fvk), derive(psi_nf, true));
+        // Without NULLIFIER_L  (is_split=false), the result is different.
+        assert_ne!(split_note.nullifier(&fvk), derive(psi_nf, false));
+        // With the note's own psi, the result is different.
+        assert_ne!(split_note.nullifier(&fvk), derive(note.psi(), true));
+        // A note with no split seed uses its own psi and does not add NULLIFIER_L (is_split=false).
+        assert_eq!(note.nullifier(&fvk), derive(note.psi(), false));
     }
 }
 */
