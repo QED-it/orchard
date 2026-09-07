@@ -253,7 +253,7 @@ impl fmt::Display for BuildError {
             AnchorMismatch => {
                 f.write_str("All spends must share the anchor requested for the transaction.")
             }
-            Burn(e) => write!(f, "Burn error: {}", e),
+            Burn(e) => write!(f, "Burn error: {e}"),
             NoSplitNoteAvailable => f.write_str("No split note has been provided for this asset"),
             CrossAddressDisabled => f.write_str(
                 "Cross-address transfers are disabled for this bundle: every output must \
