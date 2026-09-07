@@ -38,6 +38,7 @@ and this project adheres to Rust's notion of
     - `orchard::circuit::note_commit::ZsaNoteCommitParams`
 
 ### Changed
+- MSRV is now 1.88
 - The following already-opaque public structs gained new private fields for future ZSA
   support (none has a public accessor beyond `Note::asset`, listed under Added):
   - `orchard::note::Note`: `asset`, `rseed_split_note`
