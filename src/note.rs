@@ -739,18 +739,19 @@ pub mod testing {
     }
 }
 
-// TODO Constance: update the zcash_test_vectors repository so that keys.rs can be
-// generated with post-quantum keys and issuance keys.
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
+    // TODO Constance: update the zcash_test_vectors repository so that keys.rs can be
+    // generated with post-quantum keys and issuance keys.
+    /*
     use crate::{
         keys::{FullViewingKey, Scope, SpendingKey},
         test_vectors::keys::TestVector,
     };
     use ff::PrimeField;
     use group::GroupEncoding;
+
 
     struct QrRcmDerivation {
         rcm_old_repr: [u8; 32],
@@ -844,6 +845,7 @@ mod tests {
             );
         }
     }
+    */
 
     /// A split note takes its psi from the split seed, and adds NULLIFIER_L to its nullifier.
     /// No constructor sets `rseed_split_note`, so this test sets it directly.
@@ -882,4 +884,3 @@ mod tests {
         assert_eq!(note.nullifier(&fvk), derive(note.psi(), false));
     }
 }
-*/
