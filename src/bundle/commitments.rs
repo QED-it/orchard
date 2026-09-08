@@ -131,7 +131,7 @@ pub(crate) enum BundleCommitmentFormat {
 }
 
 impl ValuePool {
-    fn commitment_format(
+    pub(crate) fn commitment_format(
         self,
         tx_version: TxVersion,
     ) -> Result<BundleCommitmentFormat, CommitmentError> {
@@ -176,7 +176,7 @@ impl BundleCommitmentFormat {
         }
     }
 
-    fn includes_anchor_in_txid_digest(self) -> bool {
+    pub(crate) fn includes_anchor_in_txid_digest(self) -> bool {
         matches!(self, BundleCommitmentFormat::OrchardV5)
     }
 
