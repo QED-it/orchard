@@ -462,8 +462,8 @@ impl SpendInfo {
         SpendInfo {
             dummy_sk: None,
             fvk: self.fvk.clone(),
-            // We use external scope to avoid unnecessary derivations
-            scope: Scope::External,
+            // A split note keeps the original note's address, so it keeps its scope.
+            scope: self.scope,
             note: self.note.create_split_note(rng),
             merkle_path: self.merkle_path.clone(),
             split_flag: true,
