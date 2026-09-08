@@ -1040,8 +1040,8 @@ mod tests {
         parse_note_plaintext_without_memo, prf_ock_orchard, CompactAction,
         CompactNoteCiphertextBytes, CompactNotePlaintextBytes, DomainVersion, IronwoodDomain,
         IronwoodNoteEncryption, IronwoodVersion, NoteCiphertextBytes, NoteEncryptionDomain,
-        OrchardDomain, OrchardNoteEncryption, OrchardVersion, ZSADomain, COMPACT_NOTE_SIZE_VANILLA,
-        COMPACT_NOTE_SIZE_ZSA,
+        OrchardDomain, OrchardNoteEncryption, OrchardVersion, ZSADomain, ZSAVersion,
+        COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
     };
     use crate::note::AssetBase;
     use crate::{
@@ -1655,6 +1655,11 @@ mod tests {
     #[test]
     fn batched_compact_decryption_matches_per_item_ironwood() {
         check_batched_compact_decryption_matches_per_item::<IronwoodVersion>();
+    }
+
+    #[test]
+    fn batched_compact_decryption_matches_per_item_zsa() {
+        check_batched_compact_decryption_matches_per_item::<ZSAVersion>();
     }
 
     /// The batched agreement must produce byte-identical shared secrets to
