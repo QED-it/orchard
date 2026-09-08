@@ -1733,8 +1733,7 @@ pub(crate) mod tests {
             );
         }
 
-        // Bit 3 (`zsa_enabled`) is reserved until some bundle version's `permits_zsa()`
-        // returns true; today no version does, so every value with bit 3 set is rejected.
+        // Bit 3 (`zsa_enabled`) is reserved until some bundle version's `permits_zsa()` returns true.
         for value in 0b1000..0b10000 {
             assert_eq!(Flags::from_byte(value, BundleVersion::orchard_v3()), None);
             assert_eq!(Flags::from_byte(value, BundleVersion::ironwood_v3()), None);
