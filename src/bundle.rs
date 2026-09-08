@@ -1696,7 +1696,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn only_orchard_zsa_permits_zsa() {
+    fn zsa_is_permitted_correctly() {
         assert!(BundleVersion::zsa().permits_zsa());
         for bundle_version in [
             BundleVersion::orchard_insecure_v1(),
