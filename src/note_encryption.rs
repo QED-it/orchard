@@ -1037,7 +1037,7 @@ mod tests {
     };
 
     use super::{
-        parse_note_plaintext_without_memo, prf_ock_orchard, CompactAction,
+        compact_note_size, parse_note_plaintext_without_memo, prf_ock_orchard, CompactAction,
         CompactNoteCiphertextBytes, CompactNotePlaintextBytes, DomainVersion, IronwoodDomain,
         IronwoodNoteEncryption, IronwoodVersion, NoteCiphertextBytes, NoteEncryptionDomain,
         OrchardDomain, OrchardNoteEncryption, OrchardVersion, ZSADomain, ZSAVersion,
@@ -1537,15 +1537,6 @@ mod tests {
 
     /// Encrypts a compact output of the domain's note plaintext version to
     /// `recipient`, using a fresh ephemeral key.
-    /// The compact-ciphertext length that `V`'s note version implies. The ZSA plaintext
-    /// carries an extra `AssetBase`, so this is not a constant across domains.
-    fn compact_ciphertext_size<V: DomainVersion>() -> usize {
-        match V::NOTE_VERSION {
-            NoteVersion::V2 | NoteVersion::V3 => COMPACT_NOTE_SIZE_VANILLA,
-            NoteVersion::ZSA => COMPACT_NOTE_SIZE_ZSA,
-        }
-    }
-
     fn encrypted_compact_action<V: DomainVersion>(
         rng: &mut OsRng,
         recipient: Address,
@@ -1568,7 +1559,7 @@ mod tests {
             ExtractedNoteCommitment::from(note.commitment()),
             ephemeral_key,
             CompactNoteCiphertextBytes::from_slice(
-                &enc_ciphertext.as_ref()[..compact_ciphertext_size::<V>()],
+                &enc_ciphertext.as_ref()[..compact_note_size(V::NOTE_VERSION)],
             )
             .expect("the compact prefix has the length V::NOTE_VERSION implies"),
         )
@@ -1616,7 +1607,7 @@ mod tests {
             EphemeralKeyBytes([0u8; 32]),
             CompactNoteCiphertextBytes::from_slice(&alloc::vec![
                 0u8;
-                compact_ciphertext_size::<V>()
+                compact_note_size(V::NOTE_VERSION)
             ])
             .expect("zeroed buffer has the length V::NOTE_VERSION implies"),
         ));
