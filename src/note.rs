@@ -240,6 +240,64 @@ impl RandomSeed {
 
         commitment::NoteCommitTrapdoor(to_scalar(*h.finalize().as_array()))
     }
+
+    /// Quantum-recoverable rcm derivation for ZSA note.
+    ///
+    /// Binds rcm to all note fields for post-quantum commitment binding. Compared
+    /// to rcm_v3, we bind the note's [`AssetBase`] as well, so that rcm (and hence
+    /// the note commitment) cannot be reused across notes that differ only in their asset.
+    /// This implements $\mathsf{H}^{\mathsf{rcm},\mathsf{Orchard}}\_{\mathsf{rseed}}$:
+    ///
+    /// $$
+    /// \mathsf{pre}\_{\mathsf{rcm}} =
+    /// [ \mathtt{0x0B} ]
+    /// \mathbin\Vert \mathsf{g}^\star\_{\mathsf{d}}
+    /// \mathbin\Vert \mathsf{pk}^\star\_{\mathsf{d}}
+    /// \mathbin\Vert \mathsf{I2LEOSP}\_{64}(\mathsf{v})
+    /// \mathbin\Vert \rho
+    /// \mathbin\Vert \mathsf{I2LEOSP}\_{256}(\psi)
+    /// \mathbin\Vert \mathsf{asset}^\star
+    /// $$
+    ///
+    /// $$
+    /// \mathsf{rcm} =
+    /// \mathsf{ToScalar}^{\mathsf{Orchard}}
+    /// \left(\mathsf{PRF}^{\mathsf{expand}}\_{\mathsf{rseed}}
+    /// (\mathsf{pre}\_{\mathsf{rcm}})\right)
+    /// $$
+    #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
+    pub(crate) fn rcm_zsa(
+        &self,
+        rho: &Rho,
+        g_d: &NonIdentityPallasPoint,
+        pk_d: &NonIdentityPallasPoint,
+        value: u64,
+        psi: &pallas::Base,
+        asset: &AssetBase,
+    ) -> commitment::NoteCommitTrapdoor {
+        let mut h = Blake2bParams::new()
+            .hash_length(64)
+            .personal(PRF_EXPAND_PERSONALIZATION)
+            .to_state();
+        // rseed: raw bytes (32 bytes)
+        h.update(&self.0);
+        // domain separator: [0x0B] (1 byte, literal)
+        h.update(&[ZIP2005_ORCHARD_QR_RCM_DOMAIN_SEPARATOR]);
+        // g_d: LEBS2OSP_256(repr_P(g_d)) — compressed Pallas point (32 bytes)
+        h.update(&g_d.to_bytes());
+        // pk_d: LEBS2OSP_256(repr_P(pk_d)) — compressed Pallas point (32 bytes)
+        h.update(&pk_d.to_bytes());
+        // v: I2LEOSP_64(v) — unsigned 64-bit little-endian (8 bytes)
+        h.update(&value.to_le_bytes());
+        // rho: LEBS2OSP_256(repr_P(rho)) — Pallas base field canonical repr (32 bytes)
+        h.update(&rho.0.to_repr());
+        // psi: LEBS2OSP_256(repr_P(psi)) — Pallas base field canonical repr (32 bytes)
+        h.update(&psi.to_repr());
+        // asset: LEBS2OSP_256(repr_P(asset)) — compressed Pallas point (32 bytes)
+        h.update(&asset.to_bytes());
+
+        commitment::NoteCommitTrapdoor(to_scalar(*h.finalize().as_array()))
+    }
 }
 
 impl ConditionallySelectable for RandomSeed {
@@ -506,13 +564,21 @@ impl Note {
 
         match self.version {
             NoteVersion::V2 => self.rseed.rcm_v2(&rho),
-            NoteVersion::V3 | NoteVersion::ZSA => {
+            NoteVersion::V3 => {
                 let g_d = self.recipient.g_d();
                 let pk_d = self.recipient.pk_d().inner();
                 let psi = self.rseed.psi(&rho);
 
                 self.rseed
                     .rcm_v3(&rho, &g_d, &pk_d, self.value.inner(), &psi)
+            }
+            NoteVersion::ZSA => {
+                let g_d = self.recipient.g_d();
+                let pk_d = self.recipient.pk_d().inner();
+                let psi = self.rseed.psi(&rho);
+
+                self.rseed
+                    .rcm_zsa(&rho, &g_d, &pk_d, self.value.inner(), &psi, &self.asset)
             }
         }
     }
