@@ -25,7 +25,7 @@ pub use self::asset_base::AssetId;
 
 const PRF_EXPAND_PERSONALIZATION: &[u8; 16] = b"Zcash_ExpandSeed";
 const ZIP2005_ORCHARD_QR_RCM_DOMAIN_SEPARATOR: u8 = 0x0B;
-const ZSA_ORCHARD_RCM_DOMAIN_SEPARATOR: u8 = 0x0C;
+const ZSA_ORCHARD_RCM_DOMAIN_SEPARATOR: u8 = 0x0E;
 
 #[cfg(not(feature = "unstable-voting-circuits"))]
 pub(crate) mod commitment;
@@ -251,7 +251,7 @@ impl RandomSeed {
     ///
     /// $$
     /// \mathsf{pre}\_{\mathsf{rcm}} =
-    /// [ \mathtt{0x0C} ]
+    /// [ \mathtt{0x0E} ]
     /// \mathbin\Vert \mathsf{g}^\star\_{\mathsf{d}}
     /// \mathbin\Vert \mathsf{pk}^\star\_{\mathsf{d}}
     /// \mathbin\Vert \mathsf{I2LEOSP}\_{64}(\mathsf{v})
@@ -282,7 +282,7 @@ impl RandomSeed {
             .to_state();
         // rseed: raw bytes (32 bytes)
         h.update(&self.0);
-        // domain separator: [0x0C] (1 byte, literal)
+        // domain separator: [0x0E] (1 byte, literal)
         h.update(&[ZSA_ORCHARD_RCM_DOMAIN_SEPARATOR]);
         // g_d: LEBS2OSP_256(repr_P(g_d)) — compressed Pallas point (32 bytes)
         h.update(&g_d.to_bytes());
