@@ -25,6 +25,7 @@ pub use self::asset_base::AssetId;
 
 const PRF_EXPAND_PERSONALIZATION: &[u8; 16] = b"Zcash_ExpandSeed";
 const ZIP2005_ORCHARD_QR_RCM_DOMAIN_SEPARATOR: u8 = 0x0B;
+const ZSA_ORCHARD_RCM_DOMAIN_SEPARATOR: u8 = 0x0C;
 
 #[cfg(not(feature = "unstable-voting-circuits"))]
 pub(crate) mod commitment;
@@ -250,7 +251,7 @@ impl RandomSeed {
     ///
     /// $$
     /// \mathsf{pre}\_{\mathsf{rcm}} =
-    /// [ \mathtt{0x0B} ]
+    /// [ \mathtt{0x0C} ]
     /// \mathbin\Vert \mathsf{g}^\star\_{\mathsf{d}}
     /// \mathbin\Vert \mathsf{pk}^\star\_{\mathsf{d}}
     /// \mathbin\Vert \mathsf{I2LEOSP}\_{64}(\mathsf{v})
@@ -281,8 +282,8 @@ impl RandomSeed {
             .to_state();
         // rseed: raw bytes (32 bytes)
         h.update(&self.0);
-        // domain separator: [0x0B] (1 byte, literal)
-        h.update(&[ZIP2005_ORCHARD_QR_RCM_DOMAIN_SEPARATOR]);
+        // domain separator: [0x0C] (1 byte, literal)
+        h.update(&[ZSA_ORCHARD_RCM_DOMAIN_SEPARATOR]);
         // g_d: LEBS2OSP_256(repr_P(g_d)) — compressed Pallas point (32 bytes)
         h.update(&g_d.to_bytes());
         // pk_d: LEBS2OSP_256(repr_P(pk_d)) — compressed Pallas point (32 bytes)
@@ -948,5 +949,21 @@ mod tests {
         assert_ne!(split_note.nullifier(&fvk), derive(note.psi(), true));
         // A note with no split seed uses its own psi and does not add NULLIFIER_L (is_split=false).
         assert_eq!(note.nullifier(&fvk), derive(note.psi(), false));
+    }
+
+    /// `rcm_zsa` binds the note's asset, so two ZSA notes differing only in their asset have
+    /// distinct rcm and hence distinct note commitments.
+    #[test]
+    fn rcm_zsa_binds_the_asset() {
+        let mut rng = rand::rngs::OsRng;
+        let (_, _, note) = Note::dummy(&mut rng, None, NoteVersion::ZSA);
+
+        // Everything but the asset is shared, by construction.
+        let other = Note {
+            asset: AssetBase::random(&mut rng),
+            ..note
+        };
+
+        assert_ne!(note.rcm().inner(), other.rcm().inner());
     }
 }
