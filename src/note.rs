@@ -247,7 +247,7 @@ impl RandomSeed {
     /// Binds rcm to all note fields for post-quantum commitment binding. Compared
     /// to rcm_v3, we bind the note's [`AssetBase`] as well, so that rcm (and hence
     /// the note commitment) cannot be reused across notes that differ only in their asset.
-    /// This implements $\mathsf{H}^{\mathsf{rcm},\mathsf{Orchard}}\_{\mathsf{rseed}}$:
+    /// This implements $\mathsf{H}^{\mathsf{rcm},\mathsf{OrchardZSA}}\_{\mathsf{rseed}}$:
     ///
     /// $$
     /// \mathsf{pre}\_{\mathsf{rcm}} =
@@ -262,7 +262,7 @@ impl RandomSeed {
     ///
     /// $$
     /// \mathsf{rcm} =
-    /// \mathsf{ToScalar}^{\mathsf{Orchard}}
+    /// \mathsf{ToScalar}^{\mathsf{OrchardZSA}}
     /// \left(\mathsf{PRF}^{\mathsf{expand}}\_{\mathsf{rseed}}
     /// (\mathsf{pre}\_{\mathsf{rcm}})\right)
     /// $$
