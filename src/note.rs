@@ -242,7 +242,7 @@ impl RandomSeed {
         commitment::NoteCommitTrapdoor(to_scalar(*h.finalize().as_array()))
     }
 
-    /// Quantum-recoverable rcm derivation for ZSA note.
+    /// Quantum-recoverable rcm derivation for ZSA notes.
     ///
     /// Binds rcm to all note fields for post-quantum commitment binding. Compared
     /// to rcm_v3, we bind the note's [`AssetBase`] as well, so that rcm (and hence
