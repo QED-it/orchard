@@ -262,7 +262,7 @@ impl RandomSeed {
     ///
     /// $$
     /// \mathsf{rcm} =
-    /// \mathsf{ToScalar}^{\mathsf{OrchardZSA}}
+    /// \mathsf{ToScalar}^{\mathsf{Orchard}}
     /// \left(\mathsf{PRF}^{\mathsf{expand}}\_{\mathsf{rseed}}
     /// (\mathsf{pre}\_{\mathsf{rcm}})\right)
     /// $$
