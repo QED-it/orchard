@@ -239,7 +239,7 @@ mod tests {
             Authorized, Bundle, BundleVersion, TxVersion,
         },
         circuit::ProvingKey,
-        keys::{FullViewingKey, Scope, SpendingKey},
+        keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
         value::NoteValue,
         Anchor,
     };
@@ -269,6 +269,46 @@ mod tests {
         builder.build::<i64>(rng).unwrap().unwrap().0
     }
 
+    /// Like [`generate_bundle`], for an Orchard V3 bundle version that disables cross-address
+    /// transfers.
+    ///
+    /// Such a version pairs every output with a spend addressed to the same expanded receiver,
+    /// so `add_output` is rejected and the outputs must be supplied as wallet-controlled change
+    /// outputs instead.
+    fn generate_change_only_bundle_for_orchard_v3() -> UnauthorizedBundle<i64> {
+        let rng = StdRng::seed_from_u64(5);
+
+        let bundle_version = BundleVersion::orchard_v3();
+
+        let sk = SpendingKey::from_bytes([7; 32]).unwrap();
+        let fvk = FullViewingKey::from(&sk);
+        let recipient = fvk.address_at(0u32, Scope::External);
+
+        let mut builder = Builder::new(
+            BundleType::DEFAULT,
+            bundle_version,
+            bundle_version.default_flags(),
+            Anchor::from_bytes([0; 32]).unwrap(),
+        )
+        .unwrap();
+
+        builder
+            .add_change_output(
+                fvk.clone(),
+                None,
+                recipient,
+                NoteValue::from_raw(10),
+                [0u8; 512],
+            )
+            .unwrap();
+
+        builder
+            .add_change_output(fvk, None, recipient, NoteValue::from_raw(20), [0u8; 512])
+            .unwrap();
+
+        builder.build::<i64>(rng).unwrap().unwrap().0
+    }
+
     /// Verify that the hash for an Orchard V2 bundle matches a fixed reference value
     /// to ensure consistency.
     #[test]
@@ -278,6 +318,21 @@ mod tests {
         assert_eq!(
             sighash.to_hex().as_str(),
             "0ac1e319f6761a8561b7bd3fc0907a5c73ed5590a6c210c4d39ffae1d5741875"
+        );
+    }
+
+    /// Verify that the hash for an Orchard V3 bundle matches a fixed reference value
+    /// to ensure consistency.
+    ///
+    /// Orchard V3 mandates the cross-address restriction, so this bundle is built from change
+    /// outputs; see [`generate_change_only_bundle_for_orchard_v3`].
+    #[test]
+    fn test_hash_bundle_txid_data_for_orchard_v3() {
+        let bundle = generate_change_only_bundle_for_orchard_v3();
+        let sighash = hash_bundle_txid_data(&bundle, TxVersion::V6).unwrap();
+        assert_eq!(
+            sighash.to_hex().as_str(),
+            "ff9e7cdafd4b9f2ca5ac071f46a8066f7cf1ece9ce89f1760281bfe6b05154fb"
         );
     }
 
@@ -306,6 +361,27 @@ mod tests {
         bundle.prepare(rng, sighash).finalize().unwrap()
     }
 
+    /// Like [`generate_auth_bundle`], for an Orchard V3 bundle version that disables
+    /// cross-address transfers.
+    ///
+    /// Each change output pairs with a spend the wallet controls (`dummy_sk: None`), so unlike
+    /// [`generate_auth_bundle`], whose spends are all padding dummies that `prepare` signs
+    /// itself, this one has to sign with the spend authorizing key.
+    fn generate_change_only_auth_bundle_for_orchard_v3() -> Bundle<Authorized, i64> {
+        let mut rng = StdRng::seed_from_u64(6);
+        let sk = SpendingKey::from_bytes([7; 32]).unwrap();
+        let pk = ProvingKey::build(BundleVersion::orchard_v3().circuit_version());
+        let bundle = generate_change_only_bundle_for_orchard_v3()
+            .create_proof(&pk, &mut rng)
+            .unwrap();
+        let sighash = bundle.commitment(TxVersion::V6).unwrap().into();
+        bundle
+            .prepare(&mut rng, sighash)
+            .sign(&mut rng, &SpendAuthorizingKey::from(&sk))
+            .finalize()
+            .unwrap()
+    }
+
     /// Verify that the authorizing data commitment for an Orchard V2 bundle matches a fixed
     /// reference value to ensure consistency.
     #[test]
@@ -315,6 +391,21 @@ mod tests {
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
             "37d6c29faa98c2cb54420f3f7cac0477fdb105df1cdfde7adb7fbf68a24e3085"
+        );
+    }
+
+    /// Verify that the authorizing data commitment for an Orchard V3 bundle matches a fixed
+    /// reference value to ensure consistency.
+    ///
+    /// Orchard V3 mandates the cross-address restriction, so this bundle is built from change
+    /// outputs; see [`generate_change_only_bundle_for_orchard_v3`].
+    #[test]
+    fn test_hash_bundle_auth_data_for_orchard_v3() {
+        let bundle = generate_change_only_auth_bundle_for_orchard_v3();
+        let orchard_auth_digest = hash_bundle_auth_data(&bundle, TxVersion::V6).unwrap();
+        assert_eq!(
+            orchard_auth_digest.to_hex().as_str(),
+            "1b1e51877f967fb55d2d240e029471494754c2c6235f50eeb8740331dec47bcc"
         );
     }
 
