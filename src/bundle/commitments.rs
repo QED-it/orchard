@@ -766,7 +766,7 @@ mod tests {
     /// reference value.
     ///
     /// Orchard V3 mandates the cross-address restriction, so this bundle is built from change
-    /// outputs; see [`generate_change_only_auth_bundle_for_orchard_v3`].
+    /// outputs; see [`generate_change_only_bundle_for_orchard_v3`].
     ///
     /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
     /// bundle contents), so the resulting digest must remain stable. The reference value
