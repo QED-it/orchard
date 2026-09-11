@@ -717,6 +717,44 @@ pub fn check_issue_bundle_without_sighash(
     )
 }
 
+/// Verifies the authorization signature of an [`IssueBundle`] against the given `sighash`.
+///
+/// This performs the two checks that need the transaction's `sighash`, and nothing else:
+///
+/// - Ensures that the `SighashKind` in the signature matches `AllEffecting`.
+/// - Ensures the signature on the provided `sighash` matches the bundle's authorization,
+///   under the bundle's issuance validating key `ik`.
+///
+/// The result depends only on the bundle's own bytes and the `sighash`, so it is independent
+/// of any global issuance state. Callers that also need the state-dependent checks should use
+/// [`verify_issue_bundle`], or call [`check_issue_bundle_without_sighash`] separately.
+///
+/// # Arguments
+///
+/// * `bundle`: A reference to the [`IssueBundle`] whose signature is to be verified.
+/// * `sighash`: A 32-byte array representing the `sighash` the signature must commit to.
+///
+/// # Errors
+///
+/// * `InvalidSighashKind`: The `SighashKind` in the signature does not match
+///   `IssueSighashKind::AllEffecting`. This cannot happen today, because
+///   [`IssueSighashKind`] has a single variant and unknown kinds are rejected while
+///   parsing the bundle; the check is here for when ZIP 246 adds another kind.
+/// * `InvalidIssueBundleSig`: Signature verification for the provided `sighash` fails.
+pub fn verify_issue_bundle_signature(
+    bundle: &IssueBundle<Signed>,
+    sighash: [u8; 32],
+) -> Result<(), Error> {
+    if bundle.authorization().signature().sighash_kind() != &IssueSighashKind::AllEffecting {
+        return Err(InvalidSighashKind);
+    }
+
+    bundle
+        .ik()
+        .verify(&sighash, bundle.authorization().signature().sig())
+        .map_err(|_| InvalidIssueBundleSig)
+}
+
 /// Validates an [`IssueBundle`] by performing the following checks:
 ///
 /// - **IssueBundle Auth signature verification**:
@@ -768,14 +806,7 @@ pub fn verify_issue_bundle(
     get_global_records: impl FnMut(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
-    if bundle.authorization().signature().sighash_kind() != &IssueSighashKind::AllEffecting {
-        return Err(InvalidSighashKind);
-    }
-
-    bundle
-        .ik()
-        .verify(&sighash, bundle.authorization().signature().sig())
-        .map_err(|_| InvalidIssueBundleSig)?;
+    verify_issue_bundle_signature(bundle, sighash)?;
 
     check_issue_bundle_without_sighash(bundle, get_global_records, first_nullifier)
 }
@@ -921,8 +952,8 @@ mod tests {
             auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
             compute_asset_desc_hash, create_reference_note, is_reference_note,
             sighash_kind::{BIP340IssueAuthSig, IssueSighashKind},
-            verify_issue_bundle, AssetRecord, AwaitingNullifier, IssuanceFlags, IssueAction,
-            IssueBundle, IssueInfo, Signed,
+            verify_issue_bundle, verify_issue_bundle_signature, AssetRecord, AwaitingNullifier,
+            IssuanceFlags, IssueAction, IssueBundle, IssueInfo, Signed,
         },
         keys::{FullViewingKey, Scope, SpendingKey},
         note::{rho_for_issuance_note, AssetBase, AssetId, NoteVersion, Nullifier, Rho},
@@ -1618,6 +1649,38 @@ mod tests {
         assert_eq!(
             verify_issue_bundle(&signed, params.sighash, |_| None, &params.first_nullifier)
                 .unwrap_err(),
+            InvalidIssueBundleSig
+        );
+    }
+
+    #[test]
+    fn verify_issue_bundle_signature_accepts_valid_signature() {
+        let params = setup_params();
+        let (signed, _) = new_signed_bundle(&params, b"good sig", 5);
+
+        assert_eq!(
+            verify_issue_bundle_signature(&signed, params.sighash),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn verify_issue_bundle_signature_fail_bad_signature() {
+        let params = setup_params();
+        let mut rng = OsRng;
+        let (mut signed, _) = new_signed_bundle(&params, b"bad sig", 5);
+
+        let wrong_isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
+
+        signed.set_authorization(Signed {
+            signature: BIP340IssueAuthSig::new(
+                IssueSighashKind::AllEffecting,
+                wrong_isk.try_sign(&params.sighash).unwrap(),
+            ),
+        });
+
+        assert_eq!(
+            verify_issue_bundle_signature(&signed, params.sighash).unwrap_err(),
             InvalidIssueBundleSig
         );
     }
