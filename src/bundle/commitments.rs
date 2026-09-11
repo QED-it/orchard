@@ -623,7 +623,7 @@ mod tests {
 
         builder
             .add_change_output(
-                fvk.clone(),
+                fvk,
                 None,
                 recipient,
                 NoteValue::from_raw(20),
@@ -656,7 +656,7 @@ mod tests {
     /// Verifies that the hash for an Orchard V3 bundle matches a fixed reference value.
     ///
     /// Orchard V3 mandates the cross-address restriction, so this bundle is built from change
-    /// outputs; see [`generate_change_only_bundle`].
+    /// outputs; see [`generate_change_only_bundle_for_orchard_v3`].
     ///
     /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
     /// bundle contents), so the resulting digest must remain stable. The reference value
@@ -725,7 +725,7 @@ mod tests {
     /// cross-address transfers.
     ///
     /// Each change output pairs with a spend the wallet controls (`dummy_sk: None`), so unlike
-    /// [`generate_auth_bundle`], whose spends are all padding dummies that `finalize` signs
+    /// [`generate_auth_bundle`], whose spends are all padding dummies that `prepare` signs
     /// itself, this one has to sign with the spend authorizing key.
     fn generate_change_only_auth_bundle_for_orchard_v3() -> Bundle<Authorized, i64> {
         let mut rng = StdRng::seed_from_u64(6);
@@ -766,7 +766,7 @@ mod tests {
     /// reference value.
     ///
     /// Orchard V3 mandates the cross-address restriction, so this bundle is built from change
-    /// outputs; see [`generate_change_only_bundle`].
+    /// outputs; see [`generate_change_only_auth_bundle_for_orchard_v3`].
     ///
     /// This is a regression test: inputs are fully deterministic (seeded RNG and fixed
     /// bundle contents), so the resulting digest must remain stable. The reference value
