@@ -998,7 +998,7 @@ pub fn bundle<V: TryFrom<i64>, FL: OrchardFlavor>(
 
             // Verify that bsk and bvk are consistent.
             if !is_action_group {
-                //TODO: Does that mean we don't check for cinsistency if it is an Action Group?
+                //TODO: move derivation to the bundle level at the follow-up PR
                 let bvk = derive_bvk(&actions, zatoshi_value_balance, &burn_vec);
                 assert_eq!(redpallas::VerificationKey::from(&bsk), bvk);
             }
