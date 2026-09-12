@@ -41,7 +41,6 @@ pub mod pczt;
 pub mod primitives;
 pub mod sighash_kind;
 mod spec;
-pub mod swap_bundle;
 pub mod tree;
 pub mod value;
 pub mod zip32;
@@ -51,14 +50,15 @@ mod test_vectors;
 
 pub use action::Action;
 pub use address::Address;
+pub use bundle::ActionGroup;
 pub use bundle::Bundle;
 pub use constants::MERKLE_DEPTH_ORCHARD as NOTE_COMMITMENT_TREE_DEPTH;
 pub use note::Note;
 pub use tree::Anchor;
 
-/// A proof of the validity of an Orchard [`Bundle`].
+/// A proof of the validity of an Orchard [`ActionGroup`].
 ///
-/// [`Bundle`]: crate::bundle::Bundle
+/// [`ActionGroup`]: crate::bundle::ActionGroup
 #[derive(Clone)]
 pub struct Proof(Vec<u8>);
 

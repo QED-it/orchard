@@ -5,11 +5,11 @@ use alloc::vec::Vec;
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::note_bytes::NoteBytesData;
 
-use crate::bundle::commitments::hash_action_group;
 use crate::{
     bundle::{
         commitments::{
-            get_compact_size, hasher, ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION,
+            get_compact_size, hash_action_group, hasher,
+            ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION,
             ZCASH_ORCHARD_HASH_PERSONALIZATION, ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION,
             ZCASH_ORCHARD_SPEND_AUTH_SIGS_HASH_PERSONALIZATION,
         },
@@ -25,8 +25,8 @@ use crate::{
         },
     },
     sighash_kind::OrchardSighashKind,
-    Bundle,
 };
+use crate::bundle::Bundle;
 
 impl OrchardPrimitives for OrchardZSA {
     const COMPACT_NOTE_SIZE: usize = COMPACT_NOTE_SIZE_ZSA;
@@ -62,8 +62,9 @@ impl OrchardPrimitives for OrchardZSA {
         bundle: &Bundle<A, V, OrchardZSA>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
-        let agh = hash_action_group(bundle);
-        h.update(agh.as_bytes());
+        for action_group in bundle.action_groups() {
+            h.update(hash_action_group(action_group).as_bytes());
+        }
         h.update(&(*bundle.value_balance()).into().to_le_bytes());
         h.finalize()
     }
@@ -80,25 +81,28 @@ impl OrchardPrimitives for OrchardZSA {
         sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
-        let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION);
-        agh.update(bundle.authorization().proof().as_ref());
-        let mut sash = hasher(ZCASH_ORCHARD_SPEND_AUTH_SIGS_HASH_PERSONALIZATION);
-        for action in bundle.actions().iter() {
-            let sighash_info = sighash_info_for_kind(action.authorization().sighash_kind());
-            sash.update(&get_compact_size(sighash_info.len()));
-            sash.update(sighash_info.as_slice());
-            sash.update(&<[u8; 64]>::from(action.authorization().sig()));
-        }
-        agh.update(sash.finalize().as_bytes());
-        h.update(agh.finalize().as_bytes());
 
-        let sighash_info =
-            sighash_info_for_kind(bundle.authorization().binding_signature().sighash_kind());
+        for action_group in bundle.action_groups() {
+            let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION);
+            agh.update(action_group.authorization().proof().as_ref());
+
+            let mut sash = hasher(ZCASH_ORCHARD_SPEND_AUTH_SIGS_HASH_PERSONALIZATION);
+            for action in action_group.actions().iter() {
+                let sighash_info = sighash_info_for_kind(action.authorization().sighash_kind());
+                sash.update(&get_compact_size(sighash_info.len()));
+                sash.update(sighash_info.as_slice());
+                sash.update(&<[u8; 64]>::from(action.authorization().sig()));
+            }
+            agh.update(sash.finalize().as_bytes());
+
+            h.update(agh.finalize().as_bytes());
+        }
+
+        let binding_signature = bundle.binding_signature().unwrap();
+        let sighash_info = sighash_info_for_kind(binding_signature.sighash_kind());
         h.update(&get_compact_size(sighash_info.len()));
         h.update(sighash_info.as_slice());
-        h.update(&<[u8; 64]>::from(
-            bundle.authorization().binding_signature().sig(),
-        ));
+        h.update(&<[u8; 64]>::from(binding_signature.sig()));
         h.finalize()
     }
 

@@ -49,7 +49,7 @@ pub use tx_extractor::{TxExtractorError, Unbound};
 /// This struct is for representing Orchard in a partially-created transaction. If you
 /// have a fully-created transaction, use [the regular `Bundle` struct].
 ///
-/// [the regular `Bundle` struct]: crate::Bundle
+/// [the regular `Bundle` struct]: crate::ActionGroup
 #[derive(Debug, Getters)]
 #[getset(get = "pub")]
 pub struct Bundle {
@@ -391,7 +391,8 @@ mod tests {
 
         assert_eq!(bundle.value_balance(), &(-5000));
         // We can successfully bind the bundle.
-        bundle.apply_binding_signature(sighash, rng).unwrap();
+        let action_group = bundle.action_groups().first().unwrap().clone();
+        action_group.apply_binding_signature(sighash, rng).unwrap();
     }
 
     #[test]
@@ -512,6 +513,7 @@ mod tests {
 
         assert_eq!(bundle.value_balance(), &0);
         // We can successfully bind the bundle.
-        bundle.apply_binding_signature(sighash, rng).unwrap();
+        let action_group = bundle.action_groups().first().unwrap().clone();
+        action_group.apply_binding_signature(sighash, rng).unwrap();
     }
 }

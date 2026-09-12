@@ -17,10 +17,11 @@ impl super::Bundle {
     ///
     /// This is used by the Signer role to produce the transaction sighash.
     ///
-    /// [regular `Bundle`]: crate::Bundle
+    /// [regular `Bundle`]: crate::bundle::Bundle
     pub fn extract_effects<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::Bundle<EffectsOnly, V, OrchardVanilla>>, TxExtractorError> {
+    ) -> Result<Option<crate::bundle::Bundle<EffectsOnly, V, OrchardVanilla>>, TxExtractorError>
+    {
         self.to_tx_data(|_| Ok(()), |_| Ok(EffectsOnly))
     }
 
@@ -28,10 +29,10 @@ impl super::Bundle {
     ///
     /// This is used by the Transaction Extractor role to produce the final transaction.
     ///
-    /// [regular `Bundle`]: crate::Bundle
+    /// [regular `Bundle`]: crate::ActionGroup
     pub fn extract<V: TryFrom<i64>>(
         &self,
-    ) -> Result<Option<crate::Bundle<Unbound, V, OrchardVanilla>>, TxExtractorError> {
+    ) -> Result<Option<crate::bundle::Bundle<Unbound, V, OrchardVanilla>>, TxExtractorError> {
         self.to_tx_data(
             |action| {
                 action
@@ -60,7 +61,7 @@ impl super::Bundle {
         &self,
         action_auth: F,
         bundle_auth: G,
-    ) -> Result<Option<crate::Bundle<A, V, OrchardVanilla>>, E>
+    ) -> Result<Option<crate::bundle::Bundle<A, V, OrchardVanilla>>, E>
     where
         A: Authorization,
         E: From<TxExtractorError>,
@@ -93,14 +94,19 @@ impl super::Bundle {
 
             let authorization = bundle_auth(self)?;
 
-            Some(crate::Bundle::from_parts(
+            let action_group = crate::ActionGroup::from_parts(
                 actions,
                 self.flags,
-                value_balance,
                 vec![], //No burn in PCZT V1
                 self.anchor,
                 0, // No expiry height in PCZT V1
                 authorization,
+            );
+
+            Some(crate::bundle::Bundle::<A, V, OrchardVanilla>::from_parts(
+                vec![action_group],
+                value_balance,
+                None, //TODO: There doesn't seem to be a use of this to generate Authorized bundles. But consider fixing
             ))
         } else {
             None
@@ -147,7 +153,7 @@ impl fmt::Display for TxExtractorError {
 impl std::error::Error for TxExtractorError {}
 
 /// Authorizing data for a bundle of actions that is just missing a binding signature.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Unbound {
     proof: Proof,
     bsk: redpallas::SigningKey<Binding>,
@@ -161,7 +167,7 @@ impl Authorization for Unbound {
     }
 }
 
-impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
+impl crate::ActionGroup<Unbound, OrchardVanilla> {
     /// Verifies the given sighash with every `spend_auth_sig`, and then binds the bundle.
     ///
     /// Returns `None` if the given sighash does not validate against every `spend_auth_sig`.
@@ -169,7 +175,7 @@ impl<V> crate::Bundle<Unbound, V, OrchardVanilla> {
         self,
         sighash: [u8; 32],
         rng: R,
-    ) -> Option<crate::Bundle<Authorized, V, OrchardVanilla>> {
+    ) -> Option<crate::ActionGroup<Authorized, OrchardVanilla>> {
         if self
             .actions()
             .iter()

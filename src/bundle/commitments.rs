@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use blake2b_simd::{Hash as Blake2bHash, Params, State};
 
 use crate::{
-    bundle::{Authorization, Authorized, Bundle},
+    bundle::{Authorization, Authorized, ActionGroup},
     flavor::OrchardZSA,
     primitives::OrchardPrimitives,
     sighash_kind::OrchardSighashKind,
@@ -18,6 +18,7 @@ pub(crate) use issuance::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_da
 
 #[cfg(feature = "zsa-issuance")]
 pub use issuance::{hash_issue_bundle_auth_empty, hash_issue_bundle_txid_empty};
+use crate::bundle::Bundle;
 
 // TODO remove
 const MEMO_SIZE: usize = 512;
@@ -74,8 +75,8 @@ pub fn hash_bundle_txid_empty() -> Blake2bHash {
 /// [ZIP-228: Asset Swaps for Zcash Shielded Assets][zip228]
 ///
 /// [zip228]: https://zips.z.cash/zip-0228
-pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
-    action_group: &Bundle<A, V, OrchardZSA>,
+pub(crate) fn hash_action_group<A: Authorization>(
+    action_group: &ActionGroup<A, OrchardZSA>,
 ) -> Blake2bHash {
     let mut agh = hasher(ZCASH_ORCHARD_ACTION_GROUPS_HASH_PERSONALIZATION);
 
@@ -129,24 +130,6 @@ pub(crate) fn hash_action_group<A: Authorization, V: Copy + Into<i64>>(
     agh.finalize()
 }
 
-/// Construct the commitment for a swap bundle as defined in
-/// [ZIP-228: Asset Swaps for Zcash Shielded Assets][zip228]
-///
-/// [zip228]: https://zips.z.cash/zip-0228
-pub(crate) fn hash_swap_bundle<A: Authorization, V: Copy + Into<i64>>(
-    action_groups: Vec<&Bundle<A, V, OrchardZSA>>,
-    value_balance: V,
-) -> Blake2bHash {
-    let mut h = hasher(ZCASH_ORCHARD_HASH_PERSONALIZATION);
-
-    for action_group in action_groups {
-        h.update(hash_action_group(action_group).as_bytes());
-    }
-
-    h.update(&value_balance.into().to_le_bytes());
-    h.finalize()
-}
-
 /// Construct the `orchard_auth_digest` commitment to the authorizing data of an
 /// authorized bundle as defined in
 /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
@@ -192,10 +175,10 @@ pub fn get_compact_size(size: usize) -> Vec<u8> {
 #[cfg(all(test, feature = "circuit"))]
 mod tests {
     use crate::{
-        builder::{Builder, BundleType, UnauthorizedBundle},
+        builder::{Builder, BundleType},
         bundle::{
             commitments::{get_compact_size, hash_bundle_auth_data, hash_bundle_txid_data},
-            Authorized, Bundle,
+            Authorized,
         },
         circuit::ProvingKey,
         flavor::{OrchardFlavor, OrchardVanilla, OrchardZSA},
@@ -206,8 +189,12 @@ mod tests {
         Anchor,
     };
     use rand::{rngs::StdRng, SeedableRng};
+    use crate::builder::{InProgress, Unauthorized, Unproven};
+    use crate::bundle::Bundle;
 
-    fn generate_bundle<FL: OrchardFlavor>(bundle_type: BundleType) -> UnauthorizedBundle<i64, FL> {
+    fn generate_bundle<FL: OrchardFlavor>(
+        bundle_type: BundleType,
+    ) -> Bundle<InProgress<Unproven, Unauthorized>, i64, FL> {
         let rng = StdRng::seed_from_u64(5);
 
         let sk = SpendingKey::from_bytes([7; 32]).unwrap();
@@ -234,7 +221,9 @@ mod tests {
             )
             .unwrap();
 
-        builder.build::<i64, FL>(rng).unwrap().unwrap().0
+        let (action_group, value_balance, _) = builder.build::<i64, FL>(rng).unwrap().unwrap();
+
+        Bundle::from_parts(vec![action_group], value_balance, None)
     }
 
     /// Verifies that the hash for an Orchard Vanilla bundle matches a fixed reference value.
@@ -276,11 +265,35 @@ mod tests {
     ) -> Bundle<Authorized, i64, FL> {
         let mut rng = StdRng::seed_from_u64(6);
         let pk = ProvingKey::build::<FL>();
-        let bundle = generate_bundle(bundle_type)
+        let unauth_bundle = generate_bundle(bundle_type);
+        let proven_action_group = unauth_bundle
+            .action_groups()
+            .first()
+            .unwrap()
+            .clone()
             .create_proof(&pk, &mut rng)
             .unwrap();
-        let sighash = bundle.commitment().into();
-        bundle.prepare(rng, sighash).finalize().unwrap()
+        let sighash = Bundle::from_parts(
+            vec![proven_action_group.clone()],
+            *unauth_bundle.value_balance(),
+            None,
+        )
+        .commitment()
+        .into();
+        let auth_action_group = proven_action_group
+            .prepare(rng, sighash)
+            .finalize()
+            .unwrap();
+
+        let binding_signature = auth_action_group
+            .authorization()
+            .binding_signature()
+            .clone();
+        Bundle::from_parts(
+            vec![auth_action_group],
+            *unauth_bundle.value_balance(),
+            Some(binding_signature),
+        )
     }
 
     /// Verifies that the authorizing data commitment for an Orchard Vanilla bundle matches a fixed
