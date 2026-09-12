@@ -1,7 +1,7 @@
 //! This module implements the note encryption and commitment logic specific for the
 //! `OrchardVanilla` flavor.
 
-use alloc::{collections::BTreeMap, vec::Vec};
+use alloc::vec::Vec;
 use blake2b_simd::Hash as Blake2bHash;
 use zcash_note_encryption::note_bytes::NoteBytesData;
 
@@ -15,9 +15,8 @@ use crate::{
         },
         Authorization, Authorized,
     },
+    flavor::OrchardVanilla,
     note::{AssetBase, Note},
-    orchard_flavor::OrchardVanilla,
-    orchard_sighash_versioning::OrchardSighashVersion,
     primitives::{
         orchard_primitives::OrchardPrimitives,
         zcash_note_encryption_domain::{
@@ -25,6 +24,7 @@ use crate::{
             NOTE_VERSION_BYTE_V2,
         },
     },
+    sighash_kind::OrchardSighashKind,
     Bundle,
 };
 
@@ -45,7 +45,7 @@ impl OrchardPrimitives for OrchardVanilla {
     }
 
     fn extract_asset(_plaintext: &Self::CompactNotePlaintextBytes) -> Option<AssetBase> {
-        Some(AssetBase::native())
+        Some(AssetBase::zatoshi())
     }
 
     /// Evaluate `orchard_digest` for the bundle as defined in
@@ -94,24 +94,39 @@ impl OrchardPrimitives for OrchardVanilla {
     /// Evaluate `orchard_auth_digest` for the bundle as defined in
     /// [ZIP-244: Transaction Identifier Non-Malleability][zip244]
     ///
+    /// # Panics
+    ///
+    /// Panics if any signature in the bundle uses a sighash kind different from
+    /// `OrchardSighashKind::AllEffecting`. In Orchard v5 transactions, this is the
+    /// only defined sighash kind.
+    ///
     /// [zip244]: https://zips.z.cash/zip-0244
     fn hash_bundle_auth_data<V>(
         bundle: &Bundle<Authorized, V, OrchardVanilla>,
-        _: &BTreeMap<OrchardSighashVersion, Vec<u8>>,
+        _sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
     ) -> Blake2bHash {
         let mut h = hasher(ZCASH_ORCHARD_SIGS_HASH_PERSONALIZATION);
-        h.update(bundle.authorization().proof().unwrap().as_ref());
+        h.update(bundle.authorization().proof().as_ref());
         for action in bundle.actions().iter() {
+            assert_eq!(
+                *action.authorization().sighash_kind(),
+                OrchardSighashKind::AllEffecting
+            );
             h.update(&<[u8; 64]>::from(action.authorization().sig()));
         }
+        assert_eq!(
+            *bundle.authorization().binding_signature().sighash_kind(),
+            OrchardSighashKind::AllEffecting
+        );
         h.update(&<[u8; 64]>::from(
             bundle.authorization().binding_signature().sig(),
         ));
         h.finalize()
     }
 
-    fn default_sighash_version() -> OrchardSighashVersion {
-        OrchardSighashVersion::NoVersion
+    /// Returns true if the note plaintext leadByte is equal to 0x02.
+    fn is_valid_note_plaintext_lead_byte(plaintext: &[u8]) -> bool {
+        plaintext.first() == Some(&NOTE_VERSION_BYTE_V2)
     }
 }
 
@@ -129,22 +144,21 @@ mod tests {
     use crate::{
         action::Action,
         address::Address,
+        flavor::OrchardVanilla,
         keys::{
             DiversifiedTransmissionKey, Diversifier, EphemeralSecretKey, IncomingViewingKey,
             OutgoingViewingKey, PreparedIncomingViewingKey,
         },
         note::{
-            testing::arb_native_note, AssetBase, ExtractedNoteCommitment, Note, Nullifier,
+            testing::arb_zatoshi_note, AssetBase, ExtractedNoteCommitment, Note, Nullifier,
             RandomSeed, Rho, TransmittedNoteCiphertext,
         },
-        orchard_flavor::OrchardVanilla,
         primitives::{
             compact_action::CompactAction,
             orchard_domain::OrchardDomain,
             redpallas,
-            zcash_note_encryption_domain::{
-                parse_note_plaintext_without_memo, parse_note_version, prf_ock_orchard,
-            },
+            zcash_note_encryption_domain::{parse_note_plaintext_without_memo, prf_ock_orchard},
+            OrchardPrimitives,
         },
         value::{NoteValue, ValueCommitment},
     };
@@ -154,7 +168,7 @@ mod tests {
     proptest! {
         #[test]
         fn encoding_roundtrip(
-            note in arb_native_note(),
+            note in arb_zatoshi_note(),
         ) {
             let memo = &crate::test_vectors::note_encryption_vanilla::TEST_VECTORS[0].memo;
             let rho = note.rho();
@@ -166,7 +180,7 @@ mod tests {
             let domain = OrchardDomainVanilla::for_rho(rho);
             let (compact, parsed_memo) = domain.split_plaintext_at_memo(&plaintext).unwrap();
 
-            assert!(parse_note_version(compact.as_ref()).is_some());
+            assert!(<OrchardVanilla as OrchardPrimitives>::is_valid_note_plaintext_lead_byte(compact.as_ref()));
 
             let (parsed_note, parsed_recipient) = parse_note_plaintext_without_memo::<OrchardVanilla, _>(rho, &compact,
                 |diversifier| {
@@ -227,7 +241,7 @@ mod tests {
 
             let recipient = Address::from_parts(d, pk_d);
 
-            let asset = AssetBase::native();
+            let asset = AssetBase::zatoshi();
 
             let note = Note::from_parts(recipient, value, asset, rho, rseed).unwrap();
             assert_eq!(ExtractedNoteCommitment::from(note.commitment()), cmx);
