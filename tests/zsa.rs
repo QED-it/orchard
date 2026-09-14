@@ -300,6 +300,20 @@ struct TestOutputInfo {
     recipient: Address,
 }
 
+#[derive(Eq, PartialEq, Debug)]
+struct TestSwapIO {
+    asset: AssetBase,
+    quantity: NoteValue,
+}
+
+struct TestSwapOrder {
+    proposed_input: TestSwapIO,
+    desired_output: TestSwapIO,
+    bsk: SigningKey<Binding>,
+    value_balance: i64,
+    action_group: ActionGroup<ActionGroupAuthorized, OrchardZSA>,
+}
+
 fn build_and_verify_bundle(
     spends: Vec<&TestSpendInfo>,
     outputs: Vec<TestOutputInfo>,
@@ -850,6 +864,26 @@ fn action_group_and_swap_bundle() {
     // 5 ZEC are remaining for miner fees
 
     {
+        let user1_proposed_input = TestSwapIO {
+            asset: asset1_note1.asset(),
+            quantity: NoteValue::from_raw(10),
+        };
+
+        let user1_desired_output = TestSwapIO {
+            asset: asset2_note1.asset(),
+            quantity: NoteValue::from_raw(20),
+        };
+
+        let user2_proposed_input = TestSwapIO {
+            asset: asset2_note1.asset(),
+            quantity: NoteValue::from_raw(20),
+        };
+
+        let user2_desired_output = TestSwapIO {
+            asset: asset1_note1.asset(),
+            quantity: NoteValue::from_raw(10),
+        };
+
         // 1. Create and verify ActionGroup for user1
         let (action_group1, bsk1, bal1) = build_and_verify_action_group(
             vec![
@@ -890,6 +924,14 @@ fn action_group_and_swap_bundle() {
         )
         .unwrap();
 
+        let user1_swap_order = TestSwapOrder {
+            proposed_input: user1_proposed_input,
+            desired_output: user1_desired_output,
+            bsk: bsk1,
+            value_balance: bal1,
+            action_group: action_group1,
+        };
+
         // 2. Create and verify ActionGroup for user2
         let (action_group2, bsk2, bal2) = build_and_verify_action_group(
             vec![
@@ -929,6 +971,24 @@ fn action_group_and_swap_bundle() {
         )
         .unwrap();
 
+        let user2_swap_order = TestSwapOrder {
+            proposed_input: user2_proposed_input,
+            desired_output: user2_desired_output,
+            bsk: bsk2,
+            value_balance: bal2,
+            action_group: action_group2,
+        };
+
+        // The matcher first checks that the proposed input and desired output of user1 and user2 match.
+        assert_eq!(
+            user1_swap_order.proposed_input,
+            user2_swap_order.desired_output
+        );
+        assert_eq!(
+            user1_swap_order.desired_output,
+            user2_swap_order.proposed_input
+        );
+
         // 3. Matcher fees action group
         let (action_group_matcher, bsk_matcher, bal_matcher) = build_and_verify_action_group(
             // The matcher spends nothing.
@@ -949,14 +1009,22 @@ fn action_group_and_swap_bundle() {
         )
         .unwrap();
 
+        // 4. Matcher creates a Bundle from the three previous ActionGroups
         let bundle = Bundle::from_parts(
-            vec![action_group1, action_group2, action_group_matcher],
-            bal1 + bal2 + bal_matcher,
+            vec![
+                user1_swap_order.action_group,
+                user2_swap_order.action_group,
+                action_group_matcher,
+            ],
+            user1_swap_order.value_balance + user2_swap_order.value_balance + bal_matcher,
             None,
         );
 
-        // 4. Create a SwapBundle from the three previous ActionGroups
-        let swap_bundle = bundle.compute_binding_signature(OsRng, vec![bsk1, bsk2, bsk_matcher]);
+        // Add the binding signature to the bundle.
+        let swap_bundle = bundle.compute_binding_signature(
+            OsRng,
+            vec![user1_swap_order.bsk, user2_swap_order.bsk, bsk_matcher],
+        );
         verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
     }
 
@@ -973,6 +1041,26 @@ fn action_group_and_swap_bundle() {
     // 5 ZEC are remaining for miner fees
 
     {
+        let user1_proposed_input = TestSwapIO {
+            asset: asset1_note1.asset(),
+            quantity: NoteValue::from_raw(10),
+        };
+
+        let user1_desired_output = TestSwapIO {
+            asset: AssetBase::zatoshi(),
+            quantity: NoteValue::from_raw(150),
+        };
+
+        let user2_proposed_input = TestSwapIO {
+            asset: AssetBase::zatoshi(),
+            quantity: NoteValue::from_raw(150),
+        };
+
+        let user2_desired_output = TestSwapIO {
+            asset: asset1_note1.asset(),
+            quantity: NoteValue::from_raw(10),
+        };
+
         // 1. Create and verify ActionGroup for user1
         let (action_group1, bsk1, bal1) = build_and_verify_action_group(
             vec![
@@ -1002,6 +1090,14 @@ fn action_group_and_swap_bundle() {
             &keys1,
         )
         .unwrap();
+
+        let user1_swap_order = TestSwapOrder {
+            proposed_input: user1_proposed_input,
+            desired_output: user1_desired_output,
+            bsk: bsk1,
+            value_balance: bal1,
+            action_group: action_group1,
+        };
 
         // 2. Create and verify ActionGroup for user2
         let (action_group2, bsk2, bal2) = build_and_verify_action_group(
@@ -1034,6 +1130,14 @@ fn action_group_and_swap_bundle() {
         )
         .unwrap();
 
+        let user2_swap_order = TestSwapOrder {
+            proposed_input: user2_proposed_input,
+            desired_output: user2_desired_output,
+            bsk: bsk2,
+            value_balance: bal2,
+            action_group: action_group2,
+        };
+
         // 3. Matcher fees action group
         let (action_group_matcher, bsk_matcher, bal_matcher) = build_and_verify_action_group(
             // The matcher spends nothing.
@@ -1054,14 +1158,22 @@ fn action_group_and_swap_bundle() {
         )
         .unwrap();
 
+        // 4. Matcher creates a Bundle from the three previous ActionGroups
         let bundle = Bundle::from_parts(
-            vec![action_group1, action_group2, action_group_matcher],
-            bal1 + bal2 + bal_matcher,
+            vec![
+                user1_swap_order.action_group,
+                user2_swap_order.action_group,
+                action_group_matcher,
+            ],
+            user1_swap_order.value_balance + user2_swap_order.value_balance + bal_matcher,
             None,
         );
 
-        // 4. Create a SwapBundle from the three previous ActionGroups
-        let swap_bundle = bundle.compute_binding_signature(OsRng, vec![bsk1, bsk2, bsk_matcher]);
+        // Add the binding signature to the bundle.
+        let swap_bundle = bundle.compute_binding_signature(
+            OsRng,
+            vec![user1_swap_order.bsk, user2_swap_order.bsk, bsk_matcher],
+        );
         verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
     }
 
@@ -1101,5 +1213,284 @@ fn action_group_and_swap_bundle() {
 
         let swap_bundle = bundle.compute_binding_signature(OsRng, vec![bsk1]);
         verify_swap_bundle(&swap_bundle, vec![&keys1.vk]);
+    }
+}
+
+#[test]
+#[should_panic]
+fn invalid_swap_bundle() {
+    // ----- Setup -----
+
+    let pk = ProvingKey::build::<OrchardZSA>();
+    let vk = VerifyingKey::build::<OrchardZSA>();
+
+    // Create notes for user1
+    let keys1 = prepare_keys(&pk, &vk, 5);
+
+    let user1_zatoshi_note1 = create_zatoshi_note(&keys1);
+    let user1_zatoshi_note2 = create_zatoshi_note(&keys1);
+
+    let asset_descr1 = b"zsa_asset1".to_vec();
+    let (asset1_reference_note, asset1_note1, asset1_note2) = issue_zsa_notes(
+        &asset_descr1,
+        &keys1,
+        &user1_zatoshi_note1.nullifier(keys1.fvk()),
+    );
+
+    // Create notes for user2
+    let keys2 = prepare_keys(&pk, &vk, 10);
+
+    let asset_descr2 = b"zsa_asset2".to_vec();
+    let (asset2_reference_note, asset2_note1, asset2_note2) = issue_zsa_notes(
+        &asset_descr2,
+        &keys2,
+        &user1_zatoshi_note2.nullifier(keys1.fvk()),
+    );
+
+    let user2_zatoshi_note1 = create_zatoshi_note(&keys2);
+
+    // Create matcher keys
+    let matcher_keys = prepare_keys(&pk, &vk, 15);
+
+    // Create Merkle tree with all notes
+    let (merkle_paths, anchor) = build_merkle_paths(vec![
+        &asset1_note1,
+        &asset1_note2,
+        &user1_zatoshi_note1,
+        &user1_zatoshi_note2,
+        &asset2_note1,
+        &asset2_note2,
+        &user2_zatoshi_note1,
+        &asset1_reference_note,
+        &asset2_reference_note,
+    ]);
+
+    assert_eq!(merkle_paths.len(), 10);
+    let merkle_path_asset1_note1 = merkle_paths[0].clone();
+    let merkle_path_asset1_note2 = merkle_paths[1].clone();
+    let merkle_path_user1_zatoshi_note1 = merkle_paths[2].clone();
+    let merkle_path_user1_zatoshi_note2 = merkle_paths[3].clone();
+    let merkle_path_asset2_note1 = merkle_paths[4].clone();
+    let merkle_path_asset2_note2 = merkle_paths[5].clone();
+    let merkle_path_user2_zatoshi_note1 = merkle_paths[6].clone();
+    let merkle_path_asset1_reference_note = merkle_paths[7].clone();
+    let merkle_path_asset2_reference_note = merkle_paths[8].clone();
+
+    // Create TestSpendInfo
+    let asset1_spend1 = TestSpendInfo {
+        note: asset1_note1,
+        merkle_path: merkle_path_asset1_note1,
+    };
+    let asset1_spend2 = TestSpendInfo {
+        note: asset1_note2,
+        merkle_path: merkle_path_asset1_note2,
+    };
+    let user1_zatoshi_note1_spend = TestSpendInfo {
+        note: user1_zatoshi_note1,
+        merkle_path: merkle_path_user1_zatoshi_note1,
+    };
+    let user1_zatoshi_note2_spend = TestSpendInfo {
+        note: user1_zatoshi_note2,
+        merkle_path: merkle_path_user1_zatoshi_note2,
+    };
+    let asset2_spend1 = TestSpendInfo {
+        note: asset2_note1,
+        merkle_path: merkle_path_asset2_note1,
+    };
+    let asset2_spend2 = TestSpendInfo {
+        note: asset2_note2,
+        merkle_path: merkle_path_asset2_note2,
+    };
+    let user2_zatoshi_note1_spend = TestSpendInfo {
+        note: user2_zatoshi_note1,
+        merkle_path: merkle_path_user2_zatoshi_note1,
+    };
+    let asset1_reference_spend_note = TestSpendInfo {
+        note: asset1_reference_note,
+        merkle_path: merkle_path_asset1_reference_note,
+    };
+    let asset2_reference_spend_note = TestSpendInfo {
+        note: asset2_reference_note,
+        merkle_path: merkle_path_asset2_reference_note,
+    };
+
+    // ----- Test: Provide Matcher with invalid swap order -----
+    // User1:
+    // - spends 10 asset1
+    // - receives 20 asset2
+    // - pays 5 ZEC as fees, but mentions 10 ZEC in the swap order (invalid)
+    // User2:
+    // - spends 20 asset2
+    // - receives 10 asset1
+    // - pays 5 ZEC as fees
+    // Matcher:
+    // - tries to receive 10 ZEC as fees from user1 and user2
+    // 5 ZEC are remaining for miner fees
+
+    {
+        let user1_proposed_input = TestSwapIO {
+            asset: asset1_note1.asset(),
+            quantity: NoteValue::from_raw(10),
+        };
+
+        let user1_desired_output = TestSwapIO {
+            asset: asset2_note1.asset(),
+            quantity: NoteValue::from_raw(20),
+        };
+
+        let user2_proposed_input = TestSwapIO {
+            asset: asset2_note1.asset(),
+            quantity: NoteValue::from_raw(20),
+        };
+
+        let user2_desired_output = TestSwapIO {
+            asset: asset1_note1.asset(),
+            quantity: NoteValue::from_raw(10),
+        };
+
+        // 1. Create and verify ActionGroup for user1
+        let (action_group1, bsk1, _bal1) = build_and_verify_action_group(
+            vec![
+                &asset1_spend1,             // 40 asset1
+                &asset1_spend2,             // 2 asset1
+                &user1_zatoshi_note1_spend, // 100 ZEC
+                &user1_zatoshi_note2_spend, // 100 ZEC
+            ],
+            vec![
+                // User1 would like to spend 10 asset1.
+                // Thus, he would like to keep 40+2-10=32 asset1.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(32),
+                    asset: asset1_note1.asset(),
+                    recipient: keys1.recipient,
+                },
+                // User1 would like to receive 20 asset2.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(20),
+                    asset: asset2_note1.asset(),
+                    recipient: keys1.recipient,
+                },
+                // User1 would like to pay 5 ZEC as a fee.
+                // Thus, he would like to keep 100+100-5=195 ZEC.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(195),
+                    asset: AssetBase::zatoshi(),
+                    recipient: keys1.recipient,
+                },
+            ],
+            // We must provide a reference note for asset2 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset2.
+            vec![&asset2_reference_spend_note],
+            anchor,
+            0,
+            5,
+            &keys1,
+        )
+        .unwrap();
+
+        let user1_swap_order = TestSwapOrder {
+            proposed_input: user1_proposed_input,
+            desired_output: user1_desired_output,
+            bsk: bsk1,
+            value_balance: 10, // User1 mentions 10 ZEC in the swap order, but only pays 5 ZEC as fees in the ActionGroup.
+            action_group: action_group1,
+        };
+
+        // 2. Create and verify ActionGroup for user2
+        let (action_group2, bsk2, bal2) = build_and_verify_action_group(
+            vec![
+                &asset2_spend1,             // 40 asset2
+                &asset2_spend2,             // 2 asset2
+                &user2_zatoshi_note1_spend, // 100 ZEC
+            ],
+            vec![
+                // User2 would like to spend 20 asset2.
+                // Thus, he would like to keep 40+2-20=22 asset2.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(22),
+                    asset: asset2_note1.asset(),
+                    recipient: keys2.recipient,
+                },
+                // User2 would like to receive 10 asset1.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(10),
+                    asset: asset1_note1.asset(),
+                    recipient: keys2.recipient,
+                },
+                // User2 would like to pay 5 ZEC as a fee.
+                // Thus, he would like to keep 100-5=95 ZEC.
+                TestOutputInfo {
+                    value: NoteValue::from_raw(95),
+                    asset: AssetBase::zatoshi(),
+                    recipient: keys2.recipient,
+                },
+            ],
+            // We must provide a reference note for asset1 because we have no spend note for this asset.
+            // This note will not be spent. It is only used to check the correctness of asset1.
+            vec![&asset1_reference_spend_note],
+            anchor,
+            0,
+            4,
+            &keys2,
+        )
+        .unwrap();
+
+        let user2_swap_order = TestSwapOrder {
+            proposed_input: user2_proposed_input,
+            desired_output: user2_desired_output,
+            bsk: bsk2,
+            value_balance: bal2,
+            action_group: action_group2,
+        };
+
+        // The matcher first checks that the proposed input and desired output of user1 and user2 match.
+        assert_eq!(
+            user1_swap_order.proposed_input,
+            user2_swap_order.desired_output
+        );
+        assert_eq!(
+            user1_swap_order.desired_output,
+            user2_swap_order.proposed_input
+        );
+
+        // 3. Matcher fees action group
+        let (action_group_matcher, bsk_matcher, bal_matcher) = build_and_verify_action_group(
+            // The matcher spends nothing.
+            vec![],
+            // The matcher receives 10 ZEC as a fee from user1 and user2.
+            // The 5 ZEC remaining from user1 and user2 are miner fees.
+            // This is based on the values in the swap orders (which is incorrectly provided by user1)
+            vec![TestOutputInfo {
+                value: NoteValue::from_raw(10),
+                asset: AssetBase::zatoshi(),
+                recipient: matcher_keys.recipient,
+            }],
+            // No reference note needed
+            vec![],
+            anchor,
+            0,
+            2,
+            &matcher_keys,
+        )
+        .unwrap();
+
+        // 4. Matcher creates a Bundle from the three previous ActionGroups
+        let bundle = Bundle::from_parts(
+            vec![
+                user1_swap_order.action_group,
+                user2_swap_order.action_group,
+                action_group_matcher,
+            ],
+            user1_swap_order.value_balance + user2_swap_order.value_balance + bal_matcher,
+            None,
+        );
+
+        // Add the binding signature to the bundle.
+        let swap_bundle = bundle.compute_binding_signature(
+            OsRng,
+            vec![user1_swap_order.bsk, user2_swap_order.bsk, bsk_matcher],
+        );
+        // This should panic, as value balances will not match.
+        verify_swap_bundle(&swap_bundle, vec![&keys1.vk, &keys2.vk, &matcher_keys.vk]);
     }
 }
