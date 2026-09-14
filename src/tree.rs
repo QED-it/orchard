@@ -62,8 +62,9 @@ impl Anchor {
     /// The anchor of the empty Orchard note commitment tree.
     ///
     /// This anchor does not correspond to any valid anchor for a spend, so it
-    /// may only be used for coinbase bundles or in circumstances where Orchard
-    /// functionality is not active.
+    /// may only be used for bundles without real spends — e.g. coinbase bundles,
+    /// where the pool's consensus rules permit them — or in circumstances where
+    /// Orchard functionality is not active.
     pub fn empty_tree() -> Anchor {
         Anchor(MerkleHashOrchard::empty_root(Level::from(MERKLE_DEPTH_ORCHARD as u8)).0)
     }
@@ -115,6 +116,7 @@ impl From<incrementalmerkletree::MerklePath<MerkleHashOrchard, 32>> for MerklePa
 
 impl MerklePath {
     /// Generates a dummy Merkle path for use in dummy spent notes.
+    #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
     pub(crate) fn dummy(mut rng: &mut impl RngCore) -> Self {
         MerklePath {
             position: rng.next_u32(),
@@ -183,6 +185,7 @@ impl MerkleHashOrchard {
     }
 
     /// Only used in the circuit.
+    #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
     pub(crate) fn inner(&self) -> pallas::Base {
         self.0
     }
@@ -357,8 +360,7 @@ mod tests {
                     .0
                     .to_repr(),
                 *tv_root,
-                "Empty root mismatch at level {}",
-                level
+                "Empty root mismatch at level {level}"
             );
         }
     }

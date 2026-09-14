@@ -1,34 +1,43 @@
-//! Commit IVK (Incoming Viewing Key) for the Orchard circuit.
+//! Sub-circuit implementing the `CommitIvk` gadget.
+//!
+//! `CommitIvk` is the Sinsemilla-based commitment that binds an incoming
+//! viewing key `ivk` to the full viewing key `(ak, nk)` and the randomness
+//! `rivk`. This module provides the Halo 2 chip that enforces that
+//! commitment inside the Orchard Action circuit.
 
 use core::iter;
 
 use group::ff::{Field, PrimeField};
 use halo2_proofs::{
-    circuit::{AssignedCell, Layouter, Value},
+    circuit::{AssignedCell, Chip, Layouter, Value},
     plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
     poly::Rotation,
 };
 use pasta_curves::pallas;
 
-use crate::constants::{OrchardCommitDomains, OrchardFixedBases, T_P};
+use crate::constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains, T_P};
 use halo2_gadgets::{
     ecc::{chip::EccChip, ScalarFixed, X},
-    sinsemilla::{CommitDomain, Message, MessagePiece},
+    sinsemilla::{chip::SinsemillaChip, CommitDomain, Message, MessagePiece},
     utilities::{bool_check, RangeConstrained},
 };
 
+/// Configuration for the [`CommitIvkChip`], including its selector and advice columns.
 #[derive(Clone, Debug)]
 pub struct CommitIvkConfig {
     q_commit_ivk: Selector,
     advices: [Column<Advice>; 10],
 }
 
+/// A Halo 2 chip that proves correct evaluation of the `CommitIvk` gadget.
 #[derive(Clone, Debug)]
 pub struct CommitIvkChip {
     config: CommitIvkConfig,
 }
 
 impl CommitIvkChip {
+    /// Configures the chip's gate and column assignments.
+    #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
     pub(in crate::circuit) fn configure(
         meta: &mut ConstraintSystem<pallas::Base>,
         advices: [Column<Advice>; 10],
@@ -224,28 +233,33 @@ impl CommitIvkChip {
         config
     }
 
+    /// Constructs the chip from a [`CommitIvkConfig`].
+    #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
     pub(in crate::circuit) fn construct(config: CommitIvkConfig) -> Self {
         Self { config }
     }
 }
 
+/// Gadget functions for `CommitIvk` operations.
+#[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
 pub(in crate::circuit) mod gadgets {
     use halo2_gadgets::utilities::{lookup_range_check::PallasLookupRangeCheck, RangeConstrained};
 
     use super::*;
-
-    use super::super::orchard_sinsemilla_chip::OrchardSinsemillaChip;
 
     /// `Commit^ivk` from [Section 5.4.8.4 Sinsemilla commitments].
     ///
     /// [Section 5.4.8.4 Sinsemilla commitments]: https://zips.z.cash/protocol/protocol.pdf#concretesinsemillacommit
     #[allow(non_snake_case)]
     #[allow(clippy::type_complexity)]
-    pub(in crate::circuit) fn commit_ivk<
-        Lookup: PallasLookupRangeCheck,
-        SinsemillaChip: OrchardSinsemillaChip<Lookup>,
-    >(
-        sinsemilla_chip: SinsemillaChip,
+    #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
+    pub(in crate::circuit) fn commit_ivk<Lookup: PallasLookupRangeCheck>(
+        sinsemilla_chip: SinsemillaChip<
+            OrchardHashDomains,
+            OrchardCommitDomains,
+            OrchardFixedBases,
+            Lookup,
+        >,
         ecc_chip: EccChip<OrchardFixedBases, Lookup>,
         commit_ivk_chip: CommitIvkChip,
         mut layouter: impl Layouter<pallas::Base>,
@@ -673,7 +687,7 @@ mod tests {
     use group::ff::{Field, PrimeField, PrimeFieldBits};
     use halo2_gadgets::{
         ecc::{
-            chip::{EccChip, EccConfig},
+            chip::{CircuitVersion, EccChip, EccConfig},
             ScalarFixed,
         },
         sinsemilla::{
@@ -821,7 +835,7 @@ mod tests {
             let sinsemilla_chip = SinsemillaChip::construct(sinsemilla_config);
 
             // Construct an ECC chip
-            let ecc_chip = EccChip::construct(ecc_config);
+            let ecc_chip = EccChip::construct(ecc_config, CircuitVersion::AnchoredBase);
 
             let commit_ivk_chip = CommitIvkChip::construct(commit_ivk_config.clone());
 

@@ -10,7 +10,7 @@ use halo2_gadgets::{
     utilities::lookup_range_check::PallasLookupRangeCheck,
 };
 
-pub struct ZsaValueCommitParams<Lookup: PallasLookupRangeCheck> {
+pub(in crate::circuit) struct ZsaValueCommitParams<Lookup: PallasLookupRangeCheck> {
     pub sinsemilla_chip:
         SinsemillaChip<OrchardHashDomains, OrchardCommitDomains, OrchardFixedBases, Lookup>,
     pub asset_base: NonIdentityPoint<pallas::Affine, EccChip<OrchardFixedBases, Lookup>>,
@@ -56,9 +56,8 @@ pub(in crate::circuit) mod gadgets {
 
                 // commitment = [v_net] ValueCommitV
                 let (commitment, _) = {
-                    let value_commit_v = ValueCommitV;
                     let value_commit_v =
-                        FixedPointShort::from_inner(ecc_chip.clone(), value_commit_v);
+                        FixedPointShort::from_inner(ecc_chip.clone(), ValueCommitV.into());
                     value_commit_v.mul(layouter.namespace(|| "[v] ValueCommitV"), v_net)?
                 };
                 commitment
@@ -142,7 +141,7 @@ mod tests {
     };
     use halo2_gadgets::{
         ecc::{
-            chip::{EccChip, EccConfig},
+            chip::{CircuitVersion, EccChip, EccConfig},
             NonIdentityPoint, ScalarFixed,
         },
         sinsemilla::chip::{SinsemillaChip, SinsemillaConfig},
@@ -276,7 +275,7 @@ mod tests {
                 SinsemillaChip::load(config.sinsemilla_config.clone(), &mut layouter)?;
 
                 // Construct an ECC chip
-                let ecc_chip = EccChip::construct(config.ecc_config);
+                let ecc_chip = EccChip::construct(config.ecc_config, CircuitVersion::AnchoredBase);
 
                 let sinsemilla_chip = SinsemillaChip::construct(config.sinsemilla_config.clone());
 
@@ -287,7 +286,7 @@ mod tests {
                     //   v_old - v_new if split_flag = false
                     let v_net = self.split_flag.and_then(|split_flag| {
                         if split_flag {
-                            Value::known(crate::value::NoteValue::zero()) - self.v_new
+                            Value::known(crate::value::NoteValue::ZERO) - self.v_new
                         } else {
                             self.v_old - self.v_new
                         }
@@ -363,7 +362,7 @@ mod tests {
                 let v_new = NoteValue::from_raw(rng.next_u64());
                 let rcv = ValueCommitTrapdoor::random(&mut rng);
                 let v_net = if split_flag {
-                    NoteValue::zero() - v_new
+                    NoteValue::ZERO - v_new
                 } else {
                     v_old - v_new
                 };
@@ -374,7 +373,7 @@ mod tests {
                     asset: Value::known(asset),
                     split_flag: Value::known(split_flag),
                 });
-                let expected_cv_net = ValueCommitment::derive(v_net, rcv, asset);
+                let expected_cv_net = ValueCommitment::derive_with_asset(v_net, rcv, asset);
                 instances.push([[expected_cv_net.x(), expected_cv_net.y()]]);
             }
         }

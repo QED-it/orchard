@@ -1,3 +1,11 @@
+//! Note commitments and their trapdoors.
+//!
+//! A [`NoteCommitment`] is the Sinsemilla commitment to the contents of a
+//! note, binding the diversified transmission key, note value, ρ, and ψ. Its
+//! x-coordinate is exposed as [`ExtractedNoteCommitment`] (the value
+//! appearing in the commitment tree), and its randomness is
+//! [`NoteCommitTrapdoor`].
+
 use core::iter;
 
 use alloc::vec::Vec;
@@ -11,17 +19,29 @@ use crate::{
         fixed_bases::{NOTE_COMMITMENT_PERSONALIZATION, NOTE_ZSA_COMMITMENT_PERSONALIZATION},
         L_ORCHARD_BASE,
     },
-    note::asset_base::AssetBase,
+    note::AssetBase,
     spec::extract_p,
     value::NoteValue,
 };
 
+/// The trapdoor for a note commitment.
 #[derive(Clone, Debug)]
-pub(crate) struct NoteCommitTrapdoor(pub(crate) pallas::Scalar);
+#[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
+pub(crate) struct NoteCommitTrapdoor(pub(super) pallas::Scalar);
 
 impl NoteCommitTrapdoor {
+    /// Returns the inner scalar value.
+    #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
     pub(crate) fn inner(&self) -> pallas::Scalar {
         self.0
+    }
+
+    /// Constructs a `NoteCommitTrapdoor` from the provided scalar value.
+    ///
+    /// This constructor is only available in tests.
+    #[cfg(test)]
+    pub fn new(trapdoor: pallas::Scalar) -> Self {
+        Self(trapdoor)
     }
 }
 
@@ -30,6 +50,8 @@ impl NoteCommitTrapdoor {
 pub struct NoteCommitment(pub(super) pallas::Point);
 
 impl NoteCommitment {
+    /// Returns the inner Pallas curve point.
+    #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
     pub(crate) fn inner(&self) -> pallas::Point {
         self.0
     }
@@ -120,6 +142,8 @@ impl From<NoteCommitment> for ExtractedNoteCommitment {
 }
 
 impl ExtractedNoteCommitment {
+    /// Returns the inner field element.
+    #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
     pub(crate) fn inner(&self) -> pallas::Base {
         self.0
     }
