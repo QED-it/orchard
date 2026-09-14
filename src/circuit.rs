@@ -16,8 +16,6 @@ use halo2_proofs::{
 use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
 use rand::RngCore;
 
-pub use crate::circuit_version::OrchardCircuitVersion;
-
 use crate::{
     builder::SpendInfo,
     bundle::Flags,
@@ -32,6 +30,9 @@ use crate::{
     tree::Anchor,
     value::{ValueCommitTrapdoor, ValueCommitment},
 };
+
+pub use crate::circuit_version::OrchardCircuitVersion;
+
 use halo2_gadgets::{
     ecc::{
         chip::{EccChip, EccConfig},
