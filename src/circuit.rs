@@ -16,6 +16,8 @@ use halo2_proofs::{
 use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
 use rand::RngCore;
 
+pub use crate::circuit_version::OrchardCircuitVersion;
+
 use crate::{
     builder::SpendInfo,
     bundle::Flags,
@@ -24,7 +26,6 @@ use crate::{
         gadget::add_chip::{AddChip, AddConfig},
         note_commit::{NoteCommitChip, NoteCommitConfig},
     },
-    circuit_version::OrchardCircuitVersion,
     constants::{OrchardCommitDomains, OrchardFixedBases, OrchardHashDomains},
     note::{nullifier::Nullifier, ExtractedNoteCommitment, Note, Rho},
     primitives::redpallas::{SpendAuth, VerificationKey},
