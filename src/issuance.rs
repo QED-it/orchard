@@ -945,8 +945,8 @@ impl fmt::Display for Error {
             CannotFinalizeOnFirstIssuance => {
                 write!(
                     f,
-                    "a first issuance cannot be finalized immediately because no issue note would
-                    ever exist for this asset."
+                    "a first issuance cannot be finalized immediately because no issue note \
+                     would ever exist for this asset."
                 )
             }
             InvalidIssueValidatingKey => {
