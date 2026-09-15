@@ -691,7 +691,7 @@ impl IssueBundle<Signed> {
     }
 }
 
-/// Checks an [`IssueBundle`] without verifying its authorization.
+/// Verifies the [`IssueAction`]s of an [`IssueBundle`], against the global issuance state.
 ///
 /// Performs the same validation as [`verify_issue_bundle`], except for the two checks that
 /// [`verify_issue_bundle_signature`] performs: the signature itself, and the `SighashKind` it
@@ -701,7 +701,7 @@ impl IssueBundle<Signed> {
 /// See [`verify_issue_bundle`] for full documentation of the validation rules. This function
 /// returns the same errors, except `InvalidSighashKind` and `InvalidIssueBundleSig`, which only
 /// [`verify_issue_bundle_signature`] can return.
-pub fn verify_issue_bundle_except_signature(
+pub fn verify_issue_bundle_actions(
     bundle: &IssueBundle<Signed>,
     mut get_global_records: impl FnMut(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
@@ -842,7 +842,7 @@ pub fn verify_issue_bundle(
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
     verify_issue_bundle_signature(bundle, sighash)?;
 
-    verify_issue_bundle_except_signature(bundle, get_global_records, first_nullifier)
+    verify_issue_bundle_actions(bundle, get_global_records, first_nullifier)
 }
 
 /// Checks if a given note is a reference note.
