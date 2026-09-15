@@ -33,9 +33,9 @@ use crate::{
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, CannotFinalizeOnFirstIssuance,
     DuplicateIssueActionForAssetBase, IncorrectRhoDerivation, InvalidIssueBundleSig,
-    InvalidIssueValidatingKey, InvalidSighashKind, IssueActionNotFound,
-    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
-    IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    InvalidIssueValidatingKey, InvalidSighashKind, IssueActionPreviouslyFinalizedAssetBase,
+    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
+    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 pub mod auth;
@@ -882,8 +882,6 @@ impl AssetRecord {
 /// Errors produced during the issuance process
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    /// The requested IssueAction not exists in the bundle.
-    IssueActionNotFound,
     /// The provided `isk` and the derived `ik` does not match at least one note type.
     IssueBundleIkMismatchAssetBase,
     /// The `IssueAction` is not finalized but contains no notes.
@@ -920,9 +918,6 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            IssueActionNotFound => {
-                write!(f, "the requested IssueAction does not exist in the bundle.")
-            }
             IssueBundleIkMismatchAssetBase => {
                 write!(
                     f,
