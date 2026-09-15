@@ -1583,7 +1583,7 @@ mod tests {
             ))
         );
 
-        // Verify note_commitments() returns a correct number of non-zero,
+        // Verify note_cmxs() returns a correct number of non-zero,
         // unique pallas::Base values
         let mut unique_commitments = BTreeSet::new();
         for commitment in signed.note_cmxs() {
