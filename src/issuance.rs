@@ -698,7 +698,7 @@ impl IssueBundle<Signed> {
 /// from a trusted checkpoint).
 ///
 /// See [`verify_issue_bundle`] for full documentation of validation rules and errors.
-pub fn check_issue_bundle_without_sighash(
+pub fn verify_issue_bundle_except_signature(
     bundle: &IssueBundle<Signed>,
     mut get_global_records: impl FnMut(&AssetBase) -> Option<AssetRecord>,
     first_nullifier: &Nullifier,
@@ -761,7 +761,7 @@ pub fn check_issue_bundle_without_sighash(
 ///
 /// The result depends only on the bundle's own bytes and the `sighash`, so it is independent
 /// of any global issuance state. Callers that also need the state-dependent checks should use
-/// [`verify_issue_bundle`], or call [`check_issue_bundle_without_sighash`] separately.
+/// [`verify_issue_bundle`], or call [`verify_issue_bundle_except_signature`] separately.
 ///
 /// # Arguments
 ///
@@ -844,7 +844,7 @@ pub fn verify_issue_bundle(
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, Error> {
     verify_issue_bundle_signature(bundle, sighash)?;
 
-    check_issue_bundle_without_sighash(bundle, get_global_records, first_nullifier)
+    verify_issue_bundle_except_signature(bundle, get_global_records, first_nullifier)
 }
 
 /// Checks if a given note is a reference note.
