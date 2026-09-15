@@ -691,13 +691,16 @@ impl IssueBundle<Signed> {
     }
 }
 
-/// Checks an [`IssueBundle`] without signature verification.
+/// Checks an [`IssueBundle`] without verifying its authorization.
 ///
-/// Performs the same validation as [`verify_issue_bundle`] except skips the signature check.
-/// Use when signatures are already known to be valid (e.g., verifying historical blocks
-/// from a trusted checkpoint).
+/// Performs the same validation as [`verify_issue_bundle`], except for the two checks that
+/// [`verify_issue_bundle_signature`] performs: the signature itself, and the `SighashKind` it
+/// carries. Use when the authorization is already known to be valid (e.g., verifying historical
+/// blocks from a trusted checkpoint).
 ///
-/// See [`verify_issue_bundle`] for full documentation of validation rules and errors.
+/// See [`verify_issue_bundle`] for full documentation of the validation rules. This function
+/// returns the same errors, except `InvalidSighashKind` and `InvalidIssueBundleSig`, which only
+/// [`verify_issue_bundle_signature`] can return.
 pub fn verify_issue_bundle_except_signature(
     bundle: &IssueBundle<Signed>,
     mut get_global_records: impl FnMut(&AssetBase) -> Option<AssetRecord>,
@@ -753,15 +756,11 @@ pub fn verify_issue_bundle_except_signature(
 
 /// Verifies the authorization signature of an [`IssueBundle`] against the given `sighash`.
 ///
-/// This performs the two checks that need the transaction's `sighash`, and nothing else:
+/// This performs the two checks:
 ///
 /// - Ensures that the `SighashKind` in the signature matches `AllEffecting`.
 /// - Ensures the signature on the provided `sighash` matches the bundle's authorization,
 ///   under the bundle's issuance validating key `ik`.
-///
-/// The result depends only on the bundle's own bytes and the `sighash`, so it is independent
-/// of any global issuance state. Callers that also need the state-dependent checks should use
-/// [`verify_issue_bundle`], or call [`verify_issue_bundle_except_signature`] separately.
 ///
 /// # Arguments
 ///
@@ -771,9 +770,7 @@ pub fn verify_issue_bundle_except_signature(
 /// # Errors
 ///
 /// * `InvalidSighashKind`: The `SighashKind` in the signature does not match
-///   `IssueSighashKind::AllEffecting`. This cannot happen today, because
-///   [`IssueSighashKind`] has a single variant and unknown kinds are rejected while
-///   parsing the bundle; the check is here for when ZIP 246 adds another kind.
+///   `IssueSighashKind::AllEffecting`.
 /// * `InvalidIssueBundleSig`: Signature verification for the provided `sighash` fails.
 pub fn verify_issue_bundle_signature(
     bundle: &IssueBundle<Signed>,
@@ -792,10 +789,11 @@ pub fn verify_issue_bundle_signature(
 /// Validates an [`IssueBundle`] by performing the following checks:
 ///
 /// - **IssueBundle Auth signature verification**:
-///   - Ensure that the `SighashKind` in the  signature matches `AllEffecting`.
+///   - Ensures that the `SighashKind` in the signature matches `AllEffecting`.
 ///   - Ensures the signature on the provided `sighash` matches the bundle's authorization.
 /// - **Static IssueAction verification**:
 ///   - Runs checks using the `IssueAction::verify` method.
+///   - Ensures the bundle holds at most one `IssueAction` per asset.
 /// - **Node global state related verification**:
 ///   - Ensures the total supply value does not overflow when adding the new amount to the existing supply.
 ///   - Verifies that the `AssetBase` has not already been finalized.
@@ -808,7 +806,7 @@ pub fn verify_issue_bundle_signature(
 ///
 /// * `bundle`: A reference to the [`IssueBundle`] to be validated.
 /// * `sighash`: A 32-byte array representing the `sighash` used to verify the bundle's signature.
-/// * `get_global_asset_state`: A closure that takes a reference to an [`AssetBase`] and returns an
+/// * `get_global_records`: A closure that takes a reference to an [`AssetBase`] and returns an
 ///   [`Option<AssetRecord>`], representing the current state of the asset from a global store
 ///   of previously issued assets.
 /// * `first_nullifier`: A reference to a [`Nullifier`] that is used to compute the `rho` value of
@@ -824,7 +822,7 @@ pub fn verify_issue_bundle_signature(
 ///
 /// * `InvalidSighashKind`: The `SighashKind` in the signature does not match
 ///   `IssueSighashKind::AllEffecting`.
-/// * `IssueBundleInvalidSignature`: Signature verification for the provided `sighash` fails.
+/// * `InvalidIssueBundleSig`: Signature verification for the provided `sighash` fails.
 /// * `ValueOverflow`: adding the new amount to the existing total supply causes an overflow.
 /// * `IssueActionPreviouslyFinalizedAssetBase`: An action is attempted on an asset that has
 ///   already been finalized.
@@ -832,7 +830,7 @@ pub fn verify_issue_bundle_signature(
 ///   issuance of a new asset.
 /// * `IncorrectRhoDerivation`: If the `rho` value of any issuance note is not correctly derived
 ///   from the `first_nullifier`.
-/// * `DuplicateIssueActionForAssetBase`:If the bundle contains multiple `IssueAction`s for
+/// * `DuplicateIssueActionForAssetBase`: If the bundle contains multiple `IssueAction`s for
 ///   the same asset.
 /// * **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
 ///   propagated
