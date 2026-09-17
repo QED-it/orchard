@@ -1398,6 +1398,10 @@ pub mod testing {
         ///
         /// Use `arb_flags_ironwood_post_nu6_3` for a strategy that can also disable
         /// cross-address transfers.
+        ///
+        /// The bundle strategies pass the drawn flags through `flags_for_version`, which
+        /// overwrites `cross_address_enabled` and `zsa_enabled` with the bundle version's own
+        /// default values; only `spends_enabled` and `outputs_enabled` survive there.
         pub fn arb_flags()(spends_enabled in prop::bool::ANY, outputs_enabled in prop::bool::ANY) -> Flags {
             Flags::from_parts(spends_enabled, outputs_enabled, true, false)
         }
