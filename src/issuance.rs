@@ -32,10 +32,9 @@ use crate::{
 
 use Error::{
     AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, CannotFinalizeOnFirstIssuance,
-    DuplicateIssueActionForAssetBase, IncorrectRhoDerivation, InvalidIssueBundleSig,
-    InvalidIssueValidatingKey, InvalidSighashKind, IssueActionPreviouslyFinalizedAssetBase,
-    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
-    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    IncorrectRhoDerivation, InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashKind,
+    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+    IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 pub mod auth;
@@ -720,14 +719,16 @@ pub fn verify_issue_bundle_actions(
 
             let (asset, amount) = action.verify(bundle.ik())?;
 
-            if new_records.contains_key(&asset) {
-                return Err(DuplicateIssueActionForAssetBase);
-            }
-
             let is_finalized = action.is_finalized();
             let ref_note = action.get_reference_note();
 
-            let new_asset_record = match get_global_records(&asset) {
+            // Per ZIP 227, actions are validated sequentially against `issued_assets_OUT`, so a
+            // later action for an asset sees the state left by the earlier actions of this bundle.
+            let new_asset_record = match new_records
+                .get(&asset)
+                .cloned()
+                .or_else(|| get_global_records(&asset))
+            {
                 // The first issuance of the asset
                 None => AssetRecord::new(
                     amount,
@@ -737,11 +738,11 @@ pub fn verify_issue_bundle_actions(
 
                 // Subsequent issuance of the asset
                 Some(current_record) => {
-                    let amount = current_record.amount.add(amount).ok_or(ValueOverflow)?;
-
                     if current_record.is_finalized {
                         return Err(IssueActionPreviouslyFinalizedAssetBase);
                     }
+
+                    let amount = current_record.amount.add(amount).ok_or(ValueOverflow)?;
 
                     AssetRecord::new(amount, is_finalized, current_record.reference_note)
                 }
@@ -793,7 +794,6 @@ pub fn verify_issue_bundle_signature(
 ///   - Ensures the signature on the provided `sighash` matches the bundle's authorization.
 /// - **Static IssueAction verification**:
 ///   - Runs checks using the `IssueAction::verify` method.
-///   - Ensures the bundle holds at most one `IssueAction` per asset.
 /// - **Node global state related verification**:
 ///   - Ensures the total supply value does not overflow when adding the new amount to the existing supply.
 ///   - Verifies that the `AssetBase` has not already been finalized.
@@ -830,8 +830,6 @@ pub fn verify_issue_bundle_signature(
 ///   issuance of a new asset.
 /// * `IncorrectRhoDerivation`: If the `rho` value of any issuance note is not correctly derived
 ///   from the `first_nullifier`.
-/// * `DuplicateIssueActionForAssetBase`: If the bundle contains multiple `IssueAction`s for
-///   the same asset.
 /// * **Other Errors**: Any additional errors returned by the `IssueAction::verify` method are
 ///   propagated
 pub fn verify_issue_bundle(
@@ -905,9 +903,6 @@ pub enum Error {
     IssueActionPreviouslyFinalizedAssetBase,
     /// The rho value of an issuance note is not correctly derived from the first nullifier.
     IncorrectRhoDerivation,
-    /// The bundle contains multiple `IssueAction`s for the same asset.
-    DuplicateIssueActionForAssetBase,
-
     /// Overflow error occurred while calculating the value of the asset
     ValueOverflow,
 
@@ -963,12 +958,6 @@ impl fmt::Display for Error {
             }
             IncorrectRhoDerivation => {
                 write!(f, "incorrect rho value")
-            }
-            DuplicateIssueActionForAssetBase => {
-                write!(
-                    f,
-                    "the bundle contains multiple `IssueAction`s for the same asset"
-                )
             }
             ValueOverflow => {
                 write!(
@@ -1924,6 +1913,79 @@ mod tests {
 
         assert_eq!(issued_assets[&asset].amount, NoteValue::from_raw(110));
         assert!(!issued_assets[&asset].is_finalized);
+    }
+
+    /// Signs a bundle with two `IssueAction`s for one asset: the first holds the reference note
+    /// and a note of 10, the second the notes `second`. `finalize` gives the two actions' flags.
+    fn two_actions_same_asset(
+        params: &TestParams,
+        second: &[u64],
+        finalize: (bool, bool),
+    ) -> (IssueBundle<Signed>, AssetBase) {
+        let mut rng = OsRng;
+        let hash = asset_desc_hash(b"repeated");
+        let asset = AssetBase::custom(&AssetId::new_v0(&params.ik, &hash));
+        let ref_note = create_reference_note(asset, &mut rng);
+        let mut note = |v| {
+            Note::new_issue_note(
+                params.recipient,
+                NoteValue::from_raw(v),
+                asset,
+                NoteVersion::ZSA,
+                &mut rng,
+            )
+        };
+
+        let actions = vec![
+            IssueAction::from_parts(hash, vec![ref_note, note(10)], finalize.0),
+            IssueAction::from_parts(hash, second.iter().map(|&v| note(v)).collect(), finalize.1),
+        ];
+        let bundle = IssueBundle::from_parts(
+            params.ik.clone(),
+            NonEmpty::from_vec(actions).unwrap(),
+            AwaitingNullifier,
+        );
+
+        (sign_bundle(bundle, params), asset)
+    }
+
+    // ZIP 227 validates actions sequentially against `issued_assets_OUT`: a later action for an
+    // asset sees the balance and the finalize flag left by an earlier one, wherever it sits.
+    #[test]
+    fn issue_bundle_verify_repeated_action_for_same_asset() {
+        let params = setup_params();
+
+        // Second action's notes, the two finalize flags, and the expected (amount, finalized).
+        let cases = [
+            (&[20][..], (false, false), Ok((30, false))),
+            (&[20][..], (false, true), Ok((30, true))),
+            (&[][..], (false, true), Ok((10, true))), // finalize-only second action
+            (
+                &[20][..],
+                (true, false),
+                Err(IssueActionPreviouslyFinalizedAssetBase),
+            ),
+            (
+                &[20][..],
+                (true, true),
+                Err(IssueActionPreviouslyFinalizedAssetBase),
+            ),
+        ];
+
+        for (second, finalize, expected) in cases {
+            let (signed, asset) = two_actions_same_asset(&params, second, finalize);
+            let result =
+                verify_issue_bundle(&signed, params.sighash, |_| None, &params.first_nullifier);
+
+            match expected {
+                Ok((amount, finalized)) => {
+                    let record = result.unwrap()[&asset];
+                    assert_eq!(record.amount, NoteValue::from_raw(amount));
+                    assert_eq!(record.is_finalized, finalized);
+                }
+                Err(e) => assert_eq!(result.unwrap_err(), e),
+            }
+        }
     }
 
     // Accumulating onto a record whose balance is already u64::MAX overflows.
