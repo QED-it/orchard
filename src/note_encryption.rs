@@ -783,7 +783,7 @@ fn batch_kdf<'a>(
         .collect()
 }
 
-impl<P: DomainPolicy, A> ShieldedOutput<NoteEncryptionDomain<P>> for Action<A> {
+impl<P: DomainPolicy, T> ShieldedOutput<NoteEncryptionDomain<P>> for Action<T> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.encrypted_note().epk_bytes)
     }
@@ -903,8 +903,8 @@ impl fmt::Debug for CompactAction {
     }
 }
 
-impl<A> From<&Action<A>> for CompactAction {
-    fn from(action: &Action<A>) -> Self {
+impl<T> From<&Action<T>> for CompactAction {
+    fn from(action: &Action<T>) -> Self {
         let enc_ciphertext = &action.encrypted_note().enc_ciphertext;
         CompactAction {
             nullifier: *action.nullifier(),
@@ -971,7 +971,6 @@ pub mod testing {
     /// Creates a fake `CompactAction` paying the given recipient the specified value.
     ///
     /// Returns the `CompactAction` and the new note.
-    #[allow(clippy::too_many_arguments)]
     pub fn fake_compact_action<R: RngCore>(
         rng: &mut R,
         nf_old: Nullifier,
