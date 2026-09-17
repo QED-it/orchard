@@ -110,6 +110,8 @@ where
             .unwrap(),
     );
 
+    // `COMPACT_NOTE_SIZE_VANILLA` is the end of the rseed field, not the buffer length: a ZSA
+    // compact note is a Vanilla one followed by the asset, so both share these offsets.
     let rseed = Option::from(RandomSeed::from_bytes(
         plaintext.as_ref()[NOTE_RSEED_OFFSET..COMPACT_NOTE_SIZE_VANILLA]
             .try_into()
