@@ -22,7 +22,7 @@ use memuse::DynamicUsage;
 use crate::{
     action::Action,
     address::Address,
-    bundle::burn_validation::validate_burn,
+    bundle::burn_validation::{validate_burn, BurnError},
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     circuit_version::OrchardCircuitVersion,
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
@@ -972,8 +972,7 @@ impl<V> Bundle<EffectsOnly, V> {
     /// - [`BundleError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`
     /// - [`BundleError::MismatchedActionCiphertextKind`] if some action's encrypted-note
     ///   ciphertext is not the kind `bundle_version` implies
-    /// - [`BundleError::BurnNotPermitted`] if `burn` is non-empty and either `bundle_version`
-    ///   does not permit ZSA or `flags` do not enable ZSA
+    /// - [`BundleError::Burn`] if `burn` is not valid in this context
     pub fn from_parts(
         actions: NonEmpty<Action<<EffectsOnly as Authorization>::SpendAuth>>,
         flags: Flags,
@@ -985,7 +984,7 @@ impl<V> Bundle<EffectsOnly, V> {
     ) -> Result<Self, BundleError> {
         validate_action_ciphertext_kind(&actions, bundle_version)?;
         validate_flags(&flags, bundle_version)?;
-        validate_burn(&burn, &flags, bundle_version)?;
+        validate_burn(&burn, &flags, bundle_version).map_err(BundleError::Burn)?;
         Ok(Bundle::from_parts_unchecked(
             actions,
             flags,
@@ -1061,14 +1060,8 @@ pub enum BundleError {
     /// or carrying the wrong variant for its `bundle_version`, cannot be committed to or verified
     /// correctly.
     MismatchedActionCiphertextKind,
-    /// A non-empty burn was provided for a bundle whose version does not permit ZSA, or
-    /// whose flags do not enable ZSA.
-    ///
-    /// Burn instructions are only meaningful for the ZSA protocol, so both conditions are
-    /// required. The version alone is not enough: a ZSA bundle may still carry `zsa_enabled`
-    /// cleared, and the circuit then forces every asset to zatoshi, so no burn can be
-    /// balanced.
-    BurnNotPermitted,
+    /// Burn-specific error.
+    Burn(BurnError),
 }
 
 impl fmt::Display for BundleError {
@@ -1085,10 +1078,7 @@ impl fmt::Display for BundleError {
             BundleError::MismatchedActionCiphertextKind => f.write_str(
                 "an action's encrypted-note ciphertext kind is inconsistent with the bundle's version",
             ),
-            BundleError::BurnNotPermitted => f.write_str(
-                "a non-empty burn was provided for a bundle whose version does not permit ZSA, \
-                 or whose flags do not enable ZSA",
-            ),
+            BundleError::Burn(err) => write!(f, "Burn error: {err}"),
         }
     }
 }
@@ -1143,8 +1133,7 @@ impl<V> Bundle<Authorized, V> {
     /// - [`BundleError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`
     /// - [`BundleError::MismatchedActionCiphertextKind`] if some action's encrypted-note
     ///   ciphertext is not the kind `bundle_version` implies
-    /// - [`BundleError::BurnNotPermitted`] if `burn` is non-empty and either `bundle_version`
-    ///   does not permit ZSA or `flags` do not enable ZSA
+    /// - [`BundleError::Burn`] if `burn` is not valid in this context
     pub fn try_from_parts(
         actions: NonEmpty<Action<<Authorized as Authorization>::SpendAuth>>,
         flags: Flags,
@@ -1163,7 +1152,7 @@ impl<V> Bundle<Authorized, V> {
         }
         validate_action_ciphertext_kind(&actions, bundle_version)?;
         validate_flags(&flags, bundle_version)?;
-        validate_burn(&burn, &flags, bundle_version)?;
+        validate_burn(&burn, &flags, bundle_version).map_err(BundleError::Burn)?;
         Ok(Bundle::from_parts_unchecked(
             actions,
             flags,
@@ -1275,17 +1264,14 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::{
-        bundle::BundleVersion,
+        bundle::{burn_validation::MAX_BURN_VALUE, BundleVersion},
         note::{
             asset_base::testing::{arb_asset_base, arb_zsa_asset_base},
             AssetBase,
         },
         primitives::redpallas::testing::arb_binding_signing_key,
         sighash_kind::{OrchardBindingSig, OrchardSighashKind, OrchardSpendAuthSig},
-        value::{
-            testing::{arb_note_value, arb_note_value_bounded},
-            NoteValue, ValueSum, MAX_NOTE_VALUE,
-        },
+        value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, NoteVersion, Proof,
     };
 
@@ -1393,13 +1379,13 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Create an arbitrary vector of assets to burn.
+        /// Create an arbitrary burn entry.
         pub fn arb_asset_to_burn()
         (
             asset_base in arb_zsa_asset_base(),
-            value in arb_note_value()
+            value in 1u64..=MAX_BURN_VALUE
         ) -> (AssetBase, NoteValue) {
-            (asset_base, value)
+            (asset_base, NoteValue::from_raw(value))
         }
     }
 
@@ -1454,7 +1440,6 @@ pub mod testing {
             acts in vec(arb_unauthorized_action_n(bundle_version.note_version(), n_actions, flags), n_actions),
             anchor in arb_base().prop_map(Anchor::from),
             flags in Just(flags),
-            // `from_parts` rejects a burn under a version that does not permit ZSA.
             burn in if bundle_version.permits_zsa() {
                 vec(arb_asset_to_burn(), 1usize..10).boxed()
             } else {
@@ -1474,7 +1459,7 @@ pub mod testing {
                 super::EffectsOnly,
                 bundle_version,
             )
-            .expect("flags are normalized and burn is empty unless the version permits ZSA")
+            .expect("flags are normalized and the burn is valid for the drawn version")
         }
     }
 
@@ -1484,7 +1469,7 @@ pub mod testing {
         ///
         /// `burn` is derived from the drawn version rather than drawn independently: it is
         /// non-empty only when the version permits ZSA, since `try_from_parts` rejects a burn
-        /// under any other version as `BurnNotPermitted`.
+        /// unless the version permits ZSA and the flags enable it.
         fn arb_bundle_for_versions(n_actions: usize, versions: impl Strategy<Value = BundleVersion>)
         (
             bundle_version in versions,
@@ -1522,7 +1507,10 @@ pub mod testing {
                 },
                 bundle_version,
             )
-            .expect("fake proof has the canonical length and flags are representable")
+            .expect(
+                "fake proof has the canonical length, flags are representable, and the burn is \
+                 valid for the drawn version",
+            )
         }
     }
 
@@ -1555,11 +1543,13 @@ pub(crate) mod tests {
     use zcash_note_encryption::note_bytes::NoteBytesData;
 
     use super::testing::{
-        arb_asset_to_burn, arb_bundle, arb_bundle_vanilla, arb_flags,
+        arb_asset_to_burn, arb_bundle, arb_bundle_vanilla, arb_bundle_zsa, arb_flags,
         arb_flags_ironwood_post_nu6_3, flags_for_version,
     };
     use super::{
-        Action, Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags, TxVersion,
+        burn_validation::{BurnError, MAX_BURN_VALUE},
+        Action, AssetBase, Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags,
+        NoteValue, TxVersion,
     };
     use crate::{
         note_encryption::{NoteCiphertextBytes, ENC_CIPHERTEXT_SIZE_ZSA},
@@ -2119,7 +2109,54 @@ pub(crate) mod tests {
                 ),
                 bundle_version,
             );
-            prop_assert_eq!(result.err(), Some(BundleError::BurnNotPermitted));
+            prop_assert_eq!(result.err(), Some(BundleError::Burn(BurnError::BurnNotPermitted)));
+        }
+
+        #[test]
+        fn try_from_parts_rejects_an_invalid_burn(bundle in arb_bundle_zsa(3)) {
+            // `arb_bundle_zsa` draws a valid non-empty burn; each case below breaks one rule.
+            // Only the burn changes, so it is the sole reason `try_from_parts` can fail.
+            let rebuild = |burn| {
+                Bundle::try_from_parts(
+                    bundle.actions().clone(),
+                    *bundle.flags(),
+                    *bundle.value_balance(),
+                    burn,
+                    *bundle.anchor(),
+                    bundle.authorization().clone(),
+                    bundle.bundle_version(),
+                )
+                .err()
+            };
+
+            let burn = bundle.burn().clone();
+            prop_assert!(!burn.is_empty());
+            prop_assert_eq!(rebuild(burn.clone()), None);
+
+            let mut duplicated = burn.clone();
+            duplicated.push(burn[0]);
+            prop_assert_eq!(
+                rebuild(duplicated),
+                Some(BundleError::Burn(BurnError::DuplicateAsset))
+            );
+
+            let mut zatoshi = burn.clone();
+            zatoshi[0].0 = AssetBase::zatoshi();
+            prop_assert_eq!(
+                rebuild(zatoshi),
+                Some(BundleError::Burn(BurnError::ZatoshiAsset))
+            );
+
+            let mut zero = burn.clone();
+            zero[0].1 = NoteValue::from_raw(0);
+            prop_assert_eq!(rebuild(zero), Some(BundleError::Burn(BurnError::ZeroAmount)));
+
+            let mut too_large = burn;
+            too_large[0].1 = NoteValue::from_raw(MAX_BURN_VALUE + 1);
+            prop_assert_eq!(
+                rebuild(too_large),
+                Some(BundleError::Burn(BurnError::InvalidAmount))
+            );
         }
 
         #[test]
