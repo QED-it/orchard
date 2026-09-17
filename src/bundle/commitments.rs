@@ -224,7 +224,7 @@ fn hash_bundle_txid_data_vanilla<A: Authorization, V: Copy + Into<i64>>(
 ) -> Result<Blake2bHash, CommitmentError> {
     let format = bundle
         .bundle_version()
-        .value_pool
+        .value_pool()
         .commitment_format(tx_version)?;
     let personalizations = format.personalizations();
     let mut h = hasher(personalizations.bundle);
@@ -273,7 +273,7 @@ fn hash_bundle_txid_data_zsa<A: Authorization, V: Copy + Into<i64>>(
 ) -> Result<Blake2bHash, CommitmentError> {
     let format = bundle
         .bundle_version()
-        .value_pool
+        .value_pool()
         .commitment_format(tx_version)?;
 
     let personalizations = format.personalizations();
@@ -382,11 +382,10 @@ pub fn hash_bundle_txid_empty(
 fn hash_bundle_auth_data_vanilla<V>(
     bundle: &Bundle<Authorized, V>,
     tx_version: TxVersion,
-    _sighash_info_for_kind: impl Fn(&OrchardSighashKind) -> Vec<u8>,
 ) -> Result<Blake2bHash, CommitmentError> {
     let format = bundle
         .bundle_version()
-        .value_pool
+        .value_pool()
         .commitment_format(tx_version)?;
     let mut h = hasher(format.personalizations().auth);
     h.update(bundle.authorization().proof().as_ref());
@@ -429,7 +428,7 @@ fn hash_bundle_auth_data_zsa<V>(
 ) -> Result<Blake2bHash, CommitmentError> {
     let format = bundle
         .bundle_version()
-        .value_pool
+        .value_pool()
         .commitment_format(tx_version)?;
 
     let personalizations = format.personalizations();
@@ -490,9 +489,7 @@ pub(crate) fn hash_bundle_auth_data<V>(
         .bundle_version()
         .check_bundle_version_tx_version_compatibility(tx_version)?;
     match tx_version {
-        TxVersion::V5 | TxVersion::V6 => {
-            hash_bundle_auth_data_vanilla(bundle, tx_version, sighash_info_for_kind)
-        }
+        TxVersion::V5 | TxVersion::V6 => hash_bundle_auth_data_vanilla(bundle, tx_version),
         TxVersion::ZSA => hash_bundle_auth_data_zsa(bundle, tx_version, sighash_info_for_kind),
     }
 }
