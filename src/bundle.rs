@@ -39,7 +39,7 @@ use crate::{
 use crate::circuit::{Instance, VerifyingKey};
 
 #[cfg(feature = "circuit")]
-impl<A> Action<A> {
+impl<T> Action<T> {
     /// Prepares the public instance for this action, for creating and verifying the
     /// bundle proof.
     pub fn to_instance(&self, flags: Flags, anchor: Anchor) -> Instance {
@@ -330,7 +330,7 @@ impl Flags {
         zsa_enabled: false,
     };
 
-    /// The flags set with spends, outputs and ZSA enabled.
+    /// The flags set with spends, outputs, cross_address and ZSA enabled.
     pub const ENABLED_WITH_ZSA: Flags = Flags {
         spends_enabled: true,
         outputs_enabled: true,
@@ -538,9 +538,9 @@ pub trait Authorization: fmt::Debug {
 
 /// A bundle of actions to be applied to the ledger.
 #[derive(Clone)]
-pub struct Bundle<A: Authorization, V> {
+pub struct Bundle<T: Authorization, V> {
     /// The list of actions that make up this bundle.
-    actions: NonEmpty<Action<A::SpendAuth>>,
+    actions: NonEmpty<Action<T::SpendAuth>>,
     /// Orchard-specific transaction-level flags for this bundle.
     flags: Flags,
     /// The net value moved out of the Orchard shielded pool.
@@ -552,7 +552,7 @@ pub struct Bundle<A: Authorization, V> {
     /// The root of the Orchard commitment tree that this bundle commits to.
     anchor: Anchor,
     /// The authorization for this bundle.
-    authorization: A,
+    authorization: T,
     /// The value pool and protocol version this bundle is encoded under.
     ///
     /// This is interpretive context rather than wire data: it is never serialized, but it
@@ -563,11 +563,11 @@ pub struct Bundle<A: Authorization, V> {
     bundle_version: BundleVersion,
 }
 
-impl<A: Authorization, V: fmt::Debug> fmt::Debug for Bundle<A, V> {
+impl<T: Authorization, V: fmt::Debug> fmt::Debug for Bundle<T, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         /// Helper struct for debug-printing actions without exposing `NonEmpty`.
-        struct Actions<'a, A>(&'a NonEmpty<Action<A>>);
-        impl<A: fmt::Debug> fmt::Debug for Actions<'_, A> {
+        struct Actions<'a, T>(&'a NonEmpty<Action<T>>);
+        impl<T: fmt::Debug> fmt::Debug for Actions<'_, T> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 f.debug_list().entries(self.0.iter()).finish()
             }
@@ -642,7 +642,7 @@ pub(crate) fn validate_action_ciphertext_kind<A>(
     }
 }
 
-impl<A: Authorization, V> Bundle<A, V> {
+impl<T: Authorization, V> Bundle<T, V> {
     /// Constructs a `Bundle` from its constituent parts without validating the authorization.
     ///
     /// This does not check the proof size, so it must only be used with an authorization that
@@ -660,12 +660,12 @@ impl<A: Authorization, V> Bundle<A, V> {
     /// [`Bundle::try_from_parts`], but not here, for the same reason the proof size is not
     /// checked here.
     pub(crate) fn from_parts_unchecked(
-        actions: NonEmpty<Action<A::SpendAuth>>,
+        actions: NonEmpty<Action<T::SpendAuth>>,
         flags: Flags,
         value_balance: V,
         burn: Vec<(AssetBase, NoteValue)>,
         anchor: Anchor,
-        authorization: A,
+        authorization: T,
         bundle_version: BundleVersion,
     ) -> Self {
         debug_assert!(flags.to_byte(bundle_version).is_some());
@@ -681,7 +681,7 @@ impl<A: Authorization, V> Bundle<A, V> {
     }
 
     /// Returns the list of actions that make up this bundle.
-    pub fn actions(&self) -> &NonEmpty<Action<A::SpendAuth>> {
+    pub fn actions(&self) -> &NonEmpty<Action<T::SpendAuth>> {
         &self.actions
     }
 
@@ -710,7 +710,7 @@ impl<A: Authorization, V> Bundle<A, V> {
     /// Returns the authorization for this bundle.
     ///
     /// In the case of a `Bundle<Authorized>`, this is the proof and binding signature.
-    pub fn authorization(&self) -> &A {
+    pub fn authorization(&self) -> &T {
         &self.authorization
     }
 
@@ -739,7 +739,7 @@ impl<A: Authorization, V> Bundle<A, V> {
     pub fn try_map_value_balance<V0, E, F: FnOnce(V) -> Result<V0, E>>(
         self,
         f: F,
-    ) -> Result<Bundle<A, V0>, E> {
+    ) -> Result<Bundle<T, V0>, E> {
         Ok(Bundle {
             actions: self.actions,
             flags: self.flags,
@@ -755,8 +755,8 @@ impl<A: Authorization, V> Bundle<A, V> {
     pub fn map_authorization<R, U: Authorization>(
         self,
         context: &mut R,
-        mut spend_auth: impl FnMut(&mut R, &A, A::SpendAuth) -> U::SpendAuth,
-        step: impl FnOnce(&mut R, A) -> U,
+        mut spend_auth: impl FnMut(&mut R, &T, T::SpendAuth) -> U::SpendAuth,
+        step: impl FnOnce(&mut R, T) -> U,
     ) -> Bundle<U, V> {
         let authorization = self.authorization;
         Bundle {
@@ -776,8 +776,8 @@ impl<A: Authorization, V> Bundle<A, V> {
     pub fn try_map_authorization<R, U: Authorization, E>(
         self,
         context: &mut R,
-        mut spend_auth: impl FnMut(&mut R, &A, A::SpendAuth) -> Result<U::SpendAuth, E>,
-        step: impl FnOnce(&mut R, A) -> Result<U, E>,
+        mut spend_auth: impl FnMut(&mut R, &T, T::SpendAuth) -> Result<U::SpendAuth, E>,
+        step: impl FnOnce(&mut R, T) -> Result<U, E>,
     ) -> Result<Bundle<U, V>, E> {
         let authorization = self.authorization;
         let new_actions = self
@@ -892,8 +892,8 @@ impl<A: Authorization, V> Bundle<A, V> {
         })
     }
 }
-pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>>(
-    actions: impl IntoIterator<Item = &'a Action<A>>,
+pub(crate) fn derive_bvk<'a, T: 'a, V: Clone + Into<i64>>(
+    actions: impl IntoIterator<Item = &'a Action<T>>,
     value_balance: V,
     burn: &[(AssetBase, NoteValue)],
 ) -> redpallas::VerificationKey<Binding> {
@@ -925,7 +925,7 @@ pub(crate) fn derive_bvk_raw<'a>(
     .into_bvk()
 }
 
-impl<A: Authorization, V: Copy + Into<i64>> Bundle<A, V> {
+impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
     /// Computes this bundle's transaction-ID commitment component.
     ///
     /// The flag-byte encoding follows the bundle's own [`BundleVersion`]; `tx_version` selects the
@@ -965,6 +965,8 @@ impl<V> Bundle<EffectsOnly, V> {
     /// are not checked against circuit support (there is no proof key to check against). The flags
     /// and the action's encrypted-note ciphertexts are, however, checked for representability
     /// under `bundle_version`, so that the resulting bundle is safe to serialize and commit to.
+    /// A non-empty `burn` requires a `bundle_version` and `flags` that enable ZSA, and entries
+    /// that are burnable and unique.
     ///
     /// # Errors
     ///
@@ -1392,7 +1394,7 @@ pub mod testing {
     prop_compose! {
         /// Create an arbitrary set of flags with cross-address transfers enabled and ZSA
         /// transfers disabled. This is representable for all `bundle_version` other than
-        /// Orchard post-NU6.3 and ZSA.
+        /// Orchard post-NU6.3.
         ///
         /// Use `arb_flags_ironwood_post_nu6_3` for a strategy that can also disable
         /// cross-address transfers.
@@ -1816,15 +1818,15 @@ pub(crate) mod tests {
         ];
         for i in 0..formats.len() {
             for j in (i + 1)..formats.len() {
-                let (bi, ti) = formats[i];
-                let (bj, tj) = formats[j];
+                let (pi, ti) = formats[i];
+                let (pj, tj) = formats[j];
                 assert_ne!(
-                    hash_bundle_txid_empty(bi, ti).unwrap().as_bytes(),
-                    hash_bundle_txid_empty(bj, tj).unwrap().as_bytes()
+                    hash_bundle_txid_empty(pi, ti).unwrap().as_bytes(),
+                    hash_bundle_txid_empty(pj, tj).unwrap().as_bytes()
                 );
                 assert_ne!(
-                    hash_bundle_auth_empty(bi, ti).unwrap().as_bytes(),
-                    hash_bundle_auth_empty(bj, tj).unwrap().as_bytes()
+                    hash_bundle_auth_empty(pi, ti).unwrap().as_bytes(),
+                    hash_bundle_auth_empty(pj, tj).unwrap().as_bytes()
                 );
             }
         }
