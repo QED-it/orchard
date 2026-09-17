@@ -9,8 +9,8 @@ use orchard::{
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
     note::{AssetBase, ExtractedNoteCommitment, NoteVersion},
     note_encryption::{
-        DomainVersion, IronwoodDomain, NoteEncryptionDomain, OrchardDomain, OrchardVersion,
-        ZSAVersion,
+        DomainVersion, IronwoodDomain, IronwoodVersion, NoteEncryptionDomain, OrchardDomain,
+        OrchardVersion, ZSAVersion,
     },
     sighash_kind::OrchardSighashKind,
     tree::{MerkleHashOrchard, MerklePath},
@@ -84,8 +84,10 @@ pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
     (merkle_path, root.into())
 }
 
-/// Marker type selecting the Vanilla flavor for the flavor-parameterized tests in this file.
-struct OrchardVanilla;
+/// Marker type selecting the Orchard V2 flavor for the flavor-parameterized tests in this file.
+struct OrchardV2;
+/// Marker type selecting the Ironwood V3 flavor for the flavor-parameterized tests in this file.
+struct IronwoodV3;
 /// Marker type selecting the ZSA flavor for the flavor-parameterized tests in this file.
 struct OrchardZSA;
 
@@ -96,11 +98,18 @@ trait BundleOrchardFlavor {
     type DomainVersion: DomainVersion;
 }
 
-impl BundleOrchardFlavor for OrchardVanilla {
+impl BundleOrchardFlavor for OrchardV2 {
     const DEFAULT_BUNDLE_VERSION: BundleVersion = BundleVersion::orchard_v2();
     const TX_VERSION: TxVersion = TxVersion::V5;
     const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED;
     type DomainVersion = OrchardVersion;
+}
+
+impl BundleOrchardFlavor for IronwoodV3 {
+    const DEFAULT_BUNDLE_VERSION: BundleVersion = BundleVersion::ironwood_v3();
+    const TX_VERSION: TxVersion = TxVersion::V6;
+    const SPENDS_DISABLED_FLAGS: Flags = Flags::SPENDS_DISABLED;
+    type DomainVersion = IronwoodVersion;
 }
 
 impl BundleOrchardFlavor for OrchardZSA {
@@ -274,11 +283,11 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
 }
 
 #[test]
-fn bundle_chain_vanilla() {
-    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardVanilla>();
+fn bundle_chain_v2() {
+    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<OrchardV2>();
     assert_eq!(
         orchard_digest_1,
-        // Locks the `orchard_digest` for OrchardVanilla
+        // Locks the `orchard_digest` for Orchard V2
         [
             165, 242, 106, 135, 168, 224, 110, 252, 175, 110, 63, 29, 78, 243, 33, 14, 152, 202,
             209, 47, 68, 32, 138, 96, 79, 213, 218, 93, 45, 87, 221, 174
@@ -286,10 +295,31 @@ fn bundle_chain_vanilla() {
     );
     assert_eq!(
         orchard_digest_2,
-        // Locks the `orchard_digest` for OrchardVanilla
+        // Locks the `orchard_digest` for Orchard V2
         [
             74, 174, 42, 41, 68, 92, 171, 110, 10, 148, 217, 61, 68, 50, 49, 1, 1, 180, 221, 210,
             97, 237, 25, 198, 195, 77, 19, 160, 186, 172, 8, 26
+        ]
+    );
+}
+
+#[test]
+fn bundle_chain_ironwood_v3() {
+    let (orchard_digest_1, orchard_digest_2) = bundle_chain::<IronwoodV3>();
+    assert_eq!(
+        orchard_digest_1,
+        // Locks the `orchard_digest` for Ironwood V3
+        [
+            169, 49, 180, 254, 83, 114, 164, 97, 69, 67, 251, 84, 239, 134, 231, 190, 223, 13, 34,
+            129, 83, 214, 28, 157, 166, 110, 197, 117, 30, 135, 156, 168
+        ]
+    );
+    assert_eq!(
+        orchard_digest_2,
+        // Locks the `orchard_digest` for Ironwood V3
+        [
+            171, 108, 112, 31, 27, 67, 147, 115, 235, 134, 79, 82, 56, 252, 46, 118, 169, 215, 188,
+            207, 200, 209, 118, 161, 253, 130, 236, 129, 75, 139, 111, 102
         ]
     );
 }
@@ -734,7 +764,7 @@ fn ironwood_post_nu6_3_unrestricted_bundle_proves_and_verifies() {
         ),
         Ok(())
     );
-    let (unauthorized, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
+    let (unauthorized, _) = builder.build(&mut rng).unwrap().unwrap();
 
     assert_eq!(
         unauthorized.circuit_version(),
