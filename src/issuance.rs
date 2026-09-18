@@ -490,6 +490,9 @@ impl IssueBundle<AwaitingNullifier> {
     /// (`asset_desc_hash`, `ik`).  The reference note will also have a rho value set to
     /// `None` and a temporary rseed value. The rho and rseed values of this reference note will be
     /// updated later by calling the `update_rho` method.
+    ///
+    /// A first issuance must be added before [`Self::finalize_action`] is called for that asset:
+    /// against the empty action it inserts, `first_issuance` fails with `CannotBeFirstIssuance`.
     pub fn add_recipient(
         &mut self,
         asset_desc_hash: [u8; 32],
@@ -517,7 +520,7 @@ impl IssueBundle<AwaitingNullifier> {
             Some(action) => {
                 // Append to an existing IssueAction.
                 if first_issuance {
-                    // It cannot be first issuance because we have already some notes for this asset.
+                    // The bundle already holds an action for this asset.
                     return Err(CannotBeFirstIssuance);
                 }
                 action.notes.extend(notes);
@@ -538,7 +541,8 @@ impl IssueBundle<AwaitingNullifier> {
     /// Finalizes issuance for the asset identified by (`asset_desc_hash`, `self.ik`).
     ///
     /// If an `IssueAction` already exists for this asset, its finalize flag is set.
-    /// Otherwise, a new finalize-only `IssueAction` is created.
+    /// Otherwise, a new finalize-only `IssueAction` is created. Such an action has no reference
+    /// note, so it only suits an asset that already exists in the global issuance state.
     pub fn finalize_action(&mut self, asset_desc_hash: &[u8; 32]) {
         let issue_action = self
             .actions
