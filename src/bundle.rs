@@ -1126,6 +1126,8 @@ impl<V> Bundle<Authorized, V> {
     ///
     /// The flags and the action's encrypted-note ciphertexts are also checked for representability
     /// under `bundle_version`, so that the resulting bundle is safe to serialize and commit to.
+    /// A non-empty `burn` requires a `bundle_version` and `flags` that enable ZSA, and entries
+    /// that are burnable and unique.
     ///
     /// # Errors
     ///
