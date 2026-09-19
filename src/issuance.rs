@@ -1919,8 +1919,12 @@ mod tests {
         assert!(!issued_assets[&asset].is_finalized);
     }
 
-    /// Signs a bundle with two `IssueAction`s for one asset: the first holds the reference note
-    /// and a note of 10, the second the notes `second`. `finalize` gives the two actions' flags.
+    /// Signs a bundle with two `IssueAction`s for one asset:
+    /// - the first `IssueAction` holds the reference note and a note of 10,
+    /// - the second holds one note per value in `second`. An empty  `second` therefore
+    ///   gives a note-less action, which only verifies when finalized.
+    ///
+    /// `finalize` gives the two actions' flags.
     fn two_actions_same_asset(
         params: &TestParams,
         second: &[u64],
