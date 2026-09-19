@@ -1,5 +1,7 @@
 //! Primitives used in the Orchard protocol.
-//!
-//! This module handles the redpallas signatures.
+// TODO:
+// - DH stuff
+//     - EphemeralPublicKey
+//     - EphemeralSecretKey
 
 pub mod redpallas;

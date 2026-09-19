@@ -13,7 +13,7 @@ use zcash_note_encryption::note_bytes::NoteBytes;
 use crate::{
     address::Address,
     bundle::{
-        burn_validation::{validate_burn_entry, BurnError},
+        burn_validation::{burn_permitted, validate_burn, validate_burn_entry, BurnError},
         Authorization, Authorized, Bundle, BundleVersion, Flags, TxVersion,
     },
     keys::{
@@ -209,9 +209,6 @@ pub enum BuildError {
     UnrepresentableFlags,
     /// A coinbase bundle was requested with flags that enable spends.
     CoinbaseSpendsEnabled,
-    /// A burn was added under a [`BundleVersion`] that does not permit ZSA, or with flags
-    /// that do not enable ZSA.
-    BurnNotPermitted,
     /// A burn or a non-zatoshi asset was requested for a PCZT, which is zatoshi-only in V1.
     ZsaUnsupportedByPczt,
     /// The bundle's actions do not balance: some asset's net value is not its burn.
@@ -269,10 +266,6 @@ impl fmt::Display for BuildError {
             CoinbaseSpendsEnabled => {
                 f.write_str("A coinbase bundle was requested with flags that enable spends.")
             }
-            BurnNotPermitted => f.write_str(
-                "A burn was added under a bundle version that does not permit ZSA, or with \
-                 flags that do not enable ZSA.",
-            ),
             ZsaUnsupportedByPczt => f.write_str(
                 "A burn or a non-zatoshi asset cannot be carried in a PCZT V1 Orchard bundle.",
             ),
@@ -1213,13 +1206,20 @@ impl Builder {
     ///
     /// # Errors
     ///
-    /// Returns [`BuildError::BurnNotPermitted`] if the builder's [`BundleVersion`] does not
-    /// permit ZSA, or if its flags do not enable ZSA.
+    /// Returns [`BuildError::Burn`] wrapping:
+    ///
+    /// * [`BurnError::BurnNotPermitted`] if the builder's [`BundleVersion`] does not permit
+    ///   ZSA, or if its flags do not enable ZSA;
+    /// * [`BurnError::ZatoshiAsset`] if `asset` is the zatoshi asset;
+    /// * [`BurnError::ZeroAmount`] if `value` is zero;
+    /// * [`BurnError::InvalidAmount`] if `value` exceeds
+    ///   [`MAX_BURN_VALUE`](crate::bundle::burn_validation::MAX_BURN_VALUE);
+    /// * [`BurnError::DuplicateAsset`] if a burn was already added for `asset`.
     pub fn add_burn(&mut self, asset: AssetBase, value: NoteValue) -> Result<(), BuildError> {
         use alloc::collections::btree_map::Entry;
 
-        if !self.bundle_version.permits_zsa() || !self.flags.zsa_enabled() {
-            return Err(BuildError::BurnNotPermitted);
+        if !burn_permitted(&self.flags, self.bundle_version) {
+            return Err(BuildError::Burn(BurnError::BurnNotPermitted));
         }
 
         validate_burn_entry(asset, value).map_err(BuildError::Burn)?;
@@ -1455,8 +1455,7 @@ fn pad_spend(
 /// - [`BuildError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`,
 /// - [`BuildError::CoinbaseSpendsEnabled`] if `bundle_type` is [`BundleType::Coinbase`] but `flags`
 ///   enable spends,
-/// - [`BuildError::BurnNotPermitted`] if `burn` is non-empty but `bundle_version` does not permit
-///   ZSA or `flags` do not enable ZSA,
+/// - [`BuildError::Burn`] if `burn` is not valid in this context,
 /// - [`BuildError::BindingKeyMismatch`] if some asset's net value does not match its `burn` entry.
 #[allow(clippy::too_many_arguments)]
 #[cfg(feature = "circuit")]
@@ -1589,13 +1588,8 @@ fn build_bundle<B, R: RngCore>(
     if matches!(bundle_type, BundleType::Coinbase) && flags.spends_enabled() {
         return Err(BuildError::CoinbaseSpendsEnabled);
     }
-    let burn_permitted = bundle_version.permits_zsa() && flags.zsa_enabled();
-    if !burn.is_empty() && !burn_permitted {
-        return Err(BuildError::BurnNotPermitted);
-    }
-    for (asset, value) in &burn {
-        validate_burn_entry(*asset, *value).map_err(BuildError::Burn)?;
-    }
+    let burn_vec: Vec<(AssetBase, NoteValue)> = burn.into_iter().collect();
+    validate_burn(&burn_vec, &flags, bundle_version).map_err(BuildError::Burn)?;
     let note_version = bundle_version.note_version();
 
     let num_requested_spends = spends.len();
@@ -1872,8 +1866,6 @@ fn build_bundle<B, R: RngCore>(
         .filter(|action| action.spend.note.asset().is_zatoshi().into())
         .try_fold(ValueSum::zero(), |acc, action| acc + action.value_sum())
         .ok_or(BalanceError::Overflow)?;
-
-    let burn_vec = burn.into_iter().collect();
 
     finisher(
         pre_actions,
@@ -2524,7 +2516,7 @@ mod tests {
     };
     use crate::{
         builder::{BundleType, SpendError},
-        bundle::{Authorized, Bundle, BundleVersion, Flags, TxVersion},
+        bundle::{burn_validation::BurnError, Authorized, Bundle, BundleVersion, Flags, TxVersion},
         circuit::ProvingKey,
         circuit_version::OrchardCircuitVersion,
         constants::MERKLE_DEPTH_ORCHARD,
@@ -3083,7 +3075,7 @@ mod tests {
 
         assert!(matches!(
             builder.add_burn(AssetBase::random(&mut rng), NoteValue::from_raw(1)),
-            Err(BuildError::BurnNotPermitted)
+            Err(BuildError::Burn(BurnError::BurnNotPermitted))
         ));
     }
 
@@ -3105,7 +3097,10 @@ mod tests {
             vec![],
             burn,
         );
-        assert!(matches!(result, Err(BuildError::BurnNotPermitted)));
+        assert!(matches!(
+            result,
+            Err(BuildError::Burn(BurnError::BurnNotPermitted))
+        ));
     }
 
     #[test]
@@ -3124,7 +3119,7 @@ mod tests {
         let mut builder = Builder::new(BundleType::DEFAULT, bundle_version, flags, anchor).unwrap();
         assert!(matches!(
             builder.add_burn(AssetBase::random(&mut rng), NoteValue::from_raw(1)),
-            Err(BuildError::BurnNotPermitted)
+            Err(BuildError::Burn(BurnError::BurnNotPermitted))
         ));
 
         let burn = BTreeMap::from([(AssetBase::random(&mut rng), NoteValue::from_raw(1))]);
@@ -3139,7 +3134,10 @@ mod tests {
             vec![],
             burn,
         );
-        assert!(matches!(result, Err(BuildError::BurnNotPermitted)));
+        assert!(matches!(
+            result,
+            Err(BuildError::Burn(BurnError::BurnNotPermitted))
+        ));
     }
 
     #[test]

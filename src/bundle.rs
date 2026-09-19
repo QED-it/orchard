@@ -22,7 +22,7 @@ use memuse::DynamicUsage;
 use crate::{
     action::Action,
     address::Address,
-    bundle::burn_validation::validate_burn,
+    bundle::burn_validation::{validate_burn, BurnError},
     bundle::commitments::{hash_bundle_auth_data, hash_bundle_txid_data},
     circuit_version::OrchardCircuitVersion,
     keys::{IncomingViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey},
@@ -39,7 +39,7 @@ use crate::{
 use crate::circuit::{Instance, VerifyingKey};
 
 #[cfg(feature = "circuit")]
-impl<A> Action<A> {
+impl<T> Action<T> {
     /// Prepares the public instance for this action, for creating and verifying the
     /// bundle proof.
     pub fn to_instance(&self, flags: Flags, anchor: Anchor) -> Instance {
@@ -330,7 +330,7 @@ impl Flags {
         zsa_enabled: false,
     };
 
-    /// The flags set with spends, outputs and ZSA enabled.
+    /// The flags set with spends, outputs, cross_address and ZSA enabled.
     pub const ENABLED_WITH_ZSA: Flags = Flags {
         spends_enabled: true,
         outputs_enabled: true,
@@ -538,9 +538,9 @@ pub trait Authorization: fmt::Debug {
 
 /// A bundle of actions to be applied to the ledger.
 #[derive(Clone)]
-pub struct Bundle<A: Authorization, V> {
+pub struct Bundle<T: Authorization, V> {
     /// The list of actions that make up this bundle.
-    actions: NonEmpty<Action<A::SpendAuth>>,
+    actions: NonEmpty<Action<T::SpendAuth>>,
     /// Orchard-specific transaction-level flags for this bundle.
     flags: Flags,
     /// The net value moved out of the Orchard shielded pool.
@@ -552,7 +552,7 @@ pub struct Bundle<A: Authorization, V> {
     /// The root of the Orchard commitment tree that this bundle commits to.
     anchor: Anchor,
     /// The authorization for this bundle.
-    authorization: A,
+    authorization: T,
     /// The value pool and protocol version this bundle is encoded under.
     ///
     /// This is interpretive context rather than wire data: it is never serialized, but it
@@ -563,11 +563,11 @@ pub struct Bundle<A: Authorization, V> {
     bundle_version: BundleVersion,
 }
 
-impl<A: Authorization, V: fmt::Debug> fmt::Debug for Bundle<A, V> {
+impl<T: Authorization, V: fmt::Debug> fmt::Debug for Bundle<T, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         /// Helper struct for debug-printing actions without exposing `NonEmpty`.
-        struct Actions<'a, A>(&'a NonEmpty<Action<A>>);
-        impl<A: fmt::Debug> fmt::Debug for Actions<'_, A> {
+        struct Actions<'a, T>(&'a NonEmpty<Action<T>>);
+        impl<T: fmt::Debug> fmt::Debug for Actions<'_, T> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 f.debug_list().entries(self.0.iter()).finish()
             }
@@ -642,7 +642,7 @@ pub(crate) fn validate_action_ciphertext_kind<A>(
     }
 }
 
-impl<A: Authorization, V> Bundle<A, V> {
+impl<T: Authorization, V> Bundle<T, V> {
     /// Constructs a `Bundle` from its constituent parts without validating the authorization.
     ///
     /// This does not check the proof size, so it must only be used with an authorization that
@@ -660,12 +660,12 @@ impl<A: Authorization, V> Bundle<A, V> {
     /// [`Bundle::try_from_parts`], but not here, for the same reason the proof size is not
     /// checked here.
     pub(crate) fn from_parts_unchecked(
-        actions: NonEmpty<Action<A::SpendAuth>>,
+        actions: NonEmpty<Action<T::SpendAuth>>,
         flags: Flags,
         value_balance: V,
         burn: Vec<(AssetBase, NoteValue)>,
         anchor: Anchor,
-        authorization: A,
+        authorization: T,
         bundle_version: BundleVersion,
     ) -> Self {
         debug_assert!(flags.to_byte(bundle_version).is_some());
@@ -681,7 +681,7 @@ impl<A: Authorization, V> Bundle<A, V> {
     }
 
     /// Returns the list of actions that make up this bundle.
-    pub fn actions(&self) -> &NonEmpty<Action<A::SpendAuth>> {
+    pub fn actions(&self) -> &NonEmpty<Action<T::SpendAuth>> {
         &self.actions
     }
 
@@ -710,7 +710,7 @@ impl<A: Authorization, V> Bundle<A, V> {
     /// Returns the authorization for this bundle.
     ///
     /// In the case of a `Bundle<Authorized>`, this is the proof and binding signature.
-    pub fn authorization(&self) -> &A {
+    pub fn authorization(&self) -> &T {
         &self.authorization
     }
 
@@ -739,7 +739,7 @@ impl<A: Authorization, V> Bundle<A, V> {
     pub fn try_map_value_balance<V0, E, F: FnOnce(V) -> Result<V0, E>>(
         self,
         f: F,
-    ) -> Result<Bundle<A, V0>, E> {
+    ) -> Result<Bundle<T, V0>, E> {
         Ok(Bundle {
             actions: self.actions,
             flags: self.flags,
@@ -755,8 +755,8 @@ impl<A: Authorization, V> Bundle<A, V> {
     pub fn map_authorization<R, U: Authorization>(
         self,
         context: &mut R,
-        mut spend_auth: impl FnMut(&mut R, &A, A::SpendAuth) -> U::SpendAuth,
-        step: impl FnOnce(&mut R, A) -> U,
+        mut spend_auth: impl FnMut(&mut R, &T, T::SpendAuth) -> U::SpendAuth,
+        step: impl FnOnce(&mut R, T) -> U,
     ) -> Bundle<U, V> {
         let authorization = self.authorization;
         Bundle {
@@ -776,8 +776,8 @@ impl<A: Authorization, V> Bundle<A, V> {
     pub fn try_map_authorization<R, U: Authorization, E>(
         self,
         context: &mut R,
-        mut spend_auth: impl FnMut(&mut R, &A, A::SpendAuth) -> Result<U::SpendAuth, E>,
-        step: impl FnOnce(&mut R, A) -> Result<U, E>,
+        mut spend_auth: impl FnMut(&mut R, &T, T::SpendAuth) -> Result<U::SpendAuth, E>,
+        step: impl FnOnce(&mut R, T) -> Result<U, E>,
     ) -> Result<Bundle<U, V>, E> {
         let authorization = self.authorization;
         let new_actions = self
@@ -892,8 +892,8 @@ impl<A: Authorization, V> Bundle<A, V> {
         })
     }
 }
-pub(crate) fn derive_bvk<'a, A: 'a, V: Clone + Into<i64>>(
-    actions: impl IntoIterator<Item = &'a Action<A>>,
+pub(crate) fn derive_bvk<'a, T: 'a, V: Clone + Into<i64>>(
+    actions: impl IntoIterator<Item = &'a Action<T>>,
     value_balance: V,
     burn: &[(AssetBase, NoteValue)],
 ) -> redpallas::VerificationKey<Binding> {
@@ -925,7 +925,7 @@ pub(crate) fn derive_bvk_raw<'a>(
     .into_bvk()
 }
 
-impl<A: Authorization, V: Copy + Into<i64>> Bundle<A, V> {
+impl<T: Authorization, V: Copy + Into<i64>> Bundle<T, V> {
     /// Computes this bundle's transaction-ID commitment component.
     ///
     /// The flag-byte encoding follows the bundle's own [`BundleVersion`]; `tx_version` selects the
@@ -965,6 +965,8 @@ impl<V> Bundle<EffectsOnly, V> {
     /// are not checked against circuit support (there is no proof key to check against). The flags
     /// and the action's encrypted-note ciphertexts are, however, checked for representability
     /// under `bundle_version`, so that the resulting bundle is safe to serialize and commit to.
+    /// A non-empty `burn` requires a `bundle_version` and `flags` that enable ZSA, and entries
+    /// that are burnable and unique.
     ///
     /// # Errors
     ///
@@ -972,8 +974,7 @@ impl<V> Bundle<EffectsOnly, V> {
     /// - [`BundleError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`
     /// - [`BundleError::MismatchedActionCiphertextKind`] if some action's encrypted-note
     ///   ciphertext is not the kind `bundle_version` implies
-    /// - [`BundleError::BurnNotPermitted`] if `burn` is non-empty and either `bundle_version`
-    ///   does not permit ZSA or `flags` do not enable ZSA
+    /// - [`BundleError::Burn`] if `burn` is not valid in this context
     pub fn from_parts(
         actions: NonEmpty<Action<<EffectsOnly as Authorization>::SpendAuth>>,
         flags: Flags,
@@ -985,7 +986,7 @@ impl<V> Bundle<EffectsOnly, V> {
     ) -> Result<Self, BundleError> {
         validate_action_ciphertext_kind(&actions, bundle_version)?;
         validate_flags(&flags, bundle_version)?;
-        validate_burn(&burn, &flags, bundle_version)?;
+        validate_burn(&burn, &flags, bundle_version).map_err(BundleError::Burn)?;
         Ok(Bundle::from_parts_unchecked(
             actions,
             flags,
@@ -1061,14 +1062,8 @@ pub enum BundleError {
     /// or carrying the wrong variant for its `bundle_version`, cannot be committed to or verified
     /// correctly.
     MismatchedActionCiphertextKind,
-    /// A non-empty burn was provided for a bundle whose version does not permit ZSA, or
-    /// whose flags do not enable ZSA.
-    ///
-    /// Burn instructions are only meaningful for the ZSA protocol, so both conditions are
-    /// required. The version alone is not enough: a ZSA bundle may still carry `zsa_enabled`
-    /// cleared, and the circuit then forces every asset to zatoshi, so no burn can be
-    /// balanced.
-    BurnNotPermitted,
+    /// Burn-specific error.
+    Burn(BurnError),
 }
 
 impl fmt::Display for BundleError {
@@ -1085,10 +1080,7 @@ impl fmt::Display for BundleError {
             BundleError::MismatchedActionCiphertextKind => f.write_str(
                 "an action's encrypted-note ciphertext kind is inconsistent with the bundle's version",
             ),
-            BundleError::BurnNotPermitted => f.write_str(
-                "a non-empty burn was provided for a bundle whose version does not permit ZSA, \
-                 or whose flags do not enable ZSA",
-            ),
+            BundleError::Burn(err) => write!(f, "Burn error: {err}"),
         }
     }
 }
@@ -1134,6 +1126,8 @@ impl<V> Bundle<Authorized, V> {
     ///
     /// The flags and the action's encrypted-note ciphertexts are also checked for representability
     /// under `bundle_version`, so that the resulting bundle is safe to serialize and commit to.
+    /// A non-empty `burn` requires a `bundle_version` and `flags` that enable ZSA, and entries
+    /// that are burnable and unique.
     ///
     /// # Errors
     ///
@@ -1143,8 +1137,7 @@ impl<V> Bundle<Authorized, V> {
     /// - [`BundleError::UnrepresentableFlags`] if `flags` cannot be encoded under `bundle_version`
     /// - [`BundleError::MismatchedActionCiphertextKind`] if some action's encrypted-note
     ///   ciphertext is not the kind `bundle_version` implies
-    /// - [`BundleError::BurnNotPermitted`] if `burn` is non-empty and either `bundle_version`
-    ///   does not permit ZSA or `flags` do not enable ZSA
+    /// - [`BundleError::Burn`] if `burn` is not valid in this context
     pub fn try_from_parts(
         actions: NonEmpty<Action<<Authorized as Authorization>::SpendAuth>>,
         flags: Flags,
@@ -1163,7 +1156,7 @@ impl<V> Bundle<Authorized, V> {
         }
         validate_action_ciphertext_kind(&actions, bundle_version)?;
         validate_flags(&flags, bundle_version)?;
-        validate_burn(&burn, &flags, bundle_version)?;
+        validate_burn(&burn, &flags, bundle_version).map_err(BundleError::Burn)?;
         Ok(Bundle::from_parts_unchecked(
             actions,
             flags,
@@ -1275,17 +1268,14 @@ pub mod testing {
     use proptest::prelude::*;
 
     use crate::{
-        bundle::BundleVersion,
+        bundle::{burn_validation::MAX_BURN_VALUE, BundleVersion},
         note::{
             asset_base::testing::{arb_asset_base, arb_zsa_asset_base},
             AssetBase,
         },
         primitives::redpallas::testing::arb_binding_signing_key,
         sighash_kind::{OrchardBindingSig, OrchardSighashKind, OrchardSpendAuthSig},
-        value::{
-            testing::{arb_note_value, arb_note_value_bounded},
-            NoteValue, ValueSum, MAX_NOTE_VALUE,
-        },
+        value::{testing::arb_note_value_bounded, NoteValue, ValueSum, MAX_NOTE_VALUE},
         Anchor, NoteVersion, Proof,
     };
 
@@ -1393,23 +1383,27 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Create an arbitrary vector of assets to burn.
+        /// Create an arbitrary burn entry.
         pub fn arb_asset_to_burn()
         (
             asset_base in arb_zsa_asset_base(),
-            value in arb_note_value()
+            value in 1u64..=MAX_BURN_VALUE
         ) -> (AssetBase, NoteValue) {
-            (asset_base, value)
+            (asset_base, NoteValue::from_raw(value))
         }
     }
 
     prop_compose! {
         /// Create an arbitrary set of flags with cross-address transfers enabled and ZSA
         /// transfers disabled. This is representable for all `bundle_version` other than
-        /// Orchard post-NU6.3 and ZSA.
+        /// Orchard post-NU6.3.
         ///
         /// Use `arb_flags_ironwood_post_nu6_3` for a strategy that can also disable
         /// cross-address transfers.
+        ///
+        /// The bundle strategies pass the drawn flags through `flags_for_version`, which
+        /// overwrites `cross_address_enabled` and `zsa_enabled` with the bundle version's own
+        /// default values; only `spends_enabled` and `outputs_enabled` survive there.
         pub fn arb_flags()(spends_enabled in prop::bool::ANY, outputs_enabled in prop::bool::ANY) -> Flags {
             Flags::from_parts(spends_enabled, outputs_enabled, true, false)
         }
@@ -1454,7 +1448,6 @@ pub mod testing {
             acts in vec(arb_unauthorized_action_n(bundle_version.note_version(), n_actions, flags), n_actions),
             anchor in arb_base().prop_map(Anchor::from),
             flags in Just(flags),
-            // `from_parts` rejects a burn under a version that does not permit ZSA.
             burn in if bundle_version.permits_zsa() {
                 vec(arb_asset_to_burn(), 1usize..10).boxed()
             } else {
@@ -1474,7 +1467,7 @@ pub mod testing {
                 super::EffectsOnly,
                 bundle_version,
             )
-            .expect("flags are normalized and burn is empty unless the version permits ZSA")
+            .expect("flags are normalized and the burn is valid for the drawn version")
         }
     }
 
@@ -1484,7 +1477,7 @@ pub mod testing {
         ///
         /// `burn` is derived from the drawn version rather than drawn independently: it is
         /// non-empty only when the version permits ZSA, since `try_from_parts` rejects a burn
-        /// under any other version as `BurnNotPermitted`.
+        /// unless the version permits ZSA and the flags enable it.
         fn arb_bundle_for_versions(n_actions: usize, versions: impl Strategy<Value = BundleVersion>)
         (
             bundle_version in versions,
@@ -1522,7 +1515,10 @@ pub mod testing {
                 },
                 bundle_version,
             )
-            .expect("fake proof has the canonical length and flags are representable")
+            .expect(
+                "fake proof has the canonical length, flags are representable, and the burn is \
+                 valid for the drawn version",
+            )
         }
     }
 
@@ -1555,11 +1551,13 @@ pub(crate) mod tests {
     use zcash_note_encryption::note_bytes::NoteBytesData;
 
     use super::testing::{
-        arb_asset_to_burn, arb_bundle, arb_bundle_vanilla, arb_flags,
+        arb_asset_to_burn, arb_bundle, arb_bundle_vanilla, arb_bundle_zsa, arb_flags,
         arb_flags_ironwood_post_nu6_3, flags_for_version,
     };
     use super::{
-        Action, Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags, TxVersion,
+        burn_validation::{BurnError, MAX_BURN_VALUE},
+        Action, AssetBase, Authorized, Bundle, BundleError, BundleVersion, CommitmentError, Flags,
+        NoteValue, TxVersion,
     };
     use crate::{
         note_encryption::{NoteCiphertextBytes, ENC_CIPHERTEXT_SIZE_ZSA},
@@ -1826,15 +1824,15 @@ pub(crate) mod tests {
         ];
         for i in 0..formats.len() {
             for j in (i + 1)..formats.len() {
-                let (bi, ti) = formats[i];
-                let (bj, tj) = formats[j];
+                let (pi, ti) = formats[i];
+                let (pj, tj) = formats[j];
                 assert_ne!(
-                    hash_bundle_txid_empty(bi, ti).unwrap().as_bytes(),
-                    hash_bundle_txid_empty(bj, tj).unwrap().as_bytes()
+                    hash_bundle_txid_empty(pi, ti).unwrap().as_bytes(),
+                    hash_bundle_txid_empty(pj, tj).unwrap().as_bytes()
                 );
                 assert_ne!(
-                    hash_bundle_auth_empty(bi, ti).unwrap().as_bytes(),
-                    hash_bundle_auth_empty(bj, tj).unwrap().as_bytes()
+                    hash_bundle_auth_empty(pi, ti).unwrap().as_bytes(),
+                    hash_bundle_auth_empty(pj, tj).unwrap().as_bytes()
                 );
             }
         }
@@ -2119,7 +2117,54 @@ pub(crate) mod tests {
                 ),
                 bundle_version,
             );
-            prop_assert_eq!(result.err(), Some(BundleError::BurnNotPermitted));
+            prop_assert_eq!(result.err(), Some(BundleError::Burn(BurnError::BurnNotPermitted)));
+        }
+
+        #[test]
+        fn try_from_parts_rejects_an_invalid_burn(bundle in arb_bundle_zsa(3)) {
+            // `arb_bundle_zsa` draws a valid non-empty burn; each case below breaks one rule.
+            // Only the burn changes, so it is the sole reason `try_from_parts` can fail.
+            let rebuild = |burn| {
+                Bundle::try_from_parts(
+                    bundle.actions().clone(),
+                    *bundle.flags(),
+                    *bundle.value_balance(),
+                    burn,
+                    *bundle.anchor(),
+                    bundle.authorization().clone(),
+                    bundle.bundle_version(),
+                )
+                .err()
+            };
+
+            let burn = bundle.burn().clone();
+            prop_assert!(!burn.is_empty());
+            prop_assert_eq!(rebuild(burn.clone()), None);
+
+            let mut duplicated = burn.clone();
+            duplicated.push(burn[0]);
+            prop_assert_eq!(
+                rebuild(duplicated),
+                Some(BundleError::Burn(BurnError::DuplicateAsset))
+            );
+
+            let mut zatoshi = burn.clone();
+            zatoshi[0].0 = AssetBase::zatoshi();
+            prop_assert_eq!(
+                rebuild(zatoshi),
+                Some(BundleError::Burn(BurnError::ZatoshiAsset))
+            );
+
+            let mut zero = burn.clone();
+            zero[0].1 = NoteValue::from_raw(0);
+            prop_assert_eq!(rebuild(zero), Some(BundleError::Burn(BurnError::ZeroAmount)));
+
+            let mut too_large = burn;
+            too_large[0].1 = NoteValue::from_raw(MAX_BURN_VALUE + 1);
+            prop_assert_eq!(
+                rebuild(too_large),
+                Some(BundleError::Burn(BurnError::InvalidAmount))
+            );
         }
 
         #[test]
