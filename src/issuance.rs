@@ -324,52 +324,6 @@ impl<T: IssueAuth> IssueBundle<T> {
         &self.authorization
     }
 
-    /// Find the action corresponding to the `asset_desc_hash` for a given `IssueBundle`.
-    ///
-    /// # Returns
-    ///
-    /// If a single matching action is found, it is returned as `Some(&IssueAction)`.
-    /// If no action matches the given `asset_desc_hash`, it returns `None`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if multiple matching actions are found.
-    pub fn get_action_by_desc_hash(&self, asset_desc_hash: &[u8; 32]) -> Option<&IssueAction> {
-        let issue_actions: Vec<&IssueAction> = self
-            .actions
-            .iter()
-            .filter(|a| a.asset_desc_hash.eq(asset_desc_hash))
-            .collect();
-        match issue_actions.len() {
-            0 => None,
-            1 => Some(issue_actions[0]),
-            _ => panic!("Multiple IssueActions with the same asset_desc_hash"),
-        }
-    }
-
-    /// Find the actions corresponding to an Asset Base `asset` for a given `IssueBundle`.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Some(&IssueAction)` if a single matching action is found.
-    /// Returns `None` if no action matches the given asset base.
-    ///
-    /// # Panics
-    ///
-    /// Panics if multiple matching actions are found.
-    pub fn get_action_by_asset(&self, asset: &AssetBase) -> Option<&IssueAction> {
-        let issue_actions: Vec<&IssueAction> = self
-            .actions
-            .iter()
-            .filter(|a| AssetBase::custom(&AssetId::new_v0(&self.ik, &a.asset_desc_hash)).eq(asset))
-            .collect();
-        match issue_actions.len() {
-            0 => None,
-            1 => Some(issue_actions[0]),
-            _ => panic!("Multiple IssueActions with the same AssetBase"),
-        }
-    }
-
     /// Computes a commitment to the effects of this bundle, suitable for inclusion within
     /// a transaction ID.
     pub fn commitment(&self) -> IssueBundleCommitment {
@@ -1001,7 +955,7 @@ mod tests {
         Address, Note,
     };
     use alloc::collections::{BTreeMap, BTreeSet};
-    use alloc::string::{String, ToString};
+    use alloc::string::String;
     use alloc::vec::Vec;
     use nonempty::NonEmpty;
     use pasta_curves::pallas;
@@ -1211,7 +1165,7 @@ mod tests {
         let asset_desc_hash_1 = asset_desc_hash(b"Halo");
         let asset_desc_hash_2 = asset_desc_hash(b"Halo2");
 
-        let (mut bundle, asset) = IssueBundle::new(
+        let (mut bundle, first_asset) = IssueBundle::new(
             ik.clone(),
             asset_desc_hash_1,
             Some(IssueInfo {
@@ -1223,7 +1177,7 @@ mod tests {
         )
         .unwrap();
 
-        let another_asset = bundle
+        let duplicated_first_asset = bundle
             .add_recipient(
                 asset_desc_hash_1,
                 recipient,
@@ -1232,9 +1186,9 @@ mod tests {
                 rng,
             )
             .unwrap();
-        assert_eq!(asset, another_asset);
+        assert_eq!(first_asset, duplicated_first_asset);
 
-        let third_asset = bundle
+        let second_asset = bundle
             .add_recipient(
                 asset_desc_hash_2,
                 recipient,
@@ -1243,7 +1197,7 @@ mod tests {
                 rng,
             )
             .unwrap();
-        assert_ne!(asset, third_asset);
+        assert_ne!(first_asset, second_asset);
 
         bundle.actions().iter().for_each(|action| {
             action
@@ -1262,23 +1216,21 @@ mod tests {
         let actions = awaiting_sighash_bundle.actions();
         assert_eq!(actions.len(), 2);
 
-        let action = awaiting_sighash_bundle.get_action_by_asset(&asset).unwrap();
+        let action = awaiting_sighash_bundle.actions().first();
         assert_eq!(action.notes.len(), 3);
         let reference_note = action.notes.first().unwrap();
-        verify_reference_note(reference_note, asset);
+        verify_reference_note(reference_note, first_asset);
         let first_note = action.notes.get(1).unwrap();
         assert_eq!(first_note.value().inner(), 5);
-        assert_eq!(first_note.asset(), asset);
+        assert_eq!(first_note.asset(), first_asset);
         assert_eq!(first_note.recipient(), recipient);
 
         let second_note = action.notes.get(2).unwrap();
         assert_eq!(second_note.value().inner(), 10);
-        assert_eq!(second_note.asset(), asset);
+        assert_eq!(second_note.asset(), first_asset);
         assert_eq!(second_note.recipient(), recipient);
 
-        let action2 = awaiting_sighash_bundle
-            .get_action_by_desc_hash(&asset_desc_hash_2)
-            .unwrap();
+        let action2 = awaiting_sighash_bundle.actions().get(1).unwrap();
         assert_eq!(action2.notes.len(), 2);
         let reference_note = action2.notes.first().unwrap();
         verify_reference_note(
@@ -1287,10 +1239,10 @@ mod tests {
         );
         let first_note = action2.notes().get(1).unwrap();
         assert_eq!(first_note.value().inner(), 15);
-        assert_eq!(first_note.asset(), third_asset);
+        assert_eq!(first_note.asset(), second_asset);
 
-        verify_reference_note(action.get_reference_note().unwrap(), asset);
-        verify_reference_note(action2.get_reference_note().unwrap(), third_asset);
+        verify_reference_note(action.get_reference_note().unwrap(), first_asset);
+        verify_reference_note(action2.get_reference_note().unwrap(), second_asset);
     }
 
     #[test]
@@ -1797,51 +1749,6 @@ mod tests {
 
         let action = IssueAction::new_with_flags(asset_desc_hash, vec![note], 2u8);
         assert!(action.is_none());
-    }
-
-    #[test]
-    fn test_get_action_by_desc_hash() {
-        let TestParams {
-            rng,
-            ik,
-            recipient,
-            first_nullifier,
-            ..
-        } = setup_params();
-
-        // UTF heavy test string
-        let asset_desc_1 = "ΩΣ𐐷कあ한🐍★→".to_string().as_bytes().to_vec();
-
-        let asset_desc_hash_1 = asset_desc_hash(&asset_desc_1);
-
-        let (bundle, asset_base_1) = IssueBundle::new(
-            ik,
-            asset_desc_hash_1,
-            Some(IssueInfo {
-                recipient,
-                value: NoteValue::from_raw(5),
-            }),
-            true,
-            rng,
-        )
-        .unwrap();
-
-        // NOTE: Equality between two IssueActions can only be tested once `rho` is initialized.
-        // This call is required for the final `assert_eq!`.
-        let bundle_with_rho = bundle.update_rho(&first_nullifier, rng);
-
-        // Checks for the case of UTF-8 encoded asset description.
-        let action = bundle_with_rho.get_action_by_asset(&asset_base_1).unwrap();
-        assert_eq!(action.asset_desc_hash(), &asset_desc_hash_1);
-        let reference_note = action.notes.first().unwrap();
-        verify_reference_note(reference_note, asset_base_1);
-        assert_eq!(action.notes.get(1).unwrap().value().inner(), 5);
-        assert_eq!(
-            bundle_with_rho
-                .get_action_by_desc_hash(&asset_desc_hash_1)
-                .unwrap(),
-            action
-        );
     }
 
     /// A description mixing Greek, Deseret (supplementary plane), Devanagari, Hiragana,
