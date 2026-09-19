@@ -12,11 +12,7 @@
 //! Errors related to issuance, such as invalid signatures or supply overflows,
 //! are handled through the `Error` enum.
 
-use alloc::{
-    collections::{BTreeMap, BTreeSet},
-    string::String,
-    vec::Vec,
-};
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use blake2b_simd::{Hash as Blake2bHash, Params};
 use core::fmt;
 use core::fmt::Debug;
@@ -35,11 +31,10 @@ use crate::{
 };
 
 use Error::{
-    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, DuplicateIssueActionForAssetBase,
-    IncorrectRhoDerivation, InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashKind,
-    IssueActionNotFound, IssueActionPreviouslyFinalizedAssetBase,
-    IssueActionWithoutNoteNotFinalized, IssueBundleIkMismatchAssetBase,
-    MissingReferenceNoteOnFirstIssuance, ValueOverflow,
+    AssetBaseCannotBeIdentityPoint, CannotBeFirstIssuance, IncorrectRhoDerivation,
+    InvalidIssueBundleSig, InvalidIssueValidatingKey, InvalidSighashKind, IssueActionNotFound,
+    IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
+    IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
 };
 
 pub mod auth;
@@ -338,8 +333,7 @@ impl<T: IssueAuth> IssueBundle<T> {
     ///
     /// # Panics
     ///
-    /// Panics if multiple matching actions are found. Every constructor rejects such a bundle
-    /// (see [`IssueBundle::from_parts`]), so this is unreachable.
+    /// Panics if multiple matching actions are found.
     pub fn get_action_by_desc_hash(&self, asset_desc_hash: &[u8; 32]) -> Option<&IssueAction> {
         let issue_actions: Vec<&IssueAction> = self
             .actions
@@ -362,8 +356,7 @@ impl<T: IssueAuth> IssueBundle<T> {
     ///
     /// # Panics
     ///
-    /// Panics if multiple matching actions are found. Every constructor rejects such a bundle
-    /// (see [`IssueBundle::from_parts`]), so this is unreachable.
+    /// Panics if multiple matching actions are found.
     pub fn get_action_by_asset(&self, asset: &AssetBase) -> Option<&IssueAction> {
         let issue_actions: Vec<&IssueAction> = self
             .actions
@@ -384,36 +377,16 @@ impl<T: IssueAuth> IssueBundle<T> {
     }
 
     /// Constructs an `IssueBundle` from its constituent parts.
-    ///
-    /// Every action must issue a distinct asset. The rest of this type relies on that: an
-    /// `AssetBase` identifies at most one action, so [`IssueBundle::get_action_by_asset`] and
-    /// [`IssueBundle::get_action_by_desc_hash`] can return a single action, and
-    /// [`IssueBundle::add_recipient`] appends to the existing action for an asset rather than
-    /// creating a second one.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Error::DuplicateIssueActionForAssetBase`] if two actions issue the same asset.
     pub fn from_parts(
         ik: IssueValidatingKey<ZSASchnorr>,
         actions: NonEmpty<IssueAction>,
         authorization: T,
-    ) -> Result<Self, Error> {
-        // An action's `AssetBase` is derived from the bundle's `ik` and the action's
-        // `asset_desc_hash`, and `ik` is the same for every action, so distinct description
-        // hashes give distinct assets.
-        let mut seen = BTreeSet::new();
-        for action in actions.iter() {
-            if !seen.insert(action.asset_desc_hash) {
-                return Err(DuplicateIssueActionForAssetBase);
-            }
-        }
-
-        Ok(IssueBundle {
+    ) -> Self {
+        IssueBundle {
             ik,
             actions,
             authorization,
-        })
+        }
     }
 
     /// Transitions this bundle from one authorization state to another.
@@ -854,8 +827,6 @@ pub enum Error {
     AssetBaseCannotBeIdentityPoint,
     /// It cannot be first issuance because we have already some notes for this asset.
     CannotBeFirstIssuance,
-    /// Two `IssueAction`s in the bundle issue the same `AssetBase`.
-    DuplicateIssueActionForAssetBase,
 
     /// Verification errors:
     /// Invalid issuance validating key.
@@ -906,9 +877,6 @@ impl fmt::Display for Error {
                     "it cannot be first issuance because we have already some notes for this asset."
                 )
             }
-            DuplicateIssueActionForAssetBase => {
-                write!(f, "two IssueActions in the bundle issue the same AssetBase")
-            }
             InvalidIssueValidatingKey => {
                 write!(f, "invalid issuance validating key")
             }
@@ -944,8 +912,8 @@ impl fmt::Display for Error {
 mod tests {
     use crate::{
         issuance::Error::{
-            CannotBeFirstIssuance, DuplicateIssueActionForAssetBase, IncorrectRhoDerivation,
-            InvalidIssueBundleSig, InvalidIssueValidatingKey, IssueActionNotFound,
+            CannotBeFirstIssuance, IncorrectRhoDerivation, InvalidIssueBundleSig,
+            InvalidIssueValidatingKey, IssueActionNotFound,
             IssueActionPreviouslyFinalizedAssetBase, IssueActionWithoutNoteNotFinalized,
             IssueBundleIkMismatchAssetBase, MissingReferenceNoteOnFirstIssuance, ValueOverflow,
         },
@@ -1116,51 +1084,6 @@ mod tests {
             assert_eq!(amount, NoteValue::from_raw(30));
             assert_eq!(action.is_finalized(), finalize);
         }
-    }
-
-    #[test]
-    fn from_parts_rejects_duplicate_actions() {
-        let TestParams {
-            mut rng,
-            ik,
-            recipient,
-            ..
-        } = setup_params();
-
-        let mut action = |desc: &[u8]| {
-            let hash = asset_desc_hash(desc);
-            let asset = AssetBase::custom(&AssetId::new_v0(&ik, &hash));
-            let note = Note::new_issue_note(
-                recipient,
-                NoteValue::from_raw(10),
-                asset,
-                NoteVersion::ZSA,
-                &mut rng,
-            );
-            IssueAction::from_parts(hash, vec![note], false)
-        };
-        let first = action(b"Asset 1");
-        let second = action(b"Asset 2");
-        let duplicate = action(b"Asset 1");
-
-        // Two actions issuing the same asset: rejected.
-        assert_eq!(
-            IssueBundle::from_parts(
-                ik.clone(),
-                NonEmpty::from_vec(vec![first.clone(), duplicate]).unwrap(),
-                AwaitingNullifier,
-            )
-            .err(),
-            Some(DuplicateIssueActionForAssetBase)
-        );
-
-        // Distinct assets: accepted.
-        assert!(IssueBundle::from_parts(
-            ik,
-            NonEmpty::from_vec(vec![first, second]).unwrap(),
-            AwaitingNullifier,
-        )
-        .is_ok());
     }
 
     #[test]
