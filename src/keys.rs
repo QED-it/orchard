@@ -1105,16 +1105,13 @@ mod tests {
         }
     }
 
-    // TODO Constance: update the zcash_test_vectors repository so that keys.rs can be
-    // generated with post-quantum keys and issuance keys.
-    /*
     #[cfg(feature = "zsa-issuance")]
     #[test]
     fn test_vectors() {
         use {
             crate::{
                 issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
-                note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
+                note::{AssetBase, ExtractedNoteCommitment, NoteVersion, RandomSeed, Rho},
                 value::NoteValue,
                 Note,
             },
@@ -1181,5 +1178,4 @@ mod tests {
             assert_eq!(internal_ovk.0, tv.internal_ovk);
         }
     }
-    */
 }

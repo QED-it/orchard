@@ -809,16 +809,12 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // TODO Constance: update the zcash_test_vectors repository so that keys.rs can be
-    // generated with post-quantum keys and issuance keys.
-    /*
     use crate::{
         keys::{FullViewingKey, Scope, SpendingKey},
         test_vectors::keys::TestVector,
     };
     use ff::PrimeField;
     use group::GroupEncoding;
-
 
     struct QrRcmDerivation {
         rcm_old_repr: [u8; 32],
@@ -833,6 +829,7 @@ mod tests {
         let addr = fvk.address_at(0u32, Scope::External);
         let rho = Rho::from_bytes(&tv.note_rho).unwrap();
         let rseed = RandomSeed::from_bytes(tv.note_rseed, &rho).unwrap();
+        let asset_base = AssetBase::from_bytes(&tv.asset).unwrap();
 
         let g_d = addr.g_d();
         let pk_d = addr.pk_d().inner();
@@ -841,7 +838,7 @@ mod tests {
 
         let rcm_old = rseed.rcm_v2(&rho);
         let psi = rseed.psi(&rho);
-        let rcm_new = rseed.rcm_v3(&rho, &g_d, &pk_d, tv.note_v, &psi);
+        let rcm_new = rseed.rcm_zsa(&rho, &g_d, &pk_d, tv.note_v, &psi, &asset_base);
 
         let rcm_old_repr = rcm_old.0.to_repr();
         let rcm_new_repr = rcm_new.0.to_repr();
@@ -852,7 +849,7 @@ mod tests {
             g_d_bytes,
             pk_d_bytes,
             value,
-            AssetBase::zatoshi(),
+            asset_base,
             rho_inner,
             psi,
             rcm_old,
@@ -864,7 +861,7 @@ mod tests {
             g_d_bytes,
             pk_d_bytes,
             value,
-            AssetBase::zatoshi(),
+            asset_base,
             rho_inner,
             psi,
             rcm_new,
@@ -882,7 +879,7 @@ mod tests {
 
     #[test]
     fn qr_rcm_differs_from_old_rcm() {
-        let tv = &crate::test_vectors::keys::test_vectors()[0];
+        let tv = &crate::test_vectors::keys::TEST_VECTORS[0];
         let derived = qr_rcm_from_key_test_vector(tv);
 
         assert_ne!(derived.rcm_old_repr, derived.rcm_new_repr);
@@ -895,7 +892,7 @@ mod tests {
 
     #[test]
     fn qr_rcm_verify_stored_vectors() {
-        for (i, key_tv) in crate::test_vectors::keys::test_vectors().iter().enumerate() {
+        for (i, key_tv) in crate::test_vectors::keys::TEST_VECTORS.iter().enumerate() {
             let derived = qr_rcm_from_key_test_vector(key_tv);
 
             assert_eq!(
@@ -912,7 +909,6 @@ mod tests {
             );
         }
     }
-    */
 
     /// A split note takes its psi from the split seed, and adds NULLIFIER_L to its nullifier.
     /// No constructor sets `rseed_split_note`, so this test sets it directly.
