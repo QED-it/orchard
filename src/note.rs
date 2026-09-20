@@ -846,25 +846,13 @@ mod tests {
         let value = NoteValue::from_raw(tv.note_v);
 
         let cmx_old = NoteCommitment::derive(
-            g_d_bytes,
-            pk_d_bytes,
-            value,
-            asset_base,
-            rho_inner,
-            psi,
-            rcm_old,
+            g_d_bytes, pk_d_bytes, value, asset_base, rho_inner, psi, rcm_old,
         )
         .unwrap();
         let cmx_old_bytes = ExtractedNoteCommitment::from(cmx_old).to_bytes();
 
         let cmx_qr = NoteCommitment::derive(
-            g_d_bytes,
-            pk_d_bytes,
-            value,
-            asset_base,
-            rho_inner,
-            psi,
-            rcm_new,
+            g_d_bytes, pk_d_bytes, value, asset_base, rho_inner, psi, rcm_new,
         )
         .unwrap();
         let cmx_qr_bytes = ExtractedNoteCommitment::from(cmx_qr).to_bytes();
