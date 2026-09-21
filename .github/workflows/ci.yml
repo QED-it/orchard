@@ -19,6 +19,13 @@ jobs:
           # Disable LTO in CI to avoid very slow/hanging release test builds on macOS (rustc/LLVM).
           CARGO_PROFILE_RELEASE_LTO: "off"
         run: cargo test --verbose --release
+      # `zsa-issuance` is not a default feature, so the issuance module and its tests are
+      # otherwise never built.
+      - name: Run tests with issuance enabled
+        env:
+          # Disable LTO in CI to avoid very slow/hanging release test builds on macOS (rustc/LLVM).
+          CARGO_PROFILE_RELEASE_LTO: "off"
+        run: cargo test --verbose --release --features zsa-issuance
       # verifier-fingerprint capture tests build the k=11 proving key and run real proofs, too
       # heavy for every PR (regenerate the fixtures manually per the docs in
       # src/circuit/fingerprint/mod.rs). Compile them so the cfg(test) module can't rot unnoticed:
