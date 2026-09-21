@@ -1060,9 +1060,8 @@ mod tests {
         testing::{arb_diversifier_index, arb_diversifier_key, arb_esk, arb_spending_key},
         *,
     };
-    use crate::note::AssetBase;
     use crate::{
-        note::{ExtractedNoteCommitment, NoteVersion, RandomSeed, Rho},
+        note::{AssetBase, ExtractedNoteCommitment, NoteVersion, RandomSeed, Rho},
         value::NoteValue,
         Note,
     };
