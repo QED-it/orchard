@@ -1053,11 +1053,18 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
+    use ff::PrimeField;
     use proptest::prelude::*;
 
     use super::{
         testing::{arb_diversifier_index, arb_diversifier_key, arb_esk, arb_spending_key},
         *,
+    };
+    use crate::note::AssetBase;
+    use crate::{
+        note::{ExtractedNoteCommitment, NoteVersion, RandomSeed, Rho},
+        value::NoteValue,
+        Note,
     };
 
     #[test]
@@ -1105,35 +1112,16 @@ mod tests {
         }
     }
 
-    // TODO Constance: update the zcash_test_vectors repository so that keys.rs can be
-    // generated with post-quantum keys and issuance keys.
-    /*
-    #[cfg(feature = "zsa-issuance")]
     #[test]
     fn test_vectors() {
-        use {
-            crate::{
-                issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
-                note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
-                value::NoteValue,
-                Note,
-            },
-            ff::PrimeField,
-        };
-
-        for tv in crate::test_vectors::keys::TEST_VECTORS {
+        for tv in crate::test_vectors::keys::test_vectors() {
             let sk = SpendingKey::from_bytes(tv.sk).unwrap();
 
             let ask: SpendAuthorizingKey = (&sk).into();
             assert_eq!(<[u8; 32]>::from(&ask.0), tv.ask);
 
-            let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&tv.isk).unwrap();
-
             let ak: SpendValidatingKey = (&ask).into();
             assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
-
-            let ik = IssueValidatingKey::from(&isk);
-            assert_eq!(&ik.encode(), &tv.ik_encoding);
 
             let nk: NullifierDerivingKey = (&sk).into();
             assert_eq!(nk.0.to_repr(), tv.nk);
@@ -1158,7 +1146,7 @@ mod tests {
             let orchard_note = Note::from_parts(
                 addr,
                 NoteValue::from_raw(tv.note_v),
-                AssetBase::from_bytes(&tv.asset).unwrap(),
+                AssetBase::zatoshi(),
                 rho,
                 RandomSeed::from_bytes(tv.note_rseed, &rho).unwrap(),
                 NoteVersion::V2,
@@ -1181,5 +1169,4 @@ mod tests {
             assert_eq!(internal_ovk.0, tv.internal_ovk);
         }
     }
-    */
 }
