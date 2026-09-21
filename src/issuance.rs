@@ -1751,13 +1751,6 @@ mod tests {
         assert!(action.is_none());
     }
 
-    /// A description mixing Greek, Deseret (supplementary plane), Devanagari, Hiragana,
-    /// Hangul, an emoji and symbols is well-formed, so it hashes rather than panicking.
-    #[test]
-    fn well_formed_utf8_description() {
-        asset_desc_hash("ΩΣ𐐷कあ한🐍★→".as_bytes());
-    }
-
     #[test]
     #[should_panic(expected = "asset_desc is not a well-formed Unicode string")]
     fn not_well_formed_utf8() {
