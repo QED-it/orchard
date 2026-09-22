@@ -1217,7 +1217,7 @@ fn action_group_and_swap_bundle() {
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "InvalidSignature")]
 fn invalid_swap_bundle() {
     // ----- Setup -----
 
@@ -1265,7 +1265,7 @@ fn invalid_swap_bundle() {
         &asset2_reference_note,
     ]);
 
-    assert_eq!(merkle_paths.len(), 10);
+    assert_eq!(merkle_paths.len(), 9);
     let merkle_path_asset1_note1 = merkle_paths[0].clone();
     let merkle_path_asset1_note2 = merkle_paths[1].clone();
     let merkle_path_user1_zatoshi_note1 = merkle_paths[2].clone();
