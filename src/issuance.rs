@@ -494,14 +494,18 @@ impl IssueBundle<AwaitingNullifier> {
 
     /// Finalizes issuance for the asset identified by (`asset_desc_hash`, `self.ik`).
     ///
-    /// If an `IssueAction` already exists for this asset, its finalize flag is set.
+    /// If the bundle already holds `IssueAction`s for this asset, the flag is set on the last
+    /// of them: actions are validated in order, so finalizing an earlier one would reject every
+    /// later action for the same asset.
+    ///
     /// Otherwise, a new finalize-only `IssueAction` is created. Such an action has no reference
     /// note, so it only suits an asset that already exists in the global issuance state.
     pub fn finalize_action(&mut self, asset_desc_hash: &[u8; 32]) {
         let issue_action = self
             .actions
             .iter_mut()
-            .find(|issue_action| issue_action.asset_desc_hash.eq(asset_desc_hash));
+            .filter(|issue_action| issue_action.asset_desc_hash.eq(asset_desc_hash))
+            .next_back();
 
         if let Some(issue_action) = issue_action {
             issue_action.flags = IssuanceFlags::from_parts(true);
