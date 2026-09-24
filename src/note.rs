@@ -966,7 +966,7 @@ mod tests {
     #[test]
     fn zsa_rcm_verify_test_vectors() {
         for (i, tv) in crate::test_vectors::keys_zsa::TEST_VECTORS
-            .into_iter()
+            .iter()
             .enumerate()
         {
             let sk = SpendingKey::from_bytes(tv.sk).unwrap();
