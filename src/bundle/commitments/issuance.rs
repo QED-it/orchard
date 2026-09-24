@@ -1,15 +1,22 @@
 //! Issuance-related commitment functions (ZSA feature)
 
-use alloc::vec::Vec;
 use blake2b_simd::Hash as Blake2bHash;
 
-use crate::{
-    bundle::commitments::{get_compact_size, hasher},
-    issuance::{sighash_kind::IssueSighashKind, IssueAuth, IssueBundle, Signed},
+use crate::bundle::commitments::hasher;
+
+#[cfg(feature = "zsa-issuance")]
+use {
+    crate::{
+        bundle::commitments::get_compact_size,
+        issuance::{sighash_kind::IssueSighashKind, IssueAuth, IssueBundle, Signed},
+    },
+    alloc::vec::Vec,
 };
 
 const ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION: &[u8; 16] = b"ZTxIdSAIssueHash";
+#[cfg(feature = "zsa-issuance")]
 const ZCASH_ORCHARD_ZSA_ISSUE_ACTION_PERSONALIZATION: &[u8; 16] = b"ZTxIdIssuActHash";
+#[cfg(feature = "zsa-issuance")]
 const ZCASH_ORCHARD_ZSA_ISSUE_NOTE_PERSONALIZATION: &[u8; 16] = b"ZTxIdIAcNoteHash";
 const ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION: &[u8; 16] = b"ZTxAuthZSAOrHash";
 
@@ -25,6 +32,7 @@ pub fn hash_issue_bundle_txid_empty() -> Blake2bHash {
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
+#[cfg(feature = "zsa-issuance")]
 pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION);
 
@@ -71,6 +79,7 @@ pub fn hash_issue_bundle_auth_empty() -> Blake2bHash {
 /// `IssueSighashKind::AllEffecting`, which is currently the only defined kind.
 ///
 /// [zip246]: https://zips.z.cash/zip-0246
+#[cfg(feature = "zsa-issuance")]
 pub(crate) fn hash_issue_bundle_auth_data(
     bundle: &IssueBundle<Signed>,
     sighash_info_for_kind: impl Fn(&IssueSighashKind) -> Vec<u8>,
@@ -93,6 +102,7 @@ pub(crate) fn hash_issue_bundle_auth_data(
 }
 
 #[cfg(test)]
+#[cfg(feature = "zsa-issuance")]
 mod tests {
     use super::*;
     use crate::{

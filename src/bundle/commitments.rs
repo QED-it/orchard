@@ -10,13 +10,11 @@ use crate::{
     ProtocolVersion, ValuePool,
 };
 
-#[cfg(feature = "zsa-issuance")]
 mod issuance;
 
 #[cfg(feature = "zsa-issuance")]
 pub(crate) use issuance::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data};
 
-#[cfg(feature = "zsa-issuance")]
 pub use issuance::{hash_issue_bundle_auth_empty, hash_issue_bundle_txid_empty};
 
 const ZCASH_ORCHARD_V5_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardHash";
