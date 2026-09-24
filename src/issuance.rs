@@ -2186,6 +2186,43 @@ mod tests {
             CannotFinalizeOnFirstIssuance
         );
     }
+
+    #[test]
+    fn finalize_action_must_finalize_the_last_action() {
+        let params = setup_params();
+
+        let mut rng = OsRng;
+        let hash = asset_desc_hash(b"asset1");
+        let asset = AssetBase::custom(&AssetId::new_v0(&params.ik, &hash));
+        let ref_note = create_reference_note(asset, &mut rng);
+        let note_1 = Note::new_issue_note(
+            params.recipient,
+            NoteValue::from_raw(10),
+            asset,
+            NoteVersion::ZSA,
+            &mut rng,
+        );
+        let note_2 = Note::new_issue_note(
+            params.recipient,
+            NoteValue::from_raw(20),
+            asset,
+            NoteVersion::ZSA,
+            &mut rng,
+        );
+
+        let actions = vec![
+            IssueAction::from_parts(hash, vec![ref_note, note_1], false),
+            IssueAction::from_parts(hash, vec![note_2], false),
+        ];
+        let mut bundle = IssueBundle::from_parts(
+            params.ik.clone(),
+            NonEmpty::from_vec(actions).unwrap(),
+            AwaitingNullifier,
+        );
+        bundle.finalize_action(&hash);
+        assert!(!bundle.actions().first().is_finalized());
+        assert!(bundle.actions().get(1).unwrap().is_finalized());
+    }
 }
 
 /// Generators for property testing.
