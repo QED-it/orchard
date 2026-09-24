@@ -1,9 +1,12 @@
 #![cfg(feature = "circuit")]
 
+mod common;
+
+use crate::common::verify_bundle;
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use orchard::{
     builder::{Builder, BundleType},
-    bundle::{Authorized, BatchValidator, BundleVersion, Flags, TxVersion},
+    bundle::{BatchValidator, BundleVersion, Flags, TxVersion},
     circuit::{ProvingKey, VerifyingKey},
     circuit_version::OrchardCircuitVersion,
     keys::{FullViewingKey, PreparedIncomingViewingKey, Scope, SpendAuthorizingKey, SpendingKey},
@@ -12,7 +15,6 @@ use orchard::{
         DomainVersion, IronwoodDomain, IronwoodVersion, NoteEncryptionDomain, OrchardDomain,
         OrchardVersion, ZSAVersion,
     },
-    sighash_kind::OrchardSighashKind,
     tree::{MerkleHashOrchard, MerklePath},
     value::NoteValue,
     Address, Anchor, Bundle, Note,
@@ -45,36 +47,6 @@ fn single_leaf_witness(cmx: &ExtractedNoteCommitment) -> (MerkleHashOrchard, Mer
         .unwrap();
     assert_eq!(root, merkle_path.root(leaf));
     (root, merkle_path.into())
-}
-
-pub fn verify_bundle(
-    bundle: &Bundle<Authorized, i64>,
-    vk: &VerifyingKey,
-    tx_version: TxVersion,
-    verify_proof: bool,
-) {
-    if verify_proof {
-        assert!(matches!(bundle.verify_proof(vk), Ok(())));
-    }
-    let sighash: [u8; 32] = bundle
-        .commitment(tx_version)
-        .expect("bundle flags are representable in this format")
-        .into();
-    let bvk = bundle.binding_validating_key();
-    for action in bundle.actions() {
-        assert_eq!(
-            action.authorization().sighash_kind(),
-            &OrchardSighashKind::AllEffecting,
-        );
-        assert_eq!(
-            action.rk().verify(&sighash, action.authorization().sig()),
-            Ok(())
-        );
-    }
-    assert_eq!(
-        bvk.verify(&sighash, bundle.authorization().binding_signature().sig()),
-        Ok(())
-    );
 }
 
 pub fn build_merkle_path(note: &Note) -> (MerklePath, Anchor) {
