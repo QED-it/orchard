@@ -14,14 +14,15 @@ jobs:
         os: [ubuntu-latest, windows-latest, macOS-latest]
     steps:
       - uses: actions/checkout@v7
-      - name: Run tests
+      # `zsa-issuance` only adds code, so the run below is a superset of this one. Compile the
+      # default-features tests anyway, to catch a test that silently needs the feature, but do
+      # not pay to run the suite twice.
+      - name: Compile-check the default-features tests
         env:
           # Disable LTO in CI to avoid very slow/hanging release test builds on macOS (rustc/LLVM).
           CARGO_PROFILE_RELEASE_LTO: "off"
-        run: cargo test --verbose --release
-      # `zsa-issuance` is not a default feature, so the issuance module and its tests are
-      # otherwise never built.
-      - name: Run tests with issuance enabled
+        run: cargo test --verbose --release --no-run
+      - name: Run tests
         env:
           # Disable LTO in CI to avoid very slow/hanging release test builds on macOS (rustc/LLVM).
           CARGO_PROFILE_RELEASE_LTO: "off"
