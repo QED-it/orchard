@@ -1,15 +1,16 @@
 //! Validating burn operations on asset bundles.
 
+use alloc::collections::BTreeSet;
 use core::fmt;
 
 #[cfg(feature = "zsa-issuance")]
-use alloc::collections::BTreeMap;
+use alloc::{collections::BTreeMap, vec::Vec};
 
 #[cfg(feature = "zsa-issuance")]
 use crate::issuance::AssetRecord;
 
 use crate::{
-    bundle::{BundleError, BundleVersion, Flags},
+    bundle::{BundleVersion, Flags},
     note::AssetBase,
     value::NoteValue,
 };
@@ -18,7 +19,7 @@ use crate::{
 /// Burns must fit in both u64 and i64 for value balance calculations.
 pub const MAX_BURN_VALUE: u64 = (1u64 << 63) - 1;
 
-/// Possible errors that can occur during bundle burn validation.
+/// Possible errors that can occur when validating a burn.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum BurnError {
@@ -34,6 +35,9 @@ pub enum BurnError {
     AssetNotFoundInState,
     /// Insufficient supply for burn.
     InsufficientSupply,
+    /// A non-empty burn was provided for a bundle whose version does not permit ZSA, or
+    /// whose flags do not enable ZSA.
+    BurnNotPermitted,
 }
 
 impl fmt::Display for BurnError {
@@ -51,35 +55,66 @@ impl fmt::Display for BurnError {
                 write!(f, "Asset not found in global issuance state")
             }
             BurnError::InsufficientSupply => write!(f, "Insufficient supply for burn"),
+            BurnError::BurnNotPermitted => write!(
+                f,
+                "a non-empty burn was provided for a bundle whose version does not permit ZSA, \
+                 or whose flags do not enable ZSA"
+            ),
         }
     }
 }
 
-/// Checks that a non-empty `burn` is only present when `bundle_version` permits ZSA and
-/// `flags` enable ZSA.
+/// Whether a bundle of this version, with these flags, may carry a burn at all.
 ///
 /// Burn instructions are only meaningful for the ZSA protocol, so both conditions are
-/// required. The version alone is not enough: a ZSA bundle may still be built with
-/// `zsa_enabled` cleared, and the circuit then forces every asset to zatoshi, so no burn
-/// can be balanced.
+/// required. The version alone is not enough: a ZSA bundle may still carry `zsa_enabled`
+/// cleared, and the circuit then forces every asset to zatoshi, so no burn can be balanced.
+pub(crate) fn burn_permitted(flags: &Flags, bundle_version: BundleVersion) -> bool {
+    bundle_version.permits_zsa() && flags.zsa_enabled()
+}
+
+/// Checks a bundle's whole `burn` set, without consulting the global issuance state.
 ///
-/// Returns [`BundleError::BurnNotPermitted`] otherwise.
+/// This covers the three properties that can be checked without that state:
+///
+/// - a non-empty burn is only permitted when [`burn_permitted`] holds;
+/// - each entry is valid on its own, per [`validate_burn_entry`];
+/// - no asset appears twice.
+///
+/// # Errors
+///
+/// * [`BurnError::BurnNotPermitted`] if `burn` is non-empty but `bundle_version` does not
+///   permit ZSA, or `flags` do not enable ZSA;
+/// * [`BurnError::ZatoshiAsset`] if an entry burns the zatoshi asset;
+/// * [`BurnError::ZeroAmount`] if an entry burns a zero amount;
+/// * [`BurnError::InvalidAmount`] if an entry burns more than [`MAX_BURN_VALUE`];
+/// * [`BurnError::DuplicateAsset`] if the same asset appears in more than one entry.
+///
+/// Entries are checked in order, and the first failure is returned.
 pub(crate) fn validate_burn(
     burn: &[(AssetBase, NoteValue)],
     flags: &Flags,
     bundle_version: BundleVersion,
-) -> Result<(), BundleError> {
-    if burn.is_empty() || (bundle_version.permits_zsa() && flags.zsa_enabled()) {
-        Ok(())
-    } else {
-        Err(BundleError::BurnNotPermitted)
+) -> Result<(), BurnError> {
+    // The permission applies to a non-empty burn: an empty one is fine under any version
+    // and flags.
+    if !burn.is_empty() && !burn_permitted(flags, bundle_version) {
+        return Err(BurnError::BurnNotPermitted);
     }
+
+    let mut seen = BTreeSet::new();
+    for &(asset, value) in burn {
+        validate_burn_entry(asset, value)?;
+        if !seen.insert(asset) {
+            return Err(BurnError::DuplicateAsset);
+        }
+    }
+
+    Ok(())
 }
 
 /// Checks one burn entry: the asset must not be the native one, and the amount must be
 /// non-zero and at most [`MAX_BURN_VALUE`].
-///
-/// Uniqueness is a property of the whole set, so it is left to the caller collecting one.
 pub(crate) fn validate_burn_entry(asset: AssetBase, value: NoteValue) -> Result<(), BurnError> {
     if asset.is_zatoshi().into() {
         Err(BurnError::ZatoshiAsset)
@@ -97,6 +132,7 @@ pub(crate) fn validate_burn_entry(asset: AssetBase, value: NoteValue) -> Result<
 /// These issuance records correspond to entries in the “global issuance state” defined in ZIP-0227.
 ///
 /// This function validates burn operations by:
+/// - Ensuring a non-empty burn is permitted by the bundle version and flags
 /// - Ensuring each asset is unique, non-zatoshi, fits in u63, and has a non-zero burn value
 /// - Verifying that each asset exists in the global issuance state
 /// - Checking that there is sufficient supply to burn
@@ -107,6 +143,8 @@ pub(crate) fn validate_burn_entry(asset: AssetBase, value: NoteValue) -> Result<
 /// # Arguments
 ///
 /// * `burn` - An iterable of assets to burn, where each asset is represented as a tuple of `AssetBase` and `NoteValue`
+/// * `flags` - The bundle's [`Flags`], which must enable ZSA for a non-empty burn
+/// * `bundle_version` - The bundle's [`BundleVersion`], which must permit ZSA for a non-empty burn
 /// * `get_current_record` - A closure that retrieves the current `AssetRecord` for a given `AssetBase`
 ///
 /// # Returns
@@ -116,6 +154,8 @@ pub(crate) fn validate_burn_entry(asset: AssetBase, value: NoteValue) -> Result<
 /// # Errors
 ///
 /// Returns a `BurnError` if:
+/// * The burn is non-empty but `bundle_version` does not permit ZSA, or `flags` do not enable
+///   ZSA (`BurnError::BurnNotPermitted`).
 /// * Any asset in the `burn` vector is zatoshi (`BurnError::ZatoshiAsset`).
 /// * Any asset in the `burn` vector has a zero value (`BurnError::ZeroAmount`).
 /// * Any burn amount in the `burn` vector is out of the u63 range (`BurnError::InvalidAmount`).
@@ -125,18 +165,19 @@ pub(crate) fn validate_burn_entry(asset: AssetBase, value: NoteValue) -> Result<
 #[cfg(feature = "zsa-issuance")]
 pub fn validate_bundle_burn(
     burn: impl IntoIterator<Item = (AssetBase, NoteValue)>,
+    flags: &Flags,
+    bundle_version: BundleVersion,
     mut get_current_record: impl FnMut(&AssetBase) -> Option<AssetRecord>,
 ) -> Result<BTreeMap<AssetBase, AssetRecord>, BurnError> {
+    // State-independent checks.
+    let burn: Vec<(AssetBase, NoteValue)> = burn.into_iter().collect();
+    validate_burn(&burn, flags, bundle_version)?;
+
+    // Fill new_records.
     let mut new_records = BTreeMap::new();
 
     for (asset, amount) in burn {
-        validate_burn_entry(asset, amount)?;
-
         let burn_amount_raw = amount.inner();
-
-        if new_records.contains_key(&asset) {
-            return Err(BurnError::DuplicateAsset);
-        }
 
         let current_record = get_current_record(&asset).ok_or(BurnError::AssetNotFoundInState)?;
 
@@ -159,19 +200,18 @@ pub fn validate_bundle_burn(
 
 #[cfg(test)]
 mod burn_permission_tests {
-    use super::validate_burn;
+    use super::{validate_burn, BurnError};
     use crate::{
-        bundle::{BundleError, BundleVersion, Flags},
+        bundle::{BundleVersion, Flags},
         note::AssetBase,
         value::NoteValue,
     };
-    use alloc::vec;
     use rand_core::OsRng;
 
     #[test]
     fn burn_needs_both_a_zsa_version_and_the_zsa_flag() {
         let mut rng = OsRng;
-        let burn = vec![(AssetBase::random(&mut rng), NoteValue::from_raw(1))];
+        let burn = [(AssetBase::random(&mut rng), NoteValue::from_raw(1))];
 
         // Both conditions hold: permitted.
         assert!(validate_burn(&burn, &Flags::ENABLED_WITH_ZSA, BundleVersion::zsa()).is_ok());
@@ -179,7 +219,7 @@ mod burn_permission_tests {
         // The ZSA version alone is not enough; `zsa_enabled` is a separate bit.
         assert!(matches!(
             validate_burn(&burn, &Flags::ENABLED, BundleVersion::zsa()),
-            Err(BundleError::BurnNotPermitted)
+            Err(BurnError::BurnNotPermitted)
         ));
 
         // Nor is the flag alone, on a version that cannot encode a burn.
@@ -189,11 +229,12 @@ mod burn_permission_tests {
                 &Flags::ENABLED_WITH_ZSA,
                 BundleVersion::ironwood_v3()
             ),
-            Err(BundleError::BurnNotPermitted)
+            Err(BurnError::BurnNotPermitted)
         ));
 
         // An empty burn is always fine, whatever the version and flags.
-        assert!(validate_burn(&[], &Flags::ENABLED, BundleVersion::ironwood_v3()).is_ok());
+        let empty: [(AssetBase, NoteValue); 0] = [];
+        assert!(validate_burn(&empty, &Flags::ENABLED, BundleVersion::ironwood_v3()).is_ok());
     }
 }
 
@@ -289,7 +330,12 @@ mod tests {
             (assets[2], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
+        let result = validate_bundle_burn(
+            bundle_burn,
+            &Flags::ENABLED_WITH_ZSA,
+            BundleVersion::zsa(),
+            |asset| mock_records.get(asset).cloned(),
+        );
 
         assert!(result.is_ok());
 
@@ -303,6 +349,25 @@ mod tests {
             remove_reference_notes(&result.unwrap()),
             remove_reference_notes(&expected_records)
         );
+    }
+
+    #[test]
+    fn validate_bundle_burn_empty_burn() {
+        let assets = generate_unique_assets(2);
+
+        let mock_records = mock_issuance_records(&[
+            AssetSupply::new(assets[0], 100),
+            AssetSupply::new(assets[1], 200),
+        ]);
+
+        let result = validate_bundle_burn(
+            vec![],                       // burn
+            &Flags::ENABLED,              // enable_zsa = false
+            BundleVersion::ironwood_v3(), // ZSA not permitted
+            |asset| mock_records.get(asset).cloned(),
+        );
+
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -320,7 +385,12 @@ mod tests {
             (assets[1], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
+        let result = validate_bundle_burn(
+            bundle_burn,
+            &Flags::ENABLED_WITH_ZSA,
+            BundleVersion::zsa(),
+            |asset| mock_records.get(asset).cloned(),
+        );
 
         assert_eq!(result, Err(BurnError::DuplicateAsset));
     }
@@ -340,7 +410,12 @@ mod tests {
             (assets[1], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
+        let result = validate_bundle_burn(
+            bundle_burn,
+            &Flags::ENABLED_WITH_ZSA,
+            BundleVersion::zsa(),
+            |asset| mock_records.get(asset).cloned(),
+        );
 
         assert_eq!(result, Err(BurnError::ZatoshiAsset));
     }
@@ -361,7 +436,12 @@ mod tests {
             (assets[2], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
+        let result = validate_bundle_burn(
+            bundle_burn,
+            &Flags::ENABLED_WITH_ZSA,
+            BundleVersion::zsa(),
+            |asset| mock_records.get(asset).cloned(),
+        );
 
         assert_eq!(result, Err(BurnError::ZeroAmount));
     }
@@ -382,7 +462,12 @@ mod tests {
             (assets[2], NoteValue::from_raw(10)),
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
+        let result = validate_bundle_burn(
+            bundle_burn,
+            &Flags::ENABLED_WITH_ZSA,
+            BundleVersion::zsa(),
+            |asset| mock_records.get(asset).cloned(),
+        );
 
         assert_eq!(result, Err(BurnError::InvalidAmount));
     }
@@ -399,7 +484,12 @@ mod tests {
             (assets[1], NoteValue::from_raw(20)), // Not in the global issuance state
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
+        let result = validate_bundle_burn(
+            bundle_burn,
+            &Flags::ENABLED_WITH_ZSA,
+            BundleVersion::zsa(),
+            |asset| mock_records.get(asset).cloned(),
+        );
 
         assert_eq!(result, Err(BurnError::AssetNotFoundInState));
     }
@@ -418,8 +508,63 @@ mod tests {
             (assets[1], NoteValue::from_raw(100)), // Only has 50
         ];
 
-        let result = validate_bundle_burn(bundle_burn, |asset| mock_records.get(asset).cloned());
+        let result = validate_bundle_burn(
+            bundle_burn,
+            &Flags::ENABLED_WITH_ZSA,
+            BundleVersion::zsa(),
+            |asset| mock_records.get(asset).cloned(),
+        );
 
         assert_eq!(result, Err(BurnError::InsufficientSupply));
+    }
+
+    #[test]
+    fn validate_bundle_burn_wrong_flags() {
+        let assets = generate_unique_assets(2);
+
+        let mock_records = mock_issuance_records(&[
+            AssetSupply::new(assets[0], 100),
+            AssetSupply::new(assets[1], 200),
+        ]);
+
+        let bundle_burn = vec![
+            (assets[0], NoteValue::from_raw(10)),
+            (AssetBase::zatoshi(), NoteValue::from_raw(20)),
+            (assets[1], NoteValue::from_raw(10)),
+        ];
+
+        let result = validate_bundle_burn(
+            bundle_burn,
+            &Flags::ENABLED,
+            BundleVersion::zsa(),
+            |asset| mock_records.get(asset).cloned(),
+        );
+
+        assert_eq!(result, Err(BurnError::BurnNotPermitted));
+    }
+
+    #[test]
+    fn validate_bundle_burn_wrong_bundle_version() {
+        let assets = generate_unique_assets(2);
+
+        let mock_records = mock_issuance_records(&[
+            AssetSupply::new(assets[0], 100),
+            AssetSupply::new(assets[1], 200),
+        ]);
+
+        let bundle_burn = vec![
+            (assets[0], NoteValue::from_raw(10)),
+            (AssetBase::zatoshi(), NoteValue::from_raw(20)),
+            (assets[1], NoteValue::from_raw(10)),
+        ];
+
+        let result = validate_bundle_burn(
+            bundle_burn,
+            &Flags::ENABLED_WITH_ZSA,
+            BundleVersion::ironwood_v3(),
+            |asset| mock_records.get(asset).cloned(),
+        );
+
+        assert_eq!(result, Err(BurnError::BurnNotPermitted));
     }
 }

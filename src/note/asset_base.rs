@@ -225,6 +225,28 @@ pub mod testing {
 }
 
 #[cfg(test)]
+mod encoding_tests {
+    use super::AssetBase;
+
+    use rand_core::OsRng;
+
+    /// Not gated on `zsa-issuance`: the encoding does not depend on how the asset was derived.
+    #[test]
+    fn to_bytes_from_bytes_roundtrip() {
+        let mut rng = OsRng;
+
+        for asset in [AssetBase::zatoshi(), AssetBase::random(&mut rng)] {
+            let bytes = asset.to_bytes();
+            let decoded = AssetBase::from_bytes(&bytes).unwrap();
+
+            assert_eq!(decoded, asset);
+            // The encoding is canonical, so re-encoding gives the same bytes back.
+            assert_eq!(decoded.to_bytes(), bytes);
+        }
+    }
+}
+
+#[cfg(test)]
 #[cfg(feature = "zsa-issuance")]
 mod tests {
     use crate::{

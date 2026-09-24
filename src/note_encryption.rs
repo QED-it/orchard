@@ -110,6 +110,8 @@ where
             .unwrap(),
     );
 
+    // `COMPACT_NOTE_SIZE_VANILLA` is the end of the rseed field, not the buffer length: a ZSA
+    // compact note is a Vanilla one followed by the asset, so both share these offsets.
     let rseed = Option::from(RandomSeed::from_bytes(
         plaintext.as_ref()[NOTE_RSEED_OFFSET..COMPACT_NOTE_SIZE_VANILLA]
             .try_into()
@@ -783,7 +785,7 @@ fn batch_kdf<'a>(
         .collect()
 }
 
-impl<P: DomainPolicy, A> ShieldedOutput<NoteEncryptionDomain<P>> for Action<A> {
+impl<P: DomainPolicy, T> ShieldedOutput<NoteEncryptionDomain<P>> for Action<T> {
     fn ephemeral_key(&self) -> EphemeralKeyBytes {
         EphemeralKeyBytes(self.encrypted_note().epk_bytes)
     }
@@ -903,8 +905,8 @@ impl fmt::Debug for CompactAction {
     }
 }
 
-impl<A> From<&Action<A>> for CompactAction {
-    fn from(action: &Action<A>) -> Self {
+impl<T> From<&Action<T>> for CompactAction {
+    fn from(action: &Action<T>) -> Self {
         let enc_ciphertext = &action.encrypted_note().enc_ciphertext;
         CompactAction {
             nullifier: *action.nullifier(),
@@ -971,7 +973,6 @@ pub mod testing {
     /// Creates a fake `CompactAction` paying the given recipient the specified value.
     ///
     /// Returns the `CompactAction` and the new note.
-    #[allow(clippy::too_many_arguments)]
     pub fn fake_compact_action<R: RngCore>(
         rng: &mut R,
         nf_old: Nullifier,

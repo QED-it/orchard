@@ -38,7 +38,7 @@ pub struct Action<A> {
     authorization: A,
 }
 
-impl<A> Action<A> {
+impl<T> Action<T> {
     /// Constructs an `Action` from its constituent parts.
     ///
     /// Returns an [`ActionFromPartsError`] if `rk` is the identity
@@ -61,7 +61,7 @@ impl<A> Action<A> {
         cmx: ExtractedNoteCommitment,
         encrypted_note: TransmittedNoteCiphertext,
         cv_net: ValueCommitment,
-        authorization: A,
+        authorization: T,
     ) -> Result<Self, ActionFromPartsError> {
         if rk.is_identity() {
             return Err(ActionFromPartsError::IdentityRk);
@@ -114,12 +114,12 @@ impl<A> Action<A> {
     }
 
     /// Returns the authorization for this action.
-    pub fn authorization(&self) -> &A {
+    pub fn authorization(&self) -> &T {
         &self.authorization
     }
 
     /// Transitions this action from one authorization state to another.
-    pub fn map<U>(self, step: impl FnOnce(A) -> U) -> Action<U> {
+    pub fn map<U>(self, step: impl FnOnce(T) -> U) -> Action<U> {
         Action {
             nf: self.nf,
             rk: self.rk,
@@ -131,7 +131,7 @@ impl<A> Action<A> {
     }
 
     /// Transitions this action from one authorization state to another.
-    pub fn try_map<U, E>(self, step: impl FnOnce(A) -> Result<U, E>) -> Result<Action<U>, E> {
+    pub fn try_map<U, E>(self, step: impl FnOnce(T) -> Result<U, E>) -> Result<Action<U>, E> {
         Ok(Action {
             nf: self.nf,
             rk: self.rk,
