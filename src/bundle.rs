@@ -698,6 +698,10 @@ impl<T: Authorization, V> Bundle<T, V> {
     }
 
     /// Returns assets intended for burning
+    ///
+    /// These entries were checked at construction against the bundle's version and flags, and
+    /// for shape and uniqueness. Their effect on the global issuance state is checked by
+    /// `validate_bundle_burn`, which requires the `zsa-issuance` feature.
     pub fn burn(&self) -> &Vec<(AssetBase, NoteValue)> {
         &self.burn
     }
