@@ -1204,6 +1204,9 @@ impl Builder {
 
     /// Adds an instruction to burn a given amount of a specific asset.
     ///
+    /// The checks below do not consult the global issuance state. The burn's effect on it is
+    /// checked by `validate_bundle_burn`, which requires the `zsa-issuance` feature.
+    ///
     /// # Errors
     ///
     /// Returns [`BuildError::Burn`] wrapping:
