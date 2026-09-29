@@ -809,16 +809,12 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // TODO Constance: update the zcash_test_vectors repository so that keys.rs can be
-    // generated with post-quantum keys and issuance keys.
-    /*
     use crate::{
         keys::{FullViewingKey, Scope, SpendingKey},
         test_vectors::keys::TestVector,
     };
     use ff::PrimeField;
     use group::GroupEncoding;
-
 
     struct QrRcmDerivation {
         rcm_old_repr: [u8; 32],
@@ -912,7 +908,6 @@ mod tests {
             );
         }
     }
-    */
 
     /// A split note takes its psi from the split seed, and adds NULLIFIER_L to its nullifier.
     /// No constructor sets `rseed_split_note`, so this test sets it directly.
@@ -965,5 +960,49 @@ mod tests {
         };
 
         assert_ne!(note.rcm().inner(), other.rcm().inner());
+    }
+
+    // Verify that the rcm_zsa and cmx_zsa derivations match the test vectors.
+    #[test]
+    fn zsa_rcm_verify_test_vectors() {
+        for (i, tv) in crate::test_vectors::keys_zsa::TEST_VECTORS
+            .iter()
+            .enumerate()
+        {
+            let sk = SpendingKey::from_bytes(tv.sk).unwrap();
+            let fvk = FullViewingKey::from(&sk);
+            let addr = fvk.address_at(0u32, Scope::External);
+            let rho = Rho::from_bytes(&tv.note_rho).unwrap();
+            let rseed = RandomSeed::from_bytes(tv.note_rseed, &rho).unwrap();
+
+            let g_d = addr.g_d();
+            let pk_d = addr.pk_d().inner();
+            let g_d_bytes = g_d.to_bytes();
+            let pk_d_bytes = pk_d.to_bytes();
+            let asset_base = AssetBase::from_bytes(&tv.asset).unwrap();
+
+            let psi = rseed.psi(&rho);
+            let rcm_zsa = rseed.rcm_zsa(&rho, &g_d, &pk_d, tv.note_v, &psi, &asset_base);
+
+            let rcm_zsa_repr = rcm_zsa.0.to_repr();
+            let rho_inner = rho.into_inner();
+            let value = NoteValue::from_raw(tv.note_v);
+
+            let cmx_zsa = NoteCommitment::derive(
+                g_d_bytes, pk_d_bytes, value, asset_base, rho_inner, psi, rcm_zsa,
+            )
+            .unwrap();
+            let cmx_zsa_bytes = ExtractedNoteCommitment::from(cmx_zsa).to_bytes();
+
+            assert_eq!(
+                rcm_zsa_repr, tv.note_rcm_zsa,
+                "vector {i}: rcm_zsa mismatch"
+            );
+
+            assert_eq!(
+                cmx_zsa_bytes, tv.note_cmx_zsa,
+                "vector {i}: cmx_zsa mismatch"
+            );
+        }
     }
 }
