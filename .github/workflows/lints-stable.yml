@@ -17,6 +17,17 @@ jobs:
           working-directory: ${{ inputs.target }}
           deny: warnings
 
+  # `zsa-issuance` is not a default feature, so the `clippy` job above never lints the
+  # issuance module.
+  clippy-issuance:
+    name: Clippy (MSRV) with issuance
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run Clippy
+        run: cargo clippy --all-targets --features zsa-issuance -- -D warnings
+
   clippy-nostd:
     name: Clippy (MSRV) no_std for ${{ matrix.target }}
     runs-on: ubuntu-latest
@@ -58,12 +69,6 @@ jobs:
       - name: Add target
         working-directory: ./ci-build
         run: rustup target add ${{ matrix.target }}
-      - name: Pin deps to versions compatible with rustc 1.70
-        working-directory: ./ci-build
-        run: |
-          cargo update -p unicode-ident --precise 1.0.12
-          cargo update -p syn --precise 2.0.114
-          cargo update -p quote --precise 1.0.44
       - name: Clippy no_std for target
         working-directory: ./ci-build
         run: cargo clippy --verbose --target ${{ matrix.target }}

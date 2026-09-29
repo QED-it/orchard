@@ -43,8 +43,8 @@ impl fmt::Display for BatchError {
         match self {
             BatchError::RestrictionUnsupportedByKey => write!(
                 f,
-                "bundle disables cross-address transfers, but the verifying key's circuit \
-                 version does not constrain the cross-address restriction",
+                "the bundle requires a cross-address restriction or ZSA support that the \
+                 verifying key's circuit version does not provide",
             ),
         }
     }
@@ -129,8 +129,8 @@ impl<'a> BatchValidator<'a> {
     /// be invalid; if that information is desired, construct separate [`BatchValidator`]s
     /// for sub-batches of the bundles.
     ///
-    /// The cross-address-restriction capability is enforced when bundles are added (see
-    /// [`Self::add_bundle`]), so it is already guaranteed here.
+    /// The cross-address-restriction capability and ZSA support are enforced when bundles
+    /// are added (see [`Self::add_bundle`]), so it is already guaranteed here.
     pub fn validate<R: RngCore + CryptoRng>(self, rng: R) -> bool {
         // https://p.z.cash/TCR:bad-txns-orchard-binding-signature-invalid?partial
 

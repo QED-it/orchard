@@ -154,9 +154,8 @@ pub enum TxExtractorError {
     UnrepresentableFlags,
     /// Some action's encrypted-note ciphertext is not the kind the bundle's version implies.
     MismatchedActionCiphertextKind,
-    /// A non-empty burn was provided for a bundle whose version does not permit ZSA, or
-    /// whose flags do not enable ZSA.
-    BurnNotPermitted,
+    /// Burn-specific error.
+    Burn(crate::bundle::burn_validation::BurnError),
 }
 
 impl From<crate::ActionFromPartsError> for TxExtractorError {
@@ -180,7 +179,7 @@ impl From<crate::bundle::BundleError> for TxExtractorError {
             crate::bundle::BundleError::MismatchedActionCiphertextKind => {
                 TxExtractorError::MismatchedActionCiphertextKind
             }
-            crate::bundle::BundleError::BurnNotPermitted => TxExtractorError::BurnNotPermitted,
+            crate::bundle::BundleError::Burn(err) => TxExtractorError::Burn(err),
         }
     }
 }
@@ -221,11 +220,7 @@ impl fmt::Display for TxExtractorError {
                 f,
                 "an action's encrypted-note ciphertext kind is inconsistent with the bundle's version",
             ),
-            TxExtractorError::BurnNotPermitted => write!(
-                f,
-                "a non-empty burn was provided for a bundle whose version does not permit ZSA, \
-                 or whose flags do not enable ZSA",
-            ),
+            TxExtractorError::Burn(err) => write!(f, "Burn error: {err}"),
         }
     }
 }
