@@ -1282,6 +1282,7 @@ mod tests {
 
         let signed = sign_bundle(bundle, &params);
 
+        let finalized_ref_note = create_reference_note(finalized, &mut params.rng);
         let record_updates = verify_issue_bundle(
             &signed,
             params.sighash,
@@ -1290,7 +1291,7 @@ mod tests {
                     Some(AssetRecord::new(
                         NoteValue::from_raw(100),
                         false,
-                        create_reference_note(finalized, &mut params.rng),
+                        finalized_ref_note,
                     ))
                 } else {
                     None
@@ -1307,7 +1308,7 @@ mod tests {
         assert_eq!(record_updates[&finalized].amount, NoteValue::from_raw(100));
         assert!(record_updates[&finalized].is_finalized);
 
-        // `verify_issue_bundle` fails when the finalized asset (no action) is unknown to the
+        // `verify_issue_bundle` fails when the finalized asset (note-less action) is unknown to the
         // global issuance state.
         assert_eq!(
             verify_issue_bundle(&signed, params.sighash, |_| None, &params.first_nullifier)
@@ -1326,7 +1327,7 @@ mod tests {
                         Some(AssetRecord::new(
                             NoteValue::from_raw(100),
                             true,
-                            create_reference_note(finalized, &mut params.rng),
+                            finalized_ref_note,
                         ))
                     } else {
                         None
