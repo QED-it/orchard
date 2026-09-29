@@ -1250,8 +1250,8 @@ mod tests {
     }
 
     #[test]
-    fn issue_bundle_finalize_asset() {
-        let params = setup_params();
+    fn issue_bundle_verify_finalize_asset() {
+        let mut params = setup_params();
 
         let issued_hash = asset_desc_hash(b"issued");
         let finalized_hash = asset_desc_hash(b"finalized only");
@@ -1282,19 +1282,16 @@ mod tests {
 
         let signed = sign_bundle(bundle, &params);
 
-        let mut rng = OsRng;
-        let existing = AssetRecord::new(
-            NoteValue::from_raw(100),
-            false,
-            create_reference_note(finalized, &mut rng),
-        );
-
         let record_updates = verify_issue_bundle(
             &signed,
             params.sighash,
             |a| {
                 if *a == finalized {
-                    Some(existing)
+                    Some(AssetRecord::new(
+                        NoteValue::from_raw(100),
+                        false,
+                        create_reference_note(finalized, &mut params.rng),
+                    ))
                 } else {
                     None
                 }
@@ -1310,11 +1307,35 @@ mod tests {
         assert_eq!(record_updates[&finalized].amount, NoteValue::from_raw(100));
         assert!(record_updates[&finalized].is_finalized);
 
-        // The note-less action is rejected when the asset is unknown to the global issuance state.
+        // `verify_issue_bundle` fails when the finalized asset (no action) is unknown to the
+        // global issuance state.
         assert_eq!(
             verify_issue_bundle(&signed, params.sighash, |_| None, &params.first_nullifier)
                 .unwrap_err(),
             MissingReferenceNoteOnFirstIssuance
+        );
+
+        // `verify_issue_bundle` fails when the finalized asset is already finalized in the
+        // global issuance state.
+        assert_eq!(
+            verify_issue_bundle(
+                &signed,
+                params.sighash,
+                |a| {
+                    if *a == finalized {
+                        Some(AssetRecord::new(
+                            NoteValue::from_raw(100),
+                            true,
+                            create_reference_note(finalized, &mut params.rng),
+                        ))
+                    } else {
+                        None
+                    }
+                },
+                &params.first_nullifier
+            )
+            .unwrap_err(),
+            IssueActionPreviouslyFinalizedAssetBase
         );
     }
 
