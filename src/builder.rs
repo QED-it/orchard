@@ -3509,7 +3509,7 @@ mod tests {
     /// With cross-address transfers disabled, a ZSA change output is paired with a
     /// split note of the same asset, taken from a requested spend at the change's own address.
     #[test]
-    fn cross_address_disabled_padding_pairs_zsa_split_note() {
+    fn cross_address_disabled_pairs_zsa_change_with_split_note() {
         let mut rng = OsRng;
         let sk = SpendingKey::random(&mut rng);
         let fvk = FullViewingKey::from(&sk);
