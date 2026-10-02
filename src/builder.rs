@@ -1643,10 +1643,12 @@ fn build_bundle<B, R: RngCore>(
         //
         // - each requested spend is paired with a fabricated zero-valued output to the
         //   spent note's own address;
-        // - each requested change output is paired with a fabricated zero-valued spend
-        //   controlled by the wallet at the change address, because withdrawn value leaves
-        //   the bundle through its value balance, and retained value is exactly the
+        // - each requested zatoshi change output is paired with a fabricated zero-valued
+        //   spend controlled by the wallet at the change address, because withdrawn value
+        //   leaves the bundle through its value balance, and retained value is exactly the
         //   wallet's change;
+        // - each requested ZSA change output is paired with a split note of the same asset,
+        //   taken from a requested spend at the change's own address;
         // - padding actions pair a dummy spend with a zero-valued output to the dummy's
         //   own address, since the cross-address checks apply to dummy actions too.
         //
@@ -1656,6 +1658,54 @@ fn build_bundle<B, R: RngCore>(
         // Only complete pairs are shuffled.
         let mut pairs = Vec::with_capacity(num_actions);
 
+        for (chg_idx, change) in changes.into_iter().enumerate() {
+            let ChangeInfo { output, fvk, scope } = change;
+            let spend = if bool::from(output.asset.is_zatoshi()) {
+                let rho = Rho::from_nf_old(Nullifier::dummy(&mut rng));
+                let note = Note::new(
+                    output.recipient,
+                    NoteValue::ZERO,
+                    output.asset,
+                    rho,
+                    note_version,
+                    &mut rng,
+                );
+                SpendInfo {
+                    // The wallet controls this spend: it is signed through the normal
+                    // signing flow, by the spend authorizing key matching `fvk`.
+                    dummy_sk: None,
+                    fvk,
+                    scope,
+                    note,
+                    merkle_path: Some(MerklePath::dummy(&mut rng)),
+                    split_flag: false,
+                }
+            } else {
+                // The circuit only waives the Merkle check for a zatoshi note, through
+                // `(v_old = 0 and is_zatoshi_asset = 1) or (root = anchor)`. A fabricated
+                // note of a ZSA asset would have to satisfy `root = anchor`, which it
+                // cannot, so pair the change with a split note instead: a real note of the
+                // same asset whose value `split_flag` keeps out of the action's balance.
+                //
+                // The pair must also share an address, since the cross-address checks apply
+                // to this action, so the split note has to come from a requested spend at
+                // the change's own address.
+                spends
+                    .iter()
+                    .find(|source| {
+                        source.note.asset() == output.asset
+                            && source
+                                .note
+                                .recipient()
+                                .same_expanded_receiver(&output.recipient)
+                    })
+                    .ok_or(BuildError::NoSplitNoteAvailable)?
+                    .create_split_spend(&mut rng)
+            };
+            pairs.push((None, Some(chg_idx), spend, output));
+        }
+
+        // After the changes, so that they can borrow `spends` to take their split notes from.
         for (spend_idx, spend) in spends.into_iter().enumerate() {
             let output = OutputInfo::fabricated_for_spend(
                 note_version,
@@ -1664,30 +1714,6 @@ fn build_bundle<B, R: RngCore>(
                 spend.note.asset(),
             );
             pairs.push((Some(spend_idx), None, spend, output));
-        }
-
-        for (chg_idx, change) in changes.into_iter().enumerate() {
-            let ChangeInfo { output, fvk, scope } = change;
-            let rho = Rho::from_nf_old(Nullifier::dummy(&mut rng));
-            let note = Note::new(
-                output.recipient,
-                NoteValue::ZERO,
-                output.asset,
-                rho,
-                note_version,
-                &mut rng,
-            );
-            let spend = SpendInfo {
-                // The wallet controls this spend: it is signed through the normal
-                // signing flow, by the spend authorizing key matching `fvk`.
-                dummy_sk: None,
-                fvk,
-                scope,
-                note,
-                merkle_path: Some(MerklePath::dummy(&mut rng)),
-                split_flag: false,
-            };
-            pairs.push((None, Some(chg_idx), spend, output));
         }
 
         while pairs.len() < num_actions {
