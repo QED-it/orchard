@@ -1807,43 +1807,41 @@ fn build_bundle<B, R: RngCore>(
         }
         let asset_count = spends_outputs_by_asset.len();
 
-        indexed_spends_outputs.extend(spends_outputs_by_asset.into_iter().flat_map(
-            |(asset, (spends, outputs))| {
-                let num_asset_pre_actions = spends.len().max(outputs.len());
+        // A `for` loop rather than `flat_map`, so that a failure to pad an asset's spends
+        // propagates as a `BuildError` instead of unwinding from inside a closure.
+        for (asset, (spends, outputs)) in spends_outputs_by_asset {
+            let num_asset_pre_actions = spends.len().max(outputs.len());
 
-                let first_spend = spends.first().map(|(s, _)| s.clone());
+            let first_spend = spends.first().map(|(s, _)| s.clone());
 
-                let mut indexed_spends = spends
-                    .into_iter()
-                    .chain(iter::repeat_with(|| {
-                        (
-                            pad_spend(first_spend.as_ref(), asset, note_version, &mut rng)
-                                .unwrap_or_else(|err| panic!("{:?}", err)),
-                            None,
-                        )
-                    }))
-                    .take(num_asset_pre_actions)
-                    .collect::<Vec<_>>();
+            let mut indexed_spends = spends
+                .into_iter()
+                .map(Ok)
+                .chain(iter::repeat_with(|| {
+                    pad_spend(first_spend.as_ref(), asset, note_version, &mut rng)
+                        .map(|spend| (spend, None))
+                }))
+                .take(num_asset_pre_actions)
+                .collect::<Result<Vec<_>, BuildError>>()?;
 
-                let mut indexed_outputs = outputs
-                    .into_iter()
-                    .chain(iter::repeat_with(|| {
-                        (OutputInfo::dummy(note_version, &mut rng, asset), None)
-                    }))
-                    .take(num_asset_pre_actions)
-                    .collect::<Vec<_>>();
+            let mut indexed_outputs = outputs
+                .into_iter()
+                .chain(iter::repeat_with(|| {
+                    (OutputInfo::dummy(note_version, &mut rng, asset), None)
+                }))
+                .take(num_asset_pre_actions)
+                .collect::<Vec<_>>();
 
-                // Shuffle the spends and outputs, so that learning the position of a
-                // specific spent note or output note doesn't reveal anything on its own
-                // about the meaning of that note in the transaction context.
-                indexed_spends.shuffle(&mut rng);
-                indexed_outputs.shuffle(&mut rng);
+            // Shuffle the spends and outputs, so that learning the position of a
+            // specific spent note or output note doesn't reveal anything on its own
+            // about the meaning of that note in the transaction context.
+            indexed_spends.shuffle(&mut rng);
+            indexed_outputs.shuffle(&mut rng);
 
-                assert_eq!(indexed_spends.len(), indexed_outputs.len());
+            assert_eq!(indexed_spends.len(), indexed_outputs.len());
 
-                indexed_spends.into_iter().zip(indexed_outputs)
-            },
-        ));
+            indexed_spends_outputs.extend(indexed_spends.into_iter().zip(indexed_outputs));
+        }
 
         // Pad total actions to num_actions.
         // This covers the edge case of a single non-zatoshi asset with fewer than
