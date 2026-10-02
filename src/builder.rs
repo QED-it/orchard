@@ -1681,15 +1681,10 @@ fn build_bundle<B, R: RngCore>(
                     split_flag: false,
                 }
             } else {
-                // The circuit only waives the Merkle check for a zatoshi note, through
-                // `(v_old = 0 and is_zatoshi_asset = 1) or (root = anchor)`. A fabricated
-                // note of a ZSA asset would have to satisfy `root = anchor`, which it
-                // cannot, so pair the change with a split note instead: a real note of the
-                // same asset whose value `split_flag` keeps out of the action's balance.
-                //
-                // The pair must also share an address, since the cross-address checks apply
-                // to this action, so the split note has to come from a requested spend at
-                // the change's own address.
+                // `(v_old = 0 and is_zatoshi_asset = 1) or (root = anchor)` waives the
+                // Merkle check for zatoshi only, so a ZSA change needs a split note instead:
+                // from a spend of the same asset, at the same address, as the cross-address
+                // checks apply here too.
                 spends
                     .iter()
                     .find(|source| {
@@ -1705,7 +1700,6 @@ fn build_bundle<B, R: RngCore>(
             pairs.push((None, Some(chg_idx), spend, output));
         }
 
-        // After the changes, so that they can borrow `spends` to take their split notes from.
         for (spend_idx, spend) in spends.into_iter().enumerate() {
             let output = OutputInfo::fabricated_for_spend(
                 note_version,
@@ -1807,8 +1801,6 @@ fn build_bundle<B, R: RngCore>(
         }
         let asset_count = spends_outputs_by_asset.len();
 
-        // A `for` loop rather than `flat_map`, so that a failure to pad an asset's spends
-        // propagates as a `BuildError` instead of unwinding from inside a closure.
         for (asset, (spends, outputs)) in spends_outputs_by_asset {
             let num_asset_pre_actions = spends.len().max(outputs.len());
 
@@ -2569,6 +2561,22 @@ mod tests {
         note_with_path_for_asset(rng, recipient, value, AssetBase::zatoshi(), note_version)
     }
 
+    /// Like [`note_with_path`], for a note of `asset`.
+    fn note_with_path_for_asset(
+        rng: &mut impl RngCore,
+        recipient: Address,
+        value: NoteValue,
+        asset: AssetBase,
+        note_version: NoteVersion,
+    ) -> (Note, MerklePath, Anchor) {
+        let rho = Rho::from_nf_old(Nullifier::dummy(rng));
+        let note = Note::new(recipient, value, asset, rho, note_version, &mut *rng);
+        let merkle_path = MerklePath::dummy(rng);
+        let anchor = merkle_path.root(note.commitment().into());
+
+        (note, merkle_path, anchor)
+    }
+
     /// Returns the `split_flag` witnessed for each action of an unproven bundle, in action
     /// order. Only the ZSA circuit witnesses it, so the bundle must have been built for it.
     ///
@@ -2596,22 +2604,6 @@ mod tests {
                 out.expect("the split flag is known")
             })
             .collect()
-    }
-
-    /// Like [`note_with_path`], for a note of `asset`.
-    fn note_with_path_for_asset(
-        rng: &mut impl RngCore,
-        recipient: Address,
-        value: NoteValue,
-        asset: AssetBase,
-        note_version: NoteVersion,
-    ) -> (Note, MerklePath, Anchor) {
-        let rho = Rho::from_nf_old(Nullifier::dummy(rng));
-        let note = Note::new(recipient, value, asset, rho, note_version, &mut *rng);
-        let merkle_path = MerklePath::dummy(rng);
-        let anchor = merkle_path.root(note.commitment().into());
-
-        (note, merkle_path, anchor)
     }
 
     proptest! {
@@ -3551,8 +3543,8 @@ mod tests {
         assert!(nf_a == real_nf || nf_b == real_nf);
     }
 
-    /// The split note must share the change's address, not just its asset: the cross-address
-    /// checks apply to that action too.
+    /// A ZSA change needs a spend that matches on both asset and address, since the
+    /// split note inherits the source note's address.
     #[test]
     fn cross_address_disabled_rejects_zsa_change_without_a_split_note_at_its_address() {
         let mut rng = OsRng;
@@ -3589,9 +3581,8 @@ mod tests {
         ));
     }
 
-    /// With cross-address transfers enabled, an asset whose outputs outnumber its spends has
-    /// its spends padded with split notes, which need a spend of that asset to derive from.
-    /// This used to panic inside the per-asset padding closure.
+    /// Padding a ZSA asset's spends needs a split note, so an asset with outputs but no
+    /// spend cannot be padded.
     #[test]
     fn zsa_output_without_a_spend_of_that_asset_is_rejected() {
         let mut rng = OsRng;
