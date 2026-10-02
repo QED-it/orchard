@@ -91,7 +91,6 @@ pub(super) fn configure_zsa_orchard_gate(
     // Constrain if split_flag = 0 then psi_old = psi_nf
     // Constrain if split_flag = 1, then is_zatoshi_asset = 0
     // Constrain if enable_zsa = 0, then is_zatoshi_asset = 1
-    // Constrain if disable_cross_address = 1, then split_flag = 0
     //
     // [circuitstatement]: https://zips.z.cash/zip-0226#circuit-statement
     meta.create_gate("Orchard circuit checks", |meta| {
@@ -130,7 +129,6 @@ pub(super) fn configure_zsa_orchard_gate(
         let psi_nf = meta.query_advice(advices[5], Rotation::next());
 
         let enable_zsa = meta.query_advice(advices[6], Rotation::next());
-        let disable_cross_address = meta.query_advice(advices[7], Rotation::next());
 
         Constraints::with_selector(
             q_orchard,
@@ -192,13 +190,6 @@ pub(super) fn configure_zsa_orchard_gate(
                 (
                     "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
                     (one.clone() - enable_zsa) * (one - is_zatoshi_asset),
-                ),
-                // `split_flag` and `cross_address_disabled` cannot both be enabled at the
-                // same time. A split note's output is forced to a negative net value, which
-                // is not a meaningful self-transfer.
-                (
-                    "(disable_cross_address = 1) => (split_flag = 0)",
-                    split_flag * disable_cross_address,
                 ),
             ],
         )
@@ -761,14 +752,6 @@ impl plonk::Circuit<pallas::Base> for CircuitZsa {
                     1,
                 )?;
 
-                region.assign_advice_from_instance(
-                    || "disable_cross_address",
-                    config.primary,
-                    DISABLE_CROSS_ADDRESS,
-                    config.advices[7],
-                    1,
-                )?;
-
                 config.q_orchard.enable(&mut region, 0)
             },
         )?;
@@ -819,7 +802,6 @@ impl plonk::Circuit<pallas::Base> for CircuitZsa {
 /// psi_old          <- 0 (constant)
 /// psi_nf           <- 0 (constant)
 /// enable_zsa       <- 1 (constant)
-/// disable_cross_address <- disableCrossAddress
 /// ```
 ///
 /// With this layout, the gate constraints become:
@@ -849,11 +831,9 @@ impl plonk::Circuit<pallas::Base> for CircuitZsa {
 ///     -> 0 * 1 = 0
 /// (1 - enable_zsa) * (1 - is_zatoshi_asset) = 0
 ///     -> (1 - 1) * (1 - 1) = 0
-/// disable_cross_address * split_flag = 0
-///     -> disableCrossAddress * 0 = 0
 /// ```
 ///
-/// The second line is the actual cross-address check. Any nonzero
+/// The third line is the actual cross-address check. Any nonzero
 /// `disableCrossAddress` value forces each old coordinate to equal the
 /// corresponding new coordinate. The public API encodes `disableCrossAddress`
 /// as 0 or 1, but this algebra does not rely on a boolean constraint.
@@ -1021,16 +1001,15 @@ fn synthesize_cross_address_checks(
                     pallas::Base::one(),
                 )?;
 
+                // Occupy the otherwise-unused rightmost advice columns so the
+                // floor planner cannot lay out another region (and enable its
+                // gate) on these rows.
                 cross_address_disabled.copy_advice(
-                    || "disable_cross_address <- disableCrossAddress",
+                    || "disableCrossAddress padding",
                     &mut region,
                     config.advices[7],
                     offset,
                 )?;
-
-                // Occupy the otherwise-unused rightmost advice columns so the
-                // floor planner cannot lay out another region (and enable its
-                // gate) on these rows.
                 cross_address_disabled.copy_advice(
                     || "disableCrossAddress padding",
                     &mut region,
@@ -1377,18 +1356,6 @@ mod tests {
             &circuit,
             &instance,
             "(split_flag = 1) => (is_zatoshi_asset = 0)",
-        );
-    }
-
-    #[test]
-    fn zsa_mock_prover_rejects_split_note_with_cross_address_disabled() {
-        // The circuit constrains `(disable_cross_address = 1) => (split_flag = 0)`.
-        let (circuit, mut instance) = generate_circuit_instance_inner(false, true, true, OsRng);
-        instance.cross_address_disabled = true;
-        assert_zsa_rejected_by(
-            &circuit,
-            &instance,
-            "(disable_cross_address = 1) => (split_flag = 0)",
         );
     }
 
