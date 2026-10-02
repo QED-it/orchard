@@ -1643,10 +1643,12 @@ fn build_bundle<B, R: RngCore>(
         //
         // - each requested spend is paired with a fabricated zero-valued output to the
         //   spent note's own address;
-        // - each requested change output is paired with a fabricated zero-valued spend
-        //   controlled by the wallet at the change address, because withdrawn value leaves
-        //   the bundle through its value balance, and retained value is exactly the
+        // - each requested zatoshi change output is paired with a fabricated zero-valued
+        //   spend controlled by the wallet at the change address, because withdrawn value
+        //   leaves the bundle through its value balance, and retained value is exactly the
         //   wallet's change;
+        // - each requested ZSA change output is paired with a split note of the same asset,
+        //   taken from a requested spend at the change's own address;
         // - padding actions pair a dummy spend with a zero-valued output to the dummy's
         //   own address, since the cross-address checks apply to dummy actions too.
         //
@@ -1656,6 +1658,48 @@ fn build_bundle<B, R: RngCore>(
         // Only complete pairs are shuffled.
         let mut pairs = Vec::with_capacity(num_actions);
 
+        for (chg_idx, change) in changes.into_iter().enumerate() {
+            let ChangeInfo { output, fvk, scope } = change;
+            let spend = if bool::from(output.asset.is_zatoshi()) {
+                let rho = Rho::from_nf_old(Nullifier::dummy(&mut rng));
+                let note = Note::new(
+                    output.recipient,
+                    NoteValue::ZERO,
+                    output.asset,
+                    rho,
+                    note_version,
+                    &mut rng,
+                );
+                SpendInfo {
+                    // The wallet controls this spend: it is signed through the normal
+                    // signing flow, by the spend authorizing key matching `fvk`.
+                    dummy_sk: None,
+                    fvk,
+                    scope,
+                    note,
+                    merkle_path: Some(MerklePath::dummy(&mut rng)),
+                    split_flag: false,
+                }
+            } else {
+                // `(v_old = 0 and is_zatoshi_asset = 1) or (root = anchor)` waives the
+                // Merkle check for zatoshi only, so a ZSA change needs a split note instead:
+                // from a spend of the same asset, at the same address, as the cross-address
+                // checks apply here too.
+                spends
+                    .iter()
+                    .find(|source| {
+                        source.note.asset() == output.asset
+                            && source
+                                .note
+                                .recipient()
+                                .same_expanded_receiver(&output.recipient)
+                    })
+                    .ok_or(BuildError::NoSplitNoteAvailable)?
+                    .create_split_spend(&mut rng)
+            };
+            pairs.push((None, Some(chg_idx), spend, output));
+        }
+
         for (spend_idx, spend) in spends.into_iter().enumerate() {
             let output = OutputInfo::fabricated_for_spend(
                 note_version,
@@ -1664,30 +1708,6 @@ fn build_bundle<B, R: RngCore>(
                 spend.note.asset(),
             );
             pairs.push((Some(spend_idx), None, spend, output));
-        }
-
-        for (chg_idx, change) in changes.into_iter().enumerate() {
-            let ChangeInfo { output, fvk, scope } = change;
-            let rho = Rho::from_nf_old(Nullifier::dummy(&mut rng));
-            let note = Note::new(
-                output.recipient,
-                NoteValue::ZERO,
-                output.asset,
-                rho,
-                note_version,
-                &mut rng,
-            );
-            let spend = SpendInfo {
-                // The wallet controls this spend: it is signed through the normal
-                // signing flow, by the spend authorizing key matching `fvk`.
-                dummy_sk: None,
-                fvk,
-                scope,
-                note,
-                merkle_path: Some(MerklePath::dummy(&mut rng)),
-                split_flag: false,
-            };
-            pairs.push((None, Some(chg_idx), spend, output));
         }
 
         while pairs.len() < num_actions {
@@ -1781,43 +1801,39 @@ fn build_bundle<B, R: RngCore>(
         }
         let asset_count = spends_outputs_by_asset.len();
 
-        indexed_spends_outputs.extend(spends_outputs_by_asset.into_iter().flat_map(
-            |(asset, (spends, outputs))| {
-                let num_asset_pre_actions = spends.len().max(outputs.len());
+        for (asset, (spends, outputs)) in spends_outputs_by_asset {
+            let num_asset_pre_actions = spends.len().max(outputs.len());
 
-                let first_spend = spends.first().map(|(s, _)| s.clone());
+            let first_spend = spends.first().map(|(s, _)| s.clone());
 
-                let mut indexed_spends = spends
-                    .into_iter()
-                    .chain(iter::repeat_with(|| {
-                        (
-                            pad_spend(first_spend.as_ref(), asset, note_version, &mut rng)
-                                .unwrap_or_else(|err| panic!("{:?}", err)),
-                            None,
-                        )
-                    }))
-                    .take(num_asset_pre_actions)
-                    .collect::<Vec<_>>();
+            let mut indexed_spends = spends
+                .into_iter()
+                .map(Ok)
+                .chain(iter::repeat_with(|| {
+                    pad_spend(first_spend.as_ref(), asset, note_version, &mut rng)
+                        .map(|spend| (spend, None))
+                }))
+                .take(num_asset_pre_actions)
+                .collect::<Result<Vec<_>, BuildError>>()?;
 
-                let mut indexed_outputs = outputs
-                    .into_iter()
-                    .chain(iter::repeat_with(|| {
-                        (OutputInfo::dummy(note_version, &mut rng, asset), None)
-                    }))
-                    .take(num_asset_pre_actions)
-                    .collect::<Vec<_>>();
+            let mut indexed_outputs = outputs
+                .into_iter()
+                .chain(iter::repeat_with(|| {
+                    (OutputInfo::dummy(note_version, &mut rng, asset), None)
+                }))
+                .take(num_asset_pre_actions)
+                .collect::<Vec<_>>();
 
-                // Shuffle the spends and outputs, so that learning the position of a
-                // specific spent note or output note doesn't reveal anything on its own
-                // about the meaning of that note in the transaction context.
-                indexed_spends.shuffle(&mut rng);
-                indexed_outputs.shuffle(&mut rng);
+            // Shuffle the spends and outputs, so that learning the position of a
+            // specific spent note or output note doesn't reveal anything on its own
+            // about the meaning of that note in the transaction context.
+            indexed_spends.shuffle(&mut rng);
+            indexed_outputs.shuffle(&mut rng);
 
-                assert_eq!(indexed_spends.len(), indexed_outputs.len());
+            assert_eq!(indexed_spends.len(), indexed_outputs.len());
 
-                indexed_spends.into_iter().zip(indexed_outputs)
-            },
-        ));
+            indexed_spends_outputs.extend(indexed_spends.into_iter().zip(indexed_outputs));
+        }
 
         // Pad total actions to num_actions.
         // This covers the edge case of a single non-zatoshi asset with fewer than
@@ -2509,6 +2525,7 @@ pub mod testing {
 #[cfg(all(test, feature = "circuit"))]
 mod tests {
     use alloc::collections::BTreeMap;
+    use alloc::vec::Vec;
     use proptest::prelude::*;
     use rand::rngs::{OsRng, StdRng};
     use rand::{RngCore, SeedableRng};
@@ -2541,19 +2558,52 @@ mod tests {
         value: NoteValue,
         note_version: NoteVersion,
     ) -> (Note, MerklePath, Anchor) {
+        note_with_path_for_asset(rng, recipient, value, AssetBase::zatoshi(), note_version)
+    }
+
+    /// Like [`note_with_path`], for a note of `asset`.
+    fn note_with_path_for_asset(
+        rng: &mut impl RngCore,
+        recipient: Address,
+        value: NoteValue,
+        asset: AssetBase,
+        note_version: NoteVersion,
+    ) -> (Note, MerklePath, Anchor) {
         let rho = Rho::from_nf_old(Nullifier::dummy(rng));
-        let note = Note::new(
-            recipient,
-            value,
-            AssetBase::zatoshi(),
-            rho,
-            note_version,
-            &mut *rng,
-        );
+        let note = Note::new(recipient, value, asset, rho, note_version, &mut *rng);
         let merkle_path = MerklePath::dummy(rng);
         let anchor = merkle_path.root(note.commitment().into());
 
         (note, merkle_path, anchor)
+    }
+
+    /// Returns the `split_flag` witnessed for each action of an unproven bundle, in action
+    /// order. Only the ZSA circuit witnesses it, so the bundle must have been built for it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the bundle was built for another circuit version.
+    fn split_flags_of<V>(bundle: &super::UnauthorizedBundle<V>) -> Vec<bool> {
+        let proof = &bundle.authorization().proof;
+        assert!(
+            proof.circuit_version.is_zsa(),
+            "only a ZSA circuit witnesses a split flag",
+        );
+
+        proof
+            .circuits
+            .iter()
+            .map(|circuit| {
+                let mut out = None;
+                circuit
+                    .additional_zsa_witnesses
+                    .as_ref()
+                    .expect("a ZSA circuit witnesses the split flag")
+                    .split_flag
+                    .map(|flag| out = Some(flag));
+                out.expect("the split flag is known")
+            })
+            .collect()
     }
 
     proptest! {
@@ -3446,6 +3496,132 @@ mod tests {
 
         assert!(!bundle.flags().cross_address_enabled());
         assert!(bundle_meta.output_action_index(0).is_some());
+    }
+
+    /// With cross-address transfers disabled, a ZSA change output is paired with a
+    /// split note of the same asset, taken from a requested spend at the change's own address.
+    #[test]
+    fn cross_address_disabled_pairs_zsa_change_with_split_note() {
+        let mut rng = OsRng;
+        let sk = SpendingKey::random(&mut rng);
+        let fvk = FullViewingKey::from(&sk);
+        let recipient = fvk.address_at(0u32, Scope::External);
+        let asset = AssetBase::random(&mut rng);
+
+        let bundle_version = BundleVersion::zsa();
+        // ZSA enabled, cross-address transfers disabled.
+        let flags = Flags::from_parts(true, true, false, true);
+        let value = NoteValue::from_raw(15_000);
+        let (note, merkle_path, anchor) = note_with_path_for_asset(
+            &mut rng,
+            recipient,
+            value,
+            asset,
+            bundle_version.note_version(),
+        );
+
+        let mut builder =
+            Builder::new(transactional(false), bundle_version, flags, anchor).unwrap();
+        builder.add_spend(fvk.clone(), note, merkle_path).unwrap();
+        builder
+            .add_change_output(fvk.clone(), None, recipient, value, asset, [0u8; 512])
+            .unwrap();
+
+        let (bundle, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
+        assert_eq!(bundle.actions().len(), 2);
+
+        // Exactly one action carries a split note: the one paired with the change.
+        let split_flags = split_flags_of(&bundle);
+        assert_eq!(split_flags.len(), 2);
+        assert_eq!(split_flags.iter().filter(|flag| **flag).count(), 1);
+
+        // The real spend keeps the note's own nullifier; the split note re-randomizes it.
+        let real_nf = note.nullifier(&fvk);
+        let nf_a = *bundle.actions().first().nullifier();
+        let nf_b = *bundle.actions().get(1).unwrap().nullifier();
+        assert_ne!(nf_a, nf_b);
+        assert!(nf_a == real_nf || nf_b == real_nf);
+    }
+
+    /// A ZSA change needs a spend that matches on both asset and address, since the
+    /// split note inherits the source note's address.
+    #[test]
+    fn cross_address_disabled_rejects_zsa_change_without_a_split_note_at_its_address() {
+        let mut rng = OsRng;
+        let spend_sk = SpendingKey::random(&mut rng);
+        let spend_fvk = FullViewingKey::from(&spend_sk);
+        let spend_recipient = spend_fvk.address_at(0u32, Scope::External);
+        let change_sk = SpendingKey::random(&mut rng);
+        let change_fvk = FullViewingKey::from(&change_sk);
+        let change_recipient = change_fvk.address_at(0u32, Scope::External);
+        let asset = AssetBase::random(&mut rng);
+
+        let bundle_version = BundleVersion::zsa();
+        let flags = Flags::from_parts(true, true, false, true);
+        let value = NoteValue::from_raw(15_000);
+        let (note, merkle_path, anchor) = note_with_path_for_asset(
+            &mut rng,
+            spend_recipient,
+            value,
+            asset,
+            bundle_version.note_version(),
+        );
+
+        let mut builder =
+            Builder::new(transactional(false), bundle_version, flags, anchor).unwrap();
+        builder.add_spend(spend_fvk, note, merkle_path).unwrap();
+        // Same asset, but a different address, so no requested spend can supply the split note.
+        builder
+            .add_change_output(change_fvk, None, change_recipient, value, asset, [0u8; 512])
+            .unwrap();
+
+        assert!(matches!(
+            builder.build::<i64>(&mut rng),
+            Err(BuildError::NoSplitNoteAvailable)
+        ));
+    }
+
+    /// Padding a ZSA asset's spends needs a split note, so an asset with outputs but no
+    /// spend cannot be padded.
+    #[test]
+    fn zsa_output_without_a_spend_of_that_asset_is_rejected() {
+        let mut rng = OsRng;
+        let sk = SpendingKey::random(&mut rng);
+        let fvk = FullViewingKey::from(&sk);
+        let recipient = fvk.address_at(0u32, Scope::External);
+        let asset = AssetBase::random(&mut rng);
+
+        let bundle_version = BundleVersion::zsa();
+        let (note, merkle_path, anchor) = note_with_path(
+            &mut rng,
+            recipient,
+            NoteValue::from_raw(15_000),
+            bundle_version.note_version(),
+        );
+
+        let mut builder = Builder::new(
+            transactional(false),
+            bundle_version,
+            Flags::ENABLED_WITH_ZSA,
+            anchor,
+        )
+        .unwrap();
+        builder.add_spend(fvk, note, merkle_path).unwrap();
+        // A ZSA output with no spend of that asset: the asset's spends cannot be padded.
+        builder
+            .add_output(
+                None,
+                recipient,
+                NoteValue::from_raw(1_000),
+                asset,
+                [0u8; 512],
+            )
+            .unwrap();
+
+        assert!(matches!(
+            builder.build::<i64>(&mut rng),
+            Err(BuildError::NoSplitNoteAvailable)
+        ));
     }
 
     #[test]
