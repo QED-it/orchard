@@ -185,7 +185,7 @@ pub(super) fn configure_zsa_orchard_gate(
                 ),
                 (
                     "(split_flag = 1) => (is_zatoshi_asset = 0)",
-                    split_flag.clone() * is_zatoshi_asset.clone(),
+                    split_flag * is_zatoshi_asset.clone(),
                 ),
                 (
                     "(enable_zsa = 0) => (is_zatoshi_asset = 1)",
