@@ -1330,6 +1330,13 @@ mod tests {
     }
 
     #[test]
+    fn zsa_mock_prover_split_note_with_cross_address_disabled() {
+        let (circuit, mut instance) = generate_circuit_instance_inner(false, true, true, OsRng);
+        instance.cross_address_disabled = true;
+        assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
+    }
+
+    #[test]
     fn zsa_mock_prover_rejects_non_split_nullifier_for_split_note() {
         let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
 
