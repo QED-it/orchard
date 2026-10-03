@@ -1336,6 +1336,22 @@ mod tests {
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
     }
 
+    /// A split note does not exempt an action from the cross-address checks. Here the spend
+    /// and the output are at different addresses, so `disableCrossAddress` rejects it.
+    #[test]
+    fn zsa_mock_prover_rejects_cross_address_split_note() {
+        // `output_matches_spend` is set to false.
+        // So, the spend and output have different addresses.
+        let (circuit, mut instance) = generate_circuit_instance_inner(false, false, true, OsRng);
+        instance.cross_address_disabled = true;
+        assert_zsa_rejected_by(
+            &circuit,
+            &instance,
+            // The coordinate equality reuses the gate's `root = anchor` constraint.
+            "(v_old = 0 and is_zatoshi_asset = 1) or (root = anchor)",
+        );
+    }
+
     #[test]
     fn zsa_mock_prover_rejects_non_split_nullifier_for_split_note() {
         let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
