@@ -704,8 +704,13 @@ impl OutputInfo {
 ///
 /// This is an [`OutputInfo`] to a `recipient` owned by `fvk`, with that ownership recorded.
 /// In a bundle that disables cross-address transfers it is the only way to retain shielded
-/// value: the builder pairs it with a fabricated zero-valued spend controlled by `fvk` at
-/// `recipient`, in the same action. In a bundle that permits cross-address transfers it is
+/// value:
+/// - for a zatoshi asset, the builder pairs it with a fabricated zero-valued spend controlled
+///   by `fvk` at `recipient`, in the same action, or
+/// - for a non-zatoshi asset, the builder pairs it with a split note taken from a requested
+///   spend of that asset at `recipient`.
+///
+/// In a bundle that permits cross-address transfers it is
 /// equivalent to the underlying [`OutputInfo`] (the ownership is validated when the
 /// `ChangeInfo` is constructed, then plays no further role).
 #[derive(Debug)]
@@ -1156,13 +1161,22 @@ impl Builder {
     /// Adds a wallet-controlled change output, to an address owned by `fvk`.
     ///
     /// This is the only way to retain shielded value in a bundle that disables
-    /// cross-address transfers: the builder pairs the change output with a fabricated
-    /// zero-valued spend at `recipient`, controlled by `fvk`, in the same action.
-    /// (Withdrawals leave such a bundle through its positive value balance; its real
-    /// spends are each paired with a fabricated zero-valued output to the spent note's
-    /// own address.) The fabricated spend's authorization is produced by the normal
-    /// signing flow -- [`Bundle::apply_signatures`] with the [`SpendAuthorizingKey`]
-    /// matching `fvk` -- exactly like the bundle's real spends.
+    /// cross-address transfers:
+    /// - for a zatoshi asset, the builder pairs the change output with a fabricated
+    ///   zero-valued spend at `recipient`, controlled by `fvk`, in the same action, and
+    /// - for a non-zatoshi asset, the builder pairs the change output with a split note
+    ///   taken from a requested spend of that asset at `recipient`. The circuit only waives
+    ///   the Merkle check for zatoshi, so a fabricated note would not satisfy it. If no
+    ///   requested spend matches, [`Builder::build`] fails with
+    ///   [`BuildError::NoSplitNoteAvailable`].
+    ///
+    /// (Zatoshi withdrawals leave such a bundle through its positive value balance, and ZSA
+    /// value through a burn; its real spends are each paired with a fabricated zero-valued
+    /// output of the same asset, to the spent note's own address.) The fabricated spend's
+    /// authorization is produced by the normal signing flow -- [`Bundle::apply_signatures`]
+    /// with the [`SpendAuthorizingKey`] matching `fvk` -- exactly like the bundle's real
+    /// spends. A split note is signed the same way, under the key of the spend it was taken
+    /// from, necessarily the same wallet, since the two must share an address.
     ///
     /// This may also be used in bundles that permit cross-address transfers, where it
     /// behaves like [`Builder::add_output`] plus an ownership check, so wallet change
@@ -1175,7 +1189,7 @@ impl Builder {
     ///
     /// Returns an error if outputs are disabled for this builder's bundle type, if the
     /// bundle disables cross-address transfers but has spends disabled (the paired
-    /// fabricated spend could not be created), or if `fvk` does not own `recipient`.
+    /// spend could not be created), or if `fvk` does not own `recipient`.
     pub fn add_change_output(
         &mut self,
         fvk: FullViewingKey,
@@ -1189,7 +1203,7 @@ impl Builder {
             return Err(OutputError::OutputsDisabled);
         }
         // In a bundle that disables cross-address transfers, every change output pairs with
-        // a fabricated wallet-controlled spend, so spends must be enabled. (In a bundle that
+        // a wallet-controlled spend, so spends must be enabled. (In a bundle that
         // permits cross-address transfers, a change output is just an owned output and does
         // not require spends.)
         if !self.flags.cross_address_enabled() && !self.flags.spends_enabled() {
