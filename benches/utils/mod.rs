@@ -1,9 +1,8 @@
 use criterion::{measurement::Measurement, BenchmarkGroup, Criterion};
 
-use orchard::note_encryption::IronwoodVersion;
 use orchard::{
     bundle::BundleVersion,
-    note_encryption::{DomainVersion, OrchardVersion, ZSAVersion},
+    note_encryption::{DomainVersion, IronwoodVersion, OrchardVersion, ZSAVersion},
 };
 
 /// Marker type selecting the Orchard V2 protocol for the benchmarks.
@@ -30,11 +29,13 @@ impl OrchardFlavorBench for OrchardV2 {
     const DEFAULT_BUNDLE_VERSION: BundleVersion = BundleVersion::orchard_v2();
     type DomainVersion = OrchardVersion;
 
+    /// Not prefixed with the protocol version, to keep the benchmark name unchanged and stay
+    /// comparable with earlier measurements.
     fn benchmark_group<'a, M: Measurement>(
         c: &'a mut Criterion<M>,
         group_name: &str,
     ) -> BenchmarkGroup<'a, M> {
-        c.benchmark_group(format!("[OrchardV2] {group_name}"))
+        c.benchmark_group(group_name)
     }
 }
 

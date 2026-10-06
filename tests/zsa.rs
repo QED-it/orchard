@@ -1,8 +1,8 @@
 #![cfg(all(feature = "zsa-issuance", feature = "circuit"))]
 
-mod builder;
+mod common;
 
-use crate::builder::verify_bundle;
+use crate::common::verify_bundle;
 use incrementalmerkletree::{Hashable, Marking, Retention};
 use nonempty::NonEmpty;
 use orchard::{

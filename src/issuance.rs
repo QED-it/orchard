@@ -494,14 +494,18 @@ impl IssueBundle<AwaitingNullifier> {
 
     /// Finalizes issuance for the asset identified by (`asset_desc_hash`, `self.ik`).
     ///
-    /// If an `IssueAction` already exists for this asset, its finalize flag is set.
+    /// If the bundle already holds `IssueAction`s for this asset, the flag is set on the last
+    /// of them: actions are validated in order, so finalizing an earlier one would reject every
+    /// later action for the same asset.
+    ///
     /// Otherwise, a new finalize-only `IssueAction` is created. Such an action has no reference
     /// note, so it only suits an asset that already exists in the global issuance state.
     pub fn finalize_action(&mut self, asset_desc_hash: &[u8; 32]) {
         let issue_action = self
             .actions
             .iter_mut()
-            .find(|issue_action| issue_action.asset_desc_hash.eq(asset_desc_hash));
+            .filter(|issue_action| issue_action.asset_desc_hash.eq(asset_desc_hash))
+            .next_back();
 
         if let Some(issue_action) = issue_action {
             issue_action.flags = IssuanceFlags::from_parts(true);
@@ -1246,30 +1250,94 @@ mod tests {
     }
 
     #[test]
-    fn issue_bundle_finalize_asset() {
-        let TestParams {
-            rng, ik, recipient, ..
-        } = setup_params();
+    fn issue_bundle_verify_finalize_asset() {
+        let mut params = setup_params();
 
-        let nft_asset_desc_hash = asset_desc_hash(b"NFT");
-        let another_nft_asset_desc_hash = asset_desc_hash(b"Another NFT");
+        let issued_hash = asset_desc_hash(b"issued");
+        let finalized_hash = asset_desc_hash(b"finalized only");
+        let issued = AssetBase::custom(&AssetId::new_v0(&params.ik, &issued_hash));
+        let finalized = AssetBase::custom(&AssetId::new_v0(&params.ik, &finalized_hash));
 
         let (mut bundle, _) = IssueBundle::new(
-            ik,
-            nft_asset_desc_hash,
+            params.ik.clone(),
+            issued_hash,
             Some(IssueInfo {
-                recipient,
-                value: NoteValue::from_raw(u64::MIN),
+                recipient: params.recipient,
+                value: NoteValue::from_raw(10),
             }),
             true,
-            rng,
+            params.rng,
         )
         .unwrap();
 
-        bundle.finalize_action(&nft_asset_desc_hash);
-
+        bundle.finalize_action(&issued_hash);
         // Finalize an asset that does not yet exist in the IssueBundle.
-        bundle.finalize_action(&another_nft_asset_desc_hash);
+        bundle.finalize_action(&finalized_hash);
+
+        // Both actions are finalized.
+        assert_eq!(bundle.actions().len(), 2);
+        assert!(bundle.actions().iter().all(|a| a.is_finalized()));
+        // The second action has no note.
+        assert!(bundle.actions().last().notes().is_empty());
+
+        let signed = sign_bundle(bundle, &params);
+
+        let finalized_ref_note = create_reference_note(finalized, &mut params.rng);
+        let record_updates = verify_issue_bundle(
+            &signed,
+            params.sighash,
+            |a| {
+                if *a == finalized {
+                    Some(AssetRecord::new(
+                        NoteValue::from_raw(100),
+                        false,
+                        finalized_ref_note,
+                    ))
+                } else {
+                    None
+                }
+            },
+            &params.first_nullifier,
+        )
+        .unwrap();
+
+        // Check updated state.
+        assert_eq!(record_updates[&issued].amount, NoteValue::from_raw(10));
+        assert!(record_updates[&issued].is_finalized);
+        // The note-less action issues nothing, so the supply does not move.
+        assert_eq!(record_updates[&finalized].amount, NoteValue::from_raw(100));
+        assert!(record_updates[&finalized].is_finalized);
+
+        // `verify_issue_bundle` fails when the finalized asset (note-less action) is unknown to the
+        // global issuance state.
+        assert_eq!(
+            verify_issue_bundle(&signed, params.sighash, |_| None, &params.first_nullifier)
+                .unwrap_err(),
+            MissingReferenceNoteOnFirstIssuance
+        );
+
+        // `verify_issue_bundle` fails when the finalized asset is already finalized in the
+        // global issuance state.
+        assert_eq!(
+            verify_issue_bundle(
+                &signed,
+                params.sighash,
+                |a| {
+                    if *a == finalized {
+                        Some(AssetRecord::new(
+                            NoteValue::from_raw(100),
+                            true,
+                            finalized_ref_note,
+                        ))
+                    } else {
+                        None
+                    }
+                },
+                &params.first_nullifier
+            )
+            .unwrap_err(),
+            IssueActionPreviouslyFinalizedAssetBase
+        );
     }
 
     #[test]
@@ -2185,6 +2253,43 @@ mod tests {
             .unwrap_err(),
             CannotFinalizeOnFirstIssuance
         );
+    }
+
+    #[test]
+    fn finalize_action_must_finalize_the_last_action() {
+        let params = setup_params();
+
+        let mut rng = OsRng;
+        let hash = asset_desc_hash(b"asset1");
+        let asset = AssetBase::custom(&AssetId::new_v0(&params.ik, &hash));
+        let ref_note = create_reference_note(asset, &mut rng);
+        let note_1 = Note::new_issue_note(
+            params.recipient,
+            NoteValue::from_raw(10),
+            asset,
+            NoteVersion::ZSA,
+            &mut rng,
+        );
+        let note_2 = Note::new_issue_note(
+            params.recipient,
+            NoteValue::from_raw(20),
+            asset,
+            NoteVersion::ZSA,
+            &mut rng,
+        );
+
+        let actions = vec![
+            IssueAction::from_parts(hash, vec![ref_note, note_1], false),
+            IssueAction::from_parts(hash, vec![note_2], false),
+        ];
+        let mut bundle = IssueBundle::from_parts(
+            params.ik.clone(),
+            NonEmpty::from_vec(actions).unwrap(),
+            AwaitingNullifier,
+        );
+        bundle.finalize_action(&hash);
+        assert!(!bundle.actions().first().is_finalized());
+        assert!(bundle.actions().get(1).unwrap().is_finalized());
     }
 }
 
