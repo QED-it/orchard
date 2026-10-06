@@ -964,7 +964,7 @@ mod tests {
 
     // Verify that the rcm_zsa and cmx_zsa derivations match the test vectors.
     #[test]
-    fn zsa_rcm_verify_test_vectors() {
+    fn qr_rcm_zsa_verify_test_vectors() {
         for (i, tv) in crate::test_vectors::keys_zsa::TEST_VECTORS
             .iter()
             .enumerate()
