@@ -1041,8 +1041,8 @@ mod tests {
         compact_note_size, parse_note_plaintext_without_memo, prf_ock_orchard, CompactAction,
         CompactNoteCiphertextBytes, CompactNotePlaintextBytes, DomainVersion, IronwoodDomain,
         IronwoodNoteEncryption, IronwoodVersion, NoteCiphertextBytes, NoteEncryptionDomain,
-        OrchardDomain, OrchardNoteEncryption, OrchardVersion, ZSADomain, ZSAVersion,
-        COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
+        OrchardDomain, OrchardNoteEncryption, OrchardVersion, ZSADomain, ZSANoteEncryption,
+        ZSAVersion, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
     };
     use crate::note::AssetBase;
     use crate::{
@@ -1123,9 +1123,6 @@ mod tests {
         }
     }
 
-    // TODO Constance: cmx has been updated (we now use rcm_v3 instead of rcm_v2)
-    // To make the tests pass, the test vectors (lead_byte and rcm) need to be updated.
-    /*
     #[test]
     fn test_vectors_zsa() {
         let test_vectors = crate::test_vectors::note_encryption_zsa::TEST_VECTORS;
@@ -1239,7 +1236,6 @@ mod tests {
             );
         }
     }
-    */
 
     fn v3_encrypted_action() -> (
         Action<()>,
