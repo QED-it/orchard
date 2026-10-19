@@ -214,7 +214,7 @@ fn sign_issue_bundle(
 /// - the note value of the reference note is equal to 0
 /// - the asset of the reference note is equal to the provided asset
 /// - the recipient of the reference note is equal to the reference recipient
-fn verify_reference_note(note: &Note, asset: AssetBase) {
+pub(crate) fn verify_reference_note(note: &Note, asset: AssetBase) {
     assert_eq!(note.value(), NoteValue::from_raw(0));
     assert_eq!(note.asset(), asset);
     assert_eq!(note.recipient(), ReferenceKeys::recipient());
