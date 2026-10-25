@@ -1053,12 +1053,21 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
+    use ff::PrimeField;
     use proptest::prelude::*;
 
     use super::{
         testing::{arb_diversifier_index, arb_diversifier_key, arb_esk, arb_spending_key},
         *,
     };
+    use crate::{
+        note::{AssetBase, ExtractedNoteCommitment, NoteVersion, RandomSeed, Rho},
+        value::NoteValue,
+        Note,
+    };
+
+    #[cfg(feature = "zsa-issuance")]
+    use crate::issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
 
     #[test]
     fn spend_validating_key_from_bytes() {
@@ -1105,32 +1114,77 @@ mod tests {
         }
     }
 
-    // TODO Constance: update the zcash_test_vectors repository so that keys.rs can be
-    // generated with post-quantum keys and issuance keys.
-    /*
-    #[cfg(feature = "zsa-issuance")]
     #[test]
     fn test_vectors() {
-        use {
-            crate::{
-                issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr},
-                note::{AssetBase, ExtractedNoteCommitment, RandomSeed, Rho},
-                value::NoteValue,
-                Note,
-            },
-            ff::PrimeField,
-        };
-
-        for tv in crate::test_vectors::keys::TEST_VECTORS {
+        for tv in crate::test_vectors::keys::test_vectors() {
             let sk = SpendingKey::from_bytes(tv.sk).unwrap();
 
             let ask: SpendAuthorizingKey = (&sk).into();
             assert_eq!(<[u8; 32]>::from(&ask.0), tv.ask);
 
-            let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&tv.isk).unwrap();
+            let ak: SpendValidatingKey = (&ask).into();
+            assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
+
+            let nk: NullifierDerivingKey = (&sk).into();
+            assert_eq!(nk.0.to_repr(), tv.nk);
+
+            let rivk: CommitIvkRandomness = (&sk).into();
+            assert_eq!(rivk.0.to_repr(), tv.rivk);
+
+            let fvk: FullViewingKey = (&sk).into();
+            assert_eq!(<[u8; 32]>::from(&fvk.ak.0), tv.ak);
+            assert_eq!(fvk.nk().0.to_repr(), tv.nk);
+            assert_eq!(fvk.rivk.0.to_repr(), tv.rivk);
+
+            let external_ivk = fvk.to_ivk(Scope::External);
+            assert_eq!(external_ivk.ivk.0.to_repr(), tv.ivk);
+
+            let diversifier = Diversifier(tv.default_d);
+
+            let addr = fvk.address(diversifier, Scope::External);
+            assert_eq!(&addr.pk_d().to_bytes(), &tv.default_pk_d);
+
+            let rho = Rho::from_bytes(&tv.note_rho).unwrap();
+            let orchard_note = Note::from_parts(
+                addr,
+                NoteValue::from_raw(tv.note_v),
+                AssetBase::zatoshi(),
+                rho,
+                RandomSeed::from_bytes(tv.note_rseed, &rho).unwrap(),
+                NoteVersion::V2,
+            )
+            .unwrap();
+
+            let cmx: ExtractedNoteCommitment = orchard_note.commitment().into();
+            assert_eq!(cmx.to_bytes(), tv.note_cmx);
+
+            assert_eq!(orchard_note.nullifier(&fvk).to_bytes(), tv.note_nf);
+
+            let internal_rivk = fvk.rivk(Scope::Internal);
+            assert_eq!(internal_rivk.0.to_repr(), tv.internal_rivk);
+
+            let internal_ivk = fvk.to_ivk(Scope::Internal);
+            assert_eq!(internal_ivk.ivk.0.to_repr(), tv.internal_ivk);
+            assert_eq!(internal_ivk.dk.0, tv.internal_dk);
+
+            let internal_ovk = fvk.to_ovk(Scope::Internal);
+            assert_eq!(internal_ovk.0, tv.internal_ovk);
+        }
+    }
+
+    #[cfg(feature = "zsa-issuance")]
+    #[test]
+    fn test_vectors_zsa() {
+        for tv in crate::test_vectors::keys_zsa::TEST_VECTORS {
+            let sk = SpendingKey::from_bytes(tv.sk).unwrap();
+
+            let ask: SpendAuthorizingKey = (&sk).into();
+            assert_eq!(<[u8; 32]>::from(&ask.0), tv.ask);
 
             let ak: SpendValidatingKey = (&ask).into();
             assert_eq!(<[u8; 32]>::from(ak.0), tv.ak);
+
+            let isk = IssueAuthKey::<ZSASchnorr>::from_bytes(&tv.isk).unwrap();
 
             let ik = IssueValidatingKey::from(&isk);
             assert_eq!(&ik.encode(), &tv.ik_encoding);
@@ -1161,12 +1215,12 @@ mod tests {
                 AssetBase::from_bytes(&tv.asset).unwrap(),
                 rho,
                 RandomSeed::from_bytes(tv.note_rseed, &rho).unwrap(),
-                NoteVersion::V2,
+                NoteVersion::ZSA,
             )
             .unwrap();
 
             let cmx: ExtractedNoteCommitment = orchard_note.commitment().into();
-            assert_eq!(cmx.to_bytes(), tv.note_cmx);
+            assert_eq!(cmx.to_bytes(), tv.note_cmx_zsa);
 
             assert_eq!(orchard_note.nullifier(&fvk).to_bytes(), tv.note_nf);
 
@@ -1181,5 +1235,4 @@ mod tests {
             assert_eq!(internal_ovk.0, tv.internal_ovk);
         }
     }
-    */
 }
