@@ -18,7 +18,7 @@ const ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION: &[u8; 16] = b"ZTxIdSAIssueHash";
 const ZCASH_ORCHARD_ZSA_ISSUE_ACTION_PERSONALIZATION: &[u8; 16] = b"ZTxIdIssuActHash";
 #[cfg(feature = "zsa-issuance")]
 const ZCASH_ORCHARD_ZSA_ISSUE_NOTE_PERSONALIZATION: &[u8; 16] = b"ZTxIdIAcNoteHash";
-const ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION: &[u8; 16] = b"ZTxAuthZSAOrHash";
+const ZCASH_ORCHARD_ZSA_ISSUE_SIG_PERSONALIZATION: &[u8; 16] = b"ZTxAuthIssH__zsa";
 
 /// Construct the `issuance_digest` commitment for an absent issue bundle as defined in
 /// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
@@ -28,10 +28,10 @@ pub fn hash_issue_bundle_txid_empty() -> Blake2bHash {
     hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION).finalize()
 }
 
-/// Construct the `issuance_digest` commitment for the issue bundle as defined in
-/// [ZIP-246: Digests for the Version 6 Transaction Format][zip246]
+/// Construct the `issuance_digest` commitment for the issue bundle as defined in the
+/// [ZSA Transaction Format ZIP][zip-draft]
 ///
-/// [zip246]: https://zips.z.cash/zip-0246
+/// [zip-draft]: https://deploy-preview-141--zcash-zips-qedit.netlify.app/draft-qedit-zsa-transaction-format-and-digests
 #[cfg(feature = "zsa-issuance")]
 pub(crate) fn hash_issue_bundle_txid_data<A: IssueAuth>(bundle: &IssueBundle<A>) -> Blake2bHash {
     let mut h = hasher(ZCASH_ORCHARD_ZSA_ISSUE_PERSONALIZATION);
@@ -202,7 +202,7 @@ mod tests {
             hash_issue_bundle_auth_data(&signed_bundle, test_sighash_info_for_kind);
         assert_eq!(
             issuance_auth_digest.to_hex().as_str(),
-            "6df77af7b5323d99376336b770e4c5b06ffc195de81ac7692d1b08b6eb19534d"
+            "f8f9a41ae6360aff12e0e1e130b99579b201fa997e71f77c6aa156f5c6e25ac1"
         );
     }
 }

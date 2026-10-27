@@ -30,23 +30,17 @@ const ZCASH_IRONWOOD_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrnA
 const ZCASH_IRONWOOD_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrnActNH_v6";
 const ZCASH_IRONWOOD_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthIrnwdH_v6";
 
-// These strings are specific to this fork. They are not the ZIP-246 strings,
-// because ZIP-246 is withdrawn. ZIP-229 does not specify the ZSA values at this time.
-//
-// TODO Re-derive these from the ZSA digest spec once published, and add its test vectors.
-// Changing any string here changes consensus-visible digests.
-//
-// TODO Settle the naming convention at the same time: the burn and auth strings below still say
-// `Orc`, and the suffixes mix `Hash` with `_v6`.
-const ZCASH_ZSA_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrchardZsaH";
-const ZCASH_ZSA_ACTION_GROUPS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdZsaActGHash";
-const ZCASH_ZSA_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdZsaActCHash";
-const ZCASH_ZSA_ACTIONS_MEMOS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdZsaActMH_v6";
-const ZCASH_ZSA_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdZsaActNHash";
-const ZCASH_ZSA_BURN_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdOrcBurnHash";
-const ZCASH_ZSA_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthZsaHashv6";
-const ZCASH_ZSA_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrcAGHash";
-const ZCASH_ZSA_SPEND_AUTH_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthOrSASHash";
+// These strings are specific to this fork. They are the personalizations defined in
+// https://deploy-preview-141--zcash-zips-qedit.netlify.app/draft-qedit-zsa-transaction-format-and-digests
+// which is the draft ZIP for the ZSA transaction format post NU 6.3 (aka Ironwood).
+const ZCASH_ZSA_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIronwdH_zsa";
+const ZCASH_ZSA_ACTION_GROUPS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrn_AGH_zsa";
+const ZCASH_ZSA_ACTIONS_COMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrn_ACH_zsa";
+const ZCASH_ZSA_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrn_ANH_zsa";
+const ZCASH_ZSA_BURN_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxIdIrnBurnHash";
+const ZCASH_ZSA_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthIrnH__zsa";
+const ZCASH_ZSA_ACTION_GROUPS_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthIrnAGHash";
+const ZCASH_ZSA_SPEND_AUTH_SIGS_HASH_PERSONALIZATION: &[u8; 16] = b"ZTxAuthIrnSASH__";
 
 #[derive(Clone, Copy, Debug)]
 struct BundleCommitmentPersonalizations {
@@ -104,7 +98,7 @@ const IRONWOOD_V6_PERSONALIZATIONS: BundleCommitmentPersonalizations =
 const ZSA_PERSONALIZATIONS: BundleCommitmentPersonalizations = BundleCommitmentPersonalizations {
     bundle: ZCASH_ZSA_HASH_PERSONALIZATION,
     actions_compact: ZCASH_ZSA_ACTIONS_COMPACT_HASH_PERSONALIZATION,
-    actions_memos: ZCASH_ZSA_ACTIONS_MEMOS_HASH_PERSONALIZATION,
+    actions_memos: ZCASH_IRONWOOD_ACTIONS_MEMOS_HASH_PERSONALIZATION,
     actions_noncompact: ZCASH_ZSA_ACTIONS_NONCOMPACT_HASH_PERSONALIZATION,
     auth: ZCASH_ZSA_SIGS_HASH_PERSONALIZATION,
     zsa: Some(ZSAPersonalizations {
@@ -699,7 +693,7 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle, TxVersion::ZSA).unwrap();
         assert_eq!(
             sighash.to_hex().as_str(),
-            "58ffd40ba5bbc328ac4a9ee00385a7938de0117a295782e38c4b1895ce197bf4"
+            "f764389f2128d87114747e1fbb8adb9c9b147fca456811e585bf24824ad490ad"
         );
     }
 
@@ -814,7 +808,7 @@ mod tests {
             hash_bundle_auth_data(&bundle, TxVersion::ZSA, test_sighash_info_for_kind).unwrap();
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            "5ec1dbdbff7ee96c73e0a44038c8211ece6d55b879aa994310a25ab68149cead"
+            "b63cebdf20b4e9e7beac9fba4507167c2c239bd598a99348d7186e21ef2df2c0"
         );
     }
 
