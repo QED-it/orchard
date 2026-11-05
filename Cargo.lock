@@ -2817,23 +2817,3 @@ checksum = "73ab332fe2f6680068f3582b16a24f90ad7096d5d39b974d1c0aff0125116f02"
 dependencies = [
  "simd-adler32",
 ]
-
-[[patch.unused]]
-name = "halo2_gadgets"
-version = "0.5.0"
-source = "git+https://github.com/zcash/halo2?rev=828fab66a72116a4a8ea0dc7d8895667d90dacf4#828fab66a72116a4a8ea0dc7d8895667d90dacf4"
-
-[[patch.unused]]
-name = "halo2_proofs"
-version = "0.3.5"
-source = "git+https://github.com/zcash/halo2?rev=828fab66a72116a4a8ea0dc7d8895667d90dacf4#828fab66a72116a4a8ea0dc7d8895667d90dacf4"
-
-[[patch.unused]]
-name = "sinsemilla"
-version = "0.1.0"
-source = "git+https://github.com/zcash/sinsemilla?rev=aabb707e862bc3d7b803c77d14e5a771bcee3e8c#aabb707e862bc3d7b803c77d14e5a771bcee3e8c"
-
-[[patch.unused]]
-name = "zcash_note_encryption"
-version = "0.4.2"
-source = "git+https://github.com/zcash/zcash_note_encryption?rev=40b73b157374b62b648a26b94a1f236e5d9c389f#40b73b157374b62b648a26b94a1f236e5d9c389f"
