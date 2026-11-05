@@ -208,9 +208,14 @@ impl IssueAuthKey<ZSASchnorr> {
     ///
     /// [ZIP 32]: https://zips.z.cash/zip-0032
     pub fn random(rng: &mut impl CryptoRng) -> Self {
-        let secp = Secp256k1::signing_only();
-        let (secret_key, _) = secp.generate_keypair(rng);
-        Self(secret_key)
+        // Rejection-sample a valid secret key, as `secp256k1::SecretKey::new` does.
+        loop {
+            let mut bytes = [0u8; 32];
+            rng.fill_bytes(&mut bytes);
+            if let Some(isk) = Self::from_bytes(&bytes) {
+                return isk;
+            }
+        }
     }
 
     fn to_bytes(&self) -> Vec<u8> {
