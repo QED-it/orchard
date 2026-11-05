@@ -24,6 +24,29 @@ use crate::{
 
 const PRF_OCK_ORCHARD_PERSONALIZATION: &[u8; 16] = b"Zcash_Orchardock";
 
+/// Adapts a `rand_core` 0.6 RNG to the `rand_core` 0.10 API that
+/// `zcash_note_encryption::NoteEncryption::encrypt_outgoing_plaintext` takes.
+///
+/// Remove on upstream catch-up, once this crate moves to `rand` 0.10 like upstream `orchard` 0.16.
+pub(crate) struct Rng010<R>(pub(crate) R);
+
+impl<R: rand_core::RngCore> rand_core_010::TryRng for Rng010<R> {
+    type Error = core::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(self.0.next_u32())
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(self.0.next_u64())
+    }
+
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        self.0.fill_bytes(dst);
+        Ok(())
+    }
+}
+
 const NOTE_VERSION_SIZE: usize = 1;
 const NOTE_DIVERSIFIER_SIZE: usize = 11;
 const NOTE_VALUE_SIZE: usize = 8;
@@ -1041,7 +1064,7 @@ mod tests {
         compact_note_size, parse_note_plaintext_without_memo, prf_ock_orchard, CompactAction,
         CompactNoteCiphertextBytes, CompactNotePlaintextBytes, DomainVersion, IronwoodDomain,
         IronwoodNoteEncryption, IronwoodVersion, NoteCiphertextBytes, NoteEncryptionDomain,
-        OrchardDomain, OrchardNoteEncryption, OrchardVersion, ZSADomain, ZSANoteEncryption,
+        OrchardDomain, OrchardNoteEncryption, OrchardVersion, Rng010, ZSADomain, ZSANoteEncryption,
         ZSAVersion, COMPACT_NOTE_SIZE_VANILLA, COMPACT_NOTE_SIZE_ZSA,
     };
     use crate::note::AssetBase;
@@ -1231,7 +1254,7 @@ mod tests {
 
             assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
             assert_eq!(
-                &ne.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut OsRng)[..],
+                &ne.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut Rng010(OsRng))[..],
                 &tv.c_out[..]
             );
         }
@@ -1268,7 +1291,11 @@ mod tests {
         let encrypted_note = TransmittedNoteCiphertext {
             epk_bytes: IronwoodDomain::epk_bytes(encryptor.epk()).0,
             enc_ciphertext: encryptor.encrypt_note_plaintext(),
-            out_ciphertext: encryptor.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut rng),
+            out_ciphertext: encryptor.encrypt_outgoing_plaintext(
+                &cv_net,
+                &cmx,
+                &mut Rng010(&mut rng),
+            ),
         };
         let action = Action::from_parts(
             nf_old,
@@ -1396,7 +1423,7 @@ mod tests {
 
             assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
             assert_eq!(
-                &ne.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut OsRng)[..],
+                &ne.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut Rng010(OsRng))[..],
                 &tv.c_out[..]
             );
         }
