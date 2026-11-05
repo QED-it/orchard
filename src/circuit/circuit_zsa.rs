@@ -1039,8 +1039,8 @@ mod tests {
     use group::{Curve, Group, GroupEncoding};
     use halo2_proofs::{circuit::Value, dev::MockProver};
     use pasta_curves::pallas;
-    use rand::rngs::OsRng;
-    use rand_core::CryptoRngCore;
+    use rand::CryptoRng;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
     use subtle::{Choice, CtOption};
 
     use crate::{
@@ -1080,7 +1080,7 @@ mod tests {
 
     /// Generates a circuit and instance whose output note is addressed to an expanded
     /// receiver distinct from the spent note's.
-    fn generate_circuit_instance<R: CryptoRngCore>(
+    fn generate_circuit_instance<R: CryptoRng>(
         is_zatoshi_asset: bool,
         rng: R,
     ) -> (Circuit, Instance) {
@@ -1089,7 +1089,7 @@ mod tests {
 
     /// Generates a circuit and instance whose output note is addressed to the spent
     /// note's expanded receiver, as the cross-address restriction requires.
-    fn generate_self_transfer_circuit_instance<R: CryptoRngCore>(
+    fn generate_self_transfer_circuit_instance<R: CryptoRng>(
         is_zatoshi_asset: bool,
         rng: R,
     ) -> (Circuit, Instance) {
@@ -1100,7 +1100,7 @@ mod tests {
     ///
     /// The asset is necessarily non-zatoshi: the circuit constrains
     /// `(split_flag = 1) => (is_zatoshi_asset = 0)`.
-    fn generate_split_note_circuit_instance<R: CryptoRngCore>(rng: R) -> (Circuit, Instance) {
+    fn generate_split_note_circuit_instance<R: CryptoRng>(rng: R) -> (Circuit, Instance) {
         generate_circuit_instance_inner(false, false, true, rng)
     }
 
@@ -1111,7 +1111,7 @@ mod tests {
         out.expect("value is known")
     }
 
-    fn generate_circuit_instance_inner<R: CryptoRngCore>(
+    fn generate_circuit_instance_inner<R: CryptoRng>(
         is_zatoshi_asset: bool,
         output_matches_spend: bool,
         split_flag: bool,
@@ -1231,7 +1231,7 @@ mod tests {
         )
     }
 
-    fn random_note_commitment(mut rng: impl CryptoRngCore) -> NoteCommitment {
+    fn random_note_commitment(mut rng: impl CryptoRng) -> NoteCommitment {
         NoteCommitment::derive(
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
             pallas::Point::random(&mut rng).to_affine().to_bytes(),
@@ -1291,20 +1291,20 @@ mod tests {
 
     #[test]
     fn zsa_mock_prover_zatoshi_asset() {
-        let (circuit, instance) = generate_circuit_instance(true, OsRng);
+        let (circuit, instance) = generate_circuit_instance(true, UnwrapErr(SysRng));
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
     }
 
     #[test]
     fn zsa_mock_prover_non_zatoshi_asset() {
-        let (circuit, instance) = generate_circuit_instance(false, OsRng);
+        let (circuit, instance) = generate_circuit_instance(false, UnwrapErr(SysRng));
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
     }
 
     #[test]
     fn zsa_cross_address_restriction_is_conditional() {
         // An unrestricted cross-address statement is satisfiable...
-        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        let (circuit, mut instance) = generate_circuit_instance(false, UnwrapErr(SysRng));
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
 
         // ...but setting `disableCrossAddress` makes it unsatisfiable...
@@ -1318,20 +1318,22 @@ mod tests {
         );
 
         // ...while a restricted self-transfer statement is satisfiable.
-        let (circuit, mut instance) = generate_self_transfer_circuit_instance(false, OsRng);
+        let (circuit, mut instance) =
+            generate_self_transfer_circuit_instance(false, UnwrapErr(SysRng));
         instance.cross_address_disabled = true;
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
     }
 
     #[test]
     fn zsa_mock_prover_split_note() {
-        let (circuit, instance) = generate_split_note_circuit_instance(OsRng);
+        let (circuit, instance) = generate_split_note_circuit_instance(UnwrapErr(SysRng));
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
     }
 
     #[test]
     fn zsa_mock_prover_split_note_with_cross_address_disabled() {
-        let (circuit, mut instance) = generate_circuit_instance_inner(false, true, true, OsRng);
+        let (circuit, mut instance) =
+            generate_circuit_instance_inner(false, true, true, UnwrapErr(SysRng));
         instance.cross_address_disabled = true;
         assert_eq!(zsa_mock_verify(&circuit, &instance), Ok(()));
     }
@@ -1342,7 +1344,8 @@ mod tests {
     fn zsa_mock_prover_rejects_cross_address_split_note() {
         // `output_matches_spend` is set to false.
         // So, the spend and output have different addresses.
-        let (circuit, mut instance) = generate_circuit_instance_inner(false, false, true, OsRng);
+        let (circuit, mut instance) =
+            generate_circuit_instance_inner(false, false, true, UnwrapErr(SysRng));
         instance.cross_address_disabled = true;
         assert_zsa_rejected_by(
             &circuit,
@@ -1354,7 +1357,7 @@ mod tests {
 
     #[test]
     fn zsa_mock_prover_rejects_non_split_nullifier_for_split_note() {
-        let (circuit, mut instance) = generate_split_note_circuit_instance(OsRng);
+        let (circuit, mut instance) = generate_split_note_circuit_instance(UnwrapErr(SysRng));
 
         let psi_nf = known(&circuit.additional_zsa_witnesses.as_ref().unwrap().psi_nf);
         let cm_old = known(&circuit.common_witnesses.cm_old);
@@ -1372,7 +1375,8 @@ mod tests {
     #[test]
     fn zsa_mock_prover_rejects_split_note_with_zatoshi_asset() {
         // The circuit constrains `(split_flag = 1) => (is_zatoshi_asset = 0)`.
-        let (circuit, instance) = generate_circuit_instance_inner(true, false, true, OsRng);
+        let (circuit, instance) =
+            generate_circuit_instance_inner(true, false, true, UnwrapErr(SysRng));
         assert_zsa_rejected_by(
             &circuit,
             &instance,
@@ -1382,9 +1386,9 @@ mod tests {
 
     #[test]
     fn zsa_mock_prover_rejects_wrong_psi_nf() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         // The circuit constrains `(split_flag = 0) => (psi_old = psi_nf)`.
-        let (mut circuit, instance) = generate_circuit_instance(false, &mut rng);
+        let (mut circuit, instance) = generate_circuit_instance(false, rng);
         circuit
             .additional_zsa_witnesses
             .as_mut()
@@ -1400,9 +1404,9 @@ mod tests {
 
     #[test]
     fn zsa_mock_prover_rejects_wrong_cm_old() {
-        let mut rng = OsRng;
-        let (mut circuit, instance) = generate_circuit_instance(false, &mut rng);
-        circuit.common_witnesses.cm_old = Value::known(random_note_commitment(&mut rng));
+        let rng = UnwrapErr(SysRng);
+        let (mut circuit, instance) = generate_circuit_instance(false, rng);
+        circuit.common_witnesses.cm_old = Value::known(random_note_commitment(rng));
         // `cm_old` is the Merkle leaf, so a wrong witness makes the computed root differ from
         // the public anchor. It also feeds the derived note commitment and `nf_old`, whose copy
         // constraints fail alongside.
@@ -1415,30 +1419,30 @@ mod tests {
 
     #[test]
     fn zsa_mock_prover_rejects_zero_cv_net() {
-        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        let (circuit, mut instance) = generate_circuit_instance(false, UnwrapErr(SysRng));
         instance.cv_net = ValueCommitment::from_bytes(&[0u8; 32]).unwrap();
         assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
     }
 
     #[test]
     fn zsa_mock_prover_rejects_wrong_rk() {
-        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        let (circuit, mut instance) = generate_circuit_instance(false, UnwrapErr(SysRng));
         instance.rk = VerificationKey::dummy();
         assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
     }
 
     #[test]
     fn zsa_mock_prover_rejects_wrong_cmx() {
-        let mut rng = OsRng;
-        let (circuit, mut instance) = generate_circuit_instance(false, &mut rng);
-        instance.cmx = random_note_commitment(&mut rng).into();
+        let rng = UnwrapErr(SysRng);
+        let (circuit, mut instance) = generate_circuit_instance(false, rng);
+        instance.cmx = random_note_commitment(rng).into();
         assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
     }
 
     #[test]
     fn zsa_mock_prover_rejects_wrong_nf_old() {
-        let mut rng = OsRng;
-        let (circuit, mut instance) = generate_circuit_instance(false, &mut rng);
+        let mut rng = UnwrapErr(SysRng);
+        let (circuit, mut instance) = generate_circuit_instance(false, rng);
         instance.nf_old = Nullifier::dummy(&mut rng);
         assert_zsa_rejected_by(&circuit, &instance, "Equality constraint not satisfied");
     }
@@ -1446,8 +1450,8 @@ mod tests {
     #[test]
     fn zsa_mock_prover_rejects_asset_mismatch() {
         // The `asset` witness must match the asset baked into `cm_old`/`cv_net`.
-        let mut rng = OsRng;
-        let (mut circuit, instance) = generate_circuit_instance(false, &mut rng);
+        let mut rng = UnwrapErr(SysRng);
+        let (mut circuit, instance) = generate_circuit_instance(false, rng);
         circuit.additional_zsa_witnesses = circuit.additional_zsa_witnesses.map(|mut w| {
             let current_asset = known(&w.asset);
             let another_asset = loop {
@@ -1467,7 +1471,7 @@ mod tests {
     #[test]
     fn zsa_mock_prover_rejects_enable_zsa_false_for_non_zatoshi_asset() {
         // The circuit constrains `(enable_zsa = 0) => (is_zatoshi_asset = 1)`.
-        let (circuit, mut instance) = generate_circuit_instance(false, OsRng);
+        let (circuit, mut instance) = generate_circuit_instance(false, UnwrapErr(SysRng));
         instance.enable_zsa = false;
         assert_zsa_rejected_by(
             &circuit,
@@ -1478,8 +1482,8 @@ mod tests {
 
     #[test]
     fn zsa_restricted_statement_proves_and_verifies() {
-        let mut rng = OsRng;
-        let (circuit, mut instance) = generate_self_transfer_circuit_instance(false, &mut rng);
+        let mut rng = UnwrapErr(SysRng);
+        let (circuit, mut instance) = generate_self_transfer_circuit_instance(false, rng);
         instance.cross_address_disabled = true;
 
         let pk = ProvingKey::build(OrchardCircuitVersion::ZSA);
@@ -1493,9 +1497,9 @@ mod tests {
 
     #[test]
     fn zsa_prove_and_verify() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (circuits, instances): (Vec<_>, Vec<_>) = iter::once(())
-            .map(|()| generate_circuit_instance(false, &mut rng))
+            .map(|()| generate_circuit_instance(false, rng))
             .unzip();
 
         let vk = VerifyingKey::build(OrchardCircuitVersion::ZSA);
@@ -1541,9 +1545,9 @@ mod tests {
     // `plonk::Error::Synthesis` rather than emitting an unverifiable proof.
     #[test]
     fn create_rejects_mismatched_proving_key_version() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
-        let (circuit, instance) = generate_circuit_instance(true, &mut rng);
+        let (circuit, instance) = generate_circuit_instance(true, rng);
 
         for pk_version in [
             OrchardCircuitVersion::InsecurePreNu6_2,
@@ -1628,9 +1632,9 @@ mod tests {
 
         if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
             let create_proof = || -> std::io::Result<()> {
-                let mut rng = OsRng;
+                let mut rng = UnwrapErr(SysRng);
 
-                let (circuit, instance) = generate_circuit_instance(false, &mut rng);
+                let (circuit, instance) = generate_circuit_instance(false, rng);
                 let instances = core::slice::from_ref(&instance);
 
                 let pk = ProvingKey::build(OrchardCircuitVersion::ZSA);

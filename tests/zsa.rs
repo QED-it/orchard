@@ -21,7 +21,7 @@ use orchard::{
     value::NoteValue,
     Address, Anchor, Bundle, Note,
 };
-use rand::rngs::OsRng;
+use rand::{rand_core::UnwrapErr, rngs::SysRng};
 use shardtree::{store::memory::MemoryShardStore, ShardTree};
 use std::collections::HashSet;
 use zcash_note_encryption::try_note_decryption;
@@ -77,7 +77,7 @@ fn sign_issue_bundle(
     awaiting_nullifier_bundle: IssueBundle<AwaitingNullifier>,
     isk: &IssueAuthKey<ZSASchnorr>,
     first_nullifier: &Nullifier,
-    rng: OsRng,
+    rng: UnwrapErr<SysRng>,
 ) -> IssueBundle<Signed> {
     let awaiting_sighash_bundle = awaiting_nullifier_bundle.update_rho(first_nullifier, rng);
     let sighash = awaiting_sighash_bundle.commitment().into();
@@ -87,7 +87,7 @@ fn sign_issue_bundle(
 
 fn build_and_sign_bundle(
     builder: Builder,
-    mut rng: OsRng,
+    mut rng: UnwrapErr<SysRng>,
     pk: &ProvingKey,
     sk: &SpendingKey,
 ) -> Result<Bundle<Authorized, i64>, BuildError> {
@@ -153,7 +153,7 @@ fn issue_zsa_notes(
     keys: &Keychain,
     first_nullifier: &Nullifier,
 ) -> (Note, Note, Note) {
-    let mut rng = OsRng;
+    let mut rng = UnwrapErr(SysRng);
     // Create an issuance bundle
     let asset_desc_hash = compute_asset_desc_hash(&NonEmpty::from_slice(asset_descr).unwrap());
     let (mut awaiting_nullifier_bundle, _) = IssueBundle::new(
@@ -204,7 +204,7 @@ fn issue_zsa_notes(
 }
 
 fn create_zatoshi_note(keys: &Keychain) -> Note {
-    let mut rng = OsRng;
+    let mut rng = UnwrapErr(SysRng);
 
     let shielding_bundle: Bundle<_, i64> = {
         // Use the empty tree.
@@ -273,7 +273,7 @@ fn build_and_verify_bundle(
     expected_num_actions: usize,
     keys: &Keychain,
 ) -> Result<(), String> {
-    let rng = OsRng;
+    let rng = UnwrapErr(SysRng);
     let shielded_bundle: Bundle<_, i64> = {
         let mut builder = Builder::new(
             BundleType::DEFAULT,

@@ -6,7 +6,7 @@ use subtle::{Choice, ConstantTimeEq, CtOption};
 use crate::constants::zatoshi_asset_base::zatoshi_asset_base;
 
 #[cfg(test)]
-use rand_core::CryptoRngCore;
+use rand::CryptoRng;
 
 #[cfg(feature = "zsa-issuance")]
 use {
@@ -160,7 +160,7 @@ impl AssetBase {
     ///
     /// This is only used in tests.
     #[cfg(test)]
-    pub(crate) fn random(rng: &mut impl CryptoRngCore) -> Self {
+    pub(crate) fn random(rng: &mut impl CryptoRng) -> Self {
         loop {
             let random_point = pallas::Point::random(&mut *rng);
             // Extremely unlikely, but we explicitly reject the identity point.
@@ -228,12 +228,12 @@ pub mod testing {
 mod encoding_tests {
     use super::AssetBase;
 
-    use rand_core::OsRng;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
 
     /// Not gated on `zsa-issuance`: the encoding does not depend on how the asset was derived.
     #[test]
     fn to_bytes_from_bytes_roundtrip() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         for asset in [AssetBase::zatoshi(), AssetBase::random(&mut rng)] {
             let bytes = asset.to_bytes();

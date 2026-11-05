@@ -152,7 +152,7 @@ mod tests {
         plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
     };
     use pasta_curves::pallas;
-    use rand::rngs::OsRng;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
     use subtle::Choice;
 
     /// Checks that the `derive_nullifier` gadget agrees with `Nullifier::derive`.
@@ -352,7 +352,7 @@ mod tests {
             }
         }
 
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (_, fvk, note) = Note::dummy(&mut rng, None, NoteVersion::V3);
 
         for split_flag in [None, Some(false), Some(true)] {

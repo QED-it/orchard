@@ -4,7 +4,7 @@ extern crate alloc;
 
 use alloc::collections::BTreeMap;
 use nonempty::NonEmpty;
-use rand::{rngs::OsRng, RngCore};
+use rand::{rand_core::UnwrapErr, rngs::SysRng, Rng};
 
 use orchard::{
     issuance::{
@@ -22,7 +22,7 @@ use orchard::{
     Address, Note,
 };
 
-fn random_bytes<const N: usize>(mut rng: OsRng) -> [u8; N] {
+fn random_bytes<const N: usize>(mut rng: UnwrapErr<SysRng>) -> [u8; N] {
     let mut bytes = [0; N];
     rng.fill_bytes(&mut bytes);
     bytes
@@ -30,7 +30,7 @@ fn random_bytes<const N: usize>(mut rng: OsRng) -> [u8; N] {
 
 #[derive(Clone)]
 struct TestParams {
-    rng: OsRng,
+    rng: UnwrapErr<SysRng>,
     isk: IssueAuthKey<ZSASchnorr>,
     ik: IssueValidatingKey<ZSASchnorr>,
     recipient: Address,
@@ -43,7 +43,7 @@ fn setup_params() -> TestParams {
     use group::{ff::PrimeField, Curve, Group};
     use pasta_curves::{arithmetic::CurveAffine, pallas};
 
-    let mut rng = OsRng;
+    let mut rng = UnwrapErr(SysRng);
 
     let isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
     let ik = IssueValidatingKey::from(&isk);
@@ -57,7 +57,7 @@ fn setup_params() -> TestParams {
     // and `extract_p` functions, which are marked as `pub(crate)` in orchard and are therefore
     // not visible here.
     let first_nullifier = {
-        let point = pallas::Point::random(rng);
+        let point = pallas::Point::random(&mut rng);
 
         let base = point
             .to_affine()

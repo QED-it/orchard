@@ -222,7 +222,9 @@ fn bundle_chain<FL: BundleOrchardFlavor>() -> ([u8; 32], [u8; 32]) {
             .into();
         let proven = unauthorized.create_proof(pk, &mut rng).unwrap();
         (
-            proven.apply_signatures(rng.clone(), sighash, &[]).unwrap(),
+            // Signatures are outside the locked digests: sign with fresh randomness, so that
+            // `rng` reaches the second bundle in the same state as before.
+            proven.apply_signatures(OsRng, sighash, &[]).unwrap(),
             sighash,
         )
     };

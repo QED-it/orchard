@@ -165,7 +165,7 @@ impl RandomSeed {
     pub(crate) fn psi_nf(&self, rho: &Rho) -> pallas::Base {
         let mut h = prf_expand(&self.0, SPLIT_NOTE_PSI_NF_DOMAIN_SEPARATOR);
         h.update(&rho.to_bytes());
-        to_base(*h.finalize().as_array())
+        to_base(h.finalize().as_array())
     }
 
     /// Defined in [Zcash Protocol Spec § 4.7.3: Sending Notes (Orchard)][orchardsend].
@@ -292,7 +292,7 @@ impl RandomSeed {
         // asset: LEBS2OSP_256(repr_P(asset)) — compressed Pallas point (32 bytes)
         h.update(&asset.to_bytes());
 
-        commitment::NoteCommitTrapdoor(to_scalar(*h.finalize().as_array()))
+        commitment::NoteCommitTrapdoor(to_scalar(h.finalize().as_array()))
     }
 }
 
@@ -454,7 +454,7 @@ impl Note {
         value: NoteValue,
         asset: AssetBase,
         version: NoteVersion,
-        mut rng: impl RngCore,
+        mut rng: impl Rng,
     ) -> Self {
         let rseed = RandomSeed::random(&mut rng, &Rho(pallas::Base::zero()));
         Note {
@@ -637,7 +637,7 @@ impl Note {
     /// Panics if `self.asset().is_zatoshi()`.
     ///
     /// [Split Input note]: https://zips.z.cash/zip-0226#split-notes
-    pub(crate) fn create_split_note(self, rng: &mut impl RngCore) -> Self {
+    pub(crate) fn create_split_note(self, rng: &mut impl Rng) -> Self {
         assert!(bool::from(!self.asset().is_zatoshi()));
         Note {
             rseed_split_note: CtOption::new(RandomSeed::random(rng, &self.rho()), 1u8.into()),
@@ -663,7 +663,7 @@ impl Note {
         nullifier: &Nullifier,
         index_action: u32,
         index_note: u32,
-        mut rng: impl RngCore,
+        mut rng: impl Rng,
     ) {
         let rho = rho_for_issuance_note(nullifier, index_action, index_note);
         self.rho = Some(rho);
@@ -688,7 +688,7 @@ pub(crate) fn rho_for_issuance_note(
     let mut h = prf_expand(&nullifier.to_bytes(), ISSUANCE_RHO_DOMAIN_SEPARATOR);
     h.update(&index_action.to_le_bytes())
         .update(&index_note.to_le_bytes());
-    Rho(to_base(*h.finalize().as_array()))
+    Rho(to_base(h.finalize().as_array()))
 }
 
 /// A PRF^expand_sk hasher after `[dst]`, for domain separators that [`PrfExpand`] lacks.
@@ -821,6 +821,7 @@ mod tests {
     };
     use ff::PrimeField;
     use group::GroupEncoding;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
 
     struct QrRcmDerivation {
         rcm_old_repr: [u8; 32],
@@ -919,7 +920,7 @@ mod tests {
     /// No constructor sets `rseed_split_note`, so this test sets it directly.
     #[test]
     fn split_note_nullifier() {
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (_, fvk, note) = Note::dummy(&mut rng, None, NoteVersion::V3);
         let rho = note.rho();
         let split_rseed = RandomSeed::random(&mut rng, &rho);
@@ -957,7 +958,7 @@ mod tests {
     /// distinct rcm and hence distinct note commitments.
     #[test]
     fn rcm_zsa_binds_the_asset() {
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (_, _, note) = Note::dummy(&mut rng, None, NoteVersion::ZSA);
 
         // Everything but the asset is shared, by construction.

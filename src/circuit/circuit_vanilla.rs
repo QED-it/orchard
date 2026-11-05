@@ -727,7 +727,7 @@ mod tests {
     use ff::Field;
     use halo2_proofs::{circuit::Value, dev::MockProver};
     use pasta_curves::{pallas, vesta};
-    use rand::{rngs::OsRng, RngCore};
+    use rand::{rand_core::UnwrapErr, rngs::SysRng, Rng};
 
     use crate::{
         bundle::{BundleVersion, Flags},
@@ -743,7 +743,7 @@ mod tests {
 
     /// Generates a circuit and instance whose output note is addressed to an expanded
     /// receiver distinct from the spent note's.
-    fn generate_circuit_instance<R: RngCore>(
+    fn generate_circuit_instance<R: Rng>(
         rng: R,
         circuit_version: OrchardCircuitVersion,
     ) -> (Circuit, Instance) {
@@ -752,14 +752,14 @@ mod tests {
 
     /// Generates a circuit and instance whose output note is addressed to the spent
     /// note's expanded receiver, as the cross-address restriction requires.
-    fn generate_self_transfer_circuit_instance<R: RngCore>(
+    fn generate_self_transfer_circuit_instance<R: Rng>(
         rng: R,
         circuit_version: OrchardCircuitVersion,
     ) -> (Circuit, Instance) {
         generate_circuit_instance_inner(rng, circuit_version, true)
     }
 
-    fn generate_circuit_instance_inner<R: RngCore>(
+    fn generate_circuit_instance_inner<R: Rng>(
         mut rng: R,
         circuit_version: OrchardCircuitVersion,
         output_matches_spend: bool,
@@ -940,7 +940,7 @@ mod tests {
     #[test]
     fn halo2_instance_includes_cross_address_disabled_flag() {
         let (_, mut instance) =
-            generate_circuit_instance(OsRng, OrchardCircuitVersion::FixedPostNu6_2);
+            generate_circuit_instance(UnwrapErr(SysRng), OrchardCircuitVersion::FixedPostNu6_2);
 
         let halo2_instance = instance.to_halo2_instance();
         assert_eq!(halo2_instance[0].len(), 11);
@@ -982,7 +982,7 @@ mod tests {
 
         // An unrestricted cross-address statement is satisfiable...
         let (circuit, mut instance) =
-            generate_circuit_instance(OsRng, OrchardCircuitVersion::PostNu6_3);
+            generate_circuit_instance(UnwrapErr(SysRng), OrchardCircuitVersion::PostNu6_3);
         assert_eq!(mock_verify(&circuit, &instance), Ok(()));
 
         // ...but setting `disableCrossAddress` makes it unsatisfiable...
@@ -990,15 +990,17 @@ mod tests {
         assert!(mock_verify(&circuit, &instance).is_err());
 
         // ...while a restricted self-transfer statement is satisfiable.
-        let (circuit, mut instance) =
-            generate_self_transfer_circuit_instance(OsRng, OrchardCircuitVersion::PostNu6_3);
+        let (circuit, mut instance) = generate_self_transfer_circuit_instance(
+            UnwrapErr(SysRng),
+            OrchardCircuitVersion::PostNu6_3,
+        );
         instance.cross_address_disabled = true;
         assert_eq!(mock_verify(&circuit, &instance), Ok(()));
     }
 
     #[test]
     fn post_nu6_3_restricted_statement_proves_and_verifies() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (circuit, mut instance) =
             generate_self_transfer_circuit_instance(&mut rng, OrchardCircuitVersion::PostNu6_3);
         instance.cross_address_disabled = true;
@@ -1024,7 +1026,7 @@ mod tests {
     fn restricted_statement_requires_supporting_key() {
         use halo2_proofs::transcript::{Blake2bRead, Blake2bWrite};
 
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (circuit, mut instance) =
             generate_circuit_instance(&mut rng, OrchardCircuitVersion::FixedPostNu6_2);
         instance.cross_address_disabled = true;
@@ -1080,7 +1082,7 @@ mod tests {
     // only a ZSA key may prove or verify `enable_zsa = 1`.
     #[test]
     fn zsa_statement_requires_supporting_key() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (circuit, mut instance) =
             generate_circuit_instance(&mut rng, OrchardCircuitVersion::PostNu6_3);
         instance.enable_zsa = true;
@@ -1128,7 +1130,7 @@ mod tests {
 
     // TODO: recast as a proptest
     fn round_trip_for_version(circuit_version: OrchardCircuitVersion, vk: &VerifyingKey) {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         let (circuits, instances): (Vec<_>, Vec<_>) = iter::once(())
             .map(|()| generate_circuit_instance(&mut rng, circuit_version))
@@ -1208,7 +1210,7 @@ mod tests {
         proving_version: OrchardCircuitVersion,
         other_version: OrchardCircuitVersion,
     ) {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         let (circuit, instance) = generate_circuit_instance(&mut rng, proving_version);
         let instances = core::slice::from_ref(&instance);
@@ -1264,7 +1266,7 @@ mod tests {
     // with `plonk::Error::Synthesis` rather than emitting an unverifiable proof.
     #[test]
     fn create_rejects_mismatched_proving_key_version() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         for (circuit_version, pk_version) in [
             (
@@ -1305,7 +1307,7 @@ mod tests {
         // fixture. The non-regeneration path embeds and verifies the checked-in fixture.
         if std::env::var_os("ORCHARD_CIRCUIT_TEST_GENERATE_NEW_PROOF").is_some() {
             let create_proof = || -> std::io::Result<()> {
-                let mut rng = OsRng;
+                let mut rng = UnwrapErr(SysRng);
 
                 let (circuit, mut instance) = if restricted {
                     generate_self_transfer_circuit_instance(&mut rng, circuit_version)

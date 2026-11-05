@@ -5,10 +5,10 @@
 //!
 //! # Example
 //! ```
-//! use rand::rngs::OsRng;
+//! use rand::{rand_core::UnwrapErr, rngs::SysRng};
 //! use orchard::issuance::auth::{IssueAuthKey, IssueValidatingKey, ZSASchnorr};
 //!
-//! let mut rng = OsRng;
+//! let mut rng = UnwrapErr(SysRng);
 //! let isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
 //! let ik = IssueValidatingKey::from(&isk);
 //! let msg = [1u8; 32];
@@ -25,7 +25,7 @@ use core::{
     mem::size_of_val,
 };
 
-use rand_core::CryptoRngCore;
+use rand::CryptoRng;
 use secp256k1::{schnorr, Keypair, Message, Secp256k1, SecretKey, XOnlyPublicKey};
 
 use crate::issuance::Error;
@@ -207,7 +207,7 @@ impl IssueAuthKey<ZSASchnorr> {
     /// Real issuance keys should be derived according to [ZIP 32].
     ///
     /// [ZIP 32]: https://zips.z.cash/zip-0032
-    pub fn random(rng: &mut impl CryptoRngCore) -> Self {
+    pub fn random(rng: &mut impl CryptoRng) -> Self {
         let secp = Secp256k1::signing_only();
         let (secret_key, _) = secp.generate_keypair(rng);
         Self(secret_key)
@@ -368,7 +368,7 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::rngs::OsRng;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
 
     #[test]
     fn from_zip32_seed_rejects_invalid_inputs() {
@@ -395,7 +395,7 @@ mod tests {
 
     #[test]
     fn issuance_authorizing_key_from_bytes_to_bytes_roundtrip() {
-        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut UnwrapErr(SysRng));
         let isk_bytes = isk.to_bytes();
         let isk_roundtrip = IssueAuthKey::<ZSASchnorr>::from_bytes(&isk_bytes).unwrap();
         assert_eq!(isk_bytes, isk_roundtrip.to_bytes());
@@ -403,7 +403,7 @@ mod tests {
 
     #[test]
     fn issuance_validating_key_encode_decode_roundtrip() {
-        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut UnwrapErr(SysRng));
         let ik = IssueValidatingKey::from(&isk);
         let ik_bytes = ik.encode();
         let ik_roundtrip = IssueValidatingKey::decode(&ik_bytes).unwrap();
@@ -412,7 +412,7 @@ mod tests {
 
     #[test]
     fn issuance_authorization_signature_encode_decode_roundtrip() {
-        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut UnwrapErr(SysRng));
         let sig = isk.try_sign(&[1u8; 32]).unwrap();
         let sig_bytes = sig.encode();
         let sig_roundtrip = IssueAuthSig::<ZSASchnorr>::decode(&sig_bytes).unwrap();
@@ -421,7 +421,7 @@ mod tests {
 
     #[test]
     fn verify_fails_on_wrong_message() {
-        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut UnwrapErr(SysRng));
         let ik = IssueValidatingKey::from(&isk);
         let sighash = [1u8; 32];
         let incorrect_sighash = [2u8; 32];
@@ -434,10 +434,10 @@ mod tests {
 
     #[test]
     fn verify_fails_on_wrong_key() {
-        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut UnwrapErr(SysRng));
         let sighash = [1u8; 32];
         let sig = isk.try_sign(&sighash).unwrap();
-        let incorrect_isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut OsRng);
+        let incorrect_isk: IssueAuthKey<ZSASchnorr> = IssueAuthKey::random(&mut UnwrapErr(SysRng));
         let incorrect_ik = IssueValidatingKey::from(&incorrect_isk);
         assert_eq!(
             incorrect_ik.verify(&sighash, &sig),

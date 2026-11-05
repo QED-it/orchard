@@ -456,7 +456,7 @@ impl SpendInfo {
     /// Defined in [Transfer and Burn of Zcash Shielded Assets ZIP-0226 § Split Notes ][TransferZSA].
     ///
     /// [TransferZSA]: https://zips.z.cash/zip-0226#split-notes
-    fn create_split_spend(&self, rng: &mut impl RngCore) -> Self {
+    fn create_split_spend(&self, rng: &mut impl Rng) -> Self {
         SpendInfo {
             dummy_sk: None,
             fvk: self.fvk.clone(),
@@ -1459,7 +1459,7 @@ fn pad_spend(
     spend: Option<&SpendInfo>,
     asset: AssetBase,
     note_version: NoteVersion,
-    mut rng: impl RngCore,
+    mut rng: impl Rng,
 ) -> Result<SpendInfo, BuildError> {
     if asset.is_zatoshi().into() {
         // For zatoshi asset, extends with dummy notes
@@ -2611,7 +2611,7 @@ mod tests {
 
     /// Like [`note_with_path`], for a note of `asset`.
     fn note_with_path_for_asset(
-        rng: &mut impl RngCore,
+        rng: &mut impl Rng,
         recipient: Address,
         value: NoteValue,
         asset: AssetBase,
@@ -3155,7 +3155,7 @@ mod tests {
             Err(BuildError::CoinbaseZsaEnabled)
         ));
         let result = bundle::<i64>(
-            &mut OsRng,
+            &mut UnwrapErr(SysRng),
             BundleType::Coinbase,
             version,
             flags,
@@ -3187,7 +3187,7 @@ mod tests {
     fn add_burn_rejects_non_zsa_version() {
         // Burn is only encoded in the ZSA transaction format, so a non-ZSA builder must not
         // accept one.
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let bundle_version = BundleVersion::ironwood_v3();
         let mut builder = Builder::new(
             BundleType::DEFAULT,
@@ -3205,7 +3205,7 @@ mod tests {
 
     #[test]
     fn free_bundle_rejects_burn_under_non_zsa_version() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let anchor: Anchor = EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into();
         let bundle_version = BundleVersion::ironwood_v3();
         let burn = BTreeMap::from([(AssetBase::random(&mut rng), NoteValue::from_raw(1))]);
@@ -3233,7 +3233,7 @@ mod tests {
         // independently. With that bit cleared the circuit forces every asset to zatoshi, so a
         // burn can never be balanced: `derive_bvk` would fold it in and `build` would trip its
         // bvk/bsk assertion. Both the fail-fast path and the build path must reject it.
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let anchor: Anchor = EMPTY_ROOTS[MERKLE_DEPTH_ORCHARD].into();
         let bundle_version = BundleVersion::zsa();
         let flags = Flags::ENABLED; // representable under the ZSA version, but zsa_enabled = false
@@ -3266,7 +3266,7 @@ mod tests {
 
     #[test]
     fn add_burn_accepts_the_zsa_version_with_the_zsa_flag() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let bundle_version = BundleVersion::zsa();
         let mut builder = Builder::new(
             BundleType::DEFAULT,
@@ -3284,7 +3284,7 @@ mod tests {
     #[test]
     fn build_for_pczt_rejects_zsa() {
         // PCZT V1 carries neither a burn nor an asset base.
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let asset = AssetBase::random(&mut rng);
         let recipient =
             FullViewingKey::from(&SpendingKey::random(&mut rng)).address_at(0u32, Scope::External);
@@ -3573,7 +3573,7 @@ mod tests {
     /// split note of the same asset, taken from a requested spend at the change's own address.
     #[test]
     fn cross_address_disabled_pairs_zsa_change_with_split_note() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let sk = SpendingKey::random(&mut rng);
         let fvk = FullViewingKey::from(&sk);
         let recipient = fvk.address_at(0u32, Scope::External);
@@ -3618,7 +3618,7 @@ mod tests {
     /// split note inherits the source note's address.
     #[test]
     fn cross_address_disabled_rejects_zsa_change_without_a_split_note_at_its_address() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let spend_sk = SpendingKey::random(&mut rng);
         let spend_fvk = FullViewingKey::from(&spend_sk);
         let spend_recipient = spend_fvk.address_at(0u32, Scope::External);
@@ -3656,7 +3656,7 @@ mod tests {
     /// spend cannot be padded.
     #[test]
     fn zsa_output_without_a_spend_of_that_asset_is_rejected() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let sk = SpendingKey::random(&mut rng);
         let fvk = FullViewingKey::from(&sk);
         let recipient = fvk.address_at(0u32, Scope::External);

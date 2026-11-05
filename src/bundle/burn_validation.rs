@@ -210,11 +210,11 @@ mod burn_permission_tests {
         note::AssetBase,
         value::NoteValue,
     };
-    use rand_core::OsRng;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
 
     #[test]
     fn burn_needs_both_a_zsa_version_and_the_zsa_flag() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let burn = [(AssetBase::random(&mut rng), NoteValue::from_raw(1))];
 
         // Both conditions hold: permitted.
@@ -249,11 +249,11 @@ mod tests {
     use crate::{note::NoteVersion, value::NoteValue, Note};
 
     use alloc::{collections::BTreeSet, vec::Vec};
-    use rand_core::OsRng;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
 
     /// Generates a vector of unique random assets.
     fn generate_unique_assets(count: usize) -> Vec<AssetBase> {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let mut used = BTreeSet::new();
 
         (0..count)
@@ -284,7 +284,7 @@ mod tests {
     fn mock_issuance_records(data: &[AssetSupply]) -> BTreeMap<AssetBase, AssetRecord> {
         use crate::constants::reference_keys::ReferenceKeys;
 
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         data.iter()
             .map(|AssetSupply { asset, supply }| {

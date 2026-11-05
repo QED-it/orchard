@@ -3134,7 +3134,7 @@ mod tests {
                 // Witness a random non-negative u64 note value
                 // A note value cannot be negative.
                 let value = {
-                    let mut rng = OsRng;
+                    let mut rng = UnwrapErr(SysRng);
                     NoteValue::from_raw(rng.next_u64())
                 };
                 let value_var = {
@@ -3159,7 +3159,7 @@ mod tests {
                     self.psi,
                 )?;
 
-                let rcm = pallas::Scalar::random(OsRng);
+                let rcm = pallas::Scalar::random(&mut UnwrapErr(SysRng));
                 let rcm_gadget = ScalarFixed::new(
                     ecc_chip.clone(),
                     layouter.namespace(|| "rcm"),
@@ -3233,7 +3233,7 @@ mod tests {
         }
 
         let two_pow_254 = pallas::Base::from_u128(1 << 127).square();
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let random_asset = AssetBase::random(&mut rng);
 
         // Test different values of `ak`, `nk`
@@ -3340,8 +3340,8 @@ mod tests {
             });
             // Random values
             circuits.push(MyCircuit {
-                g_d: Value::known(pallas::Point::random(rng).to_affine()),
-                pk_d: Value::known(pallas::Point::random(rng).to_affine()),
+                g_d: Value::known(pallas::Point::random(&mut rng).to_affine()),
+                pk_d: Value::known(pallas::Point::random(&mut rng).to_affine()),
                 rho: Value::known(pallas::Base::random(&mut rng)),
                 psi: Value::known(pallas::Base::random(&mut rng)),
                 asset: Value::known(asset),

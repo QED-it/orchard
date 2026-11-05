@@ -608,7 +608,7 @@ mod tests {
         // pin the length to the one `note_version` implies. Otherwise a ciphertext of the wrong
         // kind survives the Prover and Signer roles, and is only rejected by
         // `validate_action_ciphertext_kind` in `to_tx_data`.
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let cmx = pallas::Base::random(&mut rng).to_repr();
         let out_ciphertext = alloc::vec![0u8; 80];
 

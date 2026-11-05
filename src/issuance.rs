@@ -19,7 +19,7 @@ use core::fmt::Debug;
 use group::Group;
 use nonempty::NonEmpty;
 use pasta_curves::pallas;
-use rand::RngCore;
+use rand::Rng;
 
 use crate::{
     bundle::commitments::{hash_issue_bundle_auth_data, hash_issue_bundle_txid_data},
@@ -386,7 +386,7 @@ impl IssueBundle<AwaitingNullifier> {
         asset_desc_hash: [u8; 32],
         issue_info: Option<IssueInfo>,
         first_issuance: bool,
-        mut rng: impl RngCore,
+        mut rng: impl Rng,
     ) -> Result<(IssueBundle<AwaitingNullifier>, AssetBase), Error> {
         // A first issuance cannot be finalized immediately, otherwise no issue note (except the
         //reference note) can ever be created for this asset.
@@ -453,7 +453,7 @@ impl IssueBundle<AwaitingNullifier> {
         recipient: Address,
         value: NoteValue,
         first_issuance: bool,
-        mut rng: impl RngCore,
+        mut rng: impl Rng,
     ) -> Result<AssetBase, Error> {
         let asset = AssetBase::custom(&AssetId::new_v0(&self.ik, &asset_desc_hash));
 
@@ -528,7 +528,7 @@ impl IssueBundle<AwaitingNullifier> {
     pub fn update_rho(
         self,
         first_nullifier: &Nullifier,
-        mut rng: impl RngCore,
+        mut rng: impl Rng,
     ) -> IssueBundle<AwaitingSighash> {
         let mut bundle = self;
         bundle
@@ -564,7 +564,7 @@ impl IssueBundle<AwaitingSighash> {
     }
 }
 
-fn create_reference_note(asset: AssetBase, mut rng: impl RngCore) -> Note {
+fn create_reference_note(asset: AssetBase, mut rng: impl Rng) -> Note {
     Note::new_issue_note(
         ReferenceKeys::recipient(),
         NoteValue::ZERO,
@@ -964,8 +964,8 @@ mod tests {
     use alloc::vec::Vec;
     use nonempty::NonEmpty;
     use pasta_curves::pallas;
-    use rand::rngs::OsRng;
-    use rand::RngCore;
+    use rand::Rng;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
 
     #[test]
     fn issuance_flags_roundtrip() {
@@ -995,7 +995,7 @@ mod tests {
 
     #[derive(Clone)]
     struct TestParams {
-        rng: OsRng,
+        rng: UnwrapErr<SysRng>,
         isk: IssueAuthKey<ZSASchnorr>,
         ik: IssueValidatingKey<ZSASchnorr>,
         recipient: Address,
@@ -1004,7 +1004,7 @@ mod tests {
     }
 
     fn setup_params() -> TestParams {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         let isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
         let ik = IssueValidatingKey::from(&isk);
@@ -1384,7 +1384,7 @@ mod tests {
     #[test]
     fn issue_bundle_invalid_isk_for_signature() {
         let params = setup_params();
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         let (bundle, _) = IssueBundle::new(
             params.ik.clone(),
@@ -1412,7 +1412,7 @@ mod tests {
     #[test]
     fn issue_bundle_incorrect_asset_for_signature() {
         let params = setup_params();
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         // Create a bundle with "normal" note
         let (mut bundle, _) = IssueBundle::new(
@@ -1610,7 +1610,7 @@ mod tests {
     #[test]
     fn issue_bundle_verify_fail_incorrect_rho_derivation() {
         let params = setup_params();
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (signed, _) = new_signed_bundle(&params, b"asset desc", 5);
 
         // Verify that `verify_issue_bundle` returns an error if `first_nullifier` is incorrect.
@@ -1628,7 +1628,7 @@ mod tests {
     #[test]
     fn issue_bundle_verify_fail_previously_finalized() {
         let params = setup_params();
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (signed, _) = new_signed_bundle(&params, b"already final", 5);
 
         let final_type = AssetBase::custom(&AssetId::new_v0(
@@ -1668,7 +1668,7 @@ mod tests {
     #[test]
     fn issue_bundle_verify_fail_bad_signature() {
         let params = setup_params();
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (mut signed, _) = new_signed_bundle(&params, b"bad sig", 5);
 
         let wrong_isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
@@ -1731,7 +1731,7 @@ mod tests {
     #[test]
     fn verify_issue_bundle_signature_fail_bad_signature() {
         let params = setup_params();
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (mut signed, _) = new_signed_bundle(&params, b"bad sig", 5);
 
         let wrong_isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
@@ -1752,7 +1752,7 @@ mod tests {
     #[test]
     fn issue_bundle_verify_fail_incorrect_asset_description() {
         let params = setup_params();
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (mut signed, _) = new_signed_bundle(&params, b"Asset description", 5);
 
         let note = Note::new(
@@ -1779,7 +1779,7 @@ mod tests {
     #[test]
     fn issue_bundle_verify_fail_incorrect_ik() {
         let params = setup_params();
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (mut signed, _) = new_signed_bundle(&params, b"Asset", 5);
 
         let incorrect_isk = IssueAuthKey::<ZSASchnorr>::random(&mut rng);
@@ -1805,7 +1805,7 @@ mod tests {
 
     #[test]
     fn finalize_flag_serialization() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let (_, _, note) = Note::dummy(&mut rng, None, NoteVersion::ZSA);
 
         let asset_desc_hash = asset_desc_hash(b"Asset description");
@@ -1879,7 +1879,7 @@ mod tests {
         .unwrap();
         let signed = sign_bundle(bundle, &params);
 
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let ref_note = create_reference_note(asset, &mut rng);
         let existing = AssetRecord::new(NoteValue::from_raw(100), false, ref_note);
 
@@ -1906,7 +1906,7 @@ mod tests {
         second: &[u64],
         finalize: (bool, bool),
     ) -> (IssueBundle<Signed>, AssetBase) {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let hash = asset_desc_hash(b"repeated");
         let asset = AssetBase::custom(&AssetId::new_v0(&params.ik, &hash));
         let ref_note = create_reference_note(asset, &mut rng);
@@ -1992,7 +1992,7 @@ mod tests {
         .unwrap();
         let signed = sign_bundle(bundle, &params);
 
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let ref_note = create_reference_note(asset, &mut rng);
         let existing = AssetRecord::new(NoteValue::from_raw(u64::MAX), false, ref_note);
 
@@ -2087,7 +2087,7 @@ mod tests {
         let ik = IssueValidatingKey::from(&isk);
 
         // Setup note and merkle tree
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let asset1 = AssetBase::custom(&AssetId::new_v0(&ik, &asset_desc_hash(b"zsa_asset1")));
         let note1 = Note::new(
             recipient,
@@ -2260,7 +2260,7 @@ mod tests {
     fn finalize_action_must_finalize_the_last_action() {
         let params = setup_params();
 
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let hash = asset_desc_hash(b"asset1");
         let asset = AssetBase::custom(&AssetId::new_v0(&params.ik, &hash));
         let ref_note = create_reference_note(asset, &mut rng);
