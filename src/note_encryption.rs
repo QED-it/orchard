@@ -897,7 +897,7 @@ pub(crate) fn encrypt_outgoing_plaintext<D: Domain>(
     ne: &NoteEncryption<D>,
     cv: &D::ValueCommitment,
     cmx: &D::ExtractedCommitment,
-    rng: impl rand_core::RngCore,
+    rng: &mut impl rand_core::RngCore,
 ) -> [u8; OUT_CIPHERTEXT_SIZE] {
     ne.encrypt_outgoing_plaintext(cv, cmx, &mut Rng010(rng))
 }
@@ -1264,7 +1264,7 @@ mod tests {
 
             assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
             assert_eq!(
-                &encrypt_outgoing_plaintext(&ne, &cv_net, &cmx, OsRng)[..],
+                &encrypt_outgoing_plaintext(&ne, &cv_net, &cmx, &mut OsRng)[..],
                 &tv.c_out[..]
             );
         }
@@ -1429,7 +1429,7 @@ mod tests {
 
             assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
             assert_eq!(
-                &encrypt_outgoing_plaintext(&ne, &cv_net, &cmx, OsRng)[..],
+                &encrypt_outgoing_plaintext(&ne, &cv_net, &cmx, &mut OsRng)[..],
                 &tv.c_out[..]
             );
         }
