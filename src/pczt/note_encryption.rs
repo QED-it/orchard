@@ -44,23 +44,17 @@ use zcash_note_encryption::{
 use crate::{
     bundle::BundleVersion,
     keys::{OutgoingViewingKey, PreparedIncomingViewingKey},
-    note_encryption::{CompactAction, IronwoodDomain, OrchardDomain, COMPACT_NOTE_SIZE},
+    note_encryption::{CompactAction, IronwoodDomain, OrchardDomain},
     Address, Note, ProtocolVersion, ValuePool,
 };
 
 impl From<&super::Action> for CompactAction {
     fn from(action: &super::Action) -> Self {
-        // The compact note ciphertext is the prefix of the full note ciphertext. Both
-        // lengths are compile-time constants, and `COMPACT_NOTE_SIZE` is the smaller.
-        let mut enc_ciphertext = [0; COMPACT_NOTE_SIZE];
-        enc_ciphertext
-            .copy_from_slice(&action.output.encrypted_note.enc_ciphertext.0[..COMPACT_NOTE_SIZE]);
-
         CompactAction::from_parts(
             action.spend.nullifier,
             action.output.cmx,
             EphemeralKeyBytes(action.output.encrypted_note.epk_bytes),
-            enc_ciphertext,
+            action.output.encrypted_note.enc_ciphertext.compact(),
         )
     }
 }
@@ -74,9 +68,9 @@ impl From<&super::Action> for CompactAction {
 /// responsibility, and the point of the distinction — a consumer that treats it as `Ok(None)`
 /// silently misclassifies every output of such a bundle as somebody else's.
 ///
-/// A [`BundleVersion`] is a [`ValuePool`] paired with a [`ProtocolVersion`], and no
-/// constructor of [`BundleVersion`] produces a pairing this crate has no domain for today, so
-/// this error is unreachable as the API stands. It exists because such a pairing would not be
+/// A [`BundleVersion`] is a [`ValuePool`] paired with a [`ProtocolVersion`]. Of the pairings
+/// its constructors produce today, only the ZSA ones have no domain here, because PCZT V1
+/// does not support ZSA. The error also covers a future pairing, which would not be
 /// caught by the exhaustive match that selects the domain: that match only fails to compile
 /// when a *variant* is added to either enum, and [`BundleVersion`] is `#[non_exhaustive]` with
 /// private fields, so a new constructor pairing variants this crate already has changes no
@@ -150,8 +144,7 @@ impl ActionDomain {
     /// # Errors
     ///
     /// Returns [`UnsupportedBundleVersion`] if this crate defines no note encryption domain
-    /// for `bundle_version`. No constructor of [`BundleVersion`] produces such a version
-    /// today, so this is unreachable through the public API as it stands.
+    /// for `bundle_version`: today, a ZSA bundle version.
     ///
     /// [`BundleVersion`]: crate::bundle::BundleVersion
     fn for_action(
@@ -167,8 +160,7 @@ impl ActionDomain {
                 ValuePool::Orchard,
                 ProtocolVersion::InsecureV1 | ProtocolVersion::V2 | ProtocolVersion::V3,
             ) => Ok(Self::Orchard(OrchardDomain::for_pczt_action(action))),
-            // The Ironwood pool uses `IronwoodDomain`, which is defined from
-            // `ProtocolVersion::V3` onward.
+            // The Ironwood pool uses `IronwoodDomain` under `ProtocolVersion::V3`.
             (ValuePool::Ironwood, ProtocolVersion::V3) => {
                 Ok(Self::Ironwood(IronwoodDomain::for_pczt_action(action)))
             }
@@ -177,6 +169,10 @@ impl ActionDomain {
             // exhaustiveness check above still holds; `BundleVersion` has no constructor for
             // them, so they are unconstructable today.
             (ValuePool::Ironwood, ProtocolVersion::InsecureV1 | ProtocolVersion::V2) => {
+                Err(UnsupportedBundleVersion { bundle_version })
+            }
+            // PCZT V1 does not support ZSA, so no domain is defined for its bundle versions.
+            (ValuePool::Orchard | ValuePool::Ironwood, ProtocolVersion::ZSA) => {
                 Err(UnsupportedBundleVersion { bundle_version })
             }
         }
@@ -321,8 +317,8 @@ mod tests {
         keys::{
             FullViewingKey, OutgoingViewingKey, PreparedIncomingViewingKey, Scope, SpendingKey,
         },
-        note::Rho,
-        note_encryption::{CompactAction, OrchardDomain, COMPACT_NOTE_SIZE},
+        note::{AssetBase, Rho},
+        note_encryption::{CompactAction, OrchardDomain, COMPACT_NOTE_SIZE_VANILLA},
         tree::EMPTY_ROOTS,
         value::NoteValue,
         Address, NoteVersion,
@@ -338,8 +334,8 @@ mod tests {
 
     /// Every [`BundleVersion`] instantiated for the [`crate::ValuePool::Orchard`] pool.
     ///
-    /// Together with [`IRONWOOD_POOL_VERSIONS`], every [`BundleVersion`] this crate can
-    /// construct; add a new constructor to whichever of the two it belongs to.
+    /// Together with [`IRONWOOD_POOL_VERSIONS`] and [`ZSA_VERSIONS`], every [`BundleVersion`]
+    /// this crate can construct; add a new constructor to whichever of the three it belongs to.
     const ORCHARD_POOL_VERSIONS: &[BundleVersion] = &[
         BundleVersion::orchard_insecure_v1(),
         BundleVersion::orchard_v2(),
@@ -351,8 +347,14 @@ mod tests {
     /// See [`ORCHARD_POOL_VERSIONS`].
     const IRONWOOD_POOL_VERSIONS: &[BundleVersion] = &[BundleVersion::ironwood_v3()];
 
-    /// Every [`BundleVersion`] this crate can construct.
-    fn all_bundle_versions() -> impl Iterator<Item = BundleVersion> {
+    /// Every [`BundleVersion`] with ZSA, for which no domain is defined: PCZT V1 does not
+    /// support ZSA.
+    ///
+    /// See [`ORCHARD_POOL_VERSIONS`].
+    const ZSA_VERSIONS: &[BundleVersion] = &[BundleVersion::zsa()];
+
+    /// Every [`BundleVersion`] this crate can construct, except [`ZSA_VERSIONS`].
+    fn non_zsa_bundle_versions() -> impl Iterator<Item = BundleVersion> {
         ORCHARD_POOL_VERSIONS
             .iter()
             .chain(IRONWOOD_POOL_VERSIONS)
@@ -376,7 +378,13 @@ mod tests {
         )
         .unwrap();
         builder
-            .add_output(ovk, recipient, NoteValue::from_raw(OUTPUT_VALUE_ZATS), MEMO)
+            .add_output(
+                ovk,
+                recipient,
+                NoteValue::from_raw(OUTPUT_VALUE_ZATS),
+                AssetBase::zatoshi(),
+                MEMO,
+            )
             .unwrap();
         let (bundle, bundle_meta) = builder.build_for_pczt(&mut rng).unwrap();
         let action_index = bundle_meta.output_action_index(0).unwrap();
@@ -407,8 +415,8 @@ mod tests {
             action.output().encrypted_note().epk_bytes,
         );
         assert_eq!(
-            ShieldedOutput::<OrchardDomain>::enc_ciphertext_compact(&compact).0[..],
-            action.output().encrypted_note().enc_ciphertext.0[..COMPACT_NOTE_SIZE],
+            ShieldedOutput::<OrchardDomain>::enc_ciphertext_compact(&compact).as_ref(),
+            &action.output().encrypted_note().enc_ciphertext.as_ref()[..COMPACT_NOTE_SIZE_VANILLA],
         );
     }
 
@@ -464,7 +472,7 @@ mod tests {
                 for version in same_pool_versions {
                     let (note, address, memo) = action
                         .decrypt_output_with_ivk(&ivk, *version)
-                        .expect("a domain is defined for every constructible bundle version")
+                        .expect("a domain is defined for every non-ZSA bundle version")
                         .expect("the recipient's IVK opens the output under its own pool");
                     assert_eq!(address, recipient);
                     assert_eq!(note.value(), NoteValue::from_raw(OUTPUT_VALUE_ZATS));
@@ -533,7 +541,7 @@ mod tests {
         let action = &bundle.actions()[action_index];
         assert!(action
             .decrypt_output_with_ivk(&ivk, bundle_version)
-            .expect("a domain is defined for every constructible bundle version")
+            .expect("a domain is defined for every non-ZSA bundle version")
             .is_some());
         for scope in [Scope::External, Scope::Internal] {
             assert_eq!(
@@ -544,21 +552,16 @@ mod tests {
     }
 
     /// Every [`BundleVersion`] this crate can construct has a note encryption domain defined
-    /// for it, so [`UnsupportedBundleVersion`] is unreachable through the public API as it
-    /// stands: `BundleVersion` is `#[non_exhaustive]` with private fields, and none of its
-    /// four constructors pairs the Ironwood pool with a protocol version before
-    /// `ProtocolVersion::V3`.
+    /// for it, except the ZSA ones, which get [`UnsupportedBundleVersion`]: PCZT V1 does not
+    /// support ZSA.
     ///
-    /// The error is therefore not pinned by a test that provokes it — there is no way to
-    /// build its input — but by this test, which says what must stay true of the versions
-    /// that *can* be built. A future constructor that pairs existing variants would change no
-    /// enum and break no match; if it is added to [`ORCHARD_POOL_VERSIONS`] or
-    /// [`IRONWOOD_POOL_VERSIONS`] without a domain arm in [`super::ActionDomain::for_action`],
-    /// this test is what fails.
+    /// A future constructor that pairs existing variants would change no enum and break no
+    /// match; if it is added to [`ORCHARD_POOL_VERSIONS`] or [`IRONWOOD_POOL_VERSIONS`]
+    /// without a domain arm in [`super::ActionDomain::for_action`], this test is what fails.
     ///
     /// [`UnsupportedBundleVersion`]: super::UnsupportedBundleVersion
     #[test]
-    fn every_constructible_bundle_version_has_a_domain() {
+    fn only_zsa_bundle_versions_lack_a_domain() {
         let mut rng = UnwrapErr(SysRng);
         let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
         let recipient = fvk.address_at(0u32, Scope::External);
@@ -573,7 +576,7 @@ mod tests {
         );
         let action = &bundle.actions()[action_index];
 
-        for version in all_bundle_versions() {
+        for version in non_zsa_bundle_versions() {
             assert!(
                 action.decrypt_output_with_ivk(&ivk, version).is_ok(),
                 "no domain defined for {version:?}",
@@ -587,6 +590,24 @@ mod tests {
             assert!(
                 action.recover_output_with_ovk(&ovk, version).is_ok(),
                 "no domain defined for {version:?}",
+            );
+        }
+
+        for &bundle_version in ZSA_VERSIONS {
+            let unsupported = Some(super::UnsupportedBundleVersion { bundle_version });
+            assert_eq!(
+                action.decrypt_output_with_ivk(&ivk, bundle_version).err(),
+                unsupported
+            );
+            assert_eq!(
+                action
+                    .decrypt_compact_output_with_ivk(&ivk, bundle_version)
+                    .err(),
+                unsupported,
+            );
+            assert_eq!(
+                action.recover_output_with_ovk(&ovk, bundle_version).err(),
+                unsupported
             );
         }
     }

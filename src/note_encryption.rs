@@ -359,13 +359,15 @@ impl NoteBytes for CompactNoteCiphertextBytes {
 }
 
 impl NoteCiphertextBytes {
-    /// The length of the compact prefix of this ciphertext (nullifier-revealing fields), i.e.
-    /// [`COMPACT_NOTE_SIZE_VANILLA`]/[`COMPACT_NOTE_SIZE_ZSA`] depending on the variant.
-    fn compact_size(&self) -> usize {
-        match self {
+    /// The compact prefix of this ciphertext that light clients receive: its first
+    /// [`COMPACT_NOTE_SIZE_VANILLA`] or [`COMPACT_NOTE_SIZE_ZSA`] bytes, by variant.
+    pub(crate) fn compact(&self) -> CompactNoteCiphertextBytes {
+        let compact_size = match self {
             NoteCiphertextBytes::Vanilla(_) => COMPACT_NOTE_SIZE_VANILLA,
             NoteCiphertextBytes::Zsa(_) => COMPACT_NOTE_SIZE_ZSA,
-        }
+        };
+        CompactNoteCiphertextBytes::from_slice(&self.as_ref()[..compact_size])
+            .expect("a note ciphertext is longer than its compact prefix")
     }
 }
 
@@ -803,11 +805,7 @@ impl<P: DomainPolicy, T> ShieldedOutput<NoteEncryptionDomain<P>> for Action<T> {
     }
 
     fn enc_ciphertext_compact(&self) -> CompactNoteCiphertextBytes {
-        let enc_ciphertext = &self.encrypted_note().enc_ciphertext;
-        CompactNoteCiphertextBytes::from_slice(
-            &enc_ciphertext.as_ref()[..enc_ciphertext.compact_size()],
-        )
-        .expect("enc_ciphertext is at least compact_size() bytes")
+        self.encrypted_note().enc_ciphertext.compact()
     }
 }
 
@@ -829,11 +827,7 @@ impl<P: DomainPolicy> ShieldedOutput<NoteEncryptionDomain<P>> for crate::pczt::A
     }
 
     fn enc_ciphertext_compact(&self) -> CompactNoteCiphertextBytes {
-        let enc_ciphertext = &self.output().encrypted_note().enc_ciphertext;
-        CompactNoteCiphertextBytes::from_slice(
-            &enc_ciphertext.as_ref()[..enc_ciphertext.compact_size()],
-        )
-        .expect("enc_ciphertext is at least compact_size() bytes")
+        self.output().encrypted_note().enc_ciphertext.compact()
     }
 }
 
@@ -907,15 +901,11 @@ impl fmt::Debug for CompactAction {
 
 impl<T> From<&Action<T>> for CompactAction {
     fn from(action: &Action<T>) -> Self {
-        let enc_ciphertext = &action.encrypted_note().enc_ciphertext;
         CompactAction {
             nullifier: *action.nullifier(),
             cmx: *action.cmx(),
             ephemeral_key: EphemeralKeyBytes(action.encrypted_note().epk_bytes),
-            enc_ciphertext: CompactNoteCiphertextBytes::from_slice(
-                &enc_ciphertext.as_ref()[..enc_ciphertext.compact_size()],
-            )
-            .expect("enc_ciphertext is at least compact_size() bytes"),
+            enc_ciphertext: action.encrypted_note().enc_ciphertext.compact(),
         }
     }
 }
@@ -957,7 +947,7 @@ impl CompactAction {
 pub mod testing {
     use rand::Rng;
 
-    use zcash_note_encryption::{note_bytes::NoteBytes, Domain, NoteEncryption};
+    use zcash_note_encryption::{Domain, NoteEncryption};
 
     use crate::{
         address::Address,
@@ -966,9 +956,7 @@ pub mod testing {
         value::NoteValue,
     };
 
-    use super::{
-        CompactAction, CompactNoteCiphertextBytes, NoteEncryptionDomain, OrchardVersion, MEMO_SIZE,
-    };
+    use super::{CompactAction, NoteEncryptionDomain, OrchardVersion, MEMO_SIZE};
 
     /// Creates a fake `CompactAction` paying the given recipient the specified value.
     ///
@@ -1015,10 +1003,7 @@ pub mod testing {
                 nullifier: nf_old,
                 cmx,
                 ephemeral_key,
-                enc_ciphertext: CompactNoteCiphertextBytes::from_slice(
-                    &enc_ciphertext.as_ref()[..enc_ciphertext.compact_size()],
-                )
-                .unwrap(),
+                enc_ciphertext: enc_ciphertext.compact(),
             },
             note,
         )

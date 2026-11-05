@@ -6,6 +6,7 @@ use orchard::{
     bundle::{BatchValidator, BundleVersion, Flags, TxVersion},
     circuit::ProvingKey,
     keys::{FullViewingKey, Scope, SpendingKey},
+    note::AssetBase,
     tree::MerkleHashOrchard,
     value::NoteValue,
 };
@@ -38,6 +39,7 @@ fn creates_and_verifies_proof_individually_and_in_batch() {
             None,
             recipient,
             NoteValue::from_raw(OUTPUT_VALUE),
+            AssetBase::zatoshi(),
             TEST_MEMO,
         ),
         Ok(())
@@ -55,11 +57,14 @@ fn creates_and_verifies_proof_individually_and_in_batch() {
 
     assert!(matches!(bundle.verify_proof(&verifying_key), Ok(())));
     for action in bundle.actions() {
-        assert_eq!(action.rk().verify(&sighash, action.authorization()), Ok(()));
+        assert_eq!(
+            action.rk().verify(&sighash, action.authorization().sig()),
+            Ok(())
+        );
     }
     let binding_validating_key = bundle.binding_validating_key();
     assert_eq!(
-        binding_validating_key.verify(&sighash, bundle.authorization().binding_signature()),
+        binding_validating_key.verify(&sighash, bundle.authorization().binding_signature().sig()),
         Ok(())
     );
 

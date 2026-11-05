@@ -20,6 +20,7 @@ use crate::{
     builder::{Builder, BundleType},
     bundle::{BundleVersion, Flags},
     keys::{FullViewingKey, Scope, SpendingKey},
+    note::AssetBase,
     value::NoteValue,
     Anchor, Bundle,
 };
@@ -170,6 +171,7 @@ fn create_batch_fixtures(
                     None,
                     recipient,
                     NoteValue::from_raw(FIXTURE_NOTE_VALUE),
+                    AssetBase::zatoshi(),
                     FIXTURE_MEMO,
                 )
                 .unwrap();

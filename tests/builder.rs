@@ -65,11 +65,14 @@ fn cached_test_keys(circuit_version: OrchardCircuitVersion) -> &'static CachedTe
     static INSECURE: CachedTestKeys = CachedTestKeys::new(OrchardCircuitVersion::InsecurePreNu6_2);
     static FIXED: CachedTestKeys = CachedTestKeys::new(OrchardCircuitVersion::FixedPostNu6_2);
     static POST_NU6_3: CachedTestKeys = CachedTestKeys::new(OrchardCircuitVersion::PostNu6_3);
+    static ZSA: CachedTestKeys = CachedTestKeys::new(OrchardCircuitVersion::ZSA);
 
     match circuit_version {
         OrchardCircuitVersion::InsecurePreNu6_2 => &INSECURE,
         OrchardCircuitVersion::FixedPostNu6_2 => &FIXED,
         OrchardCircuitVersion::PostNu6_3 => &POST_NU6_3,
+        OrchardCircuitVersion::ZSA => &ZSA,
+        _ => unimplemented!("no cached test keys for {circuit_version:?}"),
     }
 }
 

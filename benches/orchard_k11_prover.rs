@@ -6,6 +6,7 @@ use orchard::{
     bundle::{BundleVersion, Flags},
     circuit::{OrchardCircuitVersion, ProvingKey, VerifyingKey},
     keys::{FullViewingKey, Scope, SpendingKey},
+    note::AssetBase,
     value::NoteValue,
     Anchor, Bundle,
 };
@@ -54,6 +55,7 @@ fn orchard_k11_prover(c: &mut Criterion) {
             None,
             recipient,
             NoteValue::from_raw(FIXTURE_NOTE_VALUE),
+            AssetBase::zatoshi(),
             FIXTURE_MEMO,
         )
         .unwrap();
