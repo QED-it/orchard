@@ -189,7 +189,7 @@ impl DynamicUsage for Action<OrchardSpendAuthSig> {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-dependencies")))]
 pub(crate) mod testing {
     use alloc::vec::Vec;
-    use rand::{rngs::StdRng, RngCore, SeedableRng};
+    use rand::{rngs::StdRng, Rng, SeedableRng};
     use zcash_note_encryption::{Domain as _, NoteEncryption};
 
     use proptest::prelude::*;
@@ -219,7 +219,7 @@ pub(crate) mod testing {
         memo: Vec<u8>,
         cv_net: &ValueCommitment,
         cmx: &ExtractedNoteCommitment,
-        mut rng: impl RngCore,
+        mut rng: impl Rng,
     ) -> TransmittedNoteCiphertext {
         // The Orchard, Ironwood and ZSA encryptor aliases share encryption behavior;
         // `Note::version()` selects the note plaintext lead byte.

@@ -7,7 +7,7 @@ use blake2b_simd::Params as Blake2bParams;
 use ff::PrimeField;
 use group::GroupEncoding;
 use pasta_curves::pallas;
-use rand::RngCore;
+use rand::Rng;
 use subtle::{Choice, ConditionallySelectable, CtOption};
 
 use crate::{
@@ -128,7 +128,7 @@ impl Rho {
 pub struct RandomSeed([u8; 32]);
 
 impl RandomSeed {
-    pub(crate) fn random(rng: &mut impl RngCore, rho: &Rho) -> Self {
+    pub(crate) fn random(rng: &mut impl Rng, rho: &Rho) -> Self {
         loop {
             let mut bytes = [0; 32];
             rng.fill_bytes(&mut bytes);
@@ -158,7 +158,7 @@ impl RandomSeed {
     /// [orchardsend]: https://zips.z.cash/protocol/nu5.pdf#orchardsend
     #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
     pub(crate) fn psi(&self, rho: &Rho) -> pallas::Base {
-        to_base(PrfExpand::PSI.with(&self.0, &rho.to_bytes()))
+        to_base(&PrfExpand::PSI.with(&self.0, &rho.to_bytes()))
     }
 
     /// Defined in [ZIP 226: Split Notes](https://zips.z.cash/zip-0226#split-notes).
@@ -173,7 +173,7 @@ impl RandomSeed {
     /// [orchardsend]: https://zips.z.cash/protocol/nu5.pdf#orchardsend
     fn esk_inner(&self, rho: &Rho) -> CtOption<NonZeroPallasScalar> {
         NonZeroPallasScalar::from_scalar(to_scalar(
-            PrfExpand::ORCHARD_ESK.with(&self.0, &rho.to_bytes()),
+            &PrfExpand::ORCHARD_ESK.with(&self.0, &rho.to_bytes()),
         ))
     }
 
@@ -193,7 +193,7 @@ impl RandomSeed {
     #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
     pub(crate) fn rcm_v2(&self, rho: &Rho) -> commitment::NoteCommitTrapdoor {
         commitment::NoteCommitTrapdoor(to_scalar(
-            PrfExpand::ORCHARD_RCM.with(&self.0, &rho.to_bytes()),
+            &PrfExpand::ORCHARD_RCM.with(&self.0, &rho.to_bytes()),
         ))
     }
 
@@ -241,7 +241,7 @@ impl RandomSeed {
         // psi: LEBS2OSP_256(repr_P(psi)) — Pallas base field canonical repr (32 bytes)
         h.update(&psi.to_repr());
 
-        commitment::NoteCommitTrapdoor(to_scalar(*h.finalize().as_array()))
+        commitment::NoteCommitTrapdoor(to_scalar(h.finalize().as_array()))
     }
 
     /// Quantum-recoverable rcm derivation for ZSA notes.
@@ -422,7 +422,7 @@ impl Note {
         asset: AssetBase,
         rho: Rho,
         version: NoteVersion,
-        mut rng: impl RngCore,
+        mut rng: impl Rng,
     ) -> Self {
         loop {
             let note = Note::from_parts(
@@ -475,7 +475,7 @@ impl Note {
     /// [orcharddummynotes]: https://zips.z.cash/protocol/nu5.pdf#orcharddummynotes
     #[cfg_attr(feature = "unstable-voting-circuits", visibility::make(pub))]
     pub(crate) fn dummy(
-        rng: &mut impl RngCore,
+        rng: &mut impl Rng,
         rho: Option<Rho>,
         note_version: NoteVersion,
     ) -> (SpendingKey, FullViewingKey, Self) {

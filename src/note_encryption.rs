@@ -955,7 +955,7 @@ impl CompactAction {
 /// Utilities for constructing test data.
 #[cfg(feature = "test-dependencies")]
 pub mod testing {
-    use rand::RngCore;
+    use rand::Rng;
 
     use zcash_note_encryption::{note_bytes::NoteBytes, Domain, NoteEncryption};
 
@@ -973,7 +973,7 @@ pub mod testing {
     /// Creates a fake `CompactAction` paying the given recipient the specified value.
     ///
     /// Returns the `CompactAction` and the new note.
-    pub fn fake_compact_action<R: RngCore>(
+    pub fn fake_compact_action<R: Rng>(
         rng: &mut R,
         nf_old: Nullifier,
         recipient: Address,
@@ -1029,7 +1029,7 @@ pub mod testing {
 mod tests {
     use alloc::vec::Vec;
     use proptest::prelude::*;
-    use rand::rngs::OsRng;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
     use zcash_note_encryption::{
         batch,
         note_bytes::{NoteBytes, NoteBytesData},
@@ -1244,7 +1244,7 @@ mod tests {
         Address,
         [u8; 512],
     ) {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let sk = SpendingKey::random(&mut rng);
         let fvk = crate::keys::FullViewingKey::from(&sk);
         let incoming_viewing_key = fvk.to_ivk(Scope::External);
@@ -1396,7 +1396,7 @@ mod tests {
 
             assert_eq!(ne.encrypt_note_plaintext().as_ref(), &tv.c_enc[..]);
             assert_eq!(
-                &ne.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut OsRng)[..],
+                &ne.encrypt_outgoing_plaintext(&cv_net, &cmx, &mut UnwrapErr(SysRng))[..],
                 &tv.c_out[..]
             );
         }
@@ -1404,7 +1404,7 @@ mod tests {
 
     #[test]
     fn domains_accept_only_their_note_plaintext_versions() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let sk = crate::keys::SpendingKey::random(&mut rng);
         let fvk = crate::keys::FullViewingKey::from(&sk);
         let recipient = fvk.address_at(0u32, crate::keys::Scope::External);
@@ -1535,7 +1535,7 @@ mod tests {
     /// Encrypts a compact output of the domain's note plaintext version to
     /// `recipient`, using a fresh ephemeral key.
     fn encrypted_compact_action<V: DomainVersion>(
-        rng: &mut OsRng,
+        rng: &mut UnwrapErr<SysRng>,
         recipient: Address,
     ) -> CompactAction {
         let nf_old = Nullifier::dummy(rng);
@@ -1567,7 +1567,7 @@ mod tests {
     /// results, over hits on multiple viewing keys, misses, and an
     /// undecodable ephemeral key.
     fn check_batched_compact_decryption_matches_per_item<V: DomainVersion>() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         // Two accounts with external and internal scope each — the wallet
         // shape batched trial decryption runs with — plus a foreign account
@@ -1656,7 +1656,7 @@ mod tests {
     /// alike.
     #[test]
     fn batched_agreement_matches_per_item() {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         let our_fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
         let foreign_fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));

@@ -14,7 +14,7 @@ use halo2_proofs::{
     transcript::{Blake2bRead, Blake2bWrite},
 };
 use pasta_curves::{arithmetic::CurveAffine, pallas, vesta};
-use rand::RngCore;
+use rand::Rng;
 
 use crate::{
     builder::SpendInfo,
@@ -71,6 +71,10 @@ pub use crate::Proof;
 
 /// Size of the Orchard circuit.
 const K: u32 = 11;
+
+/// Shape of the public instance consumed by one Orchard Action proof.
+const INSTANCE_COLUMNS: usize = 1;
+const INSTANCE_ROWS: usize = 11;
 
 // Absolute offsets for public inputs.
 const ANCHOR: usize = 0;
@@ -551,6 +555,18 @@ impl ProvingKey {
         }
     }
 
+    /// Returns the [`VerifyingKey`] corresponding to this proving key.
+    ///
+    /// This clones the key material already contained in the proving key; it
+    /// does not perform key generation.
+    pub fn verifying_key(&self) -> VerifyingKey {
+        VerifyingKey {
+            params: self.params.clone(),
+            vk: self.pk.get_vk().clone(),
+            circuit_version: self.circuit_version,
+        }
+    }
+
     /// The circuit version this proving key produces proofs for.
     pub fn circuit_version(&self) -> OrchardCircuitVersion {
         self.circuit_version
@@ -678,8 +694,8 @@ impl Instance {
     /// Adding a public input whose default value is zero is backwards-compatible:
     /// halo2_proofs zero-pads instance values, so a statement that leaves the public input
     /// zero encodes exactly as it did before the public input existed.
-    fn to_halo2_instance(&self) -> [[vesta::Scalar; 11]; 1] {
-        let mut instance = [vesta::Scalar::zero(); 11];
+    fn to_halo2_instance(&self) -> [[vesta::Scalar; INSTANCE_ROWS]; INSTANCE_COLUMNS] {
+        let mut instance = [vesta::Scalar::zero(); INSTANCE_ROWS];
 
         instance[ANCHOR] = self.anchor.inner();
         instance[CV_NET_X] = self.cv_net.x();
@@ -730,7 +746,7 @@ impl Proof {
         pk: &ProvingKey,
         circuits: &[Circuit],
         instances: &[Instance],
-        mut rng: impl RngCore,
+        mut rng: impl Rng,
     ) -> Result<Self, plonk::Error> {
         if circuits
             .iter()
@@ -859,6 +875,9 @@ impl Proof {
 
 #[cfg(all(test, feature = "verifier-fingerprint"))]
 mod fingerprint;
+
+#[cfg(test)]
+mod benchmark;
 
 #[cfg(test)]
 mod tests {

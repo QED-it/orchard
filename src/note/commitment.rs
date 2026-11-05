@@ -11,6 +11,7 @@ use core::iter;
 use alloc::vec::Vec;
 use bitvec::{array::BitArray, order::Lsb0};
 use group::ff::{PrimeField, PrimeFieldBits};
+use lazy_static::lazy_static;
 use pasta_curves::pallas;
 use subtle::{ConditionallySelectable, ConstantTimeEq, CtOption};
 
@@ -23,6 +24,15 @@ use crate::{
     spec::extract_p,
     value::NoteValue,
 };
+
+lazy_static! {
+    static ref NOTE_COMMITMENT_DOMAIN: sinsemilla::CommitDomain =
+        sinsemilla::CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);
+}
+
+fn note_commitment_domain() -> &'static sinsemilla::CommitDomain {
+    &NOTE_COMMITMENT_DOMAIN
+}
 
 /// The trapdoor for a note commitment.
 #[derive(Clone, Debug)]
@@ -93,8 +103,7 @@ impl NoteCommitment {
             .chain(asset_bits.iter().by_vals());
 
         // Evaluate ZEC note commitment
-        let zec_domain = sinsemilla::CommitDomain::new(NOTE_COMMITMENT_PERSONALIZATION);
-        let commit_with_zec_domain = zec_domain.commit(zec_note_bits, &rcm.0);
+        let commit_with_zec_domain = note_commitment_domain().commit(zec_note_bits, &rcm.0);
 
         // Evaluate ZSA note commitment
         let zsa_domain = sinsemilla::CommitDomain::new_with_separate_domains(

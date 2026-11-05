@@ -2670,7 +2670,7 @@ mod tests {
     };
     use pasta_curves::{arithmetic::CurveAffine, pallas, EpAffine};
 
-    use rand::{rngs::OsRng, RngCore};
+    use rand::{rand_core::UnwrapErr, rngs::SysRng, Rng};
 
     #[test]
     fn note_commit_vanilla() {
@@ -2824,7 +2824,7 @@ mod tests {
                 // Witness a random non-negative u64 note value
                 // A note value cannot be negative.
                 let value = {
-                    let mut rng = OsRng;
+                    let mut rng = UnwrapErr(SysRng);
                     NoteValue::from_raw(rng.next_u64())
                 };
                 let value_var = {
@@ -2849,7 +2849,7 @@ mod tests {
                     self.psi,
                 )?;
 
-                let rcm = pallas::Scalar::random(OsRng);
+                let rcm = pallas::Scalar::random(&mut UnwrapErr(SysRng));
                 let rcm_gadget = ScalarFixed::new(
                     ecc_chip.clone(),
                     layouter.namespace(|| "rcm"),

@@ -708,7 +708,7 @@ mod tests {
         plonk::{Circuit, ConstraintSystem, Error},
     };
     use pasta_curves::pallas;
-    use rand::rngs::OsRng;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
 
     trait MyLookup: PallasLookupRangeCheck {
         const ENABLE_HASH_FROM_PRIVATE_POINT: bool;
@@ -854,7 +854,7 @@ mod tests {
             )?;
 
             // Use a random scalar for rivk
-            let rivk = pallas::Scalar::random(OsRng);
+            let rivk = pallas::Scalar::random(&mut UnwrapErr(SysRng));
             let rivk_gadget = ScalarFixed::new(
                 ecc_chip.clone(),
                 layouter.namespace(|| "rivk"),
