@@ -48,7 +48,7 @@ incrementalmerkletree = "0.8.1"
 zcash_spec = "0.2.1"
 zip32 = { version = "0.2.0", default-features = false }
 visibility = "0.1.1"
-# Only for `note_encryption::Rng010`; drop both on upstream catch-up (orchard 0.16 is on rand 0.10).
+# Only for `note_encryption::encrypt_outgoing_plaintext`. Drop on the move to rand 0.10.
 rand_core_010 = { package = "rand_core", version = "0.10", default-features = false }
 
 # Circuit
