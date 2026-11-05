@@ -636,9 +636,8 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle, TxVersion::V5).unwrap();
         assert_eq!(
             sighash.to_hex().as_str(),
-            // Bundle hash for Orchard V2 generated using
-            // Zcash/Orchard commit: d9bfa9f
-            "0ac1e319f6761a8561b7bd3fc0907a5c73ed5590a6c210c4d39ffae1d5741875"
+            // Bundle hash for Orchard V2, regenerated for the rand 0.10 migration
+            "1cb6b178022e0b786e5d5703122e1ce42f6689e3759cf80b256823024bc40b57"
         );
     }
 
@@ -657,9 +656,8 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle, TxVersion::V6).unwrap();
         assert_eq!(
             sighash.to_hex().as_str(),
-            // Bundle hash for Orchard V3 generated using
-            // Zcash/Orchard commit: d9bfa9f
-            "ff9e7cdafd4b9f2ca5ac071f46a8066f7cf1ece9ce89f1760281bfe6b05154fb"
+            // Bundle hash for Orchard V3, regenerated for the rand 0.10 migration
+            "067bb2a3cebe9ed6529de9e76b1f9f2e2a1335f0ebc8045c9274bef546196ace"
         );
     }
 
@@ -675,9 +673,8 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle, TxVersion::V6).unwrap();
         assert_eq!(
             sighash.to_hex().as_str(),
-            // Bundle hash for Ironwood V3 generated using
-            // Zcash/Orchard commit: d9bfa9f
-            "5f408a48dff8e499487169a9adb4f59ec41d7d393e8d4ee15e70e51c67b018a3"
+            // Bundle hash for Ironwood V3, regenerated for the rand 0.10 migration
+            "842ab8e25eac5032bcf1708124410d9c3285281960d900d807964f6382ebb58d"
         );
     }
 
@@ -693,7 +690,7 @@ mod tests {
         let sighash = hash_bundle_txid_data(&bundle, TxVersion::ZSA).unwrap();
         assert_eq!(
             sighash.to_hex().as_str(),
-            "77b85fe352c9d53ef5848d5eaab26bae47970f91d97d7564b51b9d2bf01f40d5"
+            "fde109603e059a3da93bf5e16b58648cc75b00a91a0eed057db517813dbc65eb"
         );
     }
 
@@ -745,9 +742,8 @@ mod tests {
             hash_bundle_auth_data(&bundle, TxVersion::V5, test_sighash_info_for_kind).unwrap();
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            // Bundle hash for Orchard V2 generated using
-            // Zcash/Orchard commit: d9bfa9f
-            "37d6c29faa98c2cb54420f3f7cac0477fdb105df1cdfde7adb7fbf68a24e3085"
+            // Bundle hash for Orchard V2, regenerated for the rand 0.10 migration
+            "7991134f13d5fcf28a78da9bb1fa42d03271d68af16ab11411bde0c57f500e2a"
         );
     }
 
@@ -768,9 +764,8 @@ mod tests {
             hash_bundle_auth_data(&bundle, TxVersion::V6, test_sighash_info_for_kind).unwrap();
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            // Bundle hash for Orchard V3 generated using
-            // Zcash/Orchard commit: d9bfa9f
-            "1b1e51877f967fb55d2d240e029471494754c2c6235f50eeb8740331dec47bcc"
+            // Bundle hash for Orchard V3, regenerated for the rand 0.10 migration
+            "7a52bfc3e1d1dacff84aef60fb30be6fadeb7d5d379f896a6c64bc52f2988680"
         );
     }
 
@@ -788,9 +783,8 @@ mod tests {
             hash_bundle_auth_data(&bundle, TxVersion::V6, test_sighash_info_for_kind).unwrap();
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            // Bundle hash for Ironwood V3 generated using
-            // Zcash/Orchard commit: d9bfa9f
-            "404871b295dd65dfe4b44c5bfe92bdd194c0f70bc090a4f50b43a51244a37e5f"
+            // Bundle hash for Ironwood V3, regenerated for the rand 0.10 migration
+            "f3e5974ebacb5d726a0c9fd9fe11720b7f89ed6e225808b688da3e1cb5d87f57"
         );
     }
 
@@ -808,7 +802,7 @@ mod tests {
             hash_bundle_auth_data(&bundle, TxVersion::ZSA, test_sighash_info_for_kind).unwrap();
         assert_eq!(
             orchard_auth_digest.to_hex().as_str(),
-            "1500b89c77ec3e372ffe02646461898d4aafb0751a760e358bdd6fd5fa4fe6fd"
+            "55f729aeefc6a63f6baf3595e5fd6f530cdadfe70bf47d2216012f14ca9bd339"
         );
     }
 
