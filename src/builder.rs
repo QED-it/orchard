@@ -169,6 +169,50 @@ impl BundleType {
             }
         }
     }
+
+    /// Returns the number of logical actions that the builder will produce in constructing a bundle
+    /// of this type with the given `flags`, given the asset of each requested spend and output.
+    ///
+    /// The builder pads each asset separately, so the bundle has at least
+    /// `max(num_spends, num_outputs)` actions for each asset. The result is the larger of that sum
+    /// and [`BundleType::num_actions`] for the same spends and outputs, which wallets estimating
+    /// fees (e.g. per [ZIP 317]) must use for a bundle that carries more than one asset.
+    ///
+    /// Returns an error if the specified spends and outputs are incompatible with this bundle type
+    /// and flags.
+    ///
+    /// [ZIP 317]: https://zips.z.cash/zip-0317
+    pub fn num_actions_zsa(
+        &self,
+        flags: Flags,
+        spend_assets: impl IntoIterator<Item = AssetBase>,
+        output_assets: impl IntoIterator<Item = AssetBase>,
+    ) -> Result<usize, &'static str> {
+        let mut by_asset = BTreeMap::<AssetBase, (usize, usize)>::new();
+        let mut num_spends = 0usize;
+        let mut num_outputs = 0usize;
+
+        for asset in spend_assets {
+            by_asset.entry(asset).or_default().0 += 1;
+            num_spends += 1;
+        }
+        for asset in output_assets {
+            by_asset.entry(asset).or_default().1 += 1;
+            num_outputs += 1;
+        }
+
+        let per_asset_actions = by_asset
+            .values()
+            .try_fold(0usize, |acc, (spends, outputs)| {
+                acc.checked_add(core::cmp::max(*spends, *outputs))
+            })
+            .ok_or("the per-asset action counts overflowed")?;
+
+        Ok(core::cmp::max(
+            self.num_actions(flags, num_spends, num_outputs)?,
+            per_asset_actions,
+        ))
+    }
 }
 
 /// An error type for the kinds of errors that can occur during bundle construction.
@@ -2233,6 +2277,8 @@ pub trait InputView<NoteRef> {
     fn note_id(&self) -> &NoteRef;
     /// The value of the input being spent.
     fn value<V: From<u64>>(&self) -> V;
+    /// The asset of the input being spent.
+    fn asset(&self) -> AssetBase;
 }
 
 impl InputView<()> for SpendInfo {
@@ -2244,6 +2290,10 @@ impl InputView<()> for SpendInfo {
     fn value<V: From<u64>>(&self) -> V {
         V::from(self.note.value().inner())
     }
+
+    fn asset(&self) -> AssetBase {
+        self.note.asset()
+    }
 }
 
 /// A trait that provides a minimized view of an Orchard output suitable for use in
@@ -2251,17 +2301,27 @@ impl InputView<()> for SpendInfo {
 pub trait OutputView {
     /// The value of the output being produced.
     fn value<V: From<u64>>(&self) -> V;
+    /// The asset of the output being produced.
+    fn asset(&self) -> AssetBase;
 }
 
 impl OutputView for OutputInfo {
     fn value<V: From<u64>>(&self) -> V {
         V::from(self.value.inner())
     }
+
+    fn asset(&self) -> AssetBase {
+        self.asset
+    }
 }
 
 impl OutputView for ChangeInfo {
     fn value<V: From<u64>>(&self) -> V {
         self.output.value()
+    }
+
+    fn asset(&self) -> AssetBase {
+        self.output.asset()
     }
 }
 
@@ -2936,6 +2996,58 @@ mod tests {
         let flags = BundleVersion::orchard_v3().default_flags();
         assert_eq!(unpadded.num_actions(flags, 1, 0), Ok(1));
         assert_eq!(unpadded.num_actions(flags, 1, 1), Ok(2));
+    }
+
+    #[test]
+    fn num_actions_zsa_pads_each_asset() {
+        let mut rng = OsRng;
+        let zatoshi = AssetBase::zatoshi();
+        let asset = AssetBase::random(&mut rng);
+        let unpadded = BundleType::Transactional {
+            bundle_required: false,
+            pad_to_minimum: Some(1),
+        };
+
+        // Cross-address transfers enabled: a single asset is padded as `num_actions` says.
+        let flags = BundleVersion::ironwood_v3().default_flags();
+        assert_eq!(
+            unpadded.num_actions_zsa(flags, [zatoshi, zatoshi], [zatoshi]),
+            Ok(2)
+        );
+        assert_eq!(
+            BundleType::DEFAULT.num_actions_zsa(flags, [], [zatoshi]),
+            Ok(2)
+        );
+
+        // Two assets with a different larger side each: 2 actions for zatoshi and 3 for `asset`,
+        // where `num_actions` sees only max(3, 4).
+        assert_eq!(unpadded.num_actions(flags, 3, 4), Ok(4));
+        assert_eq!(
+            unpadded.num_actions_zsa(
+                flags,
+                [zatoshi, zatoshi, asset],
+                [zatoshi, asset, asset, asset]
+            ),
+            Ok(5)
+        );
+
+        // The minimum applies to the per-asset sum as well.
+        assert_eq!(
+            BundleType::DEFAULT.num_actions_zsa(flags, [zatoshi], [asset]),
+            Ok(2)
+        );
+
+        // Cross-address transfers disabled: spends + outputs is never below the per-asset sum.
+        let flags = BundleVersion::orchard_v3().default_flags();
+        assert_eq!(
+            unpadded.num_actions_zsa(flags, [zatoshi], [zatoshi, zatoshi]),
+            Ok(3)
+        );
+
+        // Errors come from `num_actions`.
+        assert!(BundleType::Coinbase
+            .num_actions_zsa(flags, [zatoshi], [])
+            .is_err());
     }
 
     #[test]
