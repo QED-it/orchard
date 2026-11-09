@@ -273,6 +273,13 @@ fn build_and_verify_bundle(
     expected_num_actions: usize,
     keys: &Keychain,
 ) -> Result<(), String> {
+    // Computed before the spends and outputs move into the builder.
+    let predicted_num_actions = BundleType::DEFAULT.num_actions_zsa(
+        BundleVersion::zsa().default_flags(),
+        spends.iter().map(|spend| spend.note.asset()),
+        outputs.iter().map(|output| output.asset),
+    );
+
     let rng = OsRng;
     let shielded_bundle: Bundle<_, i64> = {
         let mut builder = Builder::new(
@@ -311,6 +318,7 @@ fn build_and_verify_bundle(
     // Verify the shielded bundle, currently without the proof.
     verify_bundle(&shielded_bundle, keys.vk, TxVersion::ZSA, true);
     assert_eq!(shielded_bundle.actions().len(), expected_num_actions);
+    assert_eq!(predicted_num_actions, Ok(shielded_bundle.actions().len()));
     assert!(verify_unique_spent_nullifiers(&shielded_bundle));
     Ok(())
 }
