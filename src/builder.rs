@@ -1074,7 +1074,20 @@ impl Builder {
     ///
     /// Each asset needs at least `max(spends, outputs)` actions of its own, so the bundle has
     /// the larger of the sum of those and [`BundleType::num_actions`] called with
-    /// [`Self::flags`] and the total spends and outputs.
+    /// [`Self::flags`] and the total spends and outputs:
+    ///
+    /// ```
+    /// # use orchard::builder::Builder;
+    /// fn num_actions(builder: &Builder) -> Result<usize, &'static str> {
+    ///     let counts = builder.spend_output_counts();
+    ///     let per_asset: usize = counts.values().map(|&(s, o)| s.max(o)).sum();
+    ///     let num_outputs = builder.outputs().len() + builder.changes().len();
+    ///     let num_actions = builder
+    ///         .bundle_type()
+    ///         .num_actions(builder.flags(), builder.spends().len(), num_outputs)?;
+    ///     Ok(num_actions.max(per_asset))
+    /// }
+    /// ```
     pub fn spend_output_counts(&self) -> BTreeMap<AssetBase, (usize, usize)> {
         let mut counts = BTreeMap::<AssetBase, (usize, usize)>::new();
         for spend in &self.spends {
