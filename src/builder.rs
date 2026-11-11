@@ -115,6 +115,9 @@ impl BundleType {
     /// Wallets estimating fees (e.g. per [ZIP 317]) must account for this larger action
     /// count.
     ///
+    /// Each asset's spends and outputs are paired only with each other, so a bundle carrying
+    /// more than one asset can have more actions than this; see [`Builder::spend_output_counts`].
+    ///
     /// Returns an error if the specified number of spends and outputs is incompatible with
     /// this bundle type and flags.
     ///
@@ -168,50 +171,6 @@ impl BundleType {
                 }
             }
         }
-    }
-
-    /// Returns the number of logical actions that the builder will produce in constructing a bundle
-    /// of this type with the given `flags`, given the asset of each requested spend and output.
-    ///
-    /// The builder pads each asset separately, so the bundle has at least
-    /// `max(num_spends, num_outputs)` actions for each asset. The result is the larger of that sum
-    /// and [`BundleType::num_actions`] for the same spends and outputs, which wallets estimating
-    /// fees (e.g. per [ZIP 317]) must use for a bundle that carries more than one asset.
-    ///
-    /// Returns an error if the specified spends and outputs are incompatible with this bundle type
-    /// and flags.
-    ///
-    /// [ZIP 317]: https://zips.z.cash/zip-0317
-    pub fn num_actions_zsa(
-        &self,
-        flags: Flags,
-        spend_assets: impl IntoIterator<Item = AssetBase>,
-        output_assets: impl IntoIterator<Item = AssetBase>,
-    ) -> Result<usize, &'static str> {
-        let mut by_asset = BTreeMap::<AssetBase, (usize, usize)>::new();
-        let mut num_spends = 0usize;
-        let mut num_outputs = 0usize;
-
-        for asset in spend_assets {
-            by_asset.entry(asset).or_default().0 += 1;
-            num_spends += 1;
-        }
-        for asset in output_assets {
-            by_asset.entry(asset).or_default().1 += 1;
-            num_outputs += 1;
-        }
-
-        let per_asset_actions = by_asset
-            .values()
-            .try_fold(0usize, |acc, (spends, outputs)| {
-                acc.checked_add(core::cmp::max(*spends, *outputs))
-            })
-            .ok_or("the per-asset action counts overflowed")?;
-
-        Ok(core::cmp::max(
-            self.num_actions(flags, num_spends, num_outputs)?,
-            per_asset_actions,
-        ))
     }
 }
 
@@ -1102,6 +1061,30 @@ impl Builder {
     /// with, so the two cannot drift.
     pub fn bundle_type(&self) -> BundleType {
         self.bundle_type
+    }
+
+    /// Returns the flags this builder was constructed with, for the same use as
+    /// [`Self::bundle_type`].
+    pub fn flags(&self) -> Flags {
+        self.flags
+    }
+
+    /// Returns the number of requested `(spends, outputs)` of each asset, with changes counted as
+    /// outputs.
+    ///
+    /// Each asset needs at least `max(spends, outputs)` actions of its own, so the bundle has
+    /// the larger of the sum of those and [`BundleType::num_actions`] called with
+    /// [`Self::flags`] and the total spends and outputs.
+    pub fn spend_output_counts(&self) -> BTreeMap<AssetBase, (usize, usize)> {
+        let mut counts = BTreeMap::<AssetBase, (usize, usize)>::new();
+        for spend in &self.spends {
+            counts.entry(spend.note.asset()).or_default().0 += 1;
+        }
+        let changes = self.changes.iter().map(|c| &c.output);
+        for output in self.outputs.iter().chain(changes) {
+            counts.entry(output.asset).or_default().1 += 1;
+        }
+        counts
     }
 
     /// Returns the note version associated with this builder's bundle version.
@@ -2277,8 +2260,6 @@ pub trait InputView<NoteRef> {
     fn note_id(&self) -> &NoteRef;
     /// The value of the input being spent.
     fn value<V: From<u64>>(&self) -> V;
-    /// The asset of the input being spent.
-    fn asset(&self) -> AssetBase;
 }
 
 impl InputView<()> for SpendInfo {
@@ -2290,10 +2271,6 @@ impl InputView<()> for SpendInfo {
     fn value<V: From<u64>>(&self) -> V {
         V::from(self.note.value().inner())
     }
-
-    fn asset(&self) -> AssetBase {
-        self.note.asset()
-    }
 }
 
 /// A trait that provides a minimized view of an Orchard output suitable for use in
@@ -2301,27 +2278,17 @@ impl InputView<()> for SpendInfo {
 pub trait OutputView {
     /// The value of the output being produced.
     fn value<V: From<u64>>(&self) -> V;
-    /// The asset of the output being produced.
-    fn asset(&self) -> AssetBase;
 }
 
 impl OutputView for OutputInfo {
     fn value<V: From<u64>>(&self) -> V {
         V::from(self.value.inner())
     }
-
-    fn asset(&self) -> AssetBase {
-        self.asset
-    }
 }
 
 impl OutputView for ChangeInfo {
     fn value<V: From<u64>>(&self) -> V {
         self.output.value()
-    }
-
-    fn asset(&self) -> AssetBase {
-        self.output.asset()
     }
 }
 
@@ -2998,56 +2965,53 @@ mod tests {
         assert_eq!(unpadded.num_actions(flags, 1, 1), Ok(2));
     }
 
+    /// The action count a wallet derives from the builder, per [`Builder::spend_output_counts`].
+    fn predicted_num_actions(builder: &Builder) -> Result<usize, &'static str> {
+        let counts = builder.spend_output_counts();
+        let per_asset: usize = counts.values().map(|&(s, o)| s.max(o)).sum();
+        let num_outputs = builder.outputs().len() + builder.changes().len();
+        Ok(builder
+            .bundle_type()
+            .num_actions(builder.flags(), builder.spends().len(), num_outputs)?
+            .max(per_asset))
+    }
+
     #[test]
-    fn num_actions_zsa_pads_each_asset() {
+    fn spend_output_counts_match_per_asset_padding() {
         let mut rng = OsRng;
-        let zatoshi = AssetBase::zatoshi();
-        let asset = AssetBase::random(&mut rng);
-        let unpadded = BundleType::Transactional {
-            bundle_required: false,
-            pad_to_minimum: Some(1),
-        };
-
-        // Cross-address transfers enabled: a single asset is padded as `num_actions` says.
-        let flags = BundleVersion::ironwood_v3().default_flags();
-        assert_eq!(
-            unpadded.num_actions_zsa(flags, [zatoshi, zatoshi], [zatoshi]),
-            Ok(2)
-        );
-        assert_eq!(
-            BundleType::DEFAULT.num_actions_zsa(flags, [], [zatoshi]),
-            Ok(2)
+        let fvk = FullViewingKey::from(&SpendingKey::random(&mut rng));
+        let recipient = fvk.address_at(0u32, Scope::External);
+        let (asset, zatoshi) = (AssetBase::random(&mut rng), AssetBase::zatoshi());
+        let bundle_version = BundleVersion::zsa();
+        let flags = bundle_version.default_flags();
+        let value = NoteValue::from_raw(10);
+        let (note, merkle_path, anchor) = note_with_path_for_asset(
+            &mut rng,
+            recipient,
+            value,
+            asset,
+            bundle_version.note_version(),
         );
 
-        // Two assets with a different larger side each: 2 actions for zatoshi and 3 for `asset`,
-        // where `num_actions` sees only max(3, 4).
-        assert_eq!(unpadded.num_actions(flags, 3, 4), Ok(4));
-        assert_eq!(
-            unpadded.num_actions_zsa(
-                flags,
-                [zatoshi, zatoshi, asset],
-                [zatoshi, asset, asset, asset]
-            ),
-            Ok(5)
-        );
+        // A spend of `asset`, burned in full, and two zatoshi outputs: 1 action for `asset` and
+        // 2 for zatoshi, where `num_actions` sees only max(1, 2).
+        let mut builder = Builder::new(BundleType::DEFAULT, bundle_version, flags, anchor).unwrap();
+        builder.add_spend(fvk, note, merkle_path).unwrap();
+        builder.add_burn(asset, value).unwrap();
+        for _ in 0..2 {
+            builder
+                .add_output(None, recipient, NoteValue::from_raw(1), zatoshi, [0u8; 512])
+                .unwrap();
+        }
 
-        // The minimum applies to the per-asset sum as well.
         assert_eq!(
-            BundleType::DEFAULT.num_actions_zsa(flags, [zatoshi], [asset]),
-            Ok(2)
+            builder.spend_output_counts(),
+            BTreeMap::from([(asset, (1, 0)), (zatoshi, (0, 2))])
         );
-
-        // Cross-address transfers disabled: spends + outputs is never below the per-asset sum.
-        let flags = BundleVersion::orchard_v3().default_flags();
-        assert_eq!(
-            unpadded.num_actions_zsa(flags, [zatoshi], [zatoshi, zatoshi]),
-            Ok(3)
-        );
-
-        // Errors come from `num_actions`.
-        assert!(BundleType::Coinbase
-            .num_actions_zsa(flags, [zatoshi], [])
-            .is_err());
+        assert_eq!(BundleType::DEFAULT.num_actions(flags, 1, 2), Ok(2));
+        assert_eq!(predicted_num_actions(&builder), Ok(3));
+        let (bundle, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
+        assert_eq!(bundle.actions().len(), 3);
     }
 
     #[test]
@@ -3696,6 +3660,7 @@ mod tests {
             .add_change_output(fvk.clone(), None, recipient, value, asset, [0u8; 512])
             .unwrap();
 
+        assert_eq!(predicted_num_actions(&builder), Ok(2));
         let (bundle, _) = builder.build::<i64>(&mut rng).unwrap().unwrap();
         assert_eq!(bundle.actions().len(), 2);
 
